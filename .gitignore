@@ -30,3 +30,20 @@
 *.exe
 *.out
 *.app
+
+# Build folder
+build
+
+# VsCode folder
+.vscode
+
+# Autotools
+autom4te.cache
+*.in
+*~
+aclocal.m4
+install-sh
+missing
+depcomp
+compile
+configure
