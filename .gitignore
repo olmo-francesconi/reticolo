@@ -37,13 +37,8 @@ build
 # VsCode folder
 .vscode
 
-# Autotools
+# Autotools stuff
 autom4te.cache
-*.in
 *~
-aclocal.m4
-install-sh
-missing
-depcomp
-compile
-configure
+# MacOS crap
+.DS_store
