@@ -6,7 +6,8 @@
 
 #include <config.h>
 
-#include "action/action.hpp"
+#include "action/action_base.hpp"
+#include "action/phi4.hpp"
 
 #include "lattice/lattice.hpp"
 

@@ -38,15 +38,16 @@ namespace LLR
         // reset global timer
         GlobalTimer.reset();
 
-        output_path = fs::canonical(fs::absolute(out_path));
-
         try
         {
+            output_path = fs::absolute(out_path);
+
             fs::create_directory(output_path);
+            output_path = fs::canonical(output_path);
             fs::create_directory(output_path / "logs");
             fs::create_directory(output_path / "meas");
             fs::create_directory(output_path / "conf");
-            IO::InfoLogger.init(output_path / "logs", "info.log");
+            // IO::InfoLogger.init(output_path / "logs", "info.log");
             IO::ErrorLogger.init(output_path / "logs", "err.log");
             IO::PerfLogger.init(output_path / "logs", "perf.log");
         }
@@ -67,11 +68,11 @@ namespace LLR
 
         IO::PerfLogger.log_threadig("llr_copntroller", omp_get_max_threads());
 
-        // Initialize action parameters
-        action::phi4_params par;
-        par.lambda = 1.0;
-        par.eta = 9.0;
-        par.mu = 0.0;
+        // // Initialize action parameters
+        // action::phi4::params par;
+        // par.lambda = 1.0;
+        // par.eta = 9.0;
+        // par.mu = 0.0;
 
         // Initialize workers
         workers.resize(nWorkers);
@@ -81,7 +82,8 @@ namespace LLR
             Timer T;
             T.reset();
 
-            workers[i].init(i, par, {8, 8, 8, 8}, rd());
+            workers[i].init(i, {16, 16, 16, 16   }, rd());
+            workers[i].randomize(0.1);
 
             double elapsed = T.elapsed_ms();
 #pragma omp critical
@@ -92,24 +94,23 @@ namespace LLR
         }
 
         IO::PerfLogger.log_memory("llr_controller", "Total memory allocated ", this->memoryReport());
+
+#pragma omp parallel for
+        for (uint i = 0; i < nWorkers; i++)
+        {
+            Timer T;
+            T.reset();
+
+            for (uint t = 0; t < nMC; t++)
+            {
+                workers[i].MCMC_update();
+            }
+            double elapsed = T.elapsed_ms();
+
+#pragma omp critical
+            IO::PerfLogger.log_timing(std::format("llr_worker[{:0>3d}] on thread_{:0>3d}", i, omp_get_thread_num()), std::format("Performed {} MonteCarlo steps", nMC), elapsed);
+        }
     }
-
-    // #pragma omp parallel for
-    //         for (uint i = 0; i < nWorkers; i++)
-    //         {
-    //             Timer T;
-    //             T.reset();
-
-    //             for (uint t = 0; t < nMC; t++)
-    //             {
-    //                 workers[i].MCMC_update();
-    //             }
-    //             double elapsed = T.elapsed_ms();
-
-    // #pragma omp critical
-    //             IO::PerfLogger.log_timing(std::format("llr_worker[{:0>3d}] on thread_{:0>3d}", i, omp_get_thread_num()), std::format("Performed {} MonteCarlo steps", nMC), elapsed);
-    //         }
-    //     }
 
     inline size_t llr_controller::memoryReport()
     {

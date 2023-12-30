@@ -9,6 +9,8 @@
 
 namespace LLR
 {
+    // namespace lattice
+    // {
     template <typename T_field>
     class lattice
     {
@@ -30,16 +32,16 @@ namespace LLR
 
             n_sites = N[_t] * N[_x] * N[_y] * N[_z];
 
+            field.clear();
             field.resize(n_sites);
         };
 
-        T_field &operator[](uint site) { return field[site]; }
-        const T_field &operator[](uint site) const { return field[site]; }
-        T_field &operator[](vect4 coord) { return field[site(coord)]; }
-        const T_field &operator[](vect4 coord) const { return field[site(coord)]; }
+        T_field &operator[](const uint site) { return field[site]; }
+        const T_field &operator[](const uint site) const { return field[site]; }
 
-        // T_field &operator()(uint t, uint x, uint y, uint z) { return field[site(t, x, y, z)]; }
-        // const T_field &operator()(uint t, uint x, uint y, uint z) const { return field[site(t, x, y, z)]; }
+        T_field &operator[](const vect4 &coord) { return field[site(coord)]; }
+        const T_field &operator[](const vect4 &coord) const { return field[site(coord)]; }
+
         T_field &operator()(vect4 &coord) { return field[site(coord)]; }
         const T_field &operator()(const vect4 &coord) const { return field[site(coord)]; }
 
@@ -58,41 +60,41 @@ namespace LLR
 
         // get index of next sites from current coordinates
         template <typename T>
-        friend uint nt(lattice<T> &l, vect4 &coord);
+        friend uint nt(const lattice<T> &l, const vect4 &coord);
         template <typename T>
-        friend uint nx(lattice<T> &l, vect4 &coord);
+        friend uint nx(const lattice<T> &l, const vect4 &coord);
         template <typename T>
-        friend uint ny(lattice<T> &l, vect4 &coord);
+        friend uint ny(const lattice<T> &l, const vect4 &coord);
         template <typename T>
-        friend uint nz(lattice<T> &l, vect4 &coord);
+        friend uint nz(const lattice<T> &l, const vect4 &coord);
 
         // get index of previous sites from current coordinates
         template <typename T>
-        friend uint pt(lattice<T> &l, vect4 &coord);
+        friend uint pt(const lattice<T> &l, const vect4 &coord);
         template <typename T>
-        friend uint px(lattice<T> &l, vect4 &coord);
+        friend uint px(const lattice<T> &l, const vect4 &coord);
         template <typename T>
-        friend uint py(lattice<T> &l, vect4 &coord);
+        friend uint py(const lattice<T> &l, const vect4 &coord);
         template <typename T>
-        friend uint pz(lattice<T> &l, vect4 &coord);
+        friend uint pz(const lattice<T> &l, const vect4 &coord);
     };
 
     template <typename T>
-    uint nt(lattice<T> &l, vect4 &coord) { return l.site({(coord[_t] + 1) % l.N[_t], coord[_x], coord[_y], coord[_z]}); };
+    uint nt(const lattice<T> &l, const vect4 &coord) { return l.site({(coord[_t] + 1) % l.N[_t], coord[_x], coord[_y], coord[_z]}); };
     template <typename T>
-    uint nx(lattice<T> &l, vect4 &coord) { return l.site({coord[_t], (coord[_x] + 1) % l.N[_x], coord[_y], coord[_z]}); };
+    uint nx(const lattice<T> &l, const vect4 &coord) { return l.site({coord[_t], (coord[_x] + 1) % l.N[_x], coord[_y], coord[_z]}); };
     template <typename T>
-    uint ny(lattice<T> &l, vect4 &coord) { return l.site({coord[_t], coord[_x], (coord[_y] + 1) % l.N[_y], coord[_z]}); };
+    uint ny(const lattice<T> &l, const vect4 &coord) { return l.site({coord[_t], coord[_x], (coord[_y] + 1) % l.N[_y], coord[_z]}); };
     template <typename T>
-    uint nz(lattice<T> &l, vect4 &coord) { return l.site({coord[_t], coord[_x], coord[_y], (coord[_z] + 1) % l.N[_z]}); };
+    uint nz(const lattice<T> &l, const vect4 &coord) { return l.site({coord[_t], coord[_x], coord[_y], (coord[_z] + 1) % l.N[_z]}); };
 
     template <typename T>
-    uint pt(lattice<T> &l, vect4 &coord) { return l.site({(coord[_t] - 1 + l.N[_t]) % l.N[_t], coord[_x], coord[_y], coord[_z]}); };
+    uint pt(const lattice<T> &l, const vect4 &coord) { return l.site({(coord[_t] - 1 + l.N[_t]) % l.N[_t], coord[_x], coord[_y], coord[_z]}); };
     template <typename T>
-    uint px(lattice<T> &l, vect4 &coord) { return l.site({coord[_t], (coord[_x] - 1 + l.N[_x]) % l.N[_x], coord[_y], coord[_z]}); };
+    uint px(const lattice<T> &l, const vect4 &coord) { return l.site({coord[_t], (coord[_x] - 1 + l.N[_x]) % l.N[_x], coord[_y], coord[_z]}); };
     template <typename T>
-    uint py(lattice<T> &l, vect4 &coord) { return l.site({coord[_t], coord[_x], (coord[_y] - 1 + l.N[_y]) % l.N[_y], coord[_z]}); };
+    uint py(const lattice<T> &l, const vect4 &coord) { return l.site({coord[_t], coord[_x], (coord[_y] - 1 + l.N[_y]) % l.N[_y], coord[_z]}); };
     template <typename T>
-    uint pz(lattice<T> &l, vect4 &coord) { return l.site({coord[_t], coord[_x], coord[_y], (coord[_z] - 1 + l.N[_z]) % l.N[_z]}); };
-
+    uint pz(const lattice<T> &l, const vect4 &coord) { return l.site({coord[_t], coord[_x], coord[_y], (coord[_z] - 1 + l.N[_z]) % l.N[_z]}); };
+    // }
 } // namespace LLR

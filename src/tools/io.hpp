@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <array>
 #include <string>
+#include <format>
 #include <iostream>
 #include <fstream>
 #include <system_error>
@@ -26,7 +27,22 @@ namespace LLR
 
         std::string pretty_welcome()
         {
-            return "LLR";
+            // clang-format off
+            const std::string welcome_logo =
+                R"(________________________________________________________________________________)" "\n"
+                R"(___________/\\\______________/\\\________________/\\\\\\\\\_____________________)" "\n"
+                R"(___________\/\\\_____________\/\\\_____________ /\\\///////\\\__________________)" "\n"
+                R"(____________\/\\\_____________\/\\\_____________\/\\\_____\/\\\_________________)" "\n"
+                R"(_____________\/\\\_____________\/\\\_____________\/\\\\\\\\\\\/_________________)" "\n"
+                R"(______________\/\\\_____________\/\\\_____________\/\\\//////\\\________________)" "\n"
+                R"(_______________\/\\\_____________\/\\\_____________\/\\\____\//\\\______________)" "\n"
+                R"(________________\/\\\_____________\/\\\_____________\/\\\_____\//\\\____________)" "\n"
+                R"(_________________\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\/\\\______\//\\\__________)" "\n"
+                R"(__________________\///////////////__\///////////////__\///________\///__________)" "\n"
+                R"(________________________________________________________________________________)" "\n";
+            // clang-format on
+
+            return welcome_logo;
         }
 
         class Logger
@@ -74,6 +90,7 @@ namespace LLR
                      << "[Log-type].....[time] ms /   [who]   -   [what]\n"
                      << std::endl;
             }
+
             void log_string(std::string who, std::string what)
             {
                 if (state == 1)
@@ -111,7 +128,7 @@ namespace LLR
         // These are global but need to be initialized somewhere in the code
         inline Logger ErrorLogger("ErrorLogger");
         inline Logger PerfLogger("PerfLogger");
-        inline Logger InfoLogger("InfoLogger");
+        // inline Logger InfoLogger("InfoLogger");
 
     } // namespace IO
 

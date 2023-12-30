@@ -10,7 +10,7 @@
 
 int main(int argc, char *argv[])
 {
-    LLR::llr_controller cont("./out", 128, 2000);
+    LLR::llr_controller cont("./out", 1, 1);
 
     return EXIT_SUCCESS;
 }
