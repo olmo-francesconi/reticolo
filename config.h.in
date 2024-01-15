@@ -3,6 +3,9 @@
 /* define if the compiler supports basic C++20 syntax */
 #undef HAVE_CXX20
 
+/* Define to 1 if you have the `HDF5' library */
+#undef HAVE_HDF5
+
 /* OpenMP support */
 #undef OPENMP_SUPPORTED
 

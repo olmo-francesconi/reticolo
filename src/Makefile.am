@@ -1,3 +1,5 @@
-bin_PROGRAMS = llr_test
+AM_CPPFLAGS = -I$(top_srcdir)/modules/HighFive/include
 
-llr_test_SOURCES = main.cpp
+bin_PROGRAMS = test
+
+test_SOURCES = main.cpp

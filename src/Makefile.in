@@ -86,7 +86,7 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-bin_PROGRAMS = llr_test$(EXEEXT)
+bin_PROGRAMS = test$(EXEEXT)
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -99,9 +99,9 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_llr_test_OBJECTS = main.$(OBJEXT)
-llr_test_OBJECTS = $(am_llr_test_OBJECTS)
-llr_test_LDADD = $(LDADD)
+am_test_OBJECTS = main.$(OBJEXT)
+test_OBJECTS = $(am_test_OBJECTS)
+test_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -132,8 +132,8 @@ AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
 am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
-SOURCES = $(llr_test_SOURCES)
-DIST_SOURCES = $(llr_test_SOURCES)
+SOURCES = $(test_SOURCES)
+DIST_SOURCES = $(test_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -250,7 +250,8 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-llr_test_SOURCES = main.cpp
+AM_CPPFLAGS = -I$(top_srcdir)/modules/HighFive/include
+test_SOURCES = main.cpp
 all: all-am
 
 .SUFFIXES:
@@ -327,9 +328,9 @@ uninstall-binPROGRAMS:
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
 
-llr_test$(EXEEXT): $(llr_test_OBJECTS) $(llr_test_DEPENDENCIES) $(EXTRA_llr_test_DEPENDENCIES) 
-	@rm -f llr_test$(EXEEXT)
-	$(AM_V_CXXLD)$(CXXLINK) $(llr_test_OBJECTS) $(llr_test_LDADD) $(LIBS)
+test$(EXEEXT): $(test_OBJECTS) $(test_DEPENDENCIES) $(EXTRA_test_DEPENDENCIES) 
+	@rm -f test$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(test_OBJECTS) $(test_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)

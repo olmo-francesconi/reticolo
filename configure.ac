@@ -1,8 +1,8 @@
 ########################################### autoconf and automake initialization
 AC_PREREQ([2.69])
-AC_INIT([LLR], [0.1], [olmo.francesconi@glasgow.ac.uk], [LLR])
+AC_INIT([reticolo], [0.1], [olmo.francesconi@glasgow.ac.uk], [reticolo])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
-AC_CONFIG_SRCDIR([src/LLR.hpp])
+AC_CONFIG_SRCDIR([src/reticolo.hpp])
 
 ############################################################ Check c++ compiler
 AC_PROG_CXX
@@ -22,26 +22,26 @@ if test "${ac_cv_prog_cxx_openmp}X" != "unsupportedX"; then
 fi
 
 # ########################################################################## HDF5
-# AC_ARG_WITH([hdf5],
-#     [AS_HELP_STRING([--with-hdf5=prefix],
-#     [try this for a non-standard install prefix of the HDF5 library])],
-#     [AM_CXXFLAGS="-I$with_hdf5/include $AM_CXXFLAGS"]
-#     [AM_LDFLAGS="-L$with_hdf5/lib $AM_LDFLAGS"])
+AC_ARG_WITH([hdf5],
+    [AS_HELP_STRING([--with-hdf5=prefix],
+    [try this for a non-standard install prefix of the HDF5 library])],
+    [AM_CXXFLAGS="-I$with_hdf5/include $AM_CXXFLAGS"]
+    [AM_LDFLAGS="-L$with_hdf5/lib $AM_LDFLAGS"])
 
 ############################################################### Check libraries
-# CXXFLAGS_CPY=$CXXFLAGS
-# LDFLAGS_CPY=$LDFLAGS
-# CXXFLAGS="$AM_CXXFLAGS $CXXFLAGS"
-# LDFLAGS="$AM_LDFLAGS $LDFLAGS"
+CXXFLAGS_CPY=$CXXFLAGS
+LDFLAGS_CPY=$LDFLAGS
+CXXFLAGS="$AM_CXXFLAGS $CXXFLAGS"
+LDFLAGS="$AM_LDFLAGS $LDFLAGS"
 
-# AC_SEARCH_LIBS([H5Fopen], [hdf5_cpp],
-#                [AC_DEFINE([HAVE_HDF5], [1], [Define to 1 if you have the `HDF5' library])]
-#                [have_hdf5=true]
-#                [LIBS="${LIBS} -lhdf5"], [], [-lhdf5])
-# AM_CONDITIONAL(BUILD_HDF5, [ test "${have_hdf5}X" == "trueX" ])
+AC_SEARCH_LIBS([H5Fopen], [hdf5_cpp],
+               [AC_DEFINE([HAVE_HDF5], [1], [Define to 1 if you have the `HDF5' library])]
+               [have_hdf5=true]
+               [LIBS="${LIBS} -lhdf5"], [], [-lhdf5])
+AM_CONDITIONAL(BUILD_HDF5, [ test "${have_hdf5}X" == "trueX" ])
 
-# CXXFLAGS=$CXXFLAGS_CPY
-# LDFLAGS=$LDFLAGS_CPY
+CXXFLAGS=$CXXFLAGS_CPY
+LDFLAGS=$LDFLAGS_CPY
   
 ########################################################## Set output variables
 AC_SUBST([AM_CXXFLAGS])
