@@ -2,7 +2,7 @@
 
 #include <chrono>
 
-namespace LLR
+namespace reticolo
 {
     // Timer Class
     class Timer
@@ -25,5 +25,6 @@ namespace LLR
     };
 
     // Global timer
-    Timer GlobalTimer;
-}
+    inline Timer GlobalTimer;
+
+} // namespace reticolo
