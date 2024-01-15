@@ -2,6 +2,8 @@
 
 #include <array>
 
+#include <iostream>
+
 namespace reticolo
 {
     // vector types
@@ -29,5 +31,13 @@ namespace reticolo
             }
             else
                 return;
+    }
+
+    template <size_t dim>
+    inline void print(const vect<dim> &v)
+    {
+        for (int i = 0; i < dim; i++)
+            std::cout << v[i];
+        std::cout << std::endl;
     }
 } // namespace reticolo
