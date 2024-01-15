@@ -11,114 +11,168 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
-namespace LLR
+namespace reticolo
 {
-    class llr_controller
+    namespace LLR
     {
-    private:
-        std::vector<llr_worker> workers;
-        std::random_device rd;
-        fs::path output_path;
-        uint nMC, nNR, nRM;
-
-    public:
-        llr_controller(fs::path output_path, uint nWorkers, uint nMC) { init(output_path, nWorkers, nMC); };
-
-        void init(fs::path output_path, uint nWorkers, uint nMC);
-
-        void thermalize();
-        void NewtonRaphson(uint nNR, uint nMC);
-        void RobbinsMonroe(uint nRM, uint nMC);
-
-        size_t memoryReport();
-    };
-
-    inline void llr_controller::init(fs::path out_path, uint nWorkers, uint nMC)
-    {
-        // reset global timer
-        GlobalTimer.reset();
-
-        try
+        template <template <typename, typename> class Action, typename FieldType, ComplexValue ActionType, size_t dim>
+        class controller
         {
-            output_path = fs::absolute(out_path);
+        private:
+            std::vector<worker<Action, FieldType, ActionType, dim>> workers;
+            std::random_device rd;
+            fs::path output_path;
+            uint nMC, nNR, nRM;
 
-            fs::create_directory(output_path);
-            output_path = fs::canonical(output_path);
-            fs::create_directory(output_path / "logs");
-            fs::create_directory(output_path / "meas");
-            fs::create_directory(output_path / "conf");
-            // IO::InfoLogger.init(output_path / "logs", "info.log");
-            IO::ErrorLogger.init(output_path / "logs", "err.log");
-            IO::PerfLogger.init(output_path / "logs", "perf.log");
-        }
-        catch (const std::exception &e)
+            std::vector<double> ak_vect;
+            std::vector<double> Sk_vect;
+
+            void NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carlo);
+            void RobbinsMonro(uint nRobbins_Monro, uint nMonte_Carlo);
+            void ReplicaExcange();
+
+            IO::Logger log;
+
+        public:
+            controller(){};
+
+            void init(fs::path output_path, vect<dim> lattice_size, uint nWorkers, Action<FieldType, ActionType>::params par);
+
+            void run(uint nNewton_Raphson, uint nRobbins_Monro, uint nMonte_Carlo);
+
+            size_t memoryReport();
+        };
+
+        template <template <typename, typename> class Action, typename FieldType, ComplexValue ActionType, size_t dim>
+        inline void controller<Action, FieldType, ActionType, dim>::NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carlo)
         {
-            std::cerr << e.what() << '\n';
-            exit(EXIT_FAILURE);
-        }
-
-        // info-Log that the folder and loggind stuff has bee initialized properly to info
-        IO::PerfLogger.log_string("llr_controller", "Initialization started");
-        IO::PerfLogger.log_string("llr_controller", "main oputput folder: " + output_path.string());
-        IO::PerfLogger.log_string("llr_controller", "measurements folder: " + (output_path / "meas").string());
-        IO::PerfLogger.log_string("llr_controller", "        logs folder: " + (output_path / "logs").string());
-
-        // info-Log that we are starting to initialize the workers
-        // info-Log the threading configuration
-
-        IO::PerfLogger.log_threadig("llr_copntroller", omp_get_max_threads());
-
-        // // Initialize action parameters
-        // action::phi4::params par;
-        // par.lambda = 1.0;
-        // par.eta = 9.0;
-        // par.mu = 0.0;
-
-        // Initialize workers
-        workers.resize(nWorkers);
-#pragma omp parallel for
-        for (uint i = 0; i < nWorkers; i++)
-        {
-            Timer T;
-            T.reset();
-
-            workers[i].init(i, {16, 16, 16, 16   }, rd());
-            workers[i].randomize(0.1);
-
-            double elapsed = T.elapsed_ms();
-#pragma omp critical
+            // Newton-Raphson Iterations
+            for (int step = 0; step < nNewton_Raphson; step++)
             {
-                IO::PerfLogger.log_timing(std::format("llr_worker[{:0>3d}] on thread_{:0>3d}", i, omp_get_thread_num()), "Initialization done", elapsed);
-                IO::PerfLogger.log_memory(std::format("llr_worker[{:0>3d}] on thread_{:0>3d}", i, omp_get_thread_num()), "Allocated ", workers[i].memoryReport());
+#pragma omp parallel for schedule(static, 1)
+                for (int i = 0; i < workers.size(); i++)
+                {
+                    // thermalize to the newly updated value of ak
+                    workers[i].thermalize(100);
+
+                    // run the montecarlo steps
+                    workers[i].MCMC_update(nMonte_Carlo, std::format("NR_{}", step));
+
+                    // update the ak value
+                    // ak_vect[i] = res.dS.imag();
+                }
+
+                // replica excange
             }
         }
 
-        IO::PerfLogger.log_memory("llr_controller", "Total memory allocated ", this->memoryReport());
-
-#pragma omp parallel for
-        for (uint i = 0; i < nWorkers; i++)
+        template <template <typename, typename> class Action, typename FieldType, ComplexValue ActionType, size_t dim>
+        inline void controller<Action, FieldType, ActionType, dim>::RobbinsMonro(uint nRobbins_Monro, uint nMonte_Carlo)
         {
-            Timer T;
-            T.reset();
-
-            for (uint t = 0; t < nMC; t++)
+            // Robbins-Monro Iterations
+            for (int step = 0; step < nRobbins_Monro; step++)
             {
-                workers[i].MCMC_update();
+#pragma omp parallel for schedule(static, 1)
+                for (int i = 0; i < workers.size(); i++)
+                {
+                    // thermalize to the newly updated value of ak
+                    workers[i].thermalize(100);
+
+                    // run the montecarlo steps
+                    workers[i].MCMC_update(nMonte_Carlo, std::format("NR_{}", step));
+
+                    // update the ak value
+                    // ak_vect[i] = res.dS.imag();
+                }
             }
-            double elapsed = T.elapsed_ms();
-
-#pragma omp critical
-            IO::PerfLogger.log_timing(std::format("llr_worker[{:0>3d}] on thread_{:0>3d}", i, omp_get_thread_num()), std::format("Performed {} MonteCarlo steps", nMC), elapsed);
         }
-    }
 
-    inline size_t llr_controller::memoryReport()
-    {
-        size_t memory = 0;
-        for (auto &w : workers)
-            memory += w.memoryReport();
+        template <template <typename, typename> class Action, typename FieldType, ComplexValue ActionType, size_t dim>
+        inline void controller<Action, FieldType, ActionType, dim>::ReplicaExcange()
+        {
+        }
 
-        return memory;
-    }
+        template <template <typename, typename> class Action, typename FieldType, ComplexValue ActionType, size_t dim>
+        inline void controller<Action, FieldType, ActionType, dim>::init(fs::path out_path, vect<dim> lattice_size, uint nWorkers, Action<FieldType, ActionType>::params par)
+        {
+            // reset global timer
+            GlobalTimer.reset();
 
-} // namespace LLR
+            try
+            {
+                output_path = fs::absolute(out_path);
+
+                fs::create_directory(output_path);
+                output_path = fs::canonical(output_path);
+                fs::create_directory(output_path / "logs");
+                fs::create_directory(output_path / "meas");
+                fs::create_directory(output_path / "conf");
+                // IO::InfoLogger.init(output_path / "logs", "info.log");
+                // IO::ErrorLogger.init(output_path / "logs", "err.log");
+                IO::GlobalLogger.init(output_path / "logs", "global.log");
+                log.init(output_path / "logs", "llr_controller.log");
+            }
+            catch (const std::exception &e)
+            {
+                std::cerr << e.what() << '\n';
+                exit(EXIT_FAILURE);
+            }
+
+            // Log that the folder and loggind stuff has bee initialized properly to info
+            log.log_string("llr_controller", "Initialization started");
+            log.log_string("llr_controller", "main oputput folder: " + output_path.string());
+            log.log_string("llr_controller", "measurements folder: " + (output_path / "meas").string());
+            log.log_string("llr_controller", "        logs folder: " + (output_path / "logs").string());
+
+            // info-Log that we are starting to initialize the workers
+            // info-Log the threading configuration
+            log.log_threadig("llr_controller", omp_get_max_threads());
+
+            // Initialize ak values
+            ak_vect.resize(nWorkers);
+            std::fill(ak_vect.begin(), ak_vect.end(), 0.0);
+
+            // Initialize Sk values
+            Sk_vect.resize(nWorkers);
+            for (int i = 0; i < nWorkers; i++)
+                Sk_vect[i] = 100.0 * (double(i) + 0.5);
+
+            // Initialize workers
+            workers.resize(nWorkers);
+
+#pragma omp parallel for schedule(static, 1)
+            for (uint i = 0; i < nWorkers; i++)
+            {
+                workers[i].init(out_path, i, lattice_size, rd(), par, Sk_vect[i], 1.0, IO::LOG_mode::all);
+                workers[i].set_ak(ak_vect[i]);
+            }
+
+            log.log_memory("llr_controller", "Total memory allocated: ", memoryReport());
+        }
+
+        template <template <typename, typename> class Action, typename FieldType, ComplexValue ActionType, size_t dim>
+        inline void controller<Action, FieldType, ActionType, dim>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint nMonte_Carlo)
+        {
+            // initial thermalization
+            for (auto &w : workers)
+            {
+                // call imaginary action thermalization
+
+                // do a simple initial thermalization in the imaginary action interval
+                w.thermalize(100);
+            }
+
+            NewtonRaphson(nNewton_Raphson, nMonte_Carlo);
+        }
+
+        template <template <typename, typename> class Action, typename FieldType, ComplexValue ActionType, size_t dim>
+        inline size_t controller<Action, FieldType, ActionType, dim>::memoryReport()
+        {
+            size_t memory = 0;
+            for (auto &w : workers)
+                memory += w.memoryReport();
+
+            return memory;
+        }
+    } // namespace LLR
+} // namespace reticolo
