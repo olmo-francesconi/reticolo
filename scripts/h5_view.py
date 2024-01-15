@@ -15,6 +15,11 @@ for key in keys:
 
     data = pd.DataFrame(f[key]["mc"][()])
 
-    data.plot(title=key)
+    print(pd.DataFrame(f[key]["mc"]["S_re"]))
+    print(pd.DataFrame(f[key]["mc"]["dS_re"]).mean())
+
+    # data.plot(title=key)
+    pd.DataFrame(f[key]["mc"]["dS_re"]).plot(kind="hist", bins=100)
+    pd.DataFrame(f[key]["mc"]["S_re"]).plot()
 
 plt.show()

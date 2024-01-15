@@ -32,11 +32,11 @@ int main(int argc, char *argv[])
 
         LLR::controller<action::phi4, ComplexD, ComplexD, 4> cont;
 
-        action::phi4<ComplexD, ComplexD>::params par(1.0, 9.0, 1.0);
+        action::phi4<ComplexD, ComplexD>::params par(1.0, 9.0, 0.0);
 
         cont.init(out_path, volume, 1, par);
 
-        cont.run(1, 0, 1);
+        cont.run(1, 0, 1000);
     }
 
     return EXIT_SUCCESS;
