@@ -179,20 +179,19 @@ namespace reticolo
             vect<dim> coord;
             std::fill(coord.begin(), coord.end(), 0);
 
-            for (uint i = 0; i < field.getNsites(); i++)
+            for (uint i = 0; i < field.getNsites(); advance_vect(sizes, coord), i++)
             {
                 // dfield = FieldType(0.2 * norm(rng), 0.2 * norm(rng));
                 dfield = FieldType(0.2 * (unif(rng) - 0.5), 0.2 * (unif(rng) - 0.5));
 
                 dS = action.compute_dS_loc(field, dfield, coord);
+
                 if (exp(-dS.real()) > unif(rng))
                 {
                     acc++;
                     field[coord] += dfield;
                     dS_tot += dS;
                 }
-
-                advance_vect(sizes, coord);
             }
 
             MC_stats.acceptance = static_cast<double>(acc) / field.getNsites();
@@ -238,7 +237,7 @@ namespace reticolo
             obs.clear();
             obs.reserve(nMC);
 
-            // Initialize the value of the action
+            // Initialize the starting value of S
             ActionType S = action.compute_S(field);
             MC_stats.S_re = S.real();
             MC_stats.S_im = S.imag();

@@ -73,25 +73,23 @@ namespace reticolo
 
             vect<4> sizes = field.getSizes();
             vect<4> coord;
+            std::fill(coord.begin(), coord.end(), 0);
 
-            for (coord[_t] = 0; coord[_t] < sizes[_t]; coord[_t]++)
-                for (coord[_x] = 0; coord[_x] < sizes[_x]; coord[_x]++)
-                    for (coord[_y] = 0; coord[_y] < sizes[_y]; coord[_y]++)
-                        for (coord[_z] = 0; coord[_z] < sizes[_z]; coord[_z]++)
-                        {
-                            s = field[coord];
+            for (uint i = 0; i < field.getNsites(); advance_vect(sizes, coord), i++)
+            {
+                s = field[coord];
 
-                            double phi2 = s.real() * s.real() + s.imag() * s.imag();
+                double phi2 = s.real() * s.real() + s.imag() * s.imag();
 
-                            re += 0.5 * p.eta * phi2                                                                                                  // (1/2) * (2d + m^2) phi_{a,x}^2
-                                  + 0.25 * p.lambda * phi2 * phi2                                                                                     // (lambda/4) * (phi_{a,x}^2)^2
-                                  - (s.real() * field[next(field, coord, _x)].real() + s.imag() * field[next(field, coord, _x)].imag())               // phi_{a,x} * phi_{a,x+1}
-                                  - (s.real() * field[next(field, coord, _y)].real() + s.imag() * field[next(field, coord, _y)].imag())               // phi_{a,x} * phi_{a,x+2}
-                                  - (s.real() * field[next(field, coord, _z)].real() + s.imag() * field[next(field, coord, _z)].imag())               // phi_{a,x} * phi_{a,x+3}
-                                  - cosh(p.mu) * (s.real() * field[next(field, coord, _t)].real() + s.imag() * field[next(field, coord, _t)].imag()); // cosh(mu) * phi_{a,x} * phi_{a,x+4}
+                re += 0.5 * p.eta * phi2                                                                                                  // (1/2) * (2d + m^2) phi_{a,x}^2
+                      + 0.25 * p.lambda * phi2 * phi2                                                                                     // (lambda/4) * (phi_{a,x}^2)^2
+                      - (s.real() * field[next(field, coord, _x)].real() + s.imag() * field[next(field, coord, _x)].imag())               // phi_{a,x} * phi_{a,x+1}
+                      - (s.real() * field[next(field, coord, _y)].real() + s.imag() * field[next(field, coord, _y)].imag())               // phi_{a,x} * phi_{a,x+2}
+                      - (s.real() * field[next(field, coord, _z)].real() + s.imag() * field[next(field, coord, _z)].imag())               // phi_{a,x} * phi_{a,x+3}
+                      - cosh(p.mu) * (s.real() * field[next(field, coord, _t)].real() + s.imag() * field[next(field, coord, _t)].imag()); // cosh(mu) * phi_{a,x} * phi_{a,x+4}
 
-                            im += sinh(p.mu) * (s.real() * field[next(field, coord, _t)].imag() - s.imag() * field[next(field, coord, _t)].real()); // sinh(mu) * e_{a,b} * phi_{a,x} * phi_{b,x+4}
-                        }
+                im += sinh(p.mu) * (s.real() * field[next(field, coord, _t)].imag() - s.imag() * field[next(field, coord, _t)].real()); // sinh(mu) * e_{a,b} * phi_{a,x} * phi_{b,x+4}
+            }
 
             return ActionType(re, im);
         }
@@ -114,7 +112,7 @@ namespace reticolo
                                       cosh(p.mu) * n_t.real() + cosh(p.mu) * p_t.real()) //
                         - s.imag() * (field[next(field, coord, _x)].imag() + field[prev(field, coord, _x)].imag() +
                                       field[next(field, coord, _y)].imag() + field[prev(field, coord, _y)].imag() +
-                                      field[next(field, coord, _x)].imag() + field[prev(field, coord, _z)].imag() +
+                                      field[next(field, coord, _z)].imag() + field[prev(field, coord, _z)].imag() +
                                       cosh(p.mu) * n_t.imag() + cosh(p.mu) * p_t.imag());
 
             double im = sinh(p.mu) * (s.real() * n_t.imag() - s.imag() * n_t.real())    // sinh(mu) * e_{a,b} * phi_{a,x} * phi_{b,x+4}
@@ -158,20 +156,18 @@ namespace reticolo
         template <ComplexValue FieldType, ComplexValue ActionType>
         inline phi4<FieldType, ActionType>::observables phi4<FieldType, ActionType>::Measure(const lattice<FieldType, 4> &field)
         {
-            vect<4> sizes = field.getSizes();
-            vect<4> coord;
-
             FieldType phi;
             double phi2 = 0.0;
 
-            for (coord[_t] = 0; coord[_t] < sizes[_t]; coord[_t]++)
-                for (coord[_x] = 0; coord[_x] < sizes[_x]; coord[_x]++)
-                    for (coord[_y] = 0; coord[_y] < sizes[_y]; coord[_y]++)
-                        for (coord[_z] = 0; coord[_z] < sizes[_z]; coord[_z]++)
-                        {
-                            phi = field[coord];
-                            phi2 += phi.real() * phi.real() + phi.imag() * phi.imag();
-                        }
+            vect<4> sizes = field.getSizes();
+            vect<4> coord;
+            std::fill(coord.begin(), coord.end(), 0);
+
+            for (uint i = 0; i < field.getNsites(); advance_vect(sizes, coord), i++)
+            {
+                phi = field[coord];
+                phi2 += phi.real() * phi.real() + phi.imag() * phi.imag();
+            }
 
             return observables(0.5 * phi2 / (double)field.getNsites(), 0.0);
         }
