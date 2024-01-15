@@ -1,0 +1,3 @@
+[submodule "modules/HighFive"]
+	path = modules/HighFive
+	url = git@github.com:BlueBrain/HighFive.git
