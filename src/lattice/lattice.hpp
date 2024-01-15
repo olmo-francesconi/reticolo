@@ -14,7 +14,7 @@ namespace reticolo
     template <typename T_field, size_t dim>
     class lattice
     {
-        vect<dim> N;  // vect4 storing the lattice size in the four dimensions
+        vect<dim> N;  // vect storing the lattice size in N-dimensions
         uint n_sites; // Total number of lattice sites
         vect<dim> sub_vols;
 
@@ -82,7 +82,7 @@ namespace reticolo
     uint prev(const lattice<T, dim> &l, const vect<dim> &coord, const uint dir)
     {
         vect<dim> prev_coord = coord;
-        prev_coord[dir] = (prev_coord[_t] - 1 + l.N[_t]) % l.N[_t];
+        prev_coord[dir] = (prev_coord[dir] - 1 + l.N[dir]) % l.N[dir];
         return l.site(prev_coord);
     }
 } // namespace reticolo
