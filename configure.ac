@@ -4,6 +4,8 @@ AC_INIT([reticolo], [0.1], [olmo.francesconi@glasgow.ac.uk], [reticolo])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AC_CONFIG_SRCDIR([src/reticolo.hpp])
 
+AC_PROG_RANLIB
+
 ############################################################ Check c++ compiler
 AC_PROG_CXX
 
@@ -54,6 +56,7 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([
   Makefile
   src/Makefile
+  test/Makefile
 ])
 
 ############################################# Set silent output for compilation
