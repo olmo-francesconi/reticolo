@@ -1,3 +1,13 @@
+/******************************************************************************
+
+ - reticolo (www.github.com/olmo-francesconi/reticolo.git)
+
+ - SourceFile: tools/io.hpp
+
+ - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
+
+ ******************************************************************************/
+
 #pragma once
 
 #include "tools/io/stuff.hpp"
@@ -9,7 +19,7 @@ namespace reticolo
     {
         enum LOG_mode
         {
-            silet = 0,
+            silent = 0,
             log_only = 1,
             file_only = 2,
             all = 3

@@ -1,3 +1,13 @@
+/******************************************************************************
+
+ - reticolo (www.github.com/olmo-francesconi/reticolo.git)
+
+ - SourceFile: tools/io/logger.hpp
+
+ - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
+
+ ******************************************************************************/
+
 #pragma once
 
 #include "tools/types.hpp"
@@ -27,10 +37,10 @@ namespace reticolo
 
         public:
             Logger() : state(0), logger_name("unnamed"){};
-            Logger(std::string logger_name) : state(0), logger_name(logger_name){};
-            Logger(std::filesystem::path p, std::string fn)
+            Logger(std::string name) : state(0), logger_name(name){};
+            Logger(std::filesystem::path p, std::string fn, std::string name)
             {
-                init(p, fn);
+                init(p, fn, name);
             };
 
             Logger(Logger &&other) = default; // move constructor
@@ -41,10 +51,11 @@ namespace reticolo
                     file.close();
             }
 
-            void init(std::filesystem::path p, std::string fn)
+            void init(std::filesystem::path p, std::string fn, std::string name)
             {
                 path = std::filesystem::absolute(p);
                 file_name = fn;
+                logger_name = name;
 
                 file.open(path / file_name, std::ios::out | std::ios::trunc);
 

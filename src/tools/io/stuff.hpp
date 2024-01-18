@@ -1,3 +1,13 @@
+/******************************************************************************
+
+ - reticolo (www.github.com/olmo-francesconi/reticolo.git)
+
+ - SourceFile: tools/io/stuff.hpp
+
+ - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
+
+ ******************************************************************************/
+
 #pragma once
 
 #include "tools/types.hpp"
@@ -39,5 +49,20 @@ namespace reticolo
             }
             return std::format("{:>6.2f}", count) + " " + suffixes[s];
         };
+
+        ////////////////////////////////////////////////////////////
+        // Generic print() functions for the various types
+        ////////////////////////////////////////////////////////////
+        template<RealValue T>
+        std::string print(T val){
+            return std::format("{:+8e}", val);
+        }
+
+        template<ComplexValue T>
+        std::string print(T val){
+            return std::format("{:+8e}{:+8e}I", val.real(), val.imag());
+        }
+
     } // namespace IO
+    
 } // namespace reticolo

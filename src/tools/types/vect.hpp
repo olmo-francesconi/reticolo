@@ -1,17 +1,26 @@
+/******************************************************************************
+
+ - reticolo (www.github.com/olmo-francesconi/reticolo.git)
+
+ - SourceFile: tools/types/vect.hpp
+
+ - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
+
+ ******************************************************************************/
+
 #pragma once
 
-#include <array>
-
 #include <iostream>
+#include <array>
 
 namespace reticolo
 {
     // vector types
     template <size_t dim>
-    using vect = std::array<uint, dim>;
+    using uintvect = std::array<uint, dim>;
 
     template <size_t dim>
-    uint operator*(const vect<dim> &lhs, const vect<dim> &rhs)
+    uint operator*(const uintvect<dim> &lhs, const uintvect<dim> &rhs)
     {
         uint res = 0;
         for (int i = 0; i < dim; i++)
@@ -20,7 +29,7 @@ namespace reticolo
     }
 
     template <size_t dim>
-    inline void advance_vect(const vect<dim> &sizes, vect<dim> &coord)
+    inline void advance_coord(const uintvect<dim> &sizes, uintvect<dim> &coord)
     {
         coord.back()++;
         for (int i = dim - 1; i >= 0; i--)
@@ -34,7 +43,7 @@ namespace reticolo
     }
 
     template <size_t dim>
-    inline void print(const vect<dim> &v)
+    inline void print(const uintvect<dim> &v)
     {
         for (int i = 0; i < dim; i++)
             std::cout << v[i];

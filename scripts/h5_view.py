@@ -2,24 +2,25 @@
 
 import h5py
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
-f = h5py.File("../build/4_4_4_4/meas/llr_worker[000].h5", "r")
-# f = h5py.File("../build/16_16_16_16/meas/llr_worker[000].h5", "r")
+f = h5py.File("../build/4_4_4_4/meas/llr.h5", "r")
 
-keys = f.keys()
-print(keys)
+runs = f.keys()
+# aks = f[runs[0]].keys()
+print(runs[1])
+# print(aks)
 
-for key in keys:
-    print(f[key].keys())
+print(np.array(f["run0/ak_001"]))
 
-    data = pd.DataFrame(f[key]["mc"][()])
+# for r in runs:
+#     ak = f[r].keys()
+#     # data = []
 
-    print(pd.DataFrame(f[key]["mc"]["S_re"]))
-    print(pd.DataFrame(f[key]["mc"]["dS_re"]).mean())
+#     for a in ak:
+#         tmp = pd.DataFrame(f[r][a]).to_numpy()
+#         print(pd.DataFrame(f[r][a]))
+#         # np.concatenate((data, tmp), axis=0)
 
-    # data.plot(title=key)
-    pd.DataFrame(f[key]["mc"]["dS_re"]).plot(kind="hist", bins=100)
-    pd.DataFrame(f[key]["mc"]["S_re"]).plot()
-
-plt.show()
+#     # print(data)
