@@ -2,17 +2,17 @@
 
  - reticolo (www.github.com/olmo-francesconi/reticolo.git)
 
- - SourceFile: tools/types.hpp
+ - SourceFile: action/impl/gr.hpp
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
  ******************************************************************************/
 
-#pragma once
+#include "action/gr.hpp"
 
-#include "tools/types/basic.hpp"
-#include "tools/types/vect.hpp"
-#include "tools/types/hfield.hpp"
-#include "tools/types/random.hpp"
+#include "tools/types.hpp"
 
-#include "tools/types/concepts.hpp"
+reticolo::RealD reticolo::action::WeakFieldEuclideanGR::compute_S(const lattice<HField, 4> &field)
+{
+    return RealD();
+}
