@@ -1,13 +1,12 @@
-#include "reticolo.hpp"
-
 #include <format>
 #include <iostream>
+#include <reticolo/reticolo.hpp>
 #include <string>
 #include <vector>
 
 using namespace reticolo;
 
-int main(int argc, char *argv[]) {
+auto main(int argc, char* argv[]) -> int {
   std::cout << IO::pretty_welcome() << '\n';
 
   std::vector<uintvect<4>> Volumes = {
@@ -21,14 +20,13 @@ int main(int argc, char *argv[]) {
       // {64, 64, 64, 64},
   };
 
-  for (const auto &Volume : Volumes) {
+  for (const auto& Volume : Volumes) {
     // std::cout << std::format("Lattice size: {} x {} x {} x {}", volume[_t],
     // volume[_x], volume[_y], volume[_z]) << std::endl;
 
-    std::string OutPath = std::format("./{}_{}_{}_{}", Volume[_t], Volume[_x],
-                                      Volume[_y], Volume[_z]);
+    std::string OutPath = std::format("./{}_{}_{}_{}", Volume[_t], Volume[_x], Volume[_y], Volume[_z]);
 
-    action::phi4 Action(1.0, 9.0, 1.0);
+    action::phi4<ComplexD, ComplexD> Action(1.0, 9.0, 1.0);
 
     LLR::controller Cont(Action);
 

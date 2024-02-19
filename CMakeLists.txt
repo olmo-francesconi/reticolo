@@ -8,6 +8,15 @@ set(CMAKE_CXX_COMPILER "/opt/homebrew/opt/llvm/bin/clang++")
 # Export compilation commands
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# setup build type
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+set(CMAKE_CXX_FLAGS "-Wall")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -ffast-math")
+
 # Project name and a few useful settings. Other commands can pick up the results
 project(
   reticolo
@@ -44,6 +53,13 @@ endif()
 
 # HDF5
 find_package(HDF5 REQUIRED CXX HL)
+
+#OpenMP
+FIND_PACKAGE(OpenMP)
+  IF(OPENMP_FOUND)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+  ENDIF()
 
 # The compiled library code is here
 add_subdirectory(src)

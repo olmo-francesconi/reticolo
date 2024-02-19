@@ -10,17 +10,10 @@
 
 #pragma once
 
-#include <config.h>
+// actions
+#include "reticolo/action/gr.hpp"
+#include "reticolo/action/phi4.hpp"
 
-#include "tools/timer.hpp"
-#include "tools/types.hpp"
-#include "tools/io.hpp"
-
-// #include "action/action_base.hpp"
-#include "action/phi4.hpp"
-#include "action/gr.hpp"
-
-#include "lattice/lattice.hpp"
-
-#include "llr/worker.hpp"
-#include "llr/controller.hpp"
+// LLR
+#include "reticolo/llr/controller.hpp"
+#include "reticolo/llr/worker.hpp"

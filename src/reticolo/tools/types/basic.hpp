@@ -37,4 +37,4 @@ using RealF = float;
 using RealD = double;
 using ComplexF = std::complex<float>;
 using ComplexD = std::complex<double>;
-} // namespace reticolo
+}  // namespace reticolo

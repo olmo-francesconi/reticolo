@@ -1,0 +1,173 @@
+/******************************************************************************
+
+ - reticolo
+ (www.github.com/olmo-francesconi/reticolo.git)
+
+ - SourceFile: action/phi4.hpp
+
+ - Author: Olmo Francesconi
+ <olmo.francesconi@glasgow.ac.uk>
+
+ ******************************************************************************/
+
+#pragma once
+
+#include <format>
+#include <string>
+
+#include "H5Cpp.h"
+#include "reticolo/action/action_base.hpp"
+#include "reticolo/lattice/lattice.hpp"
+#include "reticolo/tools/types/basic.hpp"
+#include "reticolo/tools/types/concepts.hpp"
+#include "reticolo/tools/types/vect.hpp"
+
+namespace reticolo::action {
+
+template <ComplexValue TField, ComplexValue TAction>
+class phi4 : action_base<TField, TAction, 4> {
+ public:
+  using FieldType = TField;
+  using ActionType = TAction;
+  const static int Dims = 4;
+
+  struct params {
+    double lambda;
+    double eta;
+    double mu;
+
+    params() : lambda(1.0), eta(9.0), mu(0){};
+    params(double lambda, double eta, double mu) : lambda(lambda), eta(eta), mu(mu){};
+  } p;
+
+  struct observables {
+    double phi2;
+    double density;
+
+    auto dump_str() -> std::string { return std::format("{:+8e},{:+8e}", phi2, density); }
+    auto dump_data() const -> std::vector<double> { return std::vector<double>({phi2, density}); }
+  };
+  static void make_hdf5_CompType(H5::CompType& type) {
+    type.insertMember("phi2", HOFFSET(observables, phi2), H5::PredType::NATIVE_DOUBLE);
+    type.insertMember("density", HOFFSET(observables, density), H5::PredType::NATIVE_DOUBLE);
+  }
+
+  phi4() = default;
+  phi4(double l, double n, double u) : p(l, n, u){};
+  phi4(params par) : p(par){};
+  ~phi4(){};
+
+  auto compute_S(const lattice<FieldType, 4>& field) const -> ActionType override;
+  auto compute_S_loc(const lattice<FieldType, 4>& field, const uintvect<4>& coord) const -> ActionType override;
+  auto compute_dS_loc(const lattice<TField, 4>& field, const TField& dphi, const uintvect<4>& coord) const
+      -> ActionType override;
+
+  static auto Measure(const lattice<FieldType, 4>& field) -> observables;
+
+  auto action_name() -> std::string override { return "Complex phi^4"; };
+  auto action_parameters() -> std::string override {
+    std::stringstream Res;
+    Res << "[ lambda : " << std::format("{:4.1f}", p.lambda) << ", eta : " << std::format("{:4.1f}", p.eta)
+        << ", mu : " << std::format("{:4.1f}", p.mu) << " ]";
+    return Res.str();
+  }
+};
+
+template <ComplexValue TField, ComplexValue TAction>
+inline auto phi4<TField, TAction>::compute_S(const lattice<TField, 4>& Field) const -> TAction {
+  double Real = 0.0;
+  double Imag = 0.0;
+  TAction Phi;
+
+  uintvect<4> Sizes = Field.getSizes();
+  uintvect<4> Coord;
+  std::fill(Coord.begin(), Coord.end(), 0);
+  for (uint Site = 0; Site < Field.getNsites(); advance_coord(Sizes, Coord), Site++) {
+    Phi = Field[Coord];
+
+    double Phi2 = Phi.real() * Phi.real() + Phi.imag() * Phi.imag();
+
+    Real += 0.5 * p.eta * Phi2 + 0.25 * p.lambda * Phi2 * Phi2 -
+            (Phi.real() * Field[next(Field, Coord, _x)].real() + Phi.imag() * Field[next(Field, Coord, _x)].imag()) -
+            (Phi.real() * Field[next(Field, Coord, _y)].real() + Phi.imag() * Field[next(Field, Coord, _y)].imag()) -
+            (Phi.real() * Field[next(Field, Coord, _z)].real() + Phi.imag() * Field[next(Field, Coord, _z)].imag()) -
+            cosh(p.mu) *
+                (Phi.real() * Field[next(Field, Coord, _t)].real() + Phi.imag() * Field[next(Field, Coord, _t)].imag());
+
+    Imag += sinh(p.mu) *
+            (Phi.real() * Field[next(Field, Coord, _t)].imag() - Phi.imag() * Field[next(Field, Coord, _t)].real());
+  }
+
+  return {Real, Imag};
+};
+
+template <ComplexValue TField, ComplexValue TAction>
+inline auto phi4<TField, TAction>::compute_S_loc(const lattice<TField, 4>& Field, const uintvect<4>& Coord) const
+    -> TAction {
+  TAction Phi = Field[Coord];
+  TAction PhiNt = Field[next(Field, Coord, _t)];
+  TAction PhiPt = Field[prev(Field, Coord, _t)];
+
+  double Phi2 = Phi.real() * Phi.real() + Phi.imag() * Phi.imag();
+
+  double Real = 0.5 * p.eta * Phi2 + 0.25 * p.lambda * Phi2 * Phi2 -
+                Phi.real() * (Field[next(Field, Coord, _x)].real() + Field[prev(Field, Coord, _x)].real() +
+                              Field[next(Field, Coord, _y)].real() + Field[prev(Field, Coord, _y)].real() +
+                              Field[next(Field, Coord, _z)].real() + Field[prev(Field, Coord, _z)].real() +
+                              cosh(p.mu) * PhiNt.real() + cosh(p.mu) * PhiPt.real()) -
+                Phi.imag() * (Field[next(Field, Coord, _x)].imag() + Field[prev(Field, Coord, _x)].imag() +
+                              Field[next(Field, Coord, _y)].imag() + Field[prev(Field, Coord, _y)].imag() +
+                              Field[next(Field, Coord, _z)].imag() + Field[prev(Field, Coord, _z)].imag() +
+                              cosh(p.mu) * PhiNt.imag() + cosh(p.mu) * PhiPt.imag());
+
+  double Imag = sinh(p.mu) * (Phi.real() * PhiNt.imag() - Phi.imag() * PhiNt.real()) +
+                sinh(p.mu) * (PhiPt.real() * Phi.imag() - PhiPt.imag() * Phi.real());
+
+  return {Real, Imag};
+};
+
+template <ComplexValue TField, ComplexValue TAction>
+inline auto phi4<TField, TAction>::compute_dS_loc(const lattice<TField, 4>& Field, const TField& dPhi,
+                                                  const uintvect<4>& Coord) const -> TAction {
+  TField PhiOld = Field[Coord];
+  TField PhiNew = PhiOld + dPhi;
+  TField PhiNt = Field[next(Field, Coord, _t)];
+  TField PhiPt = Field[prev(Field, Coord, _t)];
+
+  double Phi2Old = PhiOld.real() * PhiOld.real() + PhiOld.imag() * PhiOld.imag();
+  double Phi2New = PhiNew.real() * PhiNew.real() + PhiNew.imag() * PhiNew.imag();
+
+  double dPhi2 = Phi2New - Phi2Old;
+  double dPhi4 = Phi2New * Phi2New - Phi2Old * Phi2Old;
+
+  TField NeighborsSum = Field[next(Field, Coord, _x)] + Field[prev(Field, Coord, _x)] + Field[next(Field, Coord, _y)] +
+                        Field[prev(Field, Coord, _y)] + Field[next(Field, Coord, _z)] + Field[prev(Field, Coord, _z)] +
+                        cosh(p.mu) * (PhiNt + PhiPt);
+
+  double Real = 0.5 * p.eta * dPhi2 + 0.25 * p.lambda * dPhi4 - dPhi.real() * NeighborsSum.real() -
+                dPhi.imag() * NeighborsSum.imag();
+
+  double Imag = (dPhi.real() * PhiNt.imag() - dPhi.imag() * PhiNt.real()) +
+                (PhiPt.real() * dPhi.imag() - PhiPt.imag() * dPhi.real());
+
+  return {Real, Imag};
+};
+
+template <ComplexValue TField, ComplexValue TAction>
+inline auto phi4<TField, TAction>::Measure(const lattice<TField, 4>& field) -> phi4::observables {
+  TField Phi;
+  double Phi2 = 0.0;
+
+  uintvect<4> Sizes = field.getSizes();
+  uintvect<4> Coord;
+  std::fill(Coord.begin(), Coord.end(), 0);
+
+  for (uint Site = 0; Site < field.getNsites(); advance_coord(Sizes, Coord), Site++) {
+    Phi = field[Coord];
+    Phi2 += Phi.real() * Phi.real() + Phi.imag() * Phi.imag();
+  }
+
+  return observables(0.5 * Phi2 / (double)field.getNsites(), 0.0);
+};
+
+}  // namespace reticolo::action

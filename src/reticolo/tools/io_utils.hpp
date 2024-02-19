@@ -10,15 +10,15 @@
 
 #pragma once
 
-#include "tools/types.hpp"
-
 #include <array>
 #include <cstddef>
 #include <format>
 #include <string>
 
+#include "reticolo/tools/types/concepts.hpp"
+
 namespace reticolo::IO {
-inline std::string pretty_welcome() {
+inline auto pretty_welcome() -> std::string {
   // clang-format off
   const std::string WelcomeLogo =
       R"(________________________________________________________________________________)" "\n"
@@ -35,7 +35,7 @@ inline std::string pretty_welcome() {
 };
 
 const size_t KILO = 1024;
-inline std::string pretty_bytes(size_t bytes) {
+inline auto pretty_bytes(size_t bytes) -> std::string {
   std::array<std::string, 7> Suffixes(
       {"B", "KB", "MB", "GB", "TB", "PB", "EB"});
   uint SuffixIndex = 0; // which suffix to use

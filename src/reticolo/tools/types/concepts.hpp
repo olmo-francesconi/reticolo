@@ -10,9 +10,9 @@
 
 #pragma once
 
-#include "tools/types/basic.hpp"
-
 #include <random>
+
+#include "reticolo/tools/types/basic.hpp"
 
 namespace reticolo {
 
@@ -24,13 +24,11 @@ template <typename T>
 concept ComplexValue = std::same_as<T, ComplexD> || std::same_as<T, ComplexF>;
 
 template <typename T>
-concept RNGDist =
-    std::same_as<T, std::normal_distribution<typename T::result_type>> ||
-    std::same_as<T, std::uniform_real_distribution<typename T::result_type>>;
+concept RNGDist = std::same_as<T, std::normal_distribution<typename T::result_type>> ||
+                  std::same_as<T, std::uniform_real_distribution<typename T::result_type>>;
 
 template <typename T>
-concept RNGGen =
-    std::same_as<T, std::mt19937> || std::same_as<T, std::mt19937_64> ||
-    std::same_as<T, std::ranlux24> || std::same_as<T, std::ranlux48>;
+concept RNGGen = std::same_as<T, std::mt19937> || std::same_as<T, std::mt19937_64> || std::same_as<T, std::ranlux24> ||
+                 std::same_as<T, std::ranlux48>;
 
-} // namespace reticolo
+}  // namespace reticolo
