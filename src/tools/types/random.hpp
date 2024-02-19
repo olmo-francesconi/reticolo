@@ -10,31 +10,37 @@
 
 #pragma once
 
-#include "tools/types/basic.hpp"
-#include "tools/types/hfield.hpp"
 #include "tools/types/concepts.hpp"
+#include "tools/types/hfield.hpp"
 
-namespace reticolo
+namespace reticolo {
+/* Randomize real-valued variable */
+template <RealValue ValType, RNGDist DistType, RNGGen GenType>
+inline void randomize(ValType &Val, const ValType &Scale, DistType &Dist,
+                      GenType &Gen)
+  requires std::same_as<ValType, typename DistType::result_type>
 {
-    template <RealValue ValType, RNGDist DistType, RNGGen GenType>
-    ValType random(DistType &dist, GenType &gen)
-    {
-        return dist(gen);
-    }
+  Val = Scale * Dist(Gen);
+}
 
-    template <ComplexValue ValType, RNGDist DistType, RNGGen GenType>
-    ValType random(DistType &dist, GenType &gen)
-    {
-        return ValType(dist(gen), dist(gen));
-    }
+/* Randomize complex-valued variable */
+template <ComplexValue ValType, RNGDist DistType, RNGGen GenType>
+inline void randomize(ValType &Val, const typename ValType::value_type &Scale,
+                      DistType &Dist, GenType &Gen)
+  requires std::same_as<typename ValType::value_type,
+                        typename DistType::result_type>
+{
+  Val = Scale * ValType(Dist(Gen), Dist(Gen));
+}
 
-    template <typename ValType = HField, RNGDist DistType, RNGGen GenType>
-    ValType random(DistType &dist, GenType &gen)
-    {
-        HField res;
-        for (int i = 0; i < 10; i++)
-            res[i] = dist(gen);
-        return res;
-    }
+/* Randomize Hfield variable (GR metric perturbation) */
+template <RNGDist DistType, RNGGen GenType>
+inline void randomize(HField &Val, double &Scale, DistType &Dist, GenType &Gen)
+  requires std::same_as<double, typename DistType::result_type>
+{
+  for (int Comp = 0; Comp < HfieldNComp; Comp++) {
+    Val[Comp] = Scale * Dist(Gen);
+  }
+}
 
 } // namespace reticolo

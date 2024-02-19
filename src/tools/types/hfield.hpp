@@ -10,8 +10,9 @@
 
 #pragma once
 
-#include <iostream>
 #include <array>
+#include <cstddef>
+#include <iostream>
 
 // look-up table for the symmetric h_\mu\nu components
 // These speed-up data access by referencing directly the data in the linearized
@@ -33,83 +34,82 @@
 #define MUNU_32 8
 #define MUNU_33 9
 
-namespace reticolo
-{
-    // Basic matrix class to store h fields
-    struct HField
-    {
-        std::array<double, 10> mat;
+const size_t HfieldNComp = 10;
 
-        HField(){};  // std::cout << "HField::HField() constructor called" << std::endl; };
-        ~HField(){}; // std::cout << "HField::~HField() destructor called" << std::endl; };
+namespace reticolo {
+// Basic matrix class to store h fields
+struct HField {
+  std::array<double, HfieldNComp> mat;
 
-        // Array-like access operators
-        double &operator[](size_t index) { return mat[index]; };
-        const double &operator[](size_t index) const { return mat[index]; };
-        double &operator()(size_t mu, size_t nu)
-        {
-            if (nu < mu)
-                std::swap(mu, nu);
-            return mat[4 * mu + nu - (mu * (mu + 1)) / 2];
-        }
-        const double &operator()(size_t mu, size_t nu) const
-        {
-            if (nu < mu)
-                std::swap(mu, nu);
-            return mat[4 * mu + nu - (mu * (mu + 1)) / 2];
-        }
+  HField() = default; // std::cout << "HField::HField() constructor called" <<
+                      // std::endl; };
+  ~HField(){};        // std::cout << "HField::~HField() destructor called" <<
+                      // std::endl; };
 
-        HField &operator=(const HField &other)
-        {
-            std::copy(other.mat.begin(), other.mat.end(), mat.begin());
-            return *this;
-        }
-
-        double trace() const;
-
-        void print();
-    }; // struct HField
-
-    inline double HField::trace() const
-    {
-        return mat[0] + mat[4] + mat[7] + mat[9];
+  // Array-like access operators
+  auto operator[](size_t index) -> double & { return mat[index]; };
+  auto operator[](size_t index) const -> const double & { return mat[index]; };
+  auto operator()(size_t mu, size_t nu) -> double & {
+    if (nu < mu) {
+      std::swap(mu, nu);
     }
-
-    inline void HField::print()
-    {
-        std::cout << std::scientific;
-        for (int mu = 0; mu < 4; mu++)
-        {
-            for (int nu = 0; nu < 4; nu++)
-                std::cout << (*this)(mu, nu) << "\t";
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
+    return mat[4 * mu + nu - (mu * (mu + 1)) / 2];
+  }
+  auto operator()(size_t mu, size_t nu) const -> const double & {
+    if (nu < mu) {
+      std::swap(mu, nu);
     }
+    return mat[4 * mu + nu - (mu * (mu + 1)) / 2];
+  }
 
-    // Math methods for Hfield objects
-    namespace HField_math
-    {
-        // compute res = c * (A - B) element wise
-        inline void diff(HField &res, const HField &A, const HField &B, const double c = 1.0)
-        {
-            for (size_t i = 0; i < 10; i++)
-                res[i] = c * (A[i] - B[i]);
-        }
+  auto operator=(const HField &other) -> HField & {
+    std::copy(other.mat.begin(), other.mat.end(), mat.begin());
+    return *this;
+  }
 
-        // compute res = c * (A + B) element wise
-        inline void sum(HField &res, const HField &A, const HField &B, const double c = 1.0)
-        {
-            for (size_t i = 0; i < 10; i++)
-                res[i] = c * (A[i] + B[i]);
-        }
+  [[nodiscard]] auto trace() const -> double;
 
-        inline void prod(HField &res, const double lhs, const HField &rhs)
-        {
-            for (size_t i = 0; i < 10; i++)
-                res[i] = lhs * rhs[i];
-        }
+  void print();
+}; // struct HField
 
-    } // namespace HField_math
+inline auto HField::trace() const -> double {
+  return mat[0] + mat[4] + mat[7] + mat[9];
+}
 
+inline void HField::print() {
+  std::cout << std::scientific;
+  for (int mu = 0; mu < 4; mu++) {
+    for (int nu = 0; nu < 4; nu++) {
+      std::cout << (*this)(mu, nu) << "\t";
+    }
+    std::cout << '\n';
+  }
+  std::cout << '\n';
+}
+
+// Math methods for Hfield objects
+namespace HField_math {
+// compute res = c * (A - B) element wise
+inline void diff(HField &res, const HField &A, const HField &B,
+                 const double c = 1.0) {
+  for (size_t Comp = 0; Comp < HfieldNComp; Comp++) {
+    res[Comp] = c * (A[Comp] - B[Comp]);
+  }
+}
+
+// compute res = c * (A + B) element wise
+inline void sum(HField &res, const HField &A, const HField &B,
+                const double c = 1.0) {
+  for (size_t Comp = 0; Comp < HfieldNComp; Comp++) {
+    res[Comp] = c * (A[Comp] + B[Comp]);
+  }
+}
+
+inline void prod(HField &res, const double lhs, const HField &rhs) {
+  for (size_t Comp = 0; Comp < HfieldNComp; Comp++) {
+    res[Comp] = lhs * rhs[Comp];
+  }
+}
+
+} // namespace HField_math
 } // namespace reticolo

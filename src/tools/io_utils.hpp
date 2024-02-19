@@ -1,0 +1,61 @@
+/******************************************************************************
+
+ - reticolo (www.github.com/olmo-francesconi/reticolo.git)
+
+ - SourceFile: tools/io_utils.hpp
+
+ - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
+
+ ******************************************************************************/
+
+#pragma once
+
+#include "tools/types.hpp"
+
+#include <array>
+#include <cstddef>
+#include <format>
+#include <string>
+
+namespace reticolo::IO {
+inline std::string pretty_welcome() {
+  // clang-format off
+  const std::string WelcomeLogo =
+      R"(________________________________________________________________________________)" "\n"
+      R"(                                                                                )" "\n"
+      R"(         ██████╗ ███████╗████████╗██╗ ██████╗ ██████╗ ██╗      ██████╗          )" "\n"
+      R"(         ██╔══██╗██╔════╝╚══██╔══╝██║██╔════╝██╔═══██╗██║     ██╔═══██╗         )" "\n"
+      R"(         ██████╔╝█████╗     ██║   ██║██║     ██║   ██║██║     ██║   ██║         )" "\n"
+      R"(         ██╔══██╗██╔══╝     ██║   ██║██║     ██║   ██║██║     ██║   ██║         )" "\n"
+      R"(         ██║  ██║███████╗   ██║   ██║╚██████╗╚██████╔╝███████╗╚██████╔╝         )" "\n"
+      R"(         ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝ ╚═════╝          )" "\n"
+      R"(________________________________________________________________________________)" "\n";
+  //clang-format on
+  return WelcomeLogo;
+};
+
+const size_t KILO = 1024;
+inline std::string pretty_bytes(size_t bytes) {
+  std::array<std::string, 7> Suffixes(
+      {"B", "KB", "MB", "GB", "TB", "PB", "EB"});
+  uint SuffixIndex = 0; // which suffix to use
+  double Count = bytes;
+  while (Count >= KILO && SuffixIndex < Suffixes.size()) {
+    SuffixIndex++;
+    Count /= KILO;
+  }
+  return std::format("{:>6.2f}", Count) + " " + Suffixes[SuffixIndex];
+};
+
+////////////////////////////////////////////////////////////
+// Generic print() functions for the various types
+////////////////////////////////////////////////////////////
+template <RealValue T> std::string print(T val) {
+  return std::format("{:+8e}", val);
+}
+
+template <ComplexValue T> std::string print(T val) {
+  return std::format("{:+8e}{:+8e}I", val.real(), val.imag());
+}
+
+} // namespace reticolo::IO
