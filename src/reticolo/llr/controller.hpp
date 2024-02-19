@@ -75,12 +75,12 @@ void controller<Action>::init(const fs::path& out_path, uintvect<Action::Dims> l
   std::stringstream LogMessage;
 
   // Log that the folder and loggind stuff has bee initialized properly
-  LogMessage << IO::LogLineInit_time() << "llr_controller - Initialization started...\n"
-             << IO::LogLineInit_void() << "                     main oputput folder: " << output_path.string() << "\n"
-             << IO::LogLineInit_void()
-             << "                     measurements folder: " << (output_path / "llr" / "meas").string() << "\n"
-             << IO::LogLineInit_void()
-             << "                             logs folder: " << (output_path / "llr" / "logs").string() << '\n';
+  LogMessage << IO::LI_time() << "llr_controller - Initialization started...\n"
+             << IO::LI_void() << "                     main oputput folder: " << output_path.string() << "\n"
+             << IO::LI_void() << "                     measurements folder: " << (output_path / "llr" / "meas").string()
+             << "\n"
+             << IO::LI_void() << "                             logs folder: " << (output_path / "llr" / "logs").string()
+             << '\n';
   IO::GlobalLogger << LogMessage;
 
   // Initialize the output file
@@ -95,16 +95,16 @@ void controller<Action>::init(const fs::path& out_path, uintvect<Action::Dims> l
   }
 
   // Log stuff
-  LogMessage << IO::LogLineInit_void()
+  LogMessage << IO::LI_void()
              << "                          ak output file: " << (output_path / "llr" / "meas" / "llr.h5").string()
              << "\n"
-             << IO::LogLineInit_void() << "llr_controller - Action-info\n"
-             << IO::LogLineInit_void() << "                           name : " << action.action_name() << "\n"
-             << IO::LogLineInit_void() << "                     parameters : " << action.action_parameters() << "\n"
-             << IO::LogLineInit_time() << "llr_controller - Workers initialization started...\n"
-             << IO::LogLineInit_void() << "                     workers #: " << nWorkers << "\n"
-             << IO::LogLineInit_void() << "                    deltaS / V: " << scale << "\n"
-             << IO::LogLineInit_void() << "                        deltaS: " << scale * (double)get_volume(lattice_size)
+             << IO::LI_void() << "llr_controller - Action-info\n"
+             << IO::LI_void() << "                           name : " << action.action_name() << "\n"
+             << IO::LI_void() << "                     parameters : " << action.action_parameters() << "\n"
+             << IO::LI_time() << "llr_controller - Workers initialization started...\n"
+             << IO::LI_void() << "                     workers #: " << nWorkers << "\n"
+             << IO::LI_void() << "                    deltaS / V: " << scale << "\n"
+             << IO::LI_void() << "                        deltaS: " << scale * (double)get_volume(lattice_size)
              << std::endl;
   IO::GlobalLogger << LogMessage;
 
@@ -129,9 +129,9 @@ void controller<Action>::init(const fs::path& out_path, uintvect<Action::Dims> l
   }
 
   // Log stuff
-  LogMessage << IO::LogLineInit_time() << "llr_controller - Initialization completed in " << T.elapsed_ms() << " ms\n"
-             << IO::LogLineInit_void()
-             << "                 Total memory allocated: " << IO::pretty_bytes(memoryReport()) << std::endl;
+  LogMessage << IO::LI_time() << "llr_controller - Initialization completed in " << T.elapsed_ms() << " ms\n"
+             << IO::LI_void() << "                 Total memory allocated: " << IO::pretty_bytes(memoryReport())
+             << std::endl;
   IO::GlobalLogger << LogMessage;
 }
 

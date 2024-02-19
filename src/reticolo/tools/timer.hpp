@@ -16,7 +16,7 @@ namespace reticolo {
 
 // Timer Class
 class Timer {
-private:
+ private:
   using clock_ = std::chrono::high_resolution_clock;
   using s_ = std::chrono::duration<double>;
   using ms_ = std::chrono::duration<double, std::milli>;
@@ -24,17 +24,17 @@ private:
 
   std::chrono::time_point<clock_> _beg;
 
-public:
+ public:
   Timer() : _beg(clock_::now()) {}
   void reset() { _beg = clock_::now(); }
 
-  [[nodiscard]] double elapsed_s() const {
+  [[nodiscard]] auto elapsed_s() const -> double {
     return std::chrono::duration_cast<s_>(clock_::now() - _beg).count();
   }
-  [[nodiscard]] double elapsed_ms() const {
+  [[nodiscard]] auto elapsed_ms() const -> double {
     return std::chrono::duration_cast<ms_>(clock_::now() - _beg).count();
   }
-  [[nodiscard]] double elapsed_us() const {
+  [[nodiscard]] auto elapsed_us() const -> double {
     return std::chrono::duration_cast<us_>(clock_::now() - _beg).count();
   }
 };
@@ -42,4 +42,4 @@ public:
 // Global timer
 inline Timer GlobalTimer;
 
-} // namespace reticolo
+}  // namespace reticolo

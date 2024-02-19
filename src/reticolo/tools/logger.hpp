@@ -26,31 +26,31 @@ namespace reticolo::IO {
 //----------------------------------------------------------
 
 /* Default reticolo log line init with timing */
-inline auto LogLineInit_time() -> std::string {
+inline auto LI_time() -> std::string {
   std::string Message = "reticolo..." + std::format("{:.>10.3f}", GlobalTimer.elapsed_s()) + " s | ";
   return Message;
 };
 
 /* Default reticolo log line init with dots */
-inline auto LogLineInit_dots() -> std::string {
+inline auto LI_dots() -> std::string {
   std::string Message = "reticolo............... | ";
   return Message;
 };
 
 /* Default reticolo log line empty init */
-inline auto LogLineInit_void() -> std::string {
+inline auto LI_void() -> std::string {
   std::string Message = "                        | ";
   return Message;
 };
 
 /* Default reticolo log error line init */
-inline auto LogLineInit_erro() -> std::string {
+inline auto LI_erro() -> std::string {
   std::string Message = "reticolo..........ERROR | ";
   return Message;
 };
 
 /* Default reticolo log warning line init */
-inline auto LogLineInit_warn() -> std::string {
+inline auto LI_warn() -> std::string {
   std::string Message = "reticolo..........ERROR | ";
   return Message;
 };
@@ -116,7 +116,7 @@ class Logger {
 
   inline void log_string(const std::string& who, const std::string& what) {
     if (state == 1) {
-      file << LogLineInit_time() << who << " - " << what << '\n';
+      file << LI_time() << who << " - " << what << '\n';
     } else {
       throw std::runtime_error(
           "reticolo: LOGGER ERROR : Trying to write to an "
@@ -126,7 +126,7 @@ class Logger {
 
   inline void log_timing(const std::string& who, const std::string& what, double time) {
     if (state == 1) {
-      file << LogLineInit_time() << who << " - " << what << " in " << std::format("{:>8.2f}", time) << " ms" << '\n';
+      file << LI_time() << who << " - " << what << " in " << std::format("{:>8.2f}", time) << " ms" << '\n';
     } else {
       throw std::runtime_error(
           "reticolo: LOGGER ERROR : Trying to write to an "
@@ -136,7 +136,7 @@ class Logger {
 
   inline void log_memory(const std::string& who, const std::string& what, size_t memory) {
     if (state == 1) {
-      file << LogLineInit_time() << who << " - " << what << " " << pretty_bytes(memory) << '\n';
+      file << LI_time() << who << " - " << what << " " << pretty_bytes(memory) << '\n';
     } else {
       throw std::runtime_error(
           "reticolo: LOGGER ERROR : Trying to write to an "
@@ -146,7 +146,7 @@ class Logger {
 
   inline void log_threadig(const std::string& who, size_t nThreads) {
     if (state == 1) {
-      file << LogLineInit_time() << who << " - Running on " << nThreads << " threads" << '\n';
+      file << LI_time() << who << " - Running on " << nThreads << " threads" << '\n';
     } else {
       throw std::runtime_error(
           "reticolo: LOGGER ERROR : Trying to write to an "

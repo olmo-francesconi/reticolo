@@ -41,28 +41,28 @@ namespace reticolo {
 struct HField {
   std::array<double, HfieldNComp> mat;
 
-  HField() = default; // std::cout << "HField::HField() constructor called" <<
-                      // std::endl; };
-  ~HField(){};        // std::cout << "HField::~HField() destructor called" <<
-                      // std::endl; };
+  HField() = default;  // std::cout << "HField::HField() constructor called" <<
+                       // std::endl; };
+  ~HField(){};         // std::cout << "HField::~HField() destructor called" <<
+                       // std::endl; };
 
   // Array-like access operators
-  auto operator[](size_t index) -> double & { return mat[index]; };
-  auto operator[](size_t index) const -> const double & { return mat[index]; };
-  auto operator()(size_t mu, size_t nu) -> double & {
+  auto operator[](size_t index) -> double& { return mat[index]; };
+  auto operator[](size_t index) const -> const double& { return mat[index]; };
+  auto operator()(size_t mu, size_t nu) -> double& {
     if (nu < mu) {
       std::swap(mu, nu);
     }
     return mat[4 * mu + nu - (mu * (mu + 1)) / 2];
   }
-  auto operator()(size_t mu, size_t nu) const -> const double & {
+  auto operator()(size_t mu, size_t nu) const -> const double& {
     if (nu < mu) {
       std::swap(mu, nu);
     }
     return mat[4 * mu + nu - (mu * (mu + 1)) / 2];
   }
 
-  auto operator=(const HField &other) -> HField & {
+  auto operator=(const HField& other) -> HField& {
     std::copy(other.mat.begin(), other.mat.end(), mat.begin());
     return *this;
   }
@@ -70,11 +70,9 @@ struct HField {
   [[nodiscard]] auto trace() const -> double;
 
   void print();
-}; // struct HField
+};  // struct HField
 
-inline auto HField::trace() const -> double {
-  return mat[0] + mat[4] + mat[7] + mat[9];
-}
+inline auto HField::trace() const -> double { return mat[0] + mat[4] + mat[7] + mat[9]; }
 
 inline void HField::print() {
   std::cout << std::scientific;
@@ -90,26 +88,24 @@ inline void HField::print() {
 // Math methods for Hfield objects
 namespace HField_math {
 // compute res = c * (A - B) element wise
-inline void diff(HField &res, const HField &A, const HField &B,
-                 const double c = 1.0) {
+inline void diff(HField& res, const HField& A, const HField& B, const double c = 1.0) {
   for (size_t Comp = 0; Comp < HfieldNComp; Comp++) {
     res[Comp] = c * (A[Comp] - B[Comp]);
   }
 }
 
 // compute res = c * (A + B) element wise
-inline void sum(HField &res, const HField &A, const HField &B,
-                const double c = 1.0) {
+inline void sum(HField& res, const HField& A, const HField& B, const double c = 1.0) {
   for (size_t Comp = 0; Comp < HfieldNComp; Comp++) {
     res[Comp] = c * (A[Comp] + B[Comp]);
   }
 }
 
-inline void prod(HField &res, const double lhs, const HField &rhs) {
+inline void prod(HField& res, const double lhs, const HField& rhs) {
   for (size_t Comp = 0; Comp < HfieldNComp; Comp++) {
     res[Comp] = lhs * rhs[Comp];
   }
 }
 
-} // namespace HField_math
-} // namespace reticolo
+}  // namespace HField_math
+}  // namespace reticolo

@@ -26,8 +26,8 @@ class WeakFieldEuclideanGR : action_base<HField, RealD, 4> {
     double eta;
     double mu;
 
-    params() : lambda(1.0), eta(9.0), mu(0){};
-    params(double l, double e, double u) : lambda(l), eta(e), mu(u){};
+    // params() : lambda(1.0), eta(9.0), mu(0){};
+    // params(double lambda, double eta, double mu) : lambda(lambda), eta(eta), mu(mu){};
   };
 
   struct observables {
@@ -40,9 +40,9 @@ class WeakFieldEuclideanGR : action_base<HField, RealD, 4> {
     type.insertMember("R", HOFFSET(observables, R), H5::PredType::NATIVE_DOUBLE);
   }
 
-  auto compute_S(const lattice<HField, 4>& field) const -> RealD override;
-  auto compute_S_loc(const lattice<HField, 4>& field, const uintvect<4>& coord) const -> RealD override;
-  auto compute_dS_loc(const lattice<HField, 4>& field, const HField& dphi, const uintvect<4>& coord) const
+  [[nodiscard]] auto compute_S(const lattice<HField, 4>& field) const -> RealD override;
+  [[nodiscard]] auto compute_S_loc(const lattice<HField, 4>& field, const uintvect<4>& coord) const -> RealD override;
+  [[nodiscard]] auto compute_dS_loc(const lattice<HField, 4>& field, const HField& dphi, const uintvect<4>& coord) const
       -> RealD override;
 
   virtual void Measure(const lattice<HField, 4>& field);

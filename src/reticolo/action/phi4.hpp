@@ -45,7 +45,7 @@ class phi4 : action_base<TField, TAction, 4> {
     double density;
 
     auto dump_str() -> std::string { return std::format("{:+8e},{:+8e}", phi2, density); }
-    auto dump_data() const -> std::vector<double> { return std::vector<double>({phi2, density}); }
+    [[nodiscard]] auto dump_data() const -> std::vector<double> { return std::vector<double>({phi2, density}); }
   };
   static void make_hdf5_CompType(H5::CompType& type) {
     type.insertMember("phi2", HOFFSET(observables, phi2), H5::PredType::NATIVE_DOUBLE);
