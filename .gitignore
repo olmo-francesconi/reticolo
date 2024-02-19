@@ -37,8 +37,11 @@ build
 # VsCode folder
 .vscode
 
-# Autotools stuff
-autom4te.cache
-*~
 # MacOS crap
 .DS_store
+
+# clangd config
+.clangd
+
+# chace directory
+.cache
