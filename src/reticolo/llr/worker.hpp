@@ -32,9 +32,11 @@
 namespace fs = std::filesystem;
 
 namespace reticolo::LLR {
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// LLRWorker Class Declaration                                                                    //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/*--------------------------------------------------------------------------------------------------
+    LLRWorker Class Declaration
+--------------------------------------------------------------------------------------------------*/
+
 template <class Action>
 class LLRWorker {
   private:
@@ -87,7 +89,7 @@ class LLRWorker {
     void MonteCarlo_thermalize(uint nSteps, const std::string& run_id);
 
     /* Performs nMC Monte Carlo steps and returns a montecarlo::data object with the averages */
-    auto MonteCarlo_run(uint nMC, std::string run_id) -> montecarlo::data<typename Action::ActionType>;
+    auto MonteCarlo_run(uint nMC, const std::string& run_id) -> montecarlo::data<typename Action::ActionType>;
 
     /* Set the value of the LLR ak parameters*/
     void set_ak(double ak) { _Ak = ak; };
@@ -96,9 +98,10 @@ class LLRWorker {
     auto memoryReport() -> size_t;
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Public Methods Implmentations                                                                  //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+/*--------------------------------------------------------------------------------------------------
+    Public Methods Implmentations
+--------------------------------------------------------------------------------------------------*/
+
 template <class Action>
 void LLRWorker<Action>::init(const fs::path& output_path, uint id, uintvect<Action::Dims> sizes, uint rng_seed,
                              Action action, double Sk, double width, LOG_mode log_mode) {
@@ -112,7 +115,7 @@ void LLRWorker<Action>::init(const fs::path& output_path, uint id, uintvect<Acti
 
     // Initialize the logger
     if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
-        _Logger.init(output_path / "logs", _Name + ".log", _Name + "LOG");
+        _Logger.init(output_path / "logs", _Name + ".log", _Name + "LOG", false);
     }
 
     // Initialize the output file
@@ -211,18 +214,16 @@ void LLRWorker<Action>::MonteCarlo_thermalize(uint nSteps, const std::string& ru
 
     for (uint Iter = 0; Iter < nSteps; Iter++) {
         MCMC_sweep();
-
-        if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
-            log_MC(run_id + "_therm", Iter);
-        }
     }
+
     if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
         _Logger.log_timing(_Name, std::format("Performed {} thermalization steps", nSteps), _T.elapsed_ms());
     }
 }
 
 template <class Action>
-auto LLRWorker<Action>::MonteCarlo_run(uint nMC, std::string run_id) -> montecarlo::data<typename Action::ActionType> {
+auto LLRWorker<Action>::MonteCarlo_run(uint nMC, const std::string& run_id)
+    -> montecarlo::data<typename Action::ActionType> {
     _T.reset();
 
     montecarlo::data<typename Action::ActionType> Res;
@@ -297,9 +298,9 @@ auto LLRWorker<Action>::memoryReport() -> size_t {
     return Memory;
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Private Methods Implmentations                                                                 //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+/*--------------------------------------------------------------------------------------------------
+    Private Methods Implmentations
+--------------------------------------------------------------------------------------------------*/
 
 template <class Action>
 void LLRWorker<Action>::log_MC(std::string run_id, uint iter) {

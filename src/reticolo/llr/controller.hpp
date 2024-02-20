@@ -35,9 +35,10 @@
 namespace fs = std::filesystem;
 
 namespace reticolo::LLR {
-////////////////////////////////////////////////////////////////////////////////
-// LLRController Class declaration                                            //
-////////////////////////////////////////////////////////////////////////////////
+
+/*--------------------------------------------------------------------------------------------------
+    LLRController Class declaration
+--------------------------------------------------------------------------------------------------*/
 template <class Action>
 class LLRController {
   private:
@@ -70,7 +71,7 @@ class LLRController {
 
     /* Initializer function -> actually does all the set-up */
     void init(const fs::path& out_path, uintvect<Action::Dims> lattice_size, uint nWorkers, double scale,
-              LOG_mode MC_log_mode = LOG_mode::silent);
+              LOG_mode MC_log_mode = LOG_mode::all);
 
     /* Run the actual LLR simulation */
     void run(uint nNewton_Raphson, uint nRobbins_Monro, uint nMonte_Carlo, const std::string& run_id, uint replicas);
@@ -79,9 +80,10 @@ class LLRController {
     auto memoryReport() -> size_t;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-// Public methods implementation                                              //
-////////////////////////////////////////////////////////////////////////////////
+/*--------------------------------------------------------------------------------------------------
+    Public methods implementation
+--------------------------------------------------------------------------------------------------*/
+
 template <class Action>
 void LLRController<Action>::init(const fs::path& out_path, uintvect<Action::Dims> lattice_size, uint nWorkers,
                                  double scale, LOG_mode MC_log_mode) {
@@ -96,9 +98,9 @@ void LLRController<Action>::init(const fs::path& out_path, uintvect<Action::Dims
         fs::create_directories(_OutputPath / "llr" / "logs");
         fs::create_directories(_OutputPath / "llr" / "meas");
 
+        // We use the Global logger to log and print to stdout from the controller
+        // Each worker will then have its own log
         IO::GlobalLogger.init(_OutputPath, "reticolo.log");
-        IO::GlobalLogger.init(_OutputPath, "reticolo.log");
-
     } catch (const std::exception& Exept) {
         std::cerr << Exept.what() << '\n';
         exit(EXIT_FAILURE);
@@ -109,9 +111,9 @@ void LLRController<Action>::init(const fs::path& out_path, uintvect<Action::Dims
     // Log that the folder and loggind stuff has bee initialized properly
     // clang-format off
     LogMessage << IO::LI_time() << "llr_controller - Initialization started..." << "\n"
-             << IO::LI_void() << "    main oputput folder: " << _OutputPath.string() << "\n"
-             << IO::LI_void() << "    measurements folder: " << (_OutputPath / "llr" / "meas").string() << "\n"
-             << IO::LI_void() << "            logs folder: " << (_OutputPath / "llr" / "logs").string() << '\n';
+               << IO::LI_void() << "    main oputput folder: " << _OutputPath.string() << "\n"
+               << IO::LI_void() << "    measurements folder: " << (_OutputPath / "llr" / "meas").string() << "\n"
+               << IO::LI_void() << "            logs folder: " << (_OutputPath / "llr" / "logs").string() << '\n';
     IO::GlobalLogger << LogMessage;
     // clang-format on
 
@@ -163,7 +165,7 @@ void LLRController<Action>::init(const fs::path& out_path, uintvect<Action::Dims
     // Log stuff
     // clang-format off
     LogMessage << IO::LI_time() << "llr_controller - Initialization completed in " << IO::print(Time.elapsed_ms()) << " ms\n"
-              << IO::LI_void() << "     memory allocated : " << IO::pretty_bytes(memoryReport()) << std::endl;
+               << IO::LI_void() << "     memory allocated : " << IO::pretty_bytes(memoryReport()) << std::endl;
     IO::GlobalLogger << LogMessage;
     // clang-format on
 }
@@ -171,12 +173,15 @@ void LLRController<Action>::init(const fs::path& out_path, uintvect<Action::Dims
 template <class Action>
 void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint nMonte_Carlo, const std::string& run_id,
                                 uint replicas) {
+    // Initalize timer
     Timer Time;
 
+    // Main loop over replicas
     for (uint Rep = 0; Rep < replicas; Rep++) {
         std::string RunName = run_id + std::format("{}", Rep);
 
-        // Initialize ak values
+        // Initialize ak values and history vector
+        // resets them if they were set already
         std::fill(_AkVect.begin(), _AkVect.end(), 0.0);
         _AkHist.clear();
         _AkHist.push_back(_AkVect);
@@ -184,28 +189,23 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
             _Workers[WorkerId].set_ak(_AkVect[WorkerId]);
         }
 
-// initial thermalization
+        // initial thermalization
+        Time.reset();
 #pragma omp parallel for schedule(static, 1)
         for (auto& Worker : _Workers) {
-            // w.randomizeField(0.1);
-
-            // call imaginary action thermalization
             Worker.MonteCarlo_thermalize(1000, "burn-in");
         }
-        std::cout << "Thermalization done in " << Time.elapsed_ms() << " ms\n";
-        // IO::GlobalLogger.log_string("llr-controller", std::format("Thermalizarion done in {} ms",
-        // Time.elapsed_ms()));
+        IO::GlobalLogger.log_string("llr-controller", std::format("Thermalizarion done in {} ms", Time.elapsed_ms()));
 
+        // Newton - Raphson Iterations
         Time.reset();
         NewtonRaphson(nNewton_Raphson, nMonte_Carlo);
-        std::cout << "Newton-Raphson done in " << Time.elapsed_ms() << " ms\n";
-        // IO::GlobalLogger.log_string("llr-controller", std::format("Newton-Raphson done in {} ms",
-        // Time.elapsed_ms()));
+        IO::GlobalLogger.log_string("llr-controller", std::format("Newton-Raphson done in {} ms", Time.elapsed_ms()));
 
+        // Robbins - Monro Iterations
         Time.reset();
         RobbinsMonro(nRobbins_Monro, nMonte_Carlo);
-        std::cout << "Robbins-Monro done in " << Time.elapsed_ms() << " ms\n";
-        // IO::GlobalLogger.log_string("llr-controller", std::format("Robbins-Monro done in {} ms", Time.elapsed_ms()));
+        IO::GlobalLogger.log_string("llr-controller", std::format("Robbins-Monro done in {} ms", Time.elapsed_ms()));
 
         // File output
         Time.reset();
@@ -224,16 +224,15 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
             // Create datatype
             H5::FloatType DataType = H5::PredType::NATIVE_DOUBLE;
 
-            for (uint Worker = 0; Worker < _Workers.size(); Worker++) {
+            for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
                 std::vector<double> Data;
                 Data.reserve(_AkHist.size());
                 for (const auto& Val : _AkHist) {
-                    Data.push_back(Val[Worker]);
+                    Data.push_back(Val[WorkerId]);
                 }
-
                 // Create dataset and write the observables dataset
                 H5::DataSet Dataset =
-                    File.createDataSet("/" + RunName + "/ak" + std::format("_{:0>3d}", Worker), DataType, DataSpace);
+                    File.createDataSet("/" + RunName + "/ak" + std::format("_{:0>3d}", WorkerId), DataType, DataSpace);
                 Dataset.write(Data.data(), DataType);
             }
         } catch (H5::Exception& Exep) {
@@ -242,14 +241,12 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
         }
 
         IO::GlobalLogger.log_string("llr-controller", std::format("Data saved in {} ms", IO::print(Time.elapsed_ms())));
-        std::cout << "Data saved in " << Time.elapsed_ms() << " ms"
-                  << "\n";
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Private methods implementation                                             //
-////////////////////////////////////////////////////////////////////////////////
+/*--------------------------------------------------------------------------------------------------
+    Private methods implementation
+--------------------------------------------------------------------------------------------------*/
 template <class Action>
 void LLRController<Action>::NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carlo) {
     // Newton-Raphson Iterations
