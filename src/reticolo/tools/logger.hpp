@@ -157,7 +157,7 @@ inline void Logger::log_string(const std::string& who, const std::string& what) 
 
 inline void Logger::log_timing(const std::string& who, const std::string& what, double time) {
     if (_State == 1) {
-        _Msg = LI_time() + who + " - " + what + " in " + std::format("{:>8.2f}", time) + " ms" + '\n';
+        _Msg = LI_time() + who + " - " + what + "\t[" + std::format("{:.2f}", time) + " ms]\n";
         _File << _Msg;
         if (_SdtOut) {
             std::cout << _Msg;
