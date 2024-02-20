@@ -72,7 +72,7 @@ class LLRController {
 
     /* Initializer function -> actually does all the set-up */
     void init(const fs::path& out_path, uintvect<Action::Dims> lattice_size, uint nWorkers, double scale,
-              LOG_mode MC_log_mode = LOG_mode::all);
+              LOG_mode MC_log_mode = LOG_mode::silent);
 
     /* Run the actual LLR simulation */
     void run(uint nNewton_Raphson, uint nRobbins_Monro, uint nMonte_Carlo, const std::string& run_id, uint replicas);
