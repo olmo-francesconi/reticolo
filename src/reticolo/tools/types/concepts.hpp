@@ -12,7 +12,7 @@
 
 #include <random>
 
-#include "reticolo/tools/types/basic.hpp"
+#include "reticolo/tools/types/core.hpp"
 
 namespace reticolo {
 

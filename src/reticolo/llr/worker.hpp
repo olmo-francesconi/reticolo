@@ -10,295 +10,307 @@
 
 #pragma once
 
+#include <H5public.h>
+
+#include <array>
+#include <cstddef>
+#include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <random>
+#include <string>
+#include <vector>
 
 #include "H5Cpp.h"
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/montecarlo/montecarlo_data.hpp"
 #include "reticolo/tools/logger.hpp"
 #include "reticolo/tools/timer.hpp"
-#include "reticolo/tools/types/basic.hpp"
+#include "reticolo/tools/types/core.hpp"
 #include "reticolo/tools/types/random.hpp"
 
 namespace fs = std::filesystem;
 
 namespace reticolo::LLR {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// LLRWorker Class Declaration                                                                    //
+////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class Action>
-class worker {
- private:
-  /* Metadata and output */
-  uint _id;
-  std::string _name;
-  std::string _run_id;
-  fs::path _out_path;
-  IO::LOG_mode _log_status;
+class LLRWorker {
+  private:
+    /* Metadata and output */
+    uint        _Id;         // Numerical identifier of the worker
+    std::string _Name;       // Full LLRWorker name (llr_worker[###])
+    std::string _RunId;      // Run identifier shared by all workers
+    fs::path    _OutPath;    // Output path
+    LOG_mode    _LogStatus;  // Private Logger status
 
-  /* Physics stuff */
-  Action _action;
-  lattice<typename Action::FieldType, Action::Dims> field;
-  montecarlo::data<typename Action::ActionType> MC_stats;
+    /* Physics stuff */
+    Action                                            _Action;   // Action
+    Lattice<typename Action::FieldType, Action::Dims> _Field;    // Lattice of the type specified by action
+    montecarlo::data<typename Action::ActionType>     _McStats;  // MonteCarlo statisctics
 
-  /* RNG stuff */
-  std::mt19937_64 rng;
-  std::uniform_real_distribution<double> unif;
-  std::uniform_real_distribution<double> unif_c;
-  std::normal_distribution<double> norm;
+    /* RNG stuff */
+    std::mt19937_64                        _Rng;    // Random Number Generator
+    std::uniform_real_distribution<double> _Unif;   // Uniform distribution [0.0, 1.0]
+    std::uniform_real_distribution<double> _UnifC;  // Uniform distribution [-1.0, 1.0]
+    std::normal_distribution<double>       _Norm;   // Normal distibution (mean: 0.0, stddev: 1.0 )
 
-  /* Timing and logging */
-  Timer T;
-  IO::Logger logger;
+    /* LLR parameters */
+    double _Ak;     // Current reweighting parameter
+    double _Sk;     // Center of the windowing function
+    double _Width;  // Width of the windowing function
 
-  /* LLR parameters */
-  double _ak, _Sk, _width;
+    /* Timing and logging */
+    Timer      _T;       // LLRWorker Private Timer
+    IO::Logger _Logger;  // LLRWorker Private Logger
 
- public:
-  /* Default constructor (does nothing) */
-  worker(){};
+    /* Various logging utilities */
+    void log_MC(std::string run_id, uint iter);
+    void log_obs(std::string run_id, uint iter, Action::Observables& obs);
 
-  /* Initializer function -> actually does all the set-up */
-  void init(const fs::path& output_path, uint id, uintvect<Action::Dims> sizes, uint seed, Action action, double Sk,
-            double width, IO::LOG_mode log_mode = IO::LOG_mode::silent);
+  public:
+    /* Default constructor (does nothing) */
+    LLRWorker() = default;
 
-  /* Randomize the field (hot start)*/
-  void randomizeField(double scale = 1.0);
+    /* Initializer function -> actually does all the set-up */
+    void init(const fs::path& output_path, uint id, uintvect<Action::Dims> sizes, uint seed, Action action, double Sk,
+              double width, LOG_mode log_mode = LOG_mode::silent);
 
-  /* Performs a single sweep of the lattice (updates worker::MC_stats) */
-  void MCMC_sweep();
+    /* Randomize the field (hot start)*/
+    void randomizeField(double scale = 1.0);
 
-  /* Performs nSteps thermalization steps and no measurements */
-  void MonteCarlo_thermalize(uint nSteps, const std::string& run_id);
+    /* Performs a single sweep of the lattice (updates worker::MC_stats) */
+    void MCMC_sweep();
 
-  /* Performs nMC Monte Carlo steps and returns a montecarlo::data object with
-   * the averages */
-  auto MonteCarlo_run(uint nMC, std::string run_id) -> montecarlo::data<typename Action::ActionType>;
+    /* Performs nSteps thermalization steps and no measurements */
+    void MonteCarlo_thermalize(uint nSteps, const std::string& run_id);
 
-  /* Set the value of the LLR ak parameters*/
-  void set_ak(double a) { _ak = a; };
+    /* Performs nMC Monte Carlo steps and returns a montecarlo::data object with the averages */
+    auto MonteCarlo_run(uint nMC, std::string run_id) -> montecarlo::data<typename Action::ActionType>;
 
-  /* Various logging utilities */
-  auto memoryReport() -> size_t;
-  void log_MC(std::string run_id, uint iter);
-  void log_obs(std::string run_id, uint iter, Action::observables& obs);
+    /* Set the value of the LLR ak parameters*/
+    void set_ak(double ak) { _Ak = ak; };
+
+    /* Memory report */
+    auto memoryReport() -> size_t;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Public Methods Implmentations                                                                  //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+template <class Action>
+void LLRWorker<Action>::init(const fs::path& output_path, uint id, uintvect<Action::Dims> sizes, uint rng_seed,
+                             Action action, double Sk, double width, LOG_mode log_mode) {
+    _T.reset();
+
+    _Id = id;
+    _Name = std::format("llr_worker[{:0>3d}]", _Id);
+    _OutPath = output_path;
+
+    _LogStatus = log_mode;
+
+    // Initialize the logger
+    if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
+        _Logger.init(output_path / "logs", _Name + ".log", _Name + "LOG");
+    }
+
+    // Initialize the output file
+    if (_LogStatus == LOG_mode::file_only || _LogStatus == LOG_mode::all) {
+#pragma omp critical
+        {
+            try {
+                H5::Exception::dontPrint();
+                H5::H5File File(_OutPath / "meas" / (_Name + ".h5"), H5F_ACC_TRUNC);
+                // write attributes
+            } catch (H5::Exception& Exep) {
+                H5::Exception::printErrorStack();
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+    // Initialize the lattice
+    _Field.init(sizes);
+
+    // initialize the action
+    _Action = action;
+
+    // RNGs stuff
+    _Rng.seed(rng_seed);
+    _Unif = std::uniform_real_distribution<double>(0.0, 1.0);
+    _UnifC = std::uniform_real_distribution<double>(-1.0, 1.0);
+    _Norm = std::normal_distribution<double>(0.0, 1.0);
+
+    // initialize the ak parameter
+    _Ak = 0.0;
+    _Sk = Sk;
+    _Width = width;
+
+    double Elapsed = _T.elapsed_ms();
+
+    if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
+        _Logger.log_memory(_Name, "Allocated", memoryReport());
+        _Logger.log_string(_Name, std::format("Action: \"{}\" ({})", action.action_name(), action.action_parameters()));
+        _Logger.log_string(_Name, std::format("LLR: Sk: {:>6f} width: {:>6f}", _Sk, _Width));
+        _Logger.log_timing(_Name, "Initialization done", Elapsed);
+    }
 };
 
 template <class Action>
-void worker<Action>::init(const fs::path& output_path, uint id, uintvect<Action::Dims> sizes, uint rng_seed,
-                          Action action, double Sk, double width, IO::LOG_mode log_mode) {
-  Timer T;
+void LLRWorker<Action>::randomizeField(double scale) {
+    for (size_t Site = 0; Site < _Field.getNsites(); Site++) {
+        randomize(_Field[Site], scale, _Norm, _Rng);
+    }
+}
 
-  _id = id;
-  _name = std::format("llr_worker[{:0>3d}]", _id);
-  _out_path = output_path;
+template <class Action>
+void LLRWorker<Action>::MCMC_sweep() {
+    uint Acc = 0;
 
-  _log_status = log_mode;
+    double WindowWeight;
+    double LlrWeight;
 
-  // Initialize the logger
-  if (_log_status == IO::LOG_mode::log_only || _log_status == IO::LOG_mode::all) {
-    logger.init(output_path / "logs", _name + ".log", _name + "LOG");
-  }
+    typename Action::ActionType SVar;               // local action variation
+    typename Action::ActionType SVarTot(0.0, 0.0);  // cumulative action variation
 
-  // Initialize the output file
-  if (_log_status == IO::LOG_mode::file_only || _log_status == IO::LOG_mode::all) {
+    typename Action::FieldType FieldVar;  // local field variation
+
+    uintvect<Action::Dims> Sizes = _Field.getSizes();
+    uintvect<Action::Dims> Coord;
+    std::fill(Coord.begin(), Coord.end(), 0);
+    for (uint Site = 0; Site < _Field.getNsites(); advance_coord(Sizes, Coord), Site++) {
+        randomize(FieldVar, 0.2, _UnifC, _Rng);
+
+        SVar = _Action.compute_dS_loc(_Field, FieldVar, Coord);
+
+        WindowWeight = (SVar.imag() * (SVar.imag() + 2.0 * _McStats.S_im - 2.0 * _Sk)) / (2.0 * _Width * _Width);
+        LlrWeight = _Ak * SVar.imag();
+
+        if (exp(-(SVar.real() + WindowWeight + LlrWeight)) > _Unif(_Rng)) {
+            Acc++;
+            _Field[Coord] += FieldVar;
+            SVarTot += SVar;
+            _McStats.S_re += SVar.real();
+            _McStats.S_im += SVar.imag();
+        }
+    }
+
+    _McStats.acceptance = static_cast<double>(Acc) / _Field.getNsites();
+    _McStats.dS_re = SVarTot.real();
+    _McStats.dS_im = SVarTot.imag();
+}
+
+template <class Action>
+void LLRWorker<Action>::MonteCarlo_thermalize(uint nSteps, const std::string& run_id) {
+    _T.reset();
+
+    typename Action::ActionType SInit = _Action.compute_S(_Field);
+
+    _McStats.S_re = SInit.real();
+    _McStats.S_im = SInit.imag();
+
+    for (uint Iter = 0; Iter < nSteps; Iter++) {
+        MCMC_sweep();
+
+        if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
+            log_MC(run_id + "_therm", Iter);
+        }
+    }
+    if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
+        _Logger.log_timing(_Name, std::format("Performed {} thermalization steps", nSteps), _T.elapsed_ms());
+    }
+}
+
+template <class Action>
+auto LLRWorker<Action>::MonteCarlo_run(uint nMC, std::string run_id) -> montecarlo::data<typename Action::ActionType> {
+    _T.reset();
+
+    montecarlo::data<typename Action::ActionType> Res;
+
+    // Initialize std::vector of Monte Carlo stats
+    std::vector<montecarlo::data<typename Action::ActionType>> Stats;
+    Stats.clear();
+    Stats.reserve(nMC);
+
+    // Initialize std::vector of observable measurements
+    std::vector<typename Action::Observables> Obs;
+    Obs.clear();
+    Obs.reserve(nMC);
+
+    // Initialize the starting value of S
+    typename Action::ActionType SInit = _Action.compute_S(_Field);
+    _McStats.S_re = SInit.real();
+    _McStats.S_im = SInit.imag();
+
+    for (uint Iter = 0; Iter < nMC; Iter++) {
+        MCMC_sweep();
+
+        Stats.push_back(_McStats);
+
+        Obs.push_back(_Action.Measure(_Field));
+
+        Res += _McStats;
+    }
+
+    Res /= static_cast<double>(nMC);
+
 #pragma omp critical
-    {
-      try {
-        H5::Exception::dontPrint();
-        H5::H5File File(_out_path / "meas" / (_name + ".h5"), H5F_ACC_TRUNC);
-        // write attributes
-      } catch (H5::Exception& e) {
-        e.printErrorStack();
-        exit(EXIT_FAILURE);
-      }
-    }
-  }
-  // Initialize the lattice
-  field.init(sizes);
-
-  // initialize the action
-  _action = action;
-
-  // RNGs stuff
-  rng.seed(rng_seed);
-  unif = std::uniform_real_distribution<double>(0.0, 1.0);
-  unif_c = std::uniform_real_distribution<double>(-1.0, 1.0);
-  norm = std::normal_distribution<double>(0.0, 1.0);
-
-  // initialize the ak parameter
-  _ak = 0.0;
-  _Sk = Sk;
-  _width = width;
-
-  double Elapsed = T.elapsed_ms();
-
-  if (_log_status == IO::LOG_mode::log_only || _log_status == IO::LOG_mode::all) {
-    logger.log_memory(_name, "Allocated", memoryReport());
-    logger.log_string(_name, std::format("Action: \"{}\" ({})", action.action_name(), action.action_parameters()));
-    logger.log_string(_name, std::format("LLR: Sk: {:>6f} width: {:>6f}", _Sk, _width));
-    logger.log_timing(_name, "Initialization done", Elapsed);
-  }
-};
-
-template <class Action>
-void worker<Action>::randomizeField(double scale) {
-  for (size_t Site = 0; Site < field.getNsites(); Site++) {
-    randomize(field[Site], scale, norm, rng);
-  }
-}
-
-template <class Action>
-void worker<Action>::MCMC_sweep() {
-  uint Acc = 0;
-
-  double WindowWeight;
-  double LlrWeight;
-
-  typename Action::ActionType dS;                // local action variation
-  typename Action::ActionType dS_tot(0.0, 0.0);  // cumulative action variation
-
-  typename Action::FieldType dField;  // local field variation
-
-  uintvect<Action::Dims> Sizes = field.getSizes();
-  uintvect<Action::Dims> Coord;
-  std::fill(Coord.begin(), Coord.end(), 0);
-  for (uint Site = 0; Site < field.getNsites(); advance_coord(Sizes, Coord), Site++) {
-    randomize(dField, 0.2, unif_c, rng);
-
-    dS = _action.compute_dS_loc(field, dField, Coord);
-
-    WindowWeight = (dS.imag() * (dS.imag() + 2.0 * MC_stats.S_im - 2.0 * _Sk)) / (2.0 * _width * _width);
-    LlrWeight = _ak * dS.imag();
-
-    if (exp(-(dS.real() + WindowWeight + LlrWeight)) > unif(rng)) {
-      Acc++;
-      field[Coord] += dField;
-      dS_tot += dS;
-      MC_stats.S_re += dS.real();
-      MC_stats.S_im += dS.imag();
-    }
-  }
-
-  MC_stats.acceptance = static_cast<double>(Acc) / field.getNsites();
-  MC_stats.dS_re = dS_tot.real();
-  MC_stats.dS_im = dS_tot.imag();
-}
-
-template <class Action>
-void worker<Action>::MonteCarlo_thermalize(uint nSteps, const std::string& run_id) {
-  T.reset();
-
-  typename Action::ActionType S = _action.compute_S(field);
-
-  MC_stats.S_re = S.real();
-  MC_stats.S_im = S.imag();
-
-  for (uint Iter = 0; Iter < nSteps; Iter++) {
-    MCMC_sweep();
-
-    if (_log_status == IO::LOG_mode::log_only || _log_status == IO::LOG_mode::all) {
-      log_MC(run_id + "_therm", Iter);
-    }
-  }
-  if (_log_status == IO::LOG_mode::log_only || _log_status == IO::LOG_mode::all) {
-    logger.log_timing(_name, std::format("Performed {} thermalization steps", nSteps), T.elapsed_ms());
-  }
-}
-
-template <class Action>
-auto worker<Action>::MonteCarlo_run(uint nMC, std::string run_id) -> montecarlo::data<typename Action::ActionType> {
-  T.reset();
-
-  montecarlo::data<typename Action::ActionType> Res;
-
-  // Initialize std::vector of Monte Carlo stats
-  std::vector<montecarlo::data<typename Action::ActionType>> Stats;
-  Stats.clear();
-  Stats.reserve(nMC);
-
-  // Initialize std::vector of observable measurements
-  std::vector<typename Action::observables> Obs;
-  Obs.clear();
-  Obs.reserve(nMC);
-
-  // Initialize the starting value of S
-  typename Action::ActionType S = _action.compute_S(field);
-  MC_stats.S_re = S.real();
-  MC_stats.S_im = S.imag();
-
-  for (uint Iter = 0; Iter < nMC; Iter++) {
-    MCMC_sweep();
-
-    Stats.push_back(MC_stats);
-
-    Obs.push_back(_action.Measure(field));
-
-    Res += MC_stats;
-
-    if (_log_status == IO::LOG_mode::log_only || _log_status == IO::LOG_mode::all) {
-      log_MC(run_id, Iter);
-      log_obs(run_id, Iter, Obs.back());
-    }
-  }
-
-  Res /= static_cast<double>(nMC);
-
-  // Write to HDF5 file
-  if (_log_status == IO::LOG_mode::file_only || _log_status == IO::LOG_mode::all) {
-#pragma omp critical
-    {
-      try {
+    try {
         H5::Exception::dontPrint();
 
         // Create the file
-        H5::H5File File(_out_path / "meas" / (_name + ".h5"), H5F_ACC_RDWR);
-        H5::Group Group = File.createGroup("/" + run_id);
+        H5::H5File File(_OutPath / "meas" / (_Name + ".h5"), H5F_ACC_RDWR);
+        H5::Group  Group = File.createGroup("/" + run_id);
 
         // Create dataspace
-        hsize_t Entries[] = {nMC};
-        H5::DataSpace Space(1, Entries);
+        size_t                 DataRank = 1;
+        std::array<hsize_t, 1> Entries = {nMC};
+        H5::DataSpace          Space(DataRank, Entries.data());
 
         // Create datatype and write the observables dataset
-        H5::CompType ObsType(sizeof(typename Action::observables));
-        _action.make_hdf5_CompType(ObsType);
+        H5::CompType ObsType(sizeof(typename Action::Observables));
+        _Action.make_hdf5_CompType(ObsType);
         H5::DataSet ObsDataset = File.createDataSet("/" + run_id + "/obs", ObsType, Space);
         ObsDataset.write(Obs.data(), ObsType);
 
         // Create datatype and write the observables dataset
         H5::CompType McType = montecarlo::make_mc_data_hdf5_CompType<typename Action::ActionType>();
-        H5::DataSet McDataset = File.createDataSet("/" + run_id + "/mc", McType, Space);
+        H5::DataSet  McDataset = File.createDataSet("/" + run_id + "/mc", McType, Space);
         McDataset.write(Stats.data(), McType);
-      } catch (H5::Exception& e) {
-        e.printErrorStack();
+    } catch (H5::Exception& Exep) {
+        H5::Exception::printErrorStack();
         exit(EXIT_FAILURE);
-      }
     }
-  }
 
-  if (_log_status == IO::LOG_mode::log_only || _log_status == IO::LOG_mode::all) {
-    logger.log_timing(_name, std::format("Performed {} MonteCarlo steps", nMC), T.elapsed_ms());
-  }
+    if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
+        _Logger.log_timing(_Name, std::format("Performed {} MonteCarlo steps", nMC), _T.elapsed_ms());
+    }
 
-  return Res;
+    return Res;
 }
 
 template <class Action>
-size_t worker<Action>::memoryReport() {
-  size_t Memory = 0;
-  Memory += field.memoryReport();
+auto LLRWorker<Action>::memoryReport() -> size_t {
+    size_t Memory = 0;
+    Memory += _Field.memoryReport();
 
-  return Memory;
+    return Memory;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Private Methods Implmentations                                                                 //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <class Action>
+void LLRWorker<Action>::log_MC(std::string run_id, uint iter) {
+    _Logger.log_string(_Name,
+                       std::format("MC data_dump ->\t{}\t{},{:+8e},{:+8e},{:+8e},{:+8e},{:+8e},", run_id, iter,
+                                   _McStats.acceptance, _McStats.S_re, _McStats.S_im, _McStats.dS_re, _McStats.dS_im));
 }
 
 template <class Action>
-void worker<Action>::log_MC(std::string run_id, uint iter) {
-  logger.log_string(_name,
-                    std::format("MC data_dump ->\t{}\t{},{:+8e},{:+8e},{:+8e},{:+8e},{:+8e},", run_id, iter,
-                                MC_stats.acceptance, MC_stats.S_re, MC_stats.S_im, MC_stats.dS_re, MC_stats.dS_im));
-}
-
-template <class Action>
-void worker<Action>::log_obs(std::string run_id, uint iter, Action::observables& obs) {
-  logger.log_string(_name, std::format("obs data_dump ->\t{}\t{},", run_id, iter) + obs.dump_str());
+void LLRWorker<Action>::log_obs(std::string run_id, uint iter, Action::Observables& obs) {
+    _Logger.log_string(_Name, std::format("obs data_dump ->\t{}\t{},", run_id, iter) + obs.dump_str());
 }
 
 }  // namespace reticolo::LLR

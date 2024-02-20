@@ -1,15 +1,12 @@
 ---
-# We'll use defaults from the LLVM style, but with 4 columns indentation.
 BasedOnStyle: Google
-IndentWidth: 2
+IndentWidth: 4
 ColumnLimit: 120
 ---
 Language: Cpp
-# Force pointers to the type for C++.
 DerivePointerAlignment: false
 PointerAlignment: Left
-# AccessModifierOffset: -1
-AlignConsecutiveMacros:
-  Enabled: true
-  AcrossEmptyLines: true
-  AcrossComments: true
+AccessModifierOffset: -2
+# AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveMacros: Consecutive

@@ -13,22 +13,23 @@
 #include "H5Cpp.h"
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/montecarlo/montecarlo_data.hpp"
-#include "reticolo/tools/types/basic.hpp"
+#include "reticolo/tools/types/core.hpp"
 
 namespace reticolo::montecarlo {
 
 template <class Action>
-class Metropolis_worker {
- private:
-  montecarlo::data<typename Action::ActionType> MC_data;
-  void sweep(lattice<typename Action::FieldType, Action::dims>& field);
+class MetropolisWorker {
+  private:
+    montecarlo::data<typename Action::ActionType> _McData;
 
- public:
-  Metropolis_worker() = default;
+    void sweep(Lattice<typename Action::FieldType, Action::dims>& field);
 
-  void init();
+  public:
+    MetropolisWorker() = default;
 
-  void run(uint steps);
+    void init();
+
+    void run(uint steps);
 };
 
 }  // namespace reticolo::montecarlo

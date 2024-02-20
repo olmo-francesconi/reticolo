@@ -10,15 +10,14 @@
 
 #pragma once
 
+// types
+#include "reticolo/tools/types/core.hpp"  // IWYU pragma: export
+
 // actions
-#include "reticolo/action/gr.hpp"
-#include "reticolo/action/phi4.hpp"
+#include "reticolo/action/actions.hpp"  // IWYU pragma: export
 
 // montecarlo
-#include "reticolo/montecarlo/hmc.hpp"
-#include "reticolo/montecarlo/metropolis.hpp"
-#include "reticolo/montecarlo/montecarlo_data.hpp"
+#include "reticolo/montecarlo/montecarlo.hpp"  // IWYU pragma: export
 
 // LLR
-#include "reticolo/llr/controller.hpp"
-#include "reticolo/llr/worker.hpp"
+#include "reticolo/llr/controller.hpp"  // IWYU pragma: export

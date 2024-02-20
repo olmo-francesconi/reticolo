@@ -2,7 +2,7 @@
 
  - reticolo (www.github.com/olmo-francesconi/reticolo.git)
 
- - SourceFile: montecarlo/montecarlo.hpp
+ - SourceFile: action/actions.hpp
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
@@ -10,6 +10,5 @@
 
 #pragma once
 
-#include "reticolo/montecarlo/hmc.hpp"              // IWYU pragma: export
-#include "reticolo/montecarlo/metropolis.hpp"       // IWYU pragma: export
-#include "reticolo/montecarlo/montecarlo_data.hpp"  // IWYU pragma: export
+#include "reticolo/action/gr.hpp"    // IWYU pragma: export
+#include "reticolo/action/phi4.hpp"  // IWYU pragma: export
