@@ -6,7 +6,21 @@
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
- ******************************************************************************/
+
+    LLR workspace folder structure:
+        OutPath
+        ├── llr
+        │   ├── logs
+        │   │   ├── llr_worker[000].log
+        │   │   ├── ...
+        │   │   └── llr_worker[###].log
+        │   └── meas
+        │       ├── llr.h5
+        │       ├── llr_worker[000].h5
+        │       ├── ...
+        │       └── llr_worker[###].h5
+        └── reticolo.log
+******************************************************************************/
 
 #include <cstdlib>
 #include <string>
@@ -20,20 +34,7 @@ auto main(int argc, char* argv[]) -> int {
     /* Define the lattice volume */
     uintvect<4> Volume = {4, 4, 4, 4};
 
-    /*  Set the output folder to be "./nt_nx_ny_nz/"
-        LLR workspace folder structure:
-            OutPath
-            ├── llr
-            │   ├── logs
-            │   │   ├── llr_worker[000].log
-            │   │   ├── ...
-            │   │   └── llr_worker[###].log
-            │   └── meas
-            │       ├── llr.h5
-            │       ├── llr_worker[000].h5
-            │       ├── ...
-            │       └── llr_worker[###].h5
-            └── reticolo.log                         */
+    /*  Set the output folder to be ./BoseGasLLR */
     std::string OutPath = "BoseGasLLR";
 
     /* Initialize the action */
@@ -46,7 +47,7 @@ auto main(int argc, char* argv[]) -> int {
 
     /* Initialize the LLRController
         This will actually allocate memory and set up all the workers */
-    Cont.init(OutPath, Volume, 24, 0.0025);
+    Cont.init(OutPath, Volume, 48, 0.0025);
 
     /* Run the LLR simulation
         This will perform nMonteCarlo updates for each NR or RM step */
