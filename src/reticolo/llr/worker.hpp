@@ -82,14 +82,18 @@ class LLRWorker {
     /* Randomize the field (hot start)*/
     void randomizeField(double scale = 1.0);
 
+    /* Clear the field (cold start)*/
+    void resetField();
+
     /* Performs a single sweep of the lattice (updates worker::MC_stats) */
     void MCMC_sweep();
 
     /* Performs nSteps thermalization steps and no measurements */
-    void MonteCarlo_thermalize(uint nSteps, const std::string& run_id);
+    void MonteCarlo_thermalize(uint nSteps, std::string run_name, std::string run_id);
 
     /* Performs nMC Monte Carlo steps and returns a montecarlo::data object with the averages */
-    auto MonteCarlo_run(uint nMC, const std::string& run_id) -> montecarlo::data<typename Action::ActionType>;
+    auto MonteCarlo_run(uint nMC, std::string run_name, std::string run_id)
+        -> montecarlo::data<typename Action::ActionType>;
 
     /* Set the value of the LLR ak parameters*/
     void set_ak(double ak) { _Ak = ak; };
@@ -119,19 +123,16 @@ void LLRWorker<Action>::init(const fs::path& output_path, uint id, uintvect<Acti
     }
 
     // Initialize the output file
-    if (_LogStatus == LOG_mode::file_only || _LogStatus == LOG_mode::all) {
+
 #pragma omp critical
-        {
-            try {
-                H5::Exception::dontPrint();
-                H5::H5File File(_OutPath / "meas" / (_Name + ".h5"), H5F_ACC_TRUNC);
-                // write attributes
-            } catch (H5::Exception& Exep) {
-                H5::Exception::printErrorStack();
-                exit(EXIT_FAILURE);
-            }
-        }
+    try {
+        H5::Exception::dontPrint();
+        H5::H5File File(_OutPath / "meas" / (_Name + ".h5"), H5F_ACC_TRUNC);
+        // write attributes
+    } catch (H5::Exception& Exep) {
+        exit(EXIT_FAILURE);
     }
+
     // Initialize the lattice
     _Field.init(sizes);
 
@@ -167,11 +168,18 @@ void LLRWorker<Action>::randomizeField(double scale) {
 }
 
 template <class Action>
-void LLRWorker<Action>::MCMC_sweep() {
-    uint Acc = 0;
+void LLRWorker<Action>::resetField() {
+    for (size_t Site = 0; Site < _Field.getNsites(); Site++) {
+        _Field[Site] = Action::FieldType(0.0);
+    }
+}
 
-    double WindowWeight;
-    double LlrWeight;
+template <class Action>
+void LLRWorker<Action>::MCMC_sweep() {
+    uint Acc = 0;  // acceptance
+
+    double WindowWeight;  // weight of the windowing function   [normal distribution]
+    double LlrWeight;     // weight of the llr reweighting      [exp(-ak(S-Sk)]
 
     typename Action::ActionType SVar;               // local action variation
     typename Action::ActionType SVarTot(0.0, 0.0);  // cumulative action variation
@@ -204,7 +212,7 @@ void LLRWorker<Action>::MCMC_sweep() {
 }
 
 template <class Action>
-void LLRWorker<Action>::MonteCarlo_thermalize(uint nSteps, const std::string& run_id) {
+void LLRWorker<Action>::MonteCarlo_thermalize(uint nSteps, std::string run_name, std::string run_id) {
     _T.reset();
 
     typename Action::ActionType SInit = _Action.compute_S(_Field);
@@ -215,14 +223,15 @@ void LLRWorker<Action>::MonteCarlo_thermalize(uint nSteps, const std::string& ru
     for (uint Iter = 0; Iter < nSteps; Iter++) {
         MCMC_sweep();
     }
-
     if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
-        _Logger.log_timing(_Name, std::format("Performed {} thermalization steps", nSteps), _T.elapsed_ms());
+        _Logger.log_timing(
+            _Name, std::format("{:<16s} : {:>8s} : Performed {:8>d} thermalization steps", run_name, run_id, nSteps),
+            _T.elapsed_ms());
     }
 }
 
 template <class Action>
-auto LLRWorker<Action>::MonteCarlo_run(uint nMC, const std::string& run_id)
+auto LLRWorker<Action>::MonteCarlo_run(uint nMC, std::string run_name, std::string run_id)
     -> montecarlo::data<typename Action::ActionType> {
     _T.reset();
 
@@ -257,11 +266,12 @@ auto LLRWorker<Action>::MonteCarlo_run(uint nMC, const std::string& run_id)
 
 #pragma omp critical
     try {
-        H5::Exception::dontPrint();
-
         // Create the file
         H5::H5File File(_OutPath / "meas" / (_Name + ".h5"), H5F_ACC_RDWR);
-        H5::Group  Group = File.createGroup("/" + run_id);
+        if (!File.nameExists(run_name)) {
+            H5::Group RunGroup = File.createGroup("/" + run_name);
+        }
+        H5::Group Group = File.createGroup("/" + run_name + "/" + run_id);
 
         // Create dataspace
         size_t                 DataRank = 1;
@@ -271,20 +281,22 @@ auto LLRWorker<Action>::MonteCarlo_run(uint nMC, const std::string& run_id)
         // Create datatype and write the observables dataset
         H5::CompType ObsType(sizeof(typename Action::Observables));
         _Action.make_hdf5_CompType(ObsType);
-        H5::DataSet ObsDataset = File.createDataSet("/" + run_id + "/obs", ObsType, Space);
+        H5::DataSet ObsDataset = File.createDataSet("/" + run_name + "/" + run_id + "/obs", ObsType, Space);
         ObsDataset.write(Obs.data(), ObsType);
 
         // Create datatype and write the observables dataset
         H5::CompType McType = montecarlo::make_mc_data_hdf5_CompType<typename Action::ActionType>();
-        H5::DataSet  McDataset = File.createDataSet("/" + run_id + "/mc", McType, Space);
+        H5::DataSet  McDataset = File.createDataSet("/" + run_name + "/" + run_id + "/mc", McType, Space);
         McDataset.write(Stats.data(), McType);
     } catch (H5::Exception& Exep) {
-        H5::Exception::printErrorStack();
+        Exep.printErrorStack();
         exit(EXIT_FAILURE);
     }
 
     if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
-        _Logger.log_timing(_Name, std::format("Performed {} MonteCarlo steps", nMC), _T.elapsed_ms());
+        _Logger.log_timing(_Name,
+                           std::format("{:<16s} : {:>8s} : Performed {:8>d} MonteCarlo steps", run_name, run_id, nMC),
+                           _T.elapsed_ms());
     }
 
     return Res;

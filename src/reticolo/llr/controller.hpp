@@ -61,8 +61,8 @@ class LLRController {
     double                           _DeltaS;
 
     /* Private methods */
-    void NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carlo);
-    void RobbinsMonro(uint nRobbins_Monro, uint nMonte_Carlo);
+    void NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carlo, std::string RunId);
+    void RobbinsMonro(uint nRobbins_Monro, uint nMonte_Carlo, std::string RunId);
     void ReplicaExcange();
 
   public:
@@ -119,26 +119,24 @@ void LLRController<Action>::init(const fs::path& out_path, uintvect<Action::Dims
 
     // Initialize the output file
     try {
-        H5::Exception::dontPrint();
         auto* File = new H5::H5File(_OutputPath / "llr" / "meas" / "llr.h5", H5F_ACC_TRUNC);
         // write attributes
         delete File;
     } catch (H5::Exception& Exep) {
-        H5::Exception::printErrorStack();
         exit(EXIT_FAILURE);
     }
 
     // Log stuff
     // clang-format off
-    LogMessage << IO::LI_void() << "        ak output file: " << (_OutputPath / "llr" / "meas" / "llr.h5").string() << "\n"
-              << IO::LI_void() << "llr_controller - Action-info\n"
-              << IO::LI_void() << "                 name : " << _Action.action_name() << "\n"
-              << IO::LI_void() << "           parameters : " << _Action.action_parameters() << "\n"
-              << IO::LI_void() << "              lattice : " << IO::print(lattice_size) << "\n"
-              << IO::LI_time() << "llr_controller - Workers initialization started...\n"
-              << IO::LI_void() << "             workers #: " << nWorkers << "\n"
-              << IO::LI_void() << "            deltaS / V: " << scale << "\n"
-              << IO::LI_void() << "                deltaS: " << scale * (double)get_volume(lattice_size) << std::endl;
+    LogMessage << IO::LI_void() << "         ak output file: " << (_OutputPath / "llr" / "meas" / "llr.h5").string() << "\n"
+               << IO::LI_void() << "llr_controller - Action-info\n"
+               << IO::LI_void() << "                  name : " << _Action.action_name() << "\n"
+               << IO::LI_void() << "            parameters : " << _Action.action_parameters() << "\n"
+               << IO::LI_void() << "               lattice : " << IO::print(lattice_size) << "\n"
+               << IO::LI_time() << "llr_controller - Workers initialization started...\n"
+               << IO::LI_void() << "              workers #: " << nWorkers << "\n"
+               << IO::LI_void() << "             deltaS / V: " << scale << "\n"
+               << IO::LI_void() << "                 deltaS: " << scale * (double)get_volume(lattice_size) << std::endl;
     IO::GlobalLogger << LogMessage;
     // clang-format on
 
@@ -163,11 +161,10 @@ void LLRController<Action>::init(const fs::path& out_path, uintvect<Action::Dims
     }
 
     // Log stuff
-    // clang-format off
-    LogMessage << IO::LI_time() << "llr_controller - Initialization completed in " << IO::print(Time.elapsed_ms()) << " ms\n"
+    LogMessage << IO::LI_time() << "llr_controller - Initialization completed in "
+               << std::format("{:.3f}", Time.elapsed_s()) << " s\n"
                << IO::LI_void() << "     memory allocated : " << IO::pretty_bytes(memoryReport()) << std::endl;
     IO::GlobalLogger << LogMessage;
-    // clang-format on
 }
 
 template <class Action>
@@ -176,9 +173,13 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
     // Initalize timer
     Timer Time;
 
+    std::stringstream LogMessage;
+
     // Main loop over replicas
     for (uint Rep = 0; Rep < replicas; Rep++) {
-        std::string RunName = run_id + std::format("{}", Rep);
+        std::string RunName = run_id + std::format("_{}", Rep);
+
+        IO::GlobalLogger.log_string("llr_controller", "Starting run : " + RunName);
 
         // Initialize ak values and history vector
         // resets them if they were set already
@@ -193,25 +194,33 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
         Time.reset();
 #pragma omp parallel for schedule(static, 1)
         for (auto& Worker : _Workers) {
-            Worker.MonteCarlo_thermalize(1000, "burn-in");
+            Worker.randomizeField(0.1);
+            Worker.MonteCarlo_thermalize(1000, RunName, "burn-in");
         }
-        IO::GlobalLogger.log_string("llr-controller", std::format("Thermalizarion done in {} ms", Time.elapsed_ms()));
+
+        LogMessage << IO::LI_void() << "llr_controller - Thermalization completed    ("
+                   << std::format("{:.3f}", Time.elapsed_s()) << " s)\n";
+        IO::GlobalLogger << LogMessage;
 
         // Newton - Raphson Iterations
         Time.reset();
-        NewtonRaphson(nNewton_Raphson, nMonte_Carlo);
-        IO::GlobalLogger.log_string("llr-controller", std::format("Newton-Raphson done in {} ms", Time.elapsed_ms()));
+        NewtonRaphson(nNewton_Raphson, nMonte_Carlo, RunName);
+
+        LogMessage << IO::LI_void() << "llr_controller - Newton-Raphson done         ("
+                   << std::format("{:.3f}", Time.elapsed_s()) << " s)\n";
+        IO::GlobalLogger << LogMessage;
 
         // Robbins - Monro Iterations
         Time.reset();
-        RobbinsMonro(nRobbins_Monro, nMonte_Carlo);
-        IO::GlobalLogger.log_string("llr-controller", std::format("Robbins-Monro done in {} ms", Time.elapsed_ms()));
+        RobbinsMonro(nRobbins_Monro, nMonte_Carlo, RunName);
+
+        LogMessage << IO::LI_void() << "llr_controller - Robbins-Monro done in       ("
+                   << std::format("{:.3f}", Time.elapsed_s()) << " s)\n";
+        IO::GlobalLogger << LogMessage;
 
         // File output
         Time.reset();
         try {
-            H5::Exception::dontPrint();
-
             // Create the file and group
             H5::H5File File(_OutputPath / "llr" / "meas" / "llr.h5", H5F_ACC_RDWR);
             H5::Group  Group = File.createGroup("/" + RunName);
@@ -236,11 +245,12 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
                 Dataset.write(Data.data(), DataType);
             }
         } catch (H5::Exception& Exep) {
-            H5::Exception::printErrorStack();
             exit(EXIT_FAILURE);
         }
 
-        IO::GlobalLogger.log_string("llr-controller", std::format("Data saved in {} ms", IO::print(Time.elapsed_ms())));
+        LogMessage << IO::LI_void() << "llr_controller - Data saved                  ("
+                   << std::format("{:.3f}", Time.elapsed_s()) << " s)\n";
+        IO::GlobalLogger << LogMessage;
     }
 }
 
@@ -248,7 +258,7 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
     Private methods implementation
 --------------------------------------------------------------------------------------------------*/
 template <class Action>
-void LLRController<Action>::NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carlo) {
+void LLRController<Action>::NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carlo, std::string RunId) {
     // Newton-Raphson Iterations
     for (int Step = 0; Step < nNewton_Raphson; Step++) {
 #pragma omp parallel for schedule(static, 1)
@@ -256,10 +266,10 @@ void LLRController<Action>::NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carl
             montecarlo::data<typename Action::ActionType> Res;
 
             // MonteCarlo_thermalize to the newly updated value of ak
-            _Workers[WorkerId].MonteCarlo_thermalize(100, std::format("NR_{}", Step));
+            _Workers[WorkerId].MonteCarlo_thermalize(100, RunId, std::format("thNR_{}", Step));
 
             // run the montecarlo steps
-            Res = _Workers[WorkerId].MonteCarlo_run(nMonte_Carlo, std::format("NR_{}", Step));
+            Res = _Workers[WorkerId].MonteCarlo_run(nMonte_Carlo, RunId, std::format("NR_{}", Step));
 
             // update the ak value
             _AkVect[WorkerId] += -(_SkVect[WorkerId] - Res.S_im) / (_DeltaS * _DeltaS);
@@ -272,7 +282,7 @@ void LLRController<Action>::NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carl
 }
 
 template <class Action>
-void LLRController<Action>::RobbinsMonro(uint nRobbins_Monro, uint nMonte_Carlo) {
+void LLRController<Action>::RobbinsMonro(uint nRobbins_Monro, uint nMonte_Carlo, std::string RunId) {
     // Robbins-Monro Iterations
     for (int Step = 0; Step < nRobbins_Monro; Step++) {
 #pragma omp parallel for schedule(static, 1)
@@ -280,10 +290,10 @@ void LLRController<Action>::RobbinsMonro(uint nRobbins_Monro, uint nMonte_Carlo)
             montecarlo::data<typename Action::ActionType> Res;
 
             // MonteCarlo_thermalize to the newly updated value of ak
-            _Workers[WorkerId].MonteCarlo_thermalize(100, std::format("RM_{}", Step));
+            _Workers[WorkerId].MonteCarlo_thermalize(100, RunId, std::format("thRM_{}", Step));
 
             // run the montecarlo steps
-            Res = _Workers[WorkerId].MonteCarlo_run(nMonte_Carlo, std::format("RM_{}", Step));
+            Res = _Workers[WorkerId].MonteCarlo_run(nMonte_Carlo, RunId, std::format("RM_{}", Step));
 
             // update the ak value
             _AkVect[WorkerId] +=
