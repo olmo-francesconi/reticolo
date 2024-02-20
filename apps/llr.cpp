@@ -46,11 +46,11 @@ auto main(int argc, char* argv[]) -> int {
 
     /* Initialize the LLRController
         This will actually allocate memory and set up all the workers */
-    Cont.init(OutPath, Volume, 1, 0.0025);
+    Cont.init(OutPath, Volume, 24, 0.0025);
 
     /* Run the LLR simulation
         This will perform nMonteCarlo updates for each NR or RM step */
-    Cont.run(50, 50, 1000, "BoseGasLLR", 2);
+    Cont.run(50, 500, 1000, "BoseGasLLR", 8);
 
     return EXIT_SUCCESS;
 }
