@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include <H5public.h>
+#include <H5Cpp.h>
 
 #include <array>
 #include <cstddef>
@@ -21,7 +21,6 @@
 #include <string>
 #include <vector>
 
-#include "H5Cpp.h"
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/montecarlo/montecarlo_data.hpp"
 #include "reticolo/tools/logger.hpp"
@@ -266,6 +265,7 @@ auto LLRWorker<Action>::MonteCarlo_run(uint nMC, std::string run_name, std::stri
 
 #pragma omp critical
     try {
+        H5::Exception::dontPrint();
         // Create the file
         H5::H5File File(_OutPath / "meas" / (_Name + ".h5"), H5F_ACC_RDWR);
         if (!File.nameExists(run_name)) {
@@ -289,7 +289,7 @@ auto LLRWorker<Action>::MonteCarlo_run(uint nMC, std::string run_name, std::stri
         H5::DataSet  McDataset = File.createDataSet("/" + run_name + "/" + run_id + "/mc", McType, Space);
         McDataset.write(Stats.data(), McType);
     } catch (H5::Exception& Exep) {
-        Exep.printErrorStack();
+        H5::Exception::printErrorStack();
         exit(EXIT_FAILURE);
     }
 

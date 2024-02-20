@@ -10,7 +10,8 @@
 
 #pragma once
 
-#include <H5public.h>
+#include <H5Cpp.h>
+#include <H5Exception.h>
 
 #include <algorithm>
 #include <array>
@@ -119,10 +120,12 @@ void LLRController<Action>::init(const fs::path& out_path, uintvect<Action::Dims
 
     // Initialize the output file
     try {
+        H5::Exception::dontPrint();
         auto* File = new H5::H5File(_OutputPath / "llr" / "meas" / "llr.h5", H5F_ACC_TRUNC);
         // write attributes
         delete File;
     } catch (H5::Exception& Exep) {
+        H5::Exception::printErrorStack();
         exit(EXIT_FAILURE);
     }
 
@@ -221,6 +224,7 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
         // File output
         Time.reset();
         try {
+            H5::Exception::dontPrint();
             // Create the file and group
             H5::H5File File(_OutputPath / "llr" / "meas" / "llr.h5", H5F_ACC_RDWR);
             H5::Group  Group = File.createGroup("/" + RunName);
@@ -245,6 +249,7 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
                 Dataset.write(Data.data(), DataType);
             }
         } catch (H5::Exception& Exep) {
+            H5::Exception::printErrorStack();
             exit(EXIT_FAILURE);
         }
 
