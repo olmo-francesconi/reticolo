@@ -193,7 +193,7 @@ inline void Logger::log_threadig(const std::string& who, size_t nThreads) {
 
 inline void Logger::log(std::stringstream& message) {
     if (_State == 1) {
-        _Msg = message.str() + '\n';
+        _Msg = message.str();
         _File << _Msg;
         if (_SdtOut) {
             std::cout << _Msg;
@@ -206,7 +206,7 @@ inline void Logger::log(std::stringstream& message) {
 
 inline void Logger::operator<<(std::stringstream& message) {
     if (_State == 1) {
-        _Msg = message.str() + '\n';
+        _Msg = message.str();
         _File << _Msg;
         if (_SdtOut) {
             std::cout << _Msg;
