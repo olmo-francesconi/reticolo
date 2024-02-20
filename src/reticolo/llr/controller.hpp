@@ -30,7 +30,7 @@
 #include "reticolo/tools/io_utils.hpp"
 #include "reticolo/tools/logger.hpp"
 #include "reticolo/tools/timer.hpp"
-#include "reticolo/tools/types/core.hpp"
+#include "reticolo/types/core.hpp"
 
 namespace fs = std::filesystem;
 

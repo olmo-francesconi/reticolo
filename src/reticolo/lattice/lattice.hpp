@@ -14,7 +14,7 @@
 #include <functional>
 #include <vector>
 
-#include "reticolo/tools/types/core.hpp"
+#include "reticolo/types/core.hpp"
 
 namespace reticolo {
 

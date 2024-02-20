@@ -11,7 +11,7 @@
 #pragma once
 
 // types
-#include "reticolo/tools/types/core.hpp"  // IWYU pragma: export
+#include "reticolo/types/core.hpp"  // IWYU pragma: export
 
 // actions
 #include "reticolo/action/actions.hpp"  // IWYU pragma: export

@@ -10,8 +10,8 @@
 
 #pragma once
 
-#include "reticolo/tools/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/tools/types/hfield.hpp"
+#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
+#include "reticolo/types/hfield.hpp"
 
 namespace reticolo {
 /* Randomize real-valued variable */

@@ -15,8 +15,8 @@
 #include <vector>
 
 #include "H5Cpp.h"
-#include "reticolo/tools/types/concepts.hpp"  // IWYU pragma: keep
-// #include "reticolo/tools/types/core.hpp"
+#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
+#include "reticolo/types/core.hpp"
 
 namespace reticolo::montecarlo {
 /* Generic template declaration - requires the action type to be either real or complex */

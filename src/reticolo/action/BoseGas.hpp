@@ -21,8 +21,8 @@
 #include "H5Cpp.h"
 #include "reticolo/action/action_base.hpp"
 #include "reticolo/lattice/lattice.hpp"
-#include "reticolo/tools/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/tools/types/core.hpp"
+#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
+#include "reticolo/types/core.hpp"
 
 namespace reticolo::action {
 

@@ -16,7 +16,7 @@
 #include <iostream>
 #include <utility>
 
-#include "reticolo/tools/types/concepts.hpp"  // IWYU pragma: keep
+#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 
 // look-up table for the symmetric h_\mu\nu components
 // These speed-up data access by referencing directly the data in the linearized

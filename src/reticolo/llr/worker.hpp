@@ -26,8 +26,8 @@
 #include "reticolo/montecarlo/montecarlo_data.hpp"
 #include "reticolo/tools/logger.hpp"
 #include "reticolo/tools/timer.hpp"
-#include "reticolo/tools/types/core.hpp"
-#include "reticolo/tools/types/random.hpp"
+#include "reticolo/types/core.hpp"
+#include "reticolo/types/random.hpp"
 
 namespace fs = std::filesystem;
 
