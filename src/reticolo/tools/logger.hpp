@@ -24,9 +24,10 @@
 #include "reticolo/tools/timer.hpp"
 
 namespace reticolo::IO {
-//----------------------------------------------------------
-// Logging helper functions
-//----------------------------------------------------------
+
+/*--------------------------------------------------------------------------------------------------
+    Logging helper functions
+--------------------------------------------------------------------------------------------------*/
 
 /* Default reticolo log line init with timing */
 inline auto LI_time() -> std::string {
@@ -58,132 +59,169 @@ inline auto LI_warn() -> std::string {
     return Message;
 };
 
-//----------------------------------------------------------
-// Class: Logger
-//----------------------------------------------------------
-//
-// Simple interface to log messages and data
-//
+/*--------------------------------------------------------------------------------------------------
+    Logger Class Definition
+--------------------------------------------------------------------------------------------------*/
 
+// Simple interface to log messages and data
 class Logger {
   private:
-    std::string           _FileName;
-    std::string           _LoggerName;
-    std::filesystem::path _Path;
+    /* Naming and paths */
+    std::string           _FileName;    // Output Log filename
+    std::string           _LoggerName;  // Name of the logger
+    std::filesystem::path _Path;        // Output file path
 
-    int _State;
+    /* State and variables */
+    int         _State;   // State of the logger( 0: uninitialized, 1: initialized, -1: Generic error)
+    bool        _SdtOut;  // Print to stdout as well
+    std::string _Msg;     // String buffer
 
-    std::ofstream _File;
+    /* Streams */
+    std::ofstream _File;  // File opuput stream
 
   public:
-    Logger() : _LoggerName("unnamed"), _State(0){};
-    Logger(std::string name) : _LoggerName(std::move(name)), _State(0){};
-    Logger(const std::filesystem::path& OutPath, const std::string& FileName, const std::string& LogName = "") {
-        init(OutPath, FileName, LogName);
+    /* Constructors */
+    Logger() : _LoggerName("unnamed"), _State(0), _SdtOut(true){};
+    Logger(std::string name) : _LoggerName(std::move(name)), _State(0), _SdtOut(true){};
+    Logger(const std::filesystem::path& OutPath, const std::string& FileName, const std::string& LogName = "",
+           bool StdOut = true) {
+        init(OutPath, FileName, LogName, StdOut);
     };
+    Logger(Logger&& other) noexcept = default;
 
-    Logger(Logger&& other) noexcept = default;  // move constructor
-
+    /* Destructor */
     ~Logger() {
         if (_File.is_open()) {
             _File.close();
         }
     }
 
-    inline void init(const std::filesystem::path& OutPath, const std::string& FileName,
-                     const std::string& LogName = "") {
-        if (_File.is_open()) {
-            _File.close();
-        }
+    /* Initializer (This actually initialize the fstream and checks paths) */
+    inline void init(const std::filesystem::path& OutPath, const std::string& FileName, const std::string& LogName = "",
+                     bool StdOut = true);
 
-        _Path = std::filesystem::absolute(OutPath);
-        _FileName = FileName;
-        if (!LogName.empty()) {
-            _LoggerName = LogName;
-        }
+    /* Log single liners for common stuff */
+    inline void log_string(const std::string& who, const std::string& what);
+    inline void log_timing(const std::string& who, const std::string& what, double time);
+    inline void log_memory(const std::string& who, const std::string& what, size_t memory);
+    inline void log_threadig(const std::string& who, size_t nThreads);
 
-        _File.open(_Path / _FileName, std::ios::out | std::ios::trunc);
-
-        if (!_File.is_open()) {
-            _State = -1;
-            throw std::runtime_error(std::string("reticolo: LOGGER ERROR : Logger (") + _LoggerName +
-                                     std::string(") could not create log file (") + std::string(_Path / _FileName) +
-                                     std::string(")"));
-        }
-        _State = 1;
-
-        _File << pretty_welcome() << '\n';
-    }
-
-    inline void log_string(const std::string& who, const std::string& what) {
-        if (_State == 1) {
-            _File << LI_time() << who << " - " << what << '\n';
-        } else {
-            throw std::runtime_error(
-                "reticolo: LOGGER ERROR : Trying to write to an "
-                "uninitialized logger");
-        }
-    }
-
-    inline void log_timing(const std::string& who, const std::string& what, double time) {
-        if (_State == 1) {
-            _File << LI_time() << who << " - " << what << " in " << std::format("{:>8.2f}", time) << " ms" << '\n';
-        } else {
-            throw std::runtime_error(
-                "reticolo: LOGGER ERROR : Trying to write to an "
-                "uninitialized logger");
-        }
-    }
-
-    inline void log_memory(const std::string& who, const std::string& what, size_t memory) {
-        if (_State == 1) {
-            _File << LI_time() << who << " - " << what << " " << pretty_bytes(memory) << '\n';
-        } else {
-            throw std::runtime_error(
-                "reticolo: LOGGER ERROR : Trying to write to an "
-                "uninitialized logger");
-        }
-    }
-
-    inline void log_threadig(const std::string& who, size_t nThreads) {
-        if (_State == 1) {
-            _File << LI_time() << who << " - Running on " << nThreads << " threads" << '\n';
-        } else {
-            throw std::runtime_error(
-                "reticolo: LOGGER ERROR : Trying to write to an "
-                "uninitialized logger");
-        }
-    }
-
-    inline void log(std::stringstream& message) {
-        if (_State == 1) {
-            _File << message.str() << '\n';
-            message.str(std::string());
-        } else {
-            throw std::runtime_error(
-                "reticolo: LOGGER ERROR : Trying to write to an "
-                "uninitialized logger");
-        }
-    }
-
-    /* Writes message to file and clears message */
-    inline void operator<<(std::stringstream& message) {
-        if (_State == 1) {
-            _File << message.str();
-            std::cout << message.str();
-            message.str(std::string());
-        } else {
-            throw std::runtime_error(
-                "reticolo: LOGGER ERROR : Trying to write to an "
-                "uninitialized logger");
-        }
-    }
+    /* Log from a stringstream, */
+    inline void log(std::stringstream& message);
+    inline void operator<<(std::stringstream& message);
 };
 
-// Set of default Loggers
-// These are global but need to be initialized somewhere in the code
-// inline Logger ErrorLogger("ErrorLogger");
+/*--------------------------------------------------------------------------------------------------
+    Public methods implementation
+--------------------------------------------------------------------------------------------------*/
+
+inline void Logger::init(const std::filesystem::path& OutPath, const std::string& FileName, const std::string& LogName,
+                         bool StdOut) {
+    if (_File.is_open()) {
+        _File.close();
+    }
+
+    _Path = std::filesystem::absolute(OutPath);
+    _FileName = FileName;
+    if (!LogName.empty()) {
+        _LoggerName = LogName;
+    }
+    _SdtOut = StdOut;
+
+    _File.open(_Path / _FileName, std::ios::out | std::ios::trunc);
+
+    if (!_File.is_open()) {
+        _State = -1;
+        throw std::runtime_error(std::string("reticolo: LOGGER ERROR : Logger (") + _LoggerName +
+                                 std::string(") could not create log file (") + std::string(_Path / _FileName) +
+                                 std::string(")"));
+    }
+    _State = 1;
+    if (_SdtOut) {
+        std::cout << pretty_welcome() << '\n';
+    }
+    _File << pretty_welcome() << '\n';
+}
+
+inline void Logger::log_string(const std::string& who, const std::string& what) {
+    if (_State == 1) {
+        _Msg = LI_time() + who + " - " + what + '\n';
+        _File << _Msg;
+        if (_SdtOut) {
+            std::cout << _Msg;
+        }
+    } else {
+        throw std::runtime_error("reticolo: LOGGER ERROR : Trying to write to an uninitialized logger");
+    }
+}
+
+inline void Logger::log_timing(const std::string& who, const std::string& what, double time) {
+    if (_State == 1) {
+        _Msg = LI_time() + who + " - " + what + " in " + std::format("{:>8.2f}", time) + " ms" + '\n';
+        _File << _Msg;
+        if (_SdtOut) {
+            std::cout << _Msg;
+        }
+    } else {
+        throw std::runtime_error("reticolo: LOGGER ERROR : Trying to write to an uninitialized logger");
+    }
+}
+
+inline void Logger::log_memory(const std::string& who, const std::string& what, size_t memory) {
+    if (_State == 1) {
+        _Msg = LI_time() + who + " - " + what + " " + pretty_bytes(memory) + '\n';
+        _File << _Msg;
+        if (_SdtOut) {
+            std::cout << _Msg;
+        }
+    } else {
+        throw std::runtime_error("reticolo: LOGGER ERROR : Trying to write to an uninitialized logger");
+    }
+}
+
+inline void Logger::log_threadig(const std::string& who, size_t nThreads) {
+    if (_State == 1) {
+        _Msg = LI_time() + who + " - Running on " + std::to_string(nThreads) + " threads" + '\n';
+        _File << _Msg;
+        if (_SdtOut) {
+            std::cout << _Msg;
+        }
+    } else {
+        throw std::runtime_error("reticolo: LOGGER ERROR : Trying to write to an uninitialized logger");
+    }
+}
+
+inline void Logger::log(std::stringstream& message) {
+    if (_State == 1) {
+        _Msg = message.str() + '\n';
+        _File << _Msg;
+        if (_SdtOut) {
+            std::cout << _Msg;
+        }
+        message.str(std::string());
+    } else {
+        throw std::runtime_error("reticolo: LOGGER ERROR : Trying to write to an uninitialized logger");
+    }
+}
+
+inline void Logger::operator<<(std::stringstream& message) {
+    if (_State == 1) {
+        _Msg = message.str() + '\n';
+        _File << _Msg;
+        if (_SdtOut) {
+            std::cout << _Msg;
+        }
+        message.str(std::string());
+    } else {
+        throw std::runtime_error("reticolo: LOGGER ERROR : Trying to write to an uninitialized logger");
+    }
+}
+
+/*--------------------------------------------------------------------------------------------------
+    Global Logger explicit instantiation
+--------------------------------------------------------------------------------------------------*/
+
+// Gloabl Logger, available to the entirety of the code
 inline Logger GlobalLogger("GlobalLogger");
-// inline Logger InfoLogger("InfoLogger");
 
 }  // namespace reticolo::IO
