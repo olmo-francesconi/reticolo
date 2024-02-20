@@ -10,5 +10,5 @@
 
 #pragma once
 
-#include "reticolo/action/gr.hpp"    // IWYU pragma: export
-#include "reticolo/action/phi4.hpp"  // IWYU pragma: export
+#include "reticolo/action/BoseGas.hpp"  // IWYU pragma: export
+#include "reticolo/action/gr.hpp"       // IWYU pragma: export
