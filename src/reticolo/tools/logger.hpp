@@ -26,44 +26,9 @@
 namespace reticolo::IO {
 
 /*--------------------------------------------------------------------------------------------------
-    Logging helper functions
---------------------------------------------------------------------------------------------------*/
-
-/* Default reticolo log line init with timing */
-inline auto LI_time() -> std::string {
-    std::string Message = "reticolo..." + std::format("{:.>10.3f}", GlobalTimer.elapsed_s()) + " s | ";
-    return Message;
-};
-
-/* Default reticolo log line init with dots */
-inline auto LI_dots() -> std::string {
-    std::string Message = "reticolo............... | ";
-    return Message;
-};
-
-/* Default reticolo log line empty init */
-inline auto LI_void() -> std::string {
-    std::string Message = "                        | ";
-    return Message;
-};
-
-/* Default reticolo log error line init */
-inline auto LI_erro() -> std::string {
-    std::string Message = "reticolo..........ERROR | ";
-    return Message;
-};
-
-/* Default reticolo log warning line init */
-inline auto LI_warn() -> std::string {
-    std::string Message = "reticolo........WARNING | ";
-    return Message;
-};
-
-/*--------------------------------------------------------------------------------------------------
     Logger Class Definition
 --------------------------------------------------------------------------------------------------*/
 
-// Simple interface to log messages and data
 class Logger {
   private:
     /* Naming and paths */
