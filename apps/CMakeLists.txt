@@ -1,3 +1,5 @@
-add_executable(llr llr.cpp)
+add_executable(LLRBoseGas LLRBoseGas.cpp)
+target_link_libraries(LLRBoseGas PRIVATE reticolo)
 
-target_link_libraries(llr PRIVATE reticolo)
+add_executable(MetropolisMonteCarlo MetropolisMonteCarlo.cpp)
+target_link_libraries(MetropolisMonteCarlo PRIVATE reticolo)
