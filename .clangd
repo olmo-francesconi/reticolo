@@ -1,0 +1,24 @@
+CompileFlags:
+  # Treat code as C++, use C++20 standard, enable more warnings.
+  Add: [-xc++, -std=c++23, -Wall, -Wno-missing-prototypes]
+  # Remove extra warnings specified in compile commands.
+  # Single value is also acceptable, same as "Remove: [-mabi]"
+  Remove: -mabi
+Diagnostics:
+  # Tweak Clang-Tidy checks.
+  ClangTidy:
+    Add: [performance*, modernize*, readability*]
+    Remove: [readability-magic-numbers]
+    CheckOptions:
+      readability-identifier-naming.VariableCase: CamelCase
+      readability-identifier-naming.ClassCase: CamelCase
+      readability-identifier-naming.ClassMemberCase: CamelCase
+      readability-identifier-naming.PrivateMemberCase: CamelCase
+      readability-identifier-naming.PrivateMemberPrefix: _
+      readability-identifier-length.MinimumParameterNameLength: 2
+      readability-identifier-length.IgnoredExceptionVariableNames: ^[e]$
+
+  UnusedIncludes: Strict
+  MissingIncludes: Strict
+  Includes:
+    IgnoreHeader: H5*
