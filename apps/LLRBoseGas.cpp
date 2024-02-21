@@ -2,7 +2,7 @@
 
  - reticolo (www.github.com/olmo-francesconi/reticolo.git)
 
- - SourceFile: apps/llr.hpp
+ - SourceFile: apps/LLRBoseGas.hpp
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
