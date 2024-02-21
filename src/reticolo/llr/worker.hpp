@@ -319,9 +319,7 @@ auto LLRWorker<Action>::memoryReport() -> size_t {
 
 template <class Action>
 void LLRWorker<Action>::log_MC(std::string run_id, uint iter) {
-    _Logger.log_string(_Name,
-                       std::format("MC data_dump ->\t{}\t{},{:+8e},{:+8e},{:+8e},{:+8e},{:+8e},", run_id, iter,
-                                   _McStats.acceptance, _McStats.S_re, _McStats.S_im, _McStats.dS_re, _McStats.dS_im));
+    _Logger.log_string(_Name, std::format("MC data_dump ->\t{}\t{},", run_id, iter) + _McStats.dump_str());
 }
 
 template <class Action>
