@@ -158,7 +158,7 @@ void LLRWorker<Action>::init(const fs::path& output_path, uint id, uintvect<Acti
         _Logger.log_string(_Name, std::format("LLR: Sk: {:>6f} width: {:>6f}", _Sk, _Width));
         _Logger.log_timing(_Name, "Initialization done", Elapsed);
     }
-};
+}
 
 template <class Action>
 void LLRWorker<Action>::randomizeField(double scale) {
