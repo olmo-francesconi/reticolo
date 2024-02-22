@@ -86,7 +86,6 @@ struct data<ActionType> {
     }
 
     static auto make_hdf5_CompType() -> H5::CompType {
-        std::cout << sizeof(data<ActionType>) << '\n';
         H5::CompType Type(sizeof(data<ActionType>));
         Type.insertMember("acceptance", HOFFSET(data<ActionType>, acceptance), H5::PredType::NATIVE_DOUBLE);
         Type.insertMember("S_re", HOFFSET(data<ActionType>, S_re), H5::PredType::NATIVE_DOUBLE);
