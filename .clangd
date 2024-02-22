@@ -1,6 +1,6 @@
 CompileFlags:
   # Treat code as C++, use C++20 standard, enable more warnings.
-  Add: [-xc++, -std=c++23, -Wall, -Wno-missing-prototypes]
+  Add: [-xc++, -std=c++20, -Wall, -Wno-missing-prototypes]
   # Remove extra warnings specified in compile commands.
   # Single value is also acceptable, same as "Remove: [-mabi]"
   Remove: -mabi
@@ -23,3 +23,11 @@ Diagnostics:
   MissingIncludes: Strict
   Includes:
     IgnoreHeader: H5*
+
+InlayHints:
+  Enabled: Yes
+  BlockEnd: Yes
+  Designators: No
+  ParameterNames: Yes
+  DeducedTypes: Yes
+  TypeNameLimit: 24
