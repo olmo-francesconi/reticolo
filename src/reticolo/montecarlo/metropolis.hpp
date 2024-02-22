@@ -11,22 +11,16 @@
 #pragma once
 
 #include <H5Cpp.h>
-#include <H5Dpublic.h>
-#include <H5Fpublic.h>
-#include <H5Ipublic.h>
-#include <H5LaccProp.h>
-#include <H5Lpublic.h>
-#include <H5Ppublic.h>
-#include <H5Spublic.h>
-#include <H5version.h>
 #include <omp.h>
 #include <unistd.h>
 
 #include <array>
 #include <cstddef>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <format>
+#include <iostream>
 #include <random>
 #include <sstream>
 #include <string>
@@ -40,6 +34,7 @@
 #include "reticolo/tools/timer.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
+#include "reticolo/types/random.hpp"
 
 namespace fs = std::filesystem;
 
@@ -91,12 +86,11 @@ class MetropolisWorker {
     void save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect);  // save measurements
 
   public:
-    /* Default constructor (does nothing) */
-    MetropolisWorker() = default;
+    /* Constructor (only sets up the Action) */
+    MetropolisWorker(Action& act) : _Action(act){};
 
     /* Initializer function -> actually does all the set-up */
-    void init(Action action, uintvect<Action::Dims> sizes, const std::string& RunName, uint seed,
-              const fs::path& output_path);
+    void init(uintvect<Action::Dims> sizes, const std::string& RunName, uint seed, const fs::path& output_path);
 
     /* Randomize the field (hot start)*/
     void randomizeField(double scale = 1.0);
@@ -122,17 +116,35 @@ class MetropolisWorker {
 --------------------------------------------------------------------------------------------------*/
 
 template <class Action>
-void MetropolisWorker<Action>::init(Action action, uintvect<Action::Dims> sizes, const std::string& RunName, uint seed,
+void MetropolisWorker<Action>::init(uintvect<Action::Dims> sizes, const std::string& RunName, uint seed,
                                     const fs::path& output_path) {
     _T.reset();
 
     _RunName = RunName;
-    _WorkspacePath = output_path;
-    _Hdf5OutputFile = _WorkspacePath / "meas" / (_RunName + ".h5");
+
+    // Initialize the folder structure
+    try {
+        _WorkspacePath = fs::absolute(output_path);
+
+        fs::create_directories(_WorkspacePath);
+        _WorkspacePath = fs::canonical(_WorkspacePath);
+        _Hdf5OutputFile = _WorkspacePath / "meas" / (_RunName + ".h5");
+        fs::create_directories(_WorkspacePath / "logs");
+        fs::create_directories(_WorkspacePath / "meas");
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << '\n';
+        exit(EXIT_FAILURE);
+    }
 
     // Initialize the logger
+    try {
+        _Logger.init(output_path / "logs", _RunName + ".log", _RunName + "LOG", true);
+    } catch (const std::exception& Exept) {
+        std::cerr << Exept.what() << '\n';
+        exit(EXIT_FAILURE);
+    }
+
     std::stringstream LogMessage;
-    _Logger.init(output_path / "logs", _RunName + ".log", _RunName + "LOG", true);
 
     // Log that the folder and loggind stuff has bee initialized properly
     LogMessage << IO::LI_time() << "MetropolisWorker - Initialization started...\n"
@@ -142,18 +154,36 @@ void MetropolisWorker<Action>::init(Action action, uintvect<Action::Dims> sizes,
 
     // Initialize the output file
     try {
-        H5::Exception::dontPrint();
-        H5::H5File File(_Hdf5OutputFile, H5F_ACC_RDWR);
-        // write attributes
-    } catch (H5::Exception& Exep) {
-        H5::Exception::printErrorStack();
+        // Create empty but unlimited dataspace
+        std::array<hsize_t, 1> Hdf5Entries = {0};
+        std::array<hsize_t, 1> Hdf5MaxDims = {H5S_UNLIMITED};
+        H5::DataSpace          Hdf5DataSpace(1, Hdf5Entries.data(), Hdf5MaxDims.data());
+        // Create file (truncation access)
+        H5::H5File Hdf5File(_Hdf5OutputFile, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+        // Create Group
+        H5::Group Hdf5Group = Hdf5File.createGroup(_RunName);
+        // Create creation properties for dataset
+        H5::DSetCreatPropList  Hdf5CParms;
+        std::array<hsize_t, 1> Hdf5ChunkDims = {_MaxMeasBufferSize};
+        Hdf5CParms.setChunk(1, Hdf5ChunkDims.data());
+        // Create Observable DataType
+        H5::CompType Hdf5ObsType = _Action.make_obs_hdf5_CompType();
+        // Create Observable DataType
+        H5::CompType Hdf5McType = _McStats.get_hdf5_CompType();
+        // Create DataSet
+        H5::DataSet Hdf5ObsDataSet =
+            Hdf5File.createDataSet(_RunName + "/Observables", Hdf5ObsType, Hdf5DataSpace, Hdf5CParms);
+        // Create DataSet
+        H5::DataSet Hdf5McDataSet =
+            Hdf5File.createDataSet(_RunName + "/MonteCarlo", Hdf5McType, Hdf5DataSpace, Hdf5CParms);
+    } catch (H5::Exception& _) {
         exit(EXIT_FAILURE);
     }
 
     // Log stuff
     // clang-format off
     LogMessage << IO::LI_void() << "            output file: " << _Hdf5OutputFile.string() << "\n"
-               << IO::LI_void() << "llr_controller - Action-info\n"
+               << IO::LI_void() << "MetropolisWorker - Action-info\n"
                << IO::LI_void() << "                  name : " << _Action.action_name() << "\n"
                << IO::LI_void() << "            parameters : " << _Action.action_parameters() << "\n"
                << IO::LI_void() << "               lattice : " << IO::print(sizes) << "\n";
@@ -161,9 +191,8 @@ void MetropolisWorker<Action>::init(Action action, uintvect<Action::Dims> sizes,
     _Logger << LogMessage;
 
     // initialize the action
-    _Action = action;
     if (!RealValue<ActionType>) {
-        LogMessage << IO::LI_warn() << "This is a complex-valued action -> Performing a phase-quenched simulation!!";
+        LogMessage << IO::LI_warn() << "This is a complex-valued action -> Performing a phase-quenched simulation!!\n";
     }
 
     // Initialize the lattice
@@ -175,11 +204,11 @@ void MetropolisWorker<Action>::init(Action action, uintvect<Action::Dims> sizes,
     _UnifC = std::uniform_real_distribution<double>(-1.0, 1.0);
     _Norm = std::normal_distribution<double>(0.0, 1.0);
 
-    double Elapsed = _T.elapsed_ms();
-
-    _Logger.log_memory(_RunName, "Allocated", memoryReport());
-    _Logger.log_string(_RunName, std::format("Action: \"{}\" ({})", action.action_name(), action.action_parameters()));
-    _Logger.log_timing(_RunName, "Initialization done", Elapsed);
+    // Log stuff
+    LogMessage << IO::LI_time() << "MetropolisWorker - Initialization completed in "
+               << std::format("{:.3f}", _T.elapsed_ms()) << " ms\n";
+    //    << IO::LI_void() << "     memory allocated : " << IO::pretty_bytes(memoryReport()) << std::endl;
+    _Logger << LogMessage;
 }
 
 template <class Action>
@@ -311,18 +340,21 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep) {
         }
 
         // save the last measurements in the buffer and flush
-        save_Measurements(Stats, Obs);
-        Stats.clear();
-        Obs.clear();
-
+        if (Stats.size() != 0 && Obs.size() != 0) {
+            save_Measurements(Stats, Obs);
+            Stats.clear();
+            Obs.clear();
+        }
         _Logger.log_timing(_RunName, std::format("Performed {:8>d} MonteCarlo steps", Iteration), _T.elapsed_ms());
 
     } else {
         _Logger.log_string(_RunName, std::format("    Total Updates: {}", nMC));
         _Logger.log_string(_RunName, std::format("      Mesure skip: {}", MeasureStep));
         for (uint Iter = 0; Iter < nMC; Iter++) {
+            std::cout << Iter << '\n';
             // perform a sweep
             sweep();
+            usleep(100000);
             // measure if this is a MeasureStep-th iteration
             if (Iter % MeasureStep == 0) {
                 Stats.push_back(_McStats);
@@ -339,6 +371,7 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep) {
         }
 
         // save the last measurements in the buffer and flush
+
         save_Measurements(Stats, Obs);
         Stats.clear();
         Obs.clear();
@@ -350,42 +383,60 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep) {
 template <class Action>
 void MetropolisWorker<Action>::save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect) {
     try {
-        H5::Exception::dontPrint();
-        // Create the file
-        hid_t Hdf5File = H5Fcreate(_Hdf5OutputFile.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-        // if (H5Lexists(Hdf5File, _RunName.c_str(), H5P_DEFAULT) < 0) {
-        //     hid_t Hdf5Group = H5Gcreate2(Hdf5File, _RunName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        // };
+        // Define dimension of stuff to write
+        std::array<hsize_t, 1> Hdf5BufferSize = {ObsVect.size()};
+        H5::DataSpace          Hdf5BufferMemorySpace(1, Hdf5BufferSize.data());
+        std::cout << "1 ok here\n";
 
-        // Create dataspace
-        std::array<hsize_t, 1> Hdf5Entries = {McVect.size()};
-        std::array<hsize_t, 1> Hdf5MaxDims = {H5S_UNLIMITED};
-        hid_t                  Hdf5DataSpace = H5Screate_simple(1, Hdf5Entries.data(), Hdf5MaxDims.data());
+        // Open file
+        H5::H5File Hdf5File(_Hdf5OutputFile, H5F_ACC_RDWR, H5P_DEFAULT, H5P_DEFAULT);
+        std::cout << "2 ok here\n";
 
-        // Create plist
-        hid_t Hdf5Plist = H5Pcreate(H5P_DATASET_CREATE);
-        H5Pset_layout(Hdf5Plist, H5D_CHUNKED);
-        std::array<hsize_t, 1> Hdf5ChunkDims = {1};
-        H5Pset_chunk(Hdf5Plist, 1, Hdf5ChunkDims.data());
+        // Observables //
+        // Create Observable DataType
+        H5::CompType Hdf5ObsType = _Action.make_obs_hdf5_CompType();
+        std::cout << "3 ok here\n";
+        // Open DataSet
+        H5::DataSet Hdf5ObsDataSet = Hdf5File.openDataSet(_RunName + "/Observables");
+        std::cout << "4 ok here\n";
+        // Get current size of the dataset
+        H5::DataSpace          Hdf5ObsDataSpace = Hdf5ObsDataSet.getSpace();
+        std::array<hsize_t, 1> Hdf5ObsDimsOld;
+        Hdf5ObsDataSpace.getSimpleExtentDims(Hdf5ObsDimsOld.data());
+        std::cout << "5 ok here\n";
+        // Extend dataspace dimension
+        std::array<hsize_t, 1> Hdf5ObsDimsNew = {Hdf5ObsDimsOld[0] + Hdf5BufferSize[0]};
+        Hdf5ObsDataSet.extend(Hdf5ObsDimsNew.data());
+        std::cout << "6 ok here\n";
+        // Update dataspace
+        Hdf5ObsDataSpace = Hdf5ObsDataSet.getSpace();
+        std::cout << "7 ok here\n";
+        // Select Hyperslab
+        Hdf5ObsDataSpace.selectHyperslab(H5S_SELECT_SET, Hdf5BufferSize.data(), Hdf5ObsDimsOld.data());
+        std::cout << "8 ok here\n";
+        // Write to dataset
+        Hdf5ObsDataSet.write(ObsVect.data(), Hdf5ObsType, Hdf5BufferMemorySpace, Hdf5ObsDataSpace);
+        std::cout << "9 ok here\n";
 
-        // Create observables datatype and write the observables dataset
-        H5::CompType Hdf5ObsType(sizeof(ObsType));
-        _Action.make_hdf5_CompType(Hdf5ObsType);
-
-        hid_t Hdf5ObsDataset =
-            H5Dcreate2(Hdf5File, "obs", Hdf5ObsType.getId(), Hdf5DataSpace, H5P_DEFAULT, Hdf5Plist, H5P_DEFAULT);
-
-        H5Pclose(Hdf5Plist);
-        H5Pclose(Hdf5DataSpace);
-
-        // // Create datatype and write the observables dataset
-        // H5::CompType Hdf5McType = montecarlo::make_mc_data_hdf5_CompType<ActionType>();
-        // H5::DataSet  Hdf5McDataset = Hdf5File.createDataSet("/" + _RunName + "/mc", Hdf5McType, Hdf5DataSpace);
-        // Hdf5McDataset.write(McVect.data(), Hdf5McType);
-
-        // H5close();
-    } catch (H5::Exception& Exep) {
-        H5::Exception::printErrorStack();
+        // MonteCarlo stuff //
+        // Create Observable DataType
+        H5::CompType Hdf5McType = _McStats.get_hdf5_CompType();
+        // Open DataSet
+        H5::DataSet Hdf5McDataSet = Hdf5File.openDataSet(_RunName + "/MonteCarlo");
+        // Get current size of the dataset
+        H5::DataSpace          Hdf5McDataSpace = Hdf5McDataSet.getSpace();
+        std::array<hsize_t, 1> Hdf5McDimsOld;
+        Hdf5McDataSpace.getSimpleExtentDims(Hdf5McDimsOld.data());
+        // Extend dataspace dimension
+        std::array<hsize_t, 1> Hdf5McDimsNew = {Hdf5McDimsOld[0] + Hdf5BufferSize[0]};
+        Hdf5McDataSet.extend(Hdf5McDimsNew.data());
+        // Update dataspace
+        Hdf5McDataSpace = Hdf5McDataSet.getSpace();
+        // Select Hyperslab
+        Hdf5McDataSpace.selectHyperslab(H5S_SELECT_SET, Hdf5BufferSize.data(), Hdf5McDimsOld.data());
+        // Write to dataset
+        Hdf5McDataSet.write(McVect.data(), Hdf5McType, Hdf5BufferMemorySpace, Hdf5McDataSpace);
+    } catch (H5::Exception& _) {
         exit(EXIT_FAILURE);
     }
 }
