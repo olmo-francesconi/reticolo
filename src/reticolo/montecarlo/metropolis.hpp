@@ -57,11 +57,14 @@ class MetropolisWorker {
     using McDataVectType = std::vector<montecarlo::data<typename Action::ActionType>>;
 
     /* Metadata and output */
-    std::string _RunName;         // Run identifier
-    fs::path    _WorkspacePath;   // Workspace folder path
-    fs::path    _Hdf5OutputFile;  // output file complete path
+    std::string _RunName;        // Run identifier
+    fs::path    _WorkspacePath;  // Workspace folder path
 
-    const uint _MaxMeasBufferSize = 1000;  // Maximun size for the measure buffer
+    /* hdf5 stuff */
+    const uint         _MaxBufferSize = 1000;                            // Maximun size for the measure buffer
+    fs::path           _Hdf5OutputFile;                                  // output file complete path
+    const H5::CompType _McCompType = McDataType::make_hdf5_CompType();   // CompType for Monte Carlo stats
+    const H5::CompType _ObsCompType = Action::make_obs_hdf5_CompType();  // CompType for Action observables
 
     /* Physics stuff */
     Action      _Action;   // Action
@@ -79,8 +82,8 @@ class MetropolisWorker {
     IO::Logger _Logger;  // LLRWorker Private Logger
 
     /* Various logging utilities */
-    void log_MC(std::string run_id, uint iter);                 // Log MonteCarlo data
-    void log_obs(std::string run_id, uint iter, ObsType& obs);  // Log Action observables
+    void log_MC(uint iter);                 // Log MonteCarlo data
+    void log_obs(uint iter, ObsType& obs);  // Log Action observables
 
     /* File output utilities */
     void save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect);  // save measurements
@@ -164,18 +167,14 @@ void MetropolisWorker<Action>::init(uintvect<Action::Dims> sizes, const std::str
         H5::Group Hdf5Group = Hdf5File.createGroup(_RunName);
         // Create creation properties for dataset
         H5::DSetCreatPropList  Hdf5CParms;
-        std::array<hsize_t, 1> Hdf5ChunkDims = {_MaxMeasBufferSize};
+        std::array<hsize_t, 1> Hdf5ChunkDims = {_MaxBufferSize};
         Hdf5CParms.setChunk(1, Hdf5ChunkDims.data());
-        // Create Observable DataType
-        H5::CompType Hdf5ObsType = _Action.make_obs_hdf5_CompType();
-        // Create Observable DataType
-        H5::CompType Hdf5McType = _McStats.get_hdf5_CompType();
         // Create DataSet
         H5::DataSet Hdf5ObsDataSet =
-            Hdf5File.createDataSet(_RunName + "/Observables", Hdf5ObsType, Hdf5DataSpace, Hdf5CParms);
+            Hdf5File.createDataSet(_RunName + "/Observables", _ObsCompType, Hdf5DataSpace, Hdf5CParms);
         // Create DataSet
         H5::DataSet Hdf5McDataSet =
-            Hdf5File.createDataSet(_RunName + "/MonteCarlo", Hdf5McType, Hdf5DataSpace, Hdf5CParms);
+            Hdf5File.createDataSet(_RunName + "/MonteCarlo", _McCompType, Hdf5DataSpace, Hdf5CParms);
     } catch (H5::Exception& _) {
         exit(EXIT_FAILURE);
     }
@@ -294,12 +293,12 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep) {
     // Initialize std::vector of Monte Carlo stats
     McDataVectType Stats;
     Stats.clear();
-    Stats.reserve(_MaxMeasBufferSize);
+    Stats.reserve(_MaxBufferSize);
 
     // Initialize std::vector of observable measurements
     std::vector<typename Action::Observables> Obs;
     Obs.clear();
-    Obs.reserve(_MaxMeasBufferSize);
+    Obs.reserve(_MaxBufferSize);
 
     // Initialize the starting value of S
     ActionType SInit = _Action.compute_S(_Field);
@@ -328,7 +327,7 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep) {
                 Stats.push_back(_McStats);
                 Obs.push_back(_Action.Measure(_Field));
                 // if the buffer are full save to file and flush
-                if (Obs.size() == _MaxMeasBufferSize) {
+                if (Obs.size() == _MaxBufferSize) {
                     // save data
                     save_Measurements(Stats, Obs);
                     // clear the vectors
@@ -360,7 +359,7 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep) {
                 Stats.push_back(_McStats);
                 Obs.push_back(_Action.Measure(_Field));
                 // if the buffer are full save to file and flush
-                if (Obs.size() == _MaxMeasBufferSize) {
+                if (Obs.size() == _MaxBufferSize) {
                     // save data
                     save_Measurements(Stats, Obs);
                     // clear the vectors
@@ -380,47 +379,38 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep) {
     }
 }
 
+/*--------------------------------------------------------------------------------------------------
+    Private Methods Implmentations
+--------------------------------------------------------------------------------------------------*/
+
 template <class Action>
 void MetropolisWorker<Action>::save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect) {
     try {
         // Define dimension of stuff to write
         std::array<hsize_t, 1> Hdf5BufferSize = {ObsVect.size()};
         H5::DataSpace          Hdf5BufferMemorySpace(1, Hdf5BufferSize.data());
-        std::cout << "1 ok here\n";
 
         // Open file
         H5::H5File Hdf5File(_Hdf5OutputFile, H5F_ACC_RDWR, H5P_DEFAULT, H5P_DEFAULT);
-        std::cout << "2 ok here\n";
 
         // Observables //
-        // Create Observable DataType
-        H5::CompType Hdf5ObsType = _Action.make_obs_hdf5_CompType();
-        std::cout << "3 ok here\n";
         // Open DataSet
         H5::DataSet Hdf5ObsDataSet = Hdf5File.openDataSet(_RunName + "/Observables");
-        std::cout << "4 ok here\n";
         // Get current size of the dataset
         H5::DataSpace          Hdf5ObsDataSpace = Hdf5ObsDataSet.getSpace();
         std::array<hsize_t, 1> Hdf5ObsDimsOld;
         Hdf5ObsDataSpace.getSimpleExtentDims(Hdf5ObsDimsOld.data());
-        std::cout << "5 ok here\n";
         // Extend dataspace dimension
         std::array<hsize_t, 1> Hdf5ObsDimsNew = {Hdf5ObsDimsOld[0] + Hdf5BufferSize[0]};
         Hdf5ObsDataSet.extend(Hdf5ObsDimsNew.data());
-        std::cout << "6 ok here\n";
         // Update dataspace
         Hdf5ObsDataSpace = Hdf5ObsDataSet.getSpace();
-        std::cout << "7 ok here\n";
         // Select Hyperslab
         Hdf5ObsDataSpace.selectHyperslab(H5S_SELECT_SET, Hdf5BufferSize.data(), Hdf5ObsDimsOld.data());
-        std::cout << "8 ok here\n";
         // Write to dataset
-        Hdf5ObsDataSet.write(ObsVect.data(), Hdf5ObsType, Hdf5BufferMemorySpace, Hdf5ObsDataSpace);
-        std::cout << "9 ok here\n";
+        Hdf5ObsDataSet.write(ObsVect.data(), _ObsCompType, Hdf5BufferMemorySpace, Hdf5ObsDataSpace);
 
         // MonteCarlo stuff //
-        // Create Observable DataType
-        H5::CompType Hdf5McType = _McStats.get_hdf5_CompType();
         // Open DataSet
         H5::DataSet Hdf5McDataSet = Hdf5File.openDataSet(_RunName + "/MonteCarlo");
         // Get current size of the dataset
@@ -435,14 +425,19 @@ void MetropolisWorker<Action>::save_Measurements(McDataVectType& McVect, ObsVect
         // Select Hyperslab
         Hdf5McDataSpace.selectHyperslab(H5S_SELECT_SET, Hdf5BufferSize.data(), Hdf5McDimsOld.data());
         // Write to dataset
-        Hdf5McDataSet.write(McVect.data(), Hdf5McType, Hdf5BufferMemorySpace, Hdf5McDataSpace);
+        Hdf5McDataSet.write(McVect.data(), _McCompType, Hdf5BufferMemorySpace, Hdf5McDataSpace);
     } catch (H5::Exception& _) {
         exit(EXIT_FAILURE);
     }
 }
 
-/*--------------------------------------------------------------------------------------------------
-    Private Methods Implmentations
---------------------------------------------------------------------------------------------------*/
+template <class Action>
+void MetropolisWorker<Action>::log_MC(uint iter) {
+    _Logger.log_string(_RunName, std::format(" MC data_dump {} -> ", iter) + _McStats.dump_str());
+}
 
+template <class Action>
+void MetropolisWorker<Action>::log_obs(uint iter, ObsType& obs) {
+    _Logger.log_string(_RunName, std::format("obs data_dump {} -> ", iter) + obs.dump_str());
+}
 }  // namespace reticolo::montecarlo
