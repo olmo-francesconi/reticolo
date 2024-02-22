@@ -48,7 +48,10 @@ class HField {
 
   public:
     HField() = default;
-    ~HField(){};
+    HField(T val) { std::fill(_Mat.begin(), _Mat.end(), val); }
+    HField(HField&& other) = default;
+
+    ~HField() = default;
 
     // Array-like access operators
     auto operator[](size_t index) -> T& { return _Mat[index]; };
