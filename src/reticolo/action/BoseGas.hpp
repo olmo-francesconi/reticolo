@@ -49,9 +49,11 @@ class BoseGas : ActionBase<TField, TAction, 4> {
         [[nodiscard]] auto dump_str() -> std::string { return std::format("{:+8e},{:+8e}", phi2, density); }
         [[nodiscard]] auto dump_data() const -> std::vector<double> { return std::vector<double>({phi2, density}); }
     };
-    static void make_hdf5_CompType(H5::CompType& type) {
-        type.insertMember("phi2", HOFFSET(Observables, phi2), H5::PredType::NATIVE_DOUBLE);
-        type.insertMember("density", HOFFSET(Observables, density), H5::PredType::NATIVE_DOUBLE);
+    auto make_obs_hdf5_CompType() -> H5::CompType {
+        H5::CompType Type(sizeof(Observables));
+        Type.insertMember("phi2", HOFFSET(Observables, phi2), H5::PredType::NATIVE_DOUBLE);
+        Type.insertMember("density", HOFFSET(Observables, density), H5::PredType::NATIVE_DOUBLE);
+        return Type;
     }
 
     BoseGas() = default;

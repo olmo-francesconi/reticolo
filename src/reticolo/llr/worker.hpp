@@ -281,9 +281,8 @@ auto LLRWorker<Action>::MonteCarlo_run(uint nMC, std::string run_name, std::stri
             H5::DataSpace          Space(DataRank, Entries.data());
 
             // Create datatype and write the observables dataset
-            H5::CompType ObsType(sizeof(typename Action::Observables));
-            _Action.make_hdf5_CompType(ObsType);
-            H5::DataSet ObsDataset = File.createDataSet("/" + run_name + "/" + run_id + "/obs", ObsType, Space);
+            H5::CompType ObsType = _Action.make_obs_hdf5_CompType();
+            H5::DataSet  ObsDataset = File.createDataSet("/" + run_name + "/" + run_id + "/obs", ObsType, Space);
             ObsDataset.write(Obs.data(), ObsType);
 
             // Create datatype and write the observables dataset
