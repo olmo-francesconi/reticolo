@@ -11,7 +11,6 @@
 #pragma once
 
 #include <H5Cpp.h>
-#include <H5Exception.h>
 
 #include <algorithm>
 #include <array>
@@ -120,12 +119,9 @@ void LLRController<Action>::init(const fs::path& out_path, uintvect<Action::Dims
 
     // Initialize the output file
     try {
-        H5::Exception::dontPrint();
-        auto* File = new H5::H5File(_OutputPath / "llr" / "meas" / "llr.h5", H5F_ACC_TRUNC);
+        H5::H5File File(_OutputPath / "llr" / "meas" / "llr.h5", H5F_ACC_TRUNC);
         // write attributes
-        delete File;
-    } catch (H5::Exception& Exep) {
-        H5::Exception::printErrorStack();
+    } catch (H5::Exception& _) {
         exit(EXIT_FAILURE);
     }
 
@@ -224,15 +220,13 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
         // File output
         Time.reset();
         try {
-            H5::Exception::dontPrint();
             // Create the file and group
-            H5::H5File File(_OutputPath / "llr" / "meas" / "llr.h5", H5F_ACC_RDWR);
+            H5::H5File File(_OutputPath / "llr" / "meas" / "llr.h5", H5F_ACC_TRUNC);
             H5::Group  Group = File.createGroup("/" + RunName);
 
             // Create dataspace
-            const hsize_t                 DataRank = 1;
-            std::array<hsize_t, DataRank> Entries = {_AkHist.size()};
-            H5::DataSpace                 DataSpace(DataRank, Entries.data());
+            std::array<hsize_t, 1> Entries = {_AkHist.size()};
+            H5::DataSpace          DataSpace(1, Entries.data());
 
             // Create datatype
             H5::FloatType DataType = H5::PredType::NATIVE_DOUBLE;
@@ -248,8 +242,7 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
                     File.createDataSet("/" + RunName + "/ak" + std::format("_{:0>3d}", WorkerId), DataType, DataSpace);
                 Dataset.write(Data.data(), DataType);
             }
-        } catch (H5::Exception& Exep) {
-            H5::Exception::printErrorStack();
+        } catch (H5::Exception& _) {
             exit(EXIT_FAILURE);
         }
 
@@ -320,7 +313,6 @@ auto LLRController<Action>::memoryReport() -> size_t {
     for (auto& Worker : _Workers) {
         Memory += Worker.memoryReport();
     }
-
     return Memory;
 }
 
