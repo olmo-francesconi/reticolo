@@ -11,12 +11,13 @@ Diagnostics:
     Remove: [readability-magic-numbers]
     CheckOptions:
       readability-identifier-naming.VariableCase: CamelCase
+      readability-identifier-naming.VariableIgnoredRegexp: ^[_e]$
       readability-identifier-naming.ClassCase: CamelCase
       readability-identifier-naming.ClassMemberCase: CamelCase
       readability-identifier-naming.PrivateMemberCase: CamelCase
       readability-identifier-naming.PrivateMemberPrefix: _
       readability-identifier-length.MinimumParameterNameLength: 2
-      readability-identifier-length.IgnoredExceptionVariableNames: ^[e]$
+      readability-identifier-length.IgnoredExceptionVariableNames: ^[_e]$
 
   UnusedIncludes: Strict
   MissingIncludes: Strict
