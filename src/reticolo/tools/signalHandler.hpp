@@ -19,9 +19,9 @@ using Handler = void (*)(int);
 namespace reticolo::SignalHandler {
 
 /* SIGINT soft-exit handler */
-inline bool SoftexitRequested = false;
+inline bool SoftExitRequested = false;
 inline void SIGINT_SoftExit(int signum) {
-    if (!SoftexitRequested) {
+    if (!SoftExitRequested) {
         std::cout << '\n' << IO::LI_warn() << "SoftExit requested (Ctrl+C again to exit immediately)\n";
     } else {
         std::cout << '\n' << IO::LI_erro() << "Immediate exit requested, possible data corruption.\n";
@@ -29,7 +29,7 @@ inline void SIGINT_SoftExit(int signum) {
 
         exit(SIGINT);
     }
-    SoftexitRequested = true;
+    SoftExitRequested = true;
 }
 
 /* Install new handler */
