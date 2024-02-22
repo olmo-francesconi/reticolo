@@ -46,6 +46,10 @@ class LLRWorker {
     fs::path    _OutPath;    // Output path
     LOG_mode    _LogStatus;  // Private Logger status
 
+    /* hdf5 stuff*/
+    const H5::CompType _McCompType = montecarlo::data<typename Action::ActionType>::make_hdf5_CompType();
+    const H5::CompType _ObsCompType = Action::make_obs_hdf5_CompType();
+
     /* Physics stuff */
     Action                                            _Action;   // Action
     Lattice<typename Action::FieldType, Action::Dims> _Field;    // Lattice of the type specified by action
@@ -126,7 +130,6 @@ void LLRWorker<Action>::init(const fs::path& output_path, uint id, uintvect<Acti
 #pragma omp critical
     if (_LogStatus == LOG_mode::file_only || _LogStatus == LOG_mode::all) {
         try {
-            H5::Exception::dontPrint();
             H5::H5File File(_OutPath / "meas" / (_Name + ".h5"), H5F_ACC_TRUNC);
             // write attributes
         } catch (H5::Exception& Exep) {
@@ -267,30 +270,26 @@ auto LLRWorker<Action>::MonteCarlo_run(uint nMC, std::string run_name, std::stri
 #pragma omp critical
     if (_LogStatus == LOG_mode::file_only || _LogStatus == LOG_mode::all) {
         try {
-            H5::Exception::dontPrint();
             // Create the file
             H5::H5File File(_OutPath / "meas" / (_Name + ".h5"), H5F_ACC_RDWR);
+            // Check that the full path exists
             if (!File.nameExists(run_name)) {
                 H5::Group RunGroup = File.createGroup("/" + run_name);
             }
             H5::Group Group = File.createGroup("/" + run_name + "/" + run_id);
 
             // Create dataspace
-            size_t                 DataRank = 1;
             std::array<hsize_t, 1> Entries = {nMC};
-            H5::DataSpace          Space(DataRank, Entries.data());
+            H5::DataSpace          Space(1, Entries.data());
 
             // Create datatype and write the observables dataset
-            H5::CompType ObsType = _Action.make_obs_hdf5_CompType();
-            H5::DataSet  ObsDataset = File.createDataSet("/" + run_name + "/" + run_id + "/obs", ObsType, Space);
-            ObsDataset.write(Obs.data(), ObsType);
+            H5::DataSet ObsDataset = File.createDataSet("/" + run_name + "/" + run_id + "/obs", _ObsCompType, Space);
+            ObsDataset.write(Obs.data(), _ObsCompType);
 
             // Create datatype and write the observables dataset
-            H5::CompType McType = montecarlo::make_mc_data_hdf5_CompType<typename Action::ActionType>();
-            H5::DataSet  McDataset = File.createDataSet("/" + run_name + "/" + run_id + "/mc", McType, Space);
-            McDataset.write(Stats.data(), McType);
+            H5::DataSet McDataset = File.createDataSet("/" + run_name + "/" + run_id + "/mc", _McCompType, Space);
+            McDataset.write(Stats.data(), _McCompType);
         } catch (H5::Exception& Exep) {
-            H5::Exception::printErrorStack();
             exit(EXIT_FAILURE);
         }
     }
