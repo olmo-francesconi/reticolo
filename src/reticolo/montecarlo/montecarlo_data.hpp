@@ -11,6 +11,7 @@
 #pragma once
 
 #include <format>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,14 @@ struct data<ActionType> {
 
     [[nodiscard]] auto dump_str() -> std::string { return std::format("{:+8e},{:+8e},{:+8e}", acceptance, S, dS); }
     [[nodiscard]] auto dump_data() const -> std::vector<double> { return std::vector<double>({acceptance, S, dS}); }
+
+    static auto make_hdf5_CompType() -> H5::CompType {
+        H5::CompType Type(sizeof(data<ActionType>));
+        Type.insertMember("acceptance", HOFFSET(data<ActionType>, acceptance), H5::PredType::NATIVE_DOUBLE);
+        Type.insertMember("S", HOFFSET(data<ActionType>, S_re), H5::PredType::NATIVE_DOUBLE);
+        Type.insertMember("dS", HOFFSET(data<ActionType>, dS_re), H5::PredType::NATIVE_DOUBLE);
+        return Type;
+    };
 
     auto operator+=(const data<ActionType>& rhs) -> data<ActionType>& {
         acceptance += rhs.acceptance;
@@ -60,15 +69,6 @@ struct data<ActionType> {
     }
 };
 
-template <RealValue ActionType>
-auto make_mc_data_hdf5_CompType() -> H5::CompType {
-    H5::CompType Type(sizeof(data<ActionType>));
-    Type.insertMember("acceptance", HOFFSET(data<ActionType>, acceptance), H5::PredType::NATIVE_DOUBLE);
-    Type.insertMember("S", HOFFSET(data<ActionType>, S_re), H5::PredType::NATIVE_DOUBLE);
-    Type.insertMember("dS", HOFFSET(data<ActionType>, dS_re), H5::PredType::NATIVE_DOUBLE);
-    return Type;
-};
-
 /* Complex-valued action specialization */
 template <ComplexValue ActionType>
 struct data<ActionType> {
@@ -84,6 +84,17 @@ struct data<ActionType> {
     [[nodiscard]] auto dump_data() const -> std::vector<double> {
         return std::vector<double>({acceptance, S_re, S_im, dS_re, dS_im});
     }
+
+    static auto make_hdf5_CompType() -> H5::CompType {
+        std::cout << sizeof(data<ActionType>) << '\n';
+        H5::CompType Type(sizeof(data<ActionType>));
+        Type.insertMember("acceptance", HOFFSET(data<ActionType>, acceptance), H5::PredType::NATIVE_DOUBLE);
+        Type.insertMember("S_re", HOFFSET(data<ActionType>, S_re), H5::PredType::NATIVE_DOUBLE);
+        Type.insertMember("S_im", HOFFSET(data<ActionType>, S_im), H5::PredType::NATIVE_DOUBLE);
+        Type.insertMember("dS_re", HOFFSET(data<ActionType>, dS_re), H5::PredType::NATIVE_DOUBLE);
+        Type.insertMember("dS_im", HOFFSET(data<ActionType>, dS_im), H5::PredType::NATIVE_DOUBLE);
+        return Type;
+    };
 
     auto operator+=(const data<ActionType>& rhs) -> data<ActionType>& {
         acceptance += rhs.acceptance;
@@ -116,17 +127,6 @@ struct data<ActionType> {
         lhs += rhs;
         return lhs;
     }
-};
-
-template <ComplexValue ActionType>
-auto make_mc_data_hdf5_CompType() -> H5::CompType {
-    H5::CompType Type(sizeof(data<ActionType>));
-    Type.insertMember("acceptance", HOFFSET(data<ActionType>, acceptance), H5::PredType::NATIVE_DOUBLE);
-    Type.insertMember("S_re", HOFFSET(data<ActionType>, S_re), H5::PredType::NATIVE_DOUBLE);
-    Type.insertMember("S_im", HOFFSET(data<ActionType>, S_im), H5::PredType::NATIVE_DOUBLE);
-    Type.insertMember("dS_re", HOFFSET(data<ActionType>, dS_re), H5::PredType::NATIVE_DOUBLE);
-    Type.insertMember("dS_im", HOFFSET(data<ActionType>, dS_im), H5::PredType::NATIVE_DOUBLE);
-    return Type;
 };
 
 }  // namespace reticolo::montecarlo
