@@ -21,7 +21,6 @@
 #include <utility>
 
 #include "reticolo/tools/io_utils.hpp"
-#include "reticolo/tools/timer.hpp"
 
 namespace reticolo::IO {
 
