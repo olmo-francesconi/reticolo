@@ -16,28 +16,30 @@
 #include <cstdlib>
 #include <string>
 
+#include "reticolo/action/RelativisticBoseGas.hpp"
 #include "reticolo/montecarlo/metropolis.hpp"
-#include "reticolo/reticolo.hpp"
 #include "reticolo/types/core.hpp"
 
 using namespace reticolo;
 
 auto main(int argc, char* argv[]) -> int {
     /* Define the lattice volume */
-    uintvect<4> Volume = {8, 8, 8, 8};
+    uintvect<4> Volume = {4, 4, 4, 4};
+
+    // Lattice<RealD, 4> Lattice(Volume);
 
     /*  Set the output folder to be ./MetropolisMonteCarlo */
-    std::string OutPath = "MetropolisMonteCarlo";
+    std::string OutPath = "MetropolisMonteCarlo_out";
 
     /* Initialize the action */
-    action::BoseGas<ComplexD, ComplexD> Action(1.0, 9.0, 1.0);
+    action::WeakFieldEuclideanGR<ComplexD, ComplexD> Action(1.0, 9.0, 1.0);
 
     // simulation workflow for indefinite end
     montecarlo::MetropolisWorker Worker(Action);
 
-    Worker.init(Volume, "test", 0, "./test");
+    Worker.init(Volume, "MetropolisMonteCarlo", 0, OutPath);
 
-    Worker.run(0, 0, 1);
+    Worker.run(100000, 1000, 1);
 
     return EXIT_SUCCESS;
 }

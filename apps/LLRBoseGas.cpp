@@ -38,7 +38,7 @@ auto main(int argc, char* argv[]) -> int {
     std::string OutPath = "BoseGasLLR";
 
     /* Initialize the action */
-    action::BoseGas<ComplexD, ComplexD> Action(1.0, 9.0, 1.0);
+    action::RelativisticBoseGas<ComplexD, ComplexD> Action(1.0, 9.0, 1.0);
 
     /* Declare the LLRController
         This will take care of setting up and running the simulation
