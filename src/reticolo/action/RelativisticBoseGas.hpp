@@ -76,9 +76,9 @@ class RelativisticBoseGas {
     void lattice_sync(const Lattice<FieldType, 4>& field){};  // Nothing to do here
 
     /* Gloabal and local action computations */
-    auto compute_S(const Lattice<FieldType, 4>& field) const -> ActionType;
-    auto compute_S_loc(const Lattice<FieldType, 4>& field, uint site) const -> ActionType;
-    auto compute_dS_loc(const Lattice<TField, 4>& field, const TField& dphi, uint site) const -> ActionType;
+    auto compute_S(const Lattice<FieldType, 4>& field) -> ActionType;
+    auto compute_S_loc(const Lattice<FieldType, 4>& field, uint site) -> ActionType;
+    auto compute_dS_loc(const Lattice<TField, 4>& field, const TField& dphi, uint site) -> ActionType;
 
     /* Perform the measurements or returns updated Observable values*/
     static auto Measure(const Lattice<FieldType, 4>& field) -> Observables;
@@ -97,7 +97,7 @@ class RelativisticBoseGas {
   Public methods Implementatin
 --------------------------------------------------------------------------------------------------*/
 template <ComplexValue TField, ComplexValue TAction>
-inline auto RelativisticBoseGas<TField, TAction>::compute_S(const Lattice<TField, 4>& Field) const -> TAction {
+inline auto RelativisticBoseGas<TField, TAction>::compute_S(const Lattice<TField, 4>& Field) -> TAction {
     double  Real = 0.0;
     double  Imag = 0.0;
     TAction Phi;
@@ -120,8 +120,7 @@ inline auto RelativisticBoseGas<TField, TAction>::compute_S(const Lattice<TField
 };
 
 template <ComplexValue TField, ComplexValue TAction>
-inline auto RelativisticBoseGas<TField, TAction>::compute_S_loc(const Lattice<TField, 4>& Field, uint Site) const
-    -> TAction {
+inline auto RelativisticBoseGas<TField, TAction>::compute_S_loc(const Lattice<TField, 4>& Field, uint Site) -> TAction {
     TAction Phi = Field[Site];
     TAction PhiNt = Field.next(Site, _t);
     TAction PhiPt = Field.prev(Site, _t);
@@ -146,7 +145,7 @@ inline auto RelativisticBoseGas<TField, TAction>::compute_S_loc(const Lattice<TF
 
 template <ComplexValue TField, ComplexValue TAction>
 inline auto RelativisticBoseGas<TField, TAction>::compute_dS_loc(const Lattice<TField, 4>& Field, const TField& dPhi,
-                                                                 uint Site) const -> TAction {
+                                                                 uint Site) -> TAction {
     TField PhiOld = Field[Site];
     TField PhiNew = PhiOld + dPhi;
     TField PhiNt = Field.next(Site, _t);
