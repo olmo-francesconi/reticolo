@@ -32,7 +32,7 @@ auto main(int argc, char* argv[]) -> int {
     std::string OutPath = "MetropolisMonteCarlo_out";
 
     /* Initialize the action */
-    action::WeakFieldEuclideanGR<ComplexD, ComplexD> Action(1.0, 9.0, 1.0);
+    action::RelativisticBoseGas<ComplexD, ComplexD> Action(1.0, 9.0, 1.0);
 
     // simulation workflow for indefinite end
     montecarlo::MetropolisWorker Worker(Action);

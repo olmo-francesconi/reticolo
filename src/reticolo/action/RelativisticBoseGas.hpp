@@ -28,7 +28,7 @@ namespace reticolo::action {
   RelativisticBoseGas Class Declaration
 --------------------------------------------------------------------------------------------------*/
 template <ComplexValue TField, ComplexValue TAction>
-class WeakFieldEuclideanGR {
+class RelativisticBoseGas {
   public:
     /* Types and public action metadata */
     using FieldType = TField;      // Type of the field variables
@@ -62,15 +62,15 @@ class WeakFieldEuclideanGR {
     }
 
     /* Constructors */
-    WeakFieldEuclideanGR() = default;                              // Default
-    WeakFieldEuclideanGR(WeakFieldEuclideanGR&& other) = default;  // Move
+    RelativisticBoseGas() = default;                             // Default
+    RelativisticBoseGas(RelativisticBoseGas&& other) = default;  // Move
 
     /* Initializer Construtors */
-    WeakFieldEuclideanGR(double lambda, double eta, double chem_mu) : p(lambda, eta, chem_mu){};  // Parameter List
-    WeakFieldEuclideanGR(Params par) : p(par){};                                                  // Parameter struct
+    RelativisticBoseGas(double lambda, double eta, double chem_mu) : p(lambda, eta, chem_mu){};  // Parameter List
+    RelativisticBoseGas(Params par) : p(par){};                                                  // Parameter struct
 
     /* Destructor*/
-    ~WeakFieldEuclideanGR() = default;
+    ~RelativisticBoseGas() = default;
 
     /* Sync with lattice */
     void lattice_sync(const Lattice<FieldType, 4>& field){};  // Nothing to do here
@@ -97,7 +97,7 @@ class WeakFieldEuclideanGR {
   Public methods Implementatin
 --------------------------------------------------------------------------------------------------*/
 template <ComplexValue TField, ComplexValue TAction>
-inline auto WeakFieldEuclideanGR<TField, TAction>::compute_S(const Lattice<TField, 4>& Field) const -> TAction {
+inline auto RelativisticBoseGas<TField, TAction>::compute_S(const Lattice<TField, 4>& Field) const -> TAction {
     double  Real = 0.0;
     double  Imag = 0.0;
     TAction Phi;
@@ -120,7 +120,7 @@ inline auto WeakFieldEuclideanGR<TField, TAction>::compute_S(const Lattice<TFiel
 };
 
 template <ComplexValue TField, ComplexValue TAction>
-inline auto WeakFieldEuclideanGR<TField, TAction>::compute_S_loc(const Lattice<TField, 4>& Field, uint Site) const
+inline auto RelativisticBoseGas<TField, TAction>::compute_S_loc(const Lattice<TField, 4>& Field, uint Site) const
     -> TAction {
     TAction Phi = Field[Site];
     TAction PhiNt = Field.next(Site, _t);
@@ -145,8 +145,8 @@ inline auto WeakFieldEuclideanGR<TField, TAction>::compute_S_loc(const Lattice<T
 };
 
 template <ComplexValue TField, ComplexValue TAction>
-inline auto WeakFieldEuclideanGR<TField, TAction>::compute_dS_loc(const Lattice<TField, 4>& Field, const TField& dPhi,
-                                                                  uint Site) const -> TAction {
+inline auto RelativisticBoseGas<TField, TAction>::compute_dS_loc(const Lattice<TField, 4>& Field, const TField& dPhi,
+                                                                 uint Site) const -> TAction {
     TField PhiOld = Field[Site];
     TField PhiNew = PhiOld + dPhi;
     TField PhiNt = Field.next(Site, _t);
@@ -173,8 +173,8 @@ inline auto WeakFieldEuclideanGR<TField, TAction>::compute_dS_loc(const Lattice<
 };
 
 template <ComplexValue TField, ComplexValue TAction>
-inline auto WeakFieldEuclideanGR<TField, TAction>::Measure(const Lattice<TField, 4>& field)
-    -> WeakFieldEuclideanGR::Observables {
+inline auto RelativisticBoseGas<TField, TAction>::Measure(const Lattice<TField, 4>& field)
+    -> RelativisticBoseGas::Observables {
     TField Phi;
     double Phi2 = 0.0;
 
