@@ -24,6 +24,9 @@ class Lattice {
     uintvect<dim> _SubVols;  // Vector of subvolumes
     uint          _NSites;   // Total number of lattice sites
 
+    std::vector<uintvect<dim>> _Next;
+    std::vector<uintvect<dim>> _Prev;
+
     std::vector<T_field> _Field;  // actual lattice
 
   public:
@@ -44,6 +47,26 @@ class Lattice {
         }
         _SubVols.back() = 1;
 
+        uintvect<dim> Coord;
+        uintvect<dim> PrevCoord;
+        uintvect<dim> NextCoord;
+
+        std::fill(Coord.begin(), Coord.end(), 0);
+
+        _Next.resize(_NSites);
+        _Prev.resize(_NSites);
+
+        for (uint Site = 0; Site < _NSites; advance_coord(_N, Coord), Site++) {
+            for (uint Dir = 0; Dir < dim; Dir++) {
+                NextCoord = Coord;
+                NextCoord[Dir] = (Coord[Dir] + 1) % _N[Dir];
+                _Next[Site][Dir] = site(NextCoord);
+                PrevCoord = Coord;
+                PrevCoord[Dir] = (Coord[Dir] + (_N[Dir] - 1)) % _N[Dir];
+                _Prev[Site][Dir] = site(PrevCoord);
+            }
+        }
+
         _Field.clear();
         _Field.resize(_NSites);
     };
@@ -63,32 +86,36 @@ class Lattice {
     [[nodiscard]] auto getNz() const -> uint { return _N[_z]; }
     [[nodiscard]] auto getNsites() const -> uint { return _NSites; }
     [[nodiscard]] auto getVolume() const -> uint { return _NSites; }
+    [[nodiscard]] auto getSubVols() const -> uintvect<dim> { return _SubVols; }
     [[nodiscard]] auto getSizes() const -> uintvect<dim> { return _N; }
-
-    [[nodiscard]] auto memoryReport() const -> size_t { return sizeof(T_field) * _Field.size(); }
 
     // Get lattice index from 4d coordinates
     auto site(uintvect<dim>& coord) -> uint { return coord * _SubVols; };
     auto site(const uintvect<dim>& coord) const -> uint { return coord * _SubVols; };
 
-    template <typename T, size_t d>
-    friend auto next(const Lattice<T, d>& lat, const uintvect<d>& coord, uint dir) -> uint;
-    template <typename T, size_t d>
-    friend auto prev(const Lattice<T, d>& lat, const uintvect<d>& coord, uint dir) -> uint;
-};
+    auto next(uint site, uint dir) -> T_field& { return _Field[_Next[site][dir]]; }
+    auto next(uint site, uint dir) const -> const T_field& { return _Field[_Next[site][dir]]; }
 
-template <typename T, size_t dim>
-auto next(const Lattice<T, dim>& lat, const uintvect<dim>& coord, const uint dir) -> uint {
-    uintvect<dim> NextCoord = coord;
-    NextCoord[dir] = (NextCoord[dir] + 1) % lat._N[dir];
-    return lat.site(NextCoord);
-};
+    auto next(uintvect<dim> coord, uint dir) -> T_field& { return _Field[_Next[site(coord)][dir]]; }
+    auto next(uintvect<dim> coord, uint dir) const -> const T_field& { return _Field[_Next[site(coord)][dir]]; }
 
-template <typename T, size_t dim>
-auto prev(const Lattice<T, dim>& lat, const uintvect<dim>& coord, const uint dir) -> uint {
-    uintvect<dim> PrevCoord = coord;
-    PrevCoord[dir] = (PrevCoord[dir] - 1 + lat._N[dir]) % lat._N[dir];
-    return lat.site(PrevCoord);
+    auto prev(uint site, uint dir) -> T_field& { return _Field[_Prev[site][dir]]; }
+    auto prev(uint site, uint dir) const -> const T_field& { return _Field[_Prev[site][dir]]; }
+
+    auto prev(uintvect<dim> coord, uint dir) -> T_field& { return _Field[_Prev[site(coord)][dir]]; }
+    auto prev(uintvect<dim> coord, uint dir) const -> const T_field& { return _Field[_Prev[site(coord)][dir]]; }
+
+    [[nodiscard]] auto memoryReport() const -> size_t {
+        size_t Tot = 0;
+        Tot += sizeof(T_field) * _Field.size();    // byte size of the main lattice
+        Tot += sizeof(uint) * dim * _Prev.size();  // byte size of the prev index lattice
+        Tot += sizeof(uint) * dim * _Next.size();  // byte size of the next index lattice
+        Tot += sizeof(uint) * dim;                 // byte size of the lattice sizes vector
+        Tot += sizeof(uint) * dim;                 // byte size of the subvolume vector
+        Tot += sizeof(uint);                       // byte size of the number of lattice sizes
+
+        return sizeof(T_field) * _Field.size();
+    }
 };
 
 }  // namespace reticolo
