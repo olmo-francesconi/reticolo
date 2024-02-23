@@ -121,7 +121,6 @@ class MetropolisWorker {
 /*--------------------------------------------------------------------------------------------------
     Public Methods Implmentations
 --------------------------------------------------------------------------------------------------*/
-
 template <class Action>
 void MetropolisWorker<Action>::init(uintvect<Action::Dims> sizes, const std::string& RunName, uint seed,
                                     const fs::path& output_path) {
@@ -219,7 +218,7 @@ void MetropolisWorker<Action>::init(uintvect<Action::Dims> sizes, const std::str
     // Log stuff
     LogMessage << IO::LI_time() << "MetropolisWorker - Initialization completed in "
                << std::format("{:.3f}", _T.elapsed_ms()) << " ms\n"
-               << IO::LI_void() << "     memory allocated : " << IO::pretty_bytes(memoryReport()) << std::endl;
+               << IO::LI_void() << "      memory allocated : " << IO::pretty_bytes(memoryReport()) << std::endl;
     _Logger << LogMessage;
 }
 
@@ -241,8 +240,8 @@ void MetropolisWorker<Action>::resetField() {
 
 template <class Action>
 void MetropolisWorker<Action>::sweep() {
-    uint       Acc = 0;            // acceptance
-    ActionType SVarTot(0.0, 0.0);  // cumulative action variation
+    uint       Acc = 0;       // acceptance
+    ActionType SVarTot(0.0);  // cumulative action variation
 
     // Loop over the entire lattice
     uintvect<Action::Dims> SubVols = _Field.getSubVols();
@@ -269,27 +268,22 @@ void MetropolisWorker<Action>::sweep() {
         // advance the coordinate to the next site
     }
 
-    // Save the action status after the sweep to _McStats
-    _McStats.acceptance = static_cast<double>(Acc) / _Field.getNsites();
-    _McStats.S_re += SVarTot.real();
-    _McStats.S_im += SVarTot.imag();
-    _McStats.dS_re = SVarTot.real();
-    _McStats.dS_im = SVarTot.imag();
-
-}  // namespace reticolo::montecarlo
+    // Update montecarlo stats
+    _McStats.update(static_cast<double>(Acc) / _Field.getNsites(), SVarTot);
+}
 
 template <class Action>
 void MetropolisWorker<Action>::thermalize(uint nSteps, bool hot_start, double scale) {
     std::stringstream LogMessage;
     // Log that the folder and loggind stuff has bee initialized properly
     LogMessage << IO::LI_time() << "MetropolisWorker - Thermalization started...\n"
-               << IO::LI_void() << "    thermalizatoin steps: " << nSteps << "\n";
+               << IO::LI_void() << "  thermalizatoin steps : " << nSteps << "\n";
     if (hot_start) {
         randomizeField(scale);
-        LogMessage << IO::LI_void() << "      initial conditions: hot start\n";
+        LogMessage << IO::LI_void() << "    initial conditions : hot start\n";
     } else {
         resetField();
-        LogMessage << IO::LI_void() << "      initial conditions: cold start\n";
+        LogMessage << IO::LI_void() << "    initial conditions : cold start\n";
     }
     _Logger << LogMessage;
 
@@ -298,8 +292,7 @@ void MetropolisWorker<Action>::thermalize(uint nSteps, bool hot_start, double sc
 
     // Initialize the value of the action
     ActionType SInit = _Action.compute_S(_Field);
-    _McStats.S_re = SInit.real();
-    _McStats.S_im = SInit.imag();
+    _McStats.setS(SInit);
 
     // Perform the thermalization sweeps
     for (uint Iter = 0; Iter < nSteps; Iter++) {
@@ -316,8 +309,7 @@ template <class Action>
 void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool hot_start, double hs_scale) {
     // Log Run parameters
     std::stringstream LogMessage;
-    LogMessage << IO::LI_time() << "MetropolisWorker - Starting Monte Carlo updates..\n"
-               << IO::LI_void() << "          OpenMP threads: " << omp_get_max_threads() << "\n";
+    LogMessage << IO::LI_time() << "MetropolisWorker - Starting Monte Carlo updates..\n";
     _Logger << LogMessage;
 
     if (nTherm > 0) {
@@ -344,17 +336,16 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
 
     // Initialize the starting value of S
     ActionType SInit = _Action.compute_S(_Field);
-    _McStats.S_re = SInit.real();
-    _McStats.S_im = SInit.imag();
+    _McStats.setS(SInit);
 
     // Keep track of the iteration number
     unsigned long Iteration = 0;
 
     // simulation workflow for indefinite end
     if (nMC == 0) {
-        LogMessage << IO::LI_void() << "          OpenMP threads: " << omp_get_max_threads() << "\n"
-                   << IO::LI_void() << "           Total Updates: inf (Soft exit via single Ctrl+C)\n"
-                   << IO::LI_void() << "             Mesure step: " << MeasureStep << "\n";
+        LogMessage << IO::LI_void() << "        OpenMP threads : " << omp_get_max_threads() << "\n"
+                   << IO::LI_void() << "         Total Updates : inf (Soft exit via single Ctrl+C)\n"
+                   << IO::LI_void() << "           Mesure step : " << MeasureStep << "\n";
         _Logger << LogMessage;
 
         // Set the SIGINT handler to perform a SoftExit
@@ -368,7 +359,7 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
             sweep();
             // measure if this is a MeasureStep-th iteration
             if (Iteration % MeasureStep == 0) {
-                Stats.push_back(_McStats);
+                Stats.emplace_back(_McStats);
                 Obs.push_back(_Action.Measure(_Field));
                 // if the buffer are full save to file and flush
                 if (Obs.size() == _MaxBufferSize) {
@@ -386,9 +377,9 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
         SignalHandler::SIGINT_reset();
 
     } else {
-        LogMessage << IO::LI_void() << "          OpenMP threads: " << omp_get_max_threads() << "\n"
-                   << IO::LI_void() << "           Total Updates: " << nMC << "\n"
-                   << IO::LI_void() << "             Mesure step: " << MeasureStep << "\n";
+        LogMessage << IO::LI_void() << "        OpenMP threads : " << omp_get_max_threads() << "\n"
+                   << IO::LI_void() << "         Total Updates : " << nMC << "\n"
+                   << IO::LI_void() << "           Mesure step : " << MeasureStep << "\n";
         _Logger << LogMessage;
 
         for (uint Iter = 0; Iter < nMC; Iter++) {
@@ -396,7 +387,7 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
             sweep();
             // measure if this is a MeasureStep-th iteration
             if (Iter % MeasureStep == 0) {
-                Stats.push_back(_McStats);
+                Stats.emplace_back(_McStats);
                 Obs.push_back(_Action.Measure(_Field));
                 // if the buffer are full save to file and flush
                 if (Obs.size() == _MaxBufferSize) {
