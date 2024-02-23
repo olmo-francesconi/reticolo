@@ -49,6 +49,7 @@ class HField {
   public:
     HField() = default;
     HField(T val) { std::fill(_Mat.begin(), _Mat.end(), val); }
+    HField(HField& other) = default;
     HField(HField&& other) = default;
 
     ~HField() = default;
