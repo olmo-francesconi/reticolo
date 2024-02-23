@@ -95,15 +95,23 @@ class Lattice {
 
     auto next(uint site, uint dir) -> T_field& { return _Field[_Next[site][dir]]; }
     auto next(uint site, uint dir) const -> const T_field& { return _Field[_Next[site][dir]]; }
-
     auto next(uintvect<dim> coord, uint dir) -> T_field& { return _Field[_Next[site(coord)][dir]]; }
     auto next(uintvect<dim> coord, uint dir) const -> const T_field& { return _Field[_Next[site(coord)][dir]]; }
 
+    auto nextId(uint site, uint dir) -> uint& { return _Next[site][dir]; }
+    auto nextId(uint site, uint dir) const -> const uint& { return _Next[site][dir]; }
+    auto nextId(uintvect<dim> coord, uint dir) -> uint& { return _Next[site(coord)][dir]; }
+    auto nextId(uintvect<dim> coord, uint dir) const -> const uint& { return _Next[site(coord)][dir]; }
+
     auto prev(uint site, uint dir) -> T_field& { return _Field[_Prev[site][dir]]; }
     auto prev(uint site, uint dir) const -> const T_field& { return _Field[_Prev[site][dir]]; }
-
     auto prev(uintvect<dim> coord, uint dir) -> T_field& { return _Field[_Prev[site(coord)][dir]]; }
     auto prev(uintvect<dim> coord, uint dir) const -> const T_field& { return _Field[_Prev[site(coord)][dir]]; }
+
+    auto prevId(uint site, uint dir) -> uint& { return _Prev[site][dir]; }
+    auto prevId(uint site, uint dir) const -> const uint& { return _Prev[site][dir]; }
+    auto prevId(uintvect<dim> coord, uint dir) -> uint& { return _Prev[site(coord)][dir]; }
+    auto prevId(uintvect<dim> coord, uint dir) const -> const uint& { return _Prev[site(coord)][dir]; }
 
     [[nodiscard]] auto memoryReport() const -> size_t {
         size_t Tot = 0;
