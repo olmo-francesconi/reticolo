@@ -22,11 +22,9 @@ namespace reticolo::action {
 template <typename FieldType, typename ActionType, size_t dim>
 class ActionBase {
   public:
-    virtual auto compute_S(const Lattice<FieldType, dim>& field) const -> ActionType = 0;
-    virtual auto compute_S_loc(const Lattice<FieldType, dim>& field, const uintvect<dim>& coord) const
-        -> ActionType = 0;
-    virtual auto compute_dS_loc(const Lattice<FieldType, dim>& field, const FieldType& dphi,
-                                const uintvect<dim>& coord) const -> ActionType = 0;
+    virtual auto compute_S(Lattice<FieldType, dim>& field) const -> ActionType = 0;
+    virtual auto compute_S_loc(Lattice<FieldType, dim>& field, uint site) const -> ActionType = 0;
+    virtual auto compute_dS_loc(Lattice<FieldType, dim>& field, FieldType& dphi, uint site) const -> ActionType = 0;
 
     // Log action information
     virtual auto action_name() -> std::string = 0;        // return the action name
