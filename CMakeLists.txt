@@ -64,7 +64,7 @@ FIND_PACKAGE(OpenMP)
 # The compiled library code is here
 add_subdirectory(src)
 
-# The executable code is here
+# The executables code is here
 add_subdirectory(apps)
 
 # Testing only available if this is the main app
