@@ -35,9 +35,7 @@ auto main(int argc, char* argv[]) -> int {
     action::WeakFieldEuclideanGR Action(1.0);
 
     // simulation workflow for indefinite end
-    montecarlo::MetropolisWorker Worker(Action);
-
-    Worker.init(Volume, "WeakFieldEuclideanGR", 0, OutPath);
+    montecarlo::MetropolisWorker Worker("WeakFieldEuclideanGR", Action, Volume, 0, OutPath);
 
     Worker.run(100, 0, 1);
 
