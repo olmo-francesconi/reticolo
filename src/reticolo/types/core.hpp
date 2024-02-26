@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include <H5Cpp.h>
+
 #include <array>
 #include <complex>
 #include <cstddef>
@@ -74,6 +76,44 @@ inline void advance_coord(const uintvect<dim>& sizes, uintvect<dim>& coord) {
 template <size_t dim>
 inline auto get_volume(const uintvect<dim>& Sizes) -> uint {
     return std::accumulate(Sizes.begin(), Sizes.end(), 1, std::multiplies<>());
+}
+
+/*--------------------------------------------------------------------------------------------------
+    Hdf5 Types for core DataTypes
+--------------------------------------------------------------------------------------------------*/
+
+template <typename T>
+auto make_H5_Type() {}
+
+template <>
+auto make_H5_Type<uint>() {
+    return H5::PredType::NATIVE_UINT;
+}
+
+template <>
+auto make_H5_Type<RealF>() {
+    return H5::PredType::NATIVE_FLOAT;
+}
+
+template <>
+auto make_H5_Type<RealD>() {
+    return H5::PredType::NATIVE_DOUBLE;
+}
+
+template <>
+auto make_H5_Type<ComplexF>() {
+    H5::CompType Type(sizeof(ComplexF));
+    Type.insertMember("re", 0, H5::PredType::NATIVE_FLOAT);
+    Type.insertMember("im", sizeof(ComplexF) / 2, H5::PredType::NATIVE_FLOAT);
+    return Type;
+}
+
+template <>
+auto make_H5_Type<ComplexD>() {
+    H5::CompType Type(sizeof(ComplexD));
+    Type.insertMember("re", 0, H5::PredType::NATIVE_DOUBLE);
+    Type.insertMember("im", sizeof(ComplexD) / 2, H5::PredType::NATIVE_DOUBLE);
+    return Type;
 }
 
 }  // namespace reticolo
