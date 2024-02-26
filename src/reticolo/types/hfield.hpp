@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include <H5Cpp.h>
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -17,6 +19,7 @@
 #include <utility>
 
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
+#include "reticolo/types/core.hpp"
 
 // look-up table for the symmetric h_\mu\nu components
 // These speed-up data access by referencing directly the data in the linearized
@@ -97,8 +100,30 @@ inline void HField<T>::print() {
     std::cout << '\n';
 }
 
-// Math methods for Hfield objects
+/*--------------------------------------------------------------------------------------------------
+    Hdf5 Types for core DataTypes
+--------------------------------------------------------------------------------------------------*/
+
+template <>
+auto make_H5_Type<HField<RealF>>() {
+    std::array<hsize_t, 1> Dims = {10};
+    H5::ArrayType          Type(H5::PredType::NATIVE_FLOAT, 1, Dims.data());
+    return Type;
+}
+
+template <>
+auto make_H5_Type<HField<RealD>>() {
+    std::array<hsize_t, 1> Dims = {10};
+    H5::ArrayType          Type(H5::PredType::NATIVE_DOUBLE, 1, Dims.data());
+    return Type;
+}
+
+/*--------------------------------------------------------------------------------------------------
+    Math methods for Hfield objects
+--------------------------------------------------------------------------------------------------*/
+
 namespace HField_math {
+
 // compute res = c * (A - B) element wise
 template <RealValue T>
 inline void diff(HField<T>& res, const HField<T>& lhs, const HField<T>& rhs, const double Offset = 1.0) {
