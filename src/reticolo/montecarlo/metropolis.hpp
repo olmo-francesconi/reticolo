@@ -24,6 +24,7 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "reticolo/lattice/lattice.hpp"
@@ -61,8 +62,8 @@ class MetropolisWorker {
     fs::path    _WorkspacePath;  // Workspace folder path
 
     /* hdf5 stuff */
-    const uint         _MaxBufferSize = 10000;                           // Maximun size for the measure buffer
     fs::path           _Hdf5OutputFile;                                  // output file complete path
+    const uint         _MaxBufferSize = 1000;                            // Maximun size for the measure buffer
     const H5::CompType _McCompType = McDataType::make_hdf5_CompType();   // CompType for Monte Carlo stats
     const H5::CompType _ObsCompType = Action::make_obs_hdf5_CompType();  // CompType for Action observables
 
@@ -91,13 +92,12 @@ class MetropolisWorker {
 
     /* File output utilities */
     void save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect);  // save measurements
+    void save_Configuration(uint Iter);  // Save curretn configuration stored in _Lattice
 
   public:
-    /* Constructor (only sets up the Action) */
-    MetropolisWorker(Action& act) : _Action(act){};
-
-    /* Initializer function -> actually does all the set-up */
-    void init(uintvect<Action::Dims> sizes, const std::string& RunName, uint seed, const fs::path& output_path);
+    /* Constructor */
+    MetropolisWorker(std::string RunName, Action& act, uintvect<Action::Dims> sizes, uint seed,
+                     const fs::path& output_path);
 
     /* Randomize the field (hot start)*/
     void randomizeField(double scale = 1.0);
@@ -112,7 +112,8 @@ class MetropolisWorker {
     void thermalize(uint nSteps, bool hot_start = false, double scale = 1.0);
 
     /* Performs nMC Monte Carlo steps and returns a montecarlo::data object with the averages */
-    void run(uint nMC, uint nTherm, uint MeasureStep = 1, bool hot_start = false, double hs_scale = 1.0);
+    void run(uint nMC, uint nTherm, uint MeasureStep = 1, bool hot_start = false, double hs_scale = 1.0,
+             bool save_config = false);
 
     /* Memory report */
     auto memoryReport() -> size_t;
@@ -122,11 +123,10 @@ class MetropolisWorker {
     Public Methods Implmentations
 --------------------------------------------------------------------------------------------------*/
 template <class Action>
-void MetropolisWorker<Action>::init(uintvect<Action::Dims> sizes, const std::string& RunName, uint seed,
-                                    const fs::path& output_path) {
+MetropolisWorker<Action>::MetropolisWorker(std::string RunName, Action& act, uintvect<Action::Dims> sizes, uint seed,
+                                           const fs::path& output_path)
+    : _RunName(std::move(RunName)), _Action(act) {
     _T.reset();
-
-    _RunName = RunName;
 
     // Initialize the folder structure
     try {
@@ -137,6 +137,7 @@ void MetropolisWorker<Action>::init(uintvect<Action::Dims> sizes, const std::str
         _Hdf5OutputFile = _WorkspacePath / "meas" / (_RunName + ".h5");
         fs::create_directories(_WorkspacePath / "logs");
         fs::create_directories(_WorkspacePath / "meas");
+        fs::create_directories(_WorkspacePath / "cnfg");
     } catch (const std::exception& e) {
         std::cerr << e.what() << '\n';
         exit(EXIT_FAILURE);
@@ -144,7 +145,7 @@ void MetropolisWorker<Action>::init(uintvect<Action::Dims> sizes, const std::str
 
     // Initialize the logger
     try {
-        _Logger.init(output_path / "logs", _RunName + ".log", _RunName + "LOG", true);
+        _Logger.init(output_path / "logs", _RunName + ".log", _RunName + "LOGGER", true);
     } catch (const std::exception& Exept) {
         std::cerr << Exept.what() << '\n';
         exit(EXIT_FAILURE);
@@ -155,7 +156,9 @@ void MetropolisWorker<Action>::init(uintvect<Action::Dims> sizes, const std::str
     // Log that the folder and loggind stuff has bee initialized properly
     LogMessage << IO::LI_time() << "MetropolisWorker - Initialization started...\n"
                << IO::LI_void() << "    main oputput folder: " << _WorkspacePath.string() << "\n"
-               << IO::LI_void() << "    measurements folder: " << (_WorkspacePath / "meas").string() << "\n";
+               << IO::LI_void() << "    measurements folder: " << (_WorkspacePath / "meas").string() << "\n"
+               << IO::LI_void() << "  configurations folder: " << (_WorkspacePath / "cnfg").string() << "\n";
+
     _Logger << LogMessage;
 
     // Initialize the output file
@@ -189,6 +192,7 @@ void MetropolisWorker<Action>::init(uintvect<Action::Dims> sizes, const std::str
                << IO::LI_void() << "            parameters : " << _Action.action_parameters() << "\n"
                << IO::LI_void() << "               lattice : " << IO::print(sizes) << "\n";
     _Logger << LogMessage;
+
     // Initialize the lattice
     _Field.init(sizes);
 
@@ -306,7 +310,8 @@ void MetropolisWorker<Action>::thermalize(uint nSteps, bool hot_start, double sc
 }
 
 template <class Action>
-void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool hot_start, double hs_scale) {
+void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool hot_start, double hs_scale,
+                                   bool save_config) {
     // Log Run parameters
     std::stringstream LogMessage;
     LogMessage << IO::LI_time() << "MetropolisWorker - Starting Monte Carlo updates..\n";
@@ -359,6 +364,11 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
             sweep();
             // measure if this is a MeasureStep-th iteration
             if (Iteration % MeasureStep == 0) {
+                // Save the configuration
+                if (save_config) {
+                    save_Configuration(Iteration);
+                }
+
                 Stats.emplace_back(_McStats);
                 Obs.push_back(_Action.Measure(_Field));
                 // if the buffer are full save to file and flush
@@ -368,8 +378,9 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
                     // clear the vectors
                     Stats.clear();
                     Obs.clear();
-                    LogMessage << IO::LI_void() << "iteration " << Iteration + 1 << " -> Data saved\n";
-                    _Logger << LogMessage;
+                    _Logger << IO::LI_void() +
+                                   "Meassurements buffers saved to files on iteration: " + std::to_string(Iteration) +
+                                   "\n";
                 }
             }
             Iteration++;
@@ -387,6 +398,11 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
             sweep();
             // measure if this is a MeasureStep-th iteration
             if (Iter % MeasureStep == 0) {
+                // Save the configuration
+                if (save_config) {
+                    save_Configuration(Iter);
+                }
+                // Add measurements to buffer
                 Stats.emplace_back(_McStats);
                 Obs.push_back(_Action.Measure(_Field));
                 // if the buffer are full save to file and flush
@@ -396,8 +412,8 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
                     // clear the vectors
                     Stats.clear();
                     Obs.clear();
-                    LogMessage << IO::LI_void() << "iteration " << Iter + 1 << " -> Data saved\n";
-                    _Logger << LogMessage;
+                    _Logger << IO::LI_void() +
+                                   "Meassurements buffers saved to files on iteration: " + std::to_string(Iter) + "\n";
                 }
             }
             Iteration++;
@@ -476,6 +492,19 @@ void MetropolisWorker<Action>::save_Measurements(McDataVectType& McVect, ObsVect
     } catch (H5::Exception& _) {
         exit(EXIT_FAILURE);
     }
+}
+
+template <class Action>
+void MetropolisWorker<Action>::save_Configuration(uint Iter) {
+    hsize_t  FileSize;
+    fs::path FileName = _WorkspacePath / "cnfg" / (std::to_string(Iter) + ".h5");
+
+    try {
+        FileSize = _Field.save_Configuration(FileName);
+    } catch (H5::Exception& _) {
+        exit(EXIT_FAILURE);
+    }
+    _Logger << IO::LI_void() + "Saved configuration: " + FileName.string() + " [" + IO::pretty_bytes(FileSize) + "]\n";
 }
 
 template <class Action>
