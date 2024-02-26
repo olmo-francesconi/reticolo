@@ -63,6 +63,7 @@ class RelativisticBoseGas {
 
     /* Constructors */
     RelativisticBoseGas() = default;                             // Default
+    RelativisticBoseGas(RelativisticBoseGas& other) = default;   // Copy
     RelativisticBoseGas(RelativisticBoseGas&& other) = default;  // Move
 
     /* Initializer Construtors */
