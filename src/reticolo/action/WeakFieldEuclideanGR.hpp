@@ -42,9 +42,8 @@ class WeakFieldEuclideanGR {
     /* Types and public action metadata */
     using FieldType = reticolo::HField<RealD>;  // Type of the field variables
     using ActionType = RealD;                   // Return type fo the action
-    const static int  Dims = 4;                 // Dimensions of the action
-    const static int  Stencil = 2;              // Minimum step size for multi-thread safety
-    const static bool CustomMonteCarloSweep = true;
+    const static int Dims = 4;                  // Dimensions of the action
+    const static int Stencil = 2;               // Minimum step size for multi-thread safety
 
     /* Action parameters */
     struct Params {
@@ -115,7 +114,7 @@ class WeakFieldEuclideanGR {
     std::vector<ActionType>          _R;
     std::vector<std::array<uint, 5>> _Checks;
 
-    /* compute the checks indexes */
+    /* compute the check indexes */
     void make_checks(const Lattice<FieldType, 4>& field);
 
     /* Compute the curvature at a specific lattice point */
