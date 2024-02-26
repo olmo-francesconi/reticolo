@@ -73,6 +73,7 @@ class Logger {
     /* Log from a stringstream, */
     inline void log(std::stringstream& message);
     inline void operator<<(std::stringstream& message);
+    inline void operator<<(const std::string& message);
 };
 
 /*--------------------------------------------------------------------------------------------------
@@ -176,6 +177,17 @@ inline void Logger::operator<<(std::stringstream& message) {
             std::cout << _Msg;
         }
         message.str(std::string());
+    } else {
+        throw std::runtime_error("reticolo: LOGGER ERROR : Trying to write to an uninitialized logger");
+    }
+}
+
+inline void Logger::operator<<(const std::string& message) {
+    if (_State == 1) {
+        _File << message;
+        if (_SdtOut) {
+            std::cout << message;
+        }
     } else {
         throw std::runtime_error("reticolo: LOGGER ERROR : Trying to write to an uninitialized logger");
     }
