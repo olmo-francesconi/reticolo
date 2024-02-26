@@ -35,11 +35,9 @@ auto main(int argc, char* argv[]) -> int {
     action::RelativisticBoseGas<ComplexD, ComplexD> Action(1.0, 9.0, 1.0);
 
     // simulation workflow for indefinite end
-    montecarlo::MetropolisWorker Worker(Action);
+    montecarlo::MetropolisWorker Worker("MetropolisMonteCarlo", Action, Volume, 0, OutPath);
 
-    Worker.init(Volume, "MetropolisMonteCarlo", 0, OutPath);
-
-    Worker.run(100000, 1000, 1);
+    Worker.run(100000, 1000, 10);
 
     return EXIT_SUCCESS;
 }
