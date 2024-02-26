@@ -6,3 +6,6 @@ target_link_libraries(MetropolisMonteCarlo PRIVATE reticolo)
 
 add_executable(WeakFieldEuclideanGR_MCMC WeakFieldEuclideanGR_MCMC.cpp)
 target_link_libraries(WeakFieldEuclideanGR_MCMC PRIVATE reticolo)
+
+add_executable(hdf5_tests hdf5_tests.cpp)
+target_link_libraries(hdf5_tests PRIVATE reticolo)
