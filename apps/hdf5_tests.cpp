@@ -6,26 +6,11 @@
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
-
-    LLR workspace folder structure:
-        OutPath
-        ├── llr
-        │   ├── logs
-        │   │   ├── llr_worker[000].log
-        │   │   ├── ...
-        │   │   └── llr_worker[###].log
-        │   └── meas
-        │       ├── llr.h5
-        │       ├── llr_worker[000].h5
-        │       ├── ...
-        │       └── llr_worker[###].h5
-        └── reticolo.log
 ******************************************************************************/
 
 #include <H5Cpp.h>
 
 #include <cstdlib>
-#include <iostream>
 #include <string>
 
 #include "reticolo/lattice/lattice.hpp"
