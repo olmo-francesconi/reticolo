@@ -8,7 +8,8 @@ Diagnostics:
   # Tweak Clang-Tidy checks.
   ClangTidy:
     Add: [performance*, modernize*, readability*]
-    Remove: [readability-magic-numbers]
+    Remove:
+      [readability-magic-numbers, readability-function-cognitive-complexity]
     CheckOptions:
       readability-identifier-naming.VariableCase: CamelCase
       readability-identifier-naming.VariableIgnoredRegexp: ^[_e]$
