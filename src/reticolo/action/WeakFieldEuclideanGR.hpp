@@ -283,20 +283,20 @@ void montecarlo::MetropolisWorker<action::WeakFieldEuclideanGR>::sweep() {
         HField_math::sum(_Field[Site], _Field[Site], FieldVar);
 
         // Compute the updated Lagrangian in the surrounding sites
-        std::vector<ActionType> LGRPost;   // Vector storing the new curvature values in the check sites
-        ActionType              DS = 0.0;  // Cumulative curvature variation
+        std::vector<ActionType> LGRPost;             // Vector storing the new curvature values in the check sites
+        ActionType              ActionChange = 0.0;  // Cumulative curvature variation
         for (uint& CheckSite : _Action._Checks[Site]) {
             RealD Tmp = _Action.compute_LGR_loc(_Field, CheckSite);
             // std::cout << Tmp << " ";
             if (Tmp > 0.0) {
                 LGRPost.push_back(Tmp);
-                DS += Tmp - _Action._LGR[CheckSite];
+                ActionChange += Tmp - _Action._LGR[CheckSite];
             }
         }
         // Metropolis acceptance + positive action
-        if (LGRPost.size() == 5 && exp(-DS) > _Unif(_Rng)) {
+        if (LGRPost.size() == 5 && exp(-ActionChange) > _Unif(_Rng)) {
             Acc++;
-            SVarTot += DS;
+            SVarTot += ActionChange;
             for (uint CheckSite = 0; CheckSite < 5; CheckSite++) {
                 _Action._LGR[_Action._Checks[Site][CheckSite]] = LGRPost[CheckSite];
             }
