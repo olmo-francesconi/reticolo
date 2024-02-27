@@ -22,17 +22,15 @@ namespace reticolo::montecarlo {
 /* Generic template declaration - requires the action type to be either real or complex */
 template <typename T>
     requires RealValue<T> || ComplexValue<T>
-class data;
+struct data;
 
 /* Real-valued action specialization */
 template <RealValue ActionType>
-class data<ActionType> {
-  private:
+struct data<ActionType> {
     double _Acceptance;
     double _S;
     double _DS;
 
-  public:
     /* Constructors*/
     data() = default;                                                                                    // Default
     data(double acc, ActionType S, ActionType dS) : _Acceptance(acc), _S(double(S)), _DS(double(dS)){};  // Parameter
@@ -45,12 +43,17 @@ class data<ActionType> {
         _S += double(dS);
         _DS = double(dS);
     }
-    void setS(ActionType S) { _S = double(S); }
+    void softReset() {
+        _Acceptance = 0;
+        _DS = 0;
+    }
+    void hardReset() {
+        _Acceptance = 0;
+        _S = 0;
+        _DS = 0;
+    }
 
-    /* Data output */
-    [[nodiscard]] auto getAcceptance() -> double { return _Acceptance; }
-    [[nodiscard]] auto getS() -> double { return _S; }
-    [[nodiscard]] auto getDS() -> double { return _DS; }
+    /* Get/Set and Data/Str dump */
     [[nodiscard]] auto dump_str() -> std::string { return std::format("{:+8e},{:+8e},{:+8e}", _Acceptance, _S, _DS); }
     [[nodiscard]] auto dump_data() const -> std::vector<double> { return std::vector<double>({_Acceptance, _S, _DS}); }
 
@@ -93,15 +96,13 @@ class data<ActionType> {
 
 /* Complex-valued action specialization */
 template <ComplexValue ActionType>
-class data<ActionType> {
-  private:
+struct data<ActionType> {
     double _Acceptance;
     double _SRe;
     double _SIm;
     double _DSRe;
     double _DSIm;
 
-  public:
     /* Constructors*/
     data() = default;  // Default
     data(double acc, ActionType S, ActionType dS)
@@ -121,15 +122,24 @@ class data<ActionType> {
         _DSRe = dS.real();
         _DSIm = dS.imag();
     }
+    void softReset() {
+        _Acceptance = 0.0;
+        _DSRe = 0.0;
+        _DSIm = 0.0;
+    }
+    void hardReset() {
+        _Acceptance = 0;
+        _SRe = 0.0;
+        _SIm = 0.0;
+        _DSRe = 0.0;
+        _DSIm = 0.0;
+    }
     void setS(ActionType S) {
         _SRe = double(S.real());
         _SIm = double(S.imag());
     }
 
-    /* Data output */
-    [[nodiscard]] auto getAcceptance() -> double { return _Acceptance; }
-    [[nodiscard]] auto getS() -> ComplexD { return {_SRe, _SIm}; }
-    [[nodiscard]] auto getDS() -> ComplexD { return {_DSRe, _DSIm}; }
+    /* Get/Set and Data/Str dump */
     [[nodiscard]] auto dump_str() -> std::string {
         return std::format("{:+8e},{:+8e},{:+8e},{:+8e},{:+8e}", _Acceptance, _SRe, _SIm, _DSRe, _DSIm);
     }
