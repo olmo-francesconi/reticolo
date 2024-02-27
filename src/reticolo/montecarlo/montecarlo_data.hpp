@@ -16,7 +16,6 @@
 
 #include "H5Cpp.h"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/types/core.hpp"
 
 namespace reticolo::montecarlo {
 /* Generic template declaration - requires the action type to be either real or complex */
@@ -32,10 +31,11 @@ struct data<ActionType> {
     double _DS;
 
     /* Constructors*/
-    data() = default;                                                                                    // Default
-    data(double acc, ActionType S, ActionType dS) : _Acceptance(acc), _S(double(S)), _DS(double(dS)){};  // Parameter
-    data(data& other) = default;                                                                         // Copy
-    data(data&& other) = default;                                                                        // Move
+    data() = default;  // Default
+    data(double acc, ActionType action, ActionType action_change)
+        : _Acceptance(acc), _S(double(action)), _DS(double(action_change)){};  // Parameter
+    data(data& other) = default;                                               // Copy
+    data(data&& other) = default;                                              // Move
 
     /* Update values */
     void update(double acc, ActionType dS) {
@@ -105,14 +105,14 @@ struct data<ActionType> {
 
     /* Constructors*/
     data() = default;  // Default
-    data(double acc, ActionType S, ActionType dS)
+    data(double acc, ActionType action, ActionType action_change)
         : _Acceptance(acc),
-          _SRe(double(S.real())),
-          _SIm(double(S.imag())),
-          _DSRe(double(dS.real())),
-          _DSIm(double(dS.imag())){};  // Parameter
-    data(data& other) = default;       // Copy
-    data(data&& other) = default;      // Move
+          _SRe(double(action.real())),
+          _SIm(double(action.imag())),
+          _DSRe(double(action_change.real())),
+          _DSIm(double(action_change.imag())){};  // Parameter
+    data(data& other) = default;                  // Copy
+    data(data&& other) = default;                 // Move
 
     /* Update values */
     void update(double acc, ActionType dS) {
@@ -133,10 +133,6 @@ struct data<ActionType> {
         _SIm = 0.0;
         _DSRe = 0.0;
         _DSIm = 0.0;
-    }
-    void setS(ActionType S) {
-        _SRe = double(S.real());
-        _SIm = double(S.imag());
     }
 
     /* Get/Set and Data/Str dump */
