@@ -397,15 +397,16 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
                    << IO::LI_void() << "           Mesure step : " << MeasureStep << "\n";
         _Logger << LogMessage;
 
-        for (uint Iter = 0; Iter < nMC; Iter++) {
+        for (uint Iteration = 0; Iteration < nMC; Iteration++) {
             // perform a sweep
             sweep();
             {
                 // measure if this is a MeasureStep-th iteration
-                if (Iter % MeasureStep == 0) {
+                if (Iteration % MeasureStep == 0) {
+                    handle_Output(Iteration, Stats, Obs, save_config);
                     // Save the configuration
                     if (save_config) {
-                        save_Configuration(Iter);
+                        save_Configuration(Iteration);
                     }
                     // Add measurements to buffer
                     Stats.emplace_back(_McStats);
@@ -417,12 +418,10 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
                         // clear the vectors
                         Stats.clear();
                         Obs.clear();
-                        _Logger << IO::LI_void() +
-                                       "Meassurements buffers saved to files on iteration: " + std::to_string(Iter) +
-                                       "\n";
+                        _Logger << IO::LI_void() + "Meassurements buffers saved to files on iteration: " +
+                                       std::to_string(Iteration) + "\n";
                     }
                 }
-                Iteration++;
             }
         }
     }
