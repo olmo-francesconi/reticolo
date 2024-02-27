@@ -24,20 +24,18 @@ using namespace reticolo;
 
 auto main(int argc, char* argv[]) -> int {
     /* Define the lattice volume */
-    uintvect<4> Volume = {64, 24, 24, 24};
+    uintvect<4> Volume = {6, 6, 6, 6};
 
-    // Lattice<RealD, 4> Lattice(Volume);
-
-    /*  Set the output folder to be ./MetropolisMonteCarlo */
+    // /*  Set the output folder to be ./MetropolisMonteCarlo */
     std::string OutPath = "WeakFieldEuclideanGR";
 
     /* Initialize the action */
-    action::WeakFieldEuclideanGR Action(1.0);
+    action::WeakFieldEuclideanGR Action(5.7);
 
     // simulation workflow for indefinite end
     montecarlo::MetropolisWorker Worker("WeakFieldEuclideanGR", Action, Volume, 0, OutPath);
 
-    Worker.run(100, 0, 1);
+    Worker.run(10000, 0, 1, false, 1.0, false);
 
     return EXIT_SUCCESS;
 }
