@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <format>
 #include <iostream>
 #include <utility>
 
@@ -93,7 +94,7 @@ inline void HField<T>::print() {
     std::cout << std::scientific;
     for (int Mu = 0; Mu < 4; Mu++) {
         for (int Nu = 0; Nu < 4; Nu++) {
-            std::cout << (*this)(Mu, Nu) << "\t";
+            std::cout << std::format("{:>+12.2e}", (*this)(Mu, Nu));
         }
         std::cout << '\n';
     }
