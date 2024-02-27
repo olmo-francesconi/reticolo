@@ -11,7 +11,6 @@
 #pragma once
 
 #include <H5Cpp.h>
-#include <omp.h>
 #include <unistd.h>
 
 #include <array>
@@ -72,15 +71,15 @@ class MetropolisWorker {
     LatticeType _Field;    // Lattice of the type specified by action
     McDataType  _McStats;  // MonteCarlo stats
 
-    /* OpenMP multi-threading */
-    const uint _MaxThreads = omp_get_max_threads();  // Maximum number fo OpenMP threads available
-    uint       _Threads;                             // Actual number of threads used
+    // /* OpenMP multi-threading */
+    // const uint _MaxThreads = omp_get_max_threads();  // Maximum number fo OpenMP threads available
+    // uint       _Threads;                             // Actual number of threads used
 
     /* RNG stuff */
-    std::vector<std::mt19937_64>                        _Rng;    // Random Number Generator
-    std::vector<std::uniform_real_distribution<double>> _Unif;   // Uniform distribution [0.0, 1.0]
-    std::vector<std::uniform_real_distribution<double>> _UnifC;  // Uniform distribution [-1.0, 1.0]
-    std::vector<std::normal_distribution<double>>       _Norm;   // Normal distibution (mean: 0.0, stddev: 1.0 )
+    std::mt19937_64                        _Rng;    // Random Number Generator
+    std::uniform_real_distribution<double> _Unif;   // Uniform distribution [0.0, 1.0]
+    std::uniform_real_distribution<double> _UnifC;  // Uniform distribution [-1.0, 1.0]
+    std::normal_distribution<double>       _Norm;   // Normal distibution (mean: 0.0, stddev: 1.0 )
 
     /* Timing and logging */
     Timer      _T;       // LLRWorker Private Timer
@@ -202,22 +201,29 @@ MetropolisWorker<Action>::MetropolisWorker(std::string RunName, Action& act, uin
         LogMessage << IO::LI_warn() << "This is a complex-valued action -> Performing a phase-quenched simulation!!\n";
     }
 
-    // Initialize threads numbers
-    if (_MaxThreads * Action::Stencil < _Field.getNt()) {
-        _Threads = _MaxThreads;
-    } else {
-        _Threads = _Field.getNt() / Action::Stencil;
-    }
+    // // Initialize threads numbers
+    // if (_Field.getNt() % Action::Stencil != 0) {
+    //     _Threads = 1;
+    //     LogMessage << IO::LI_warn() << "       multi-threading : action and lattice not compatibles\n";
+    // } else {
+    //     if (_MaxThreads * Action::Stencil >= _Field.getNt()) {
+    //         _Threads = _Field.getNt() / Action::Stencil;
+    //     } else {
+    //         _Threads = _MaxThreads;
+    //     }
+    //     while (_Field.getNt() % (_Threads * Action::Stencil) != 0) {
+    //         _Threads--;
+    //     }
+    //     LogMessage << IO::LI_void() << "       multi-threading : available [" << _Threads << " threads]\n";
+    // }
 
     // RNGs stuff
     std::random_device MainRd;
-    _Rng.resize(_Threads);
-    for (auto& Rng : _Rng) {
-        Rng.seed(MainRd());
-    }
-    _Unif.resize(_Threads, std::uniform_real_distribution<double>(0.0, 1.0));
-    _UnifC.resize(_Threads, std::uniform_real_distribution<double>(-1.0, 1.0));
-    _Norm.resize(_Threads, std::normal_distribution<double>(0.0, 1.0));
+    _Rng.seed(MainRd());
+
+    _Unif = std::uniform_real_distribution<double>(0.0, 1.0);
+    _UnifC = std::uniform_real_distribution<double>(-1.0, 1.0);
+    _Norm = std::normal_distribution<double>(0.0, 1.0);
 
     // Log stuff
     LogMessage << IO::LI_time() << "MetropolisWorker - Initialization completed in "
@@ -229,7 +235,7 @@ MetropolisWorker<Action>::MetropolisWorker(std::string RunName, Action& act, uin
 template <class Action>
 void MetropolisWorker<Action>::randomizeField(double scale) {
     for (size_t Site = 0; Site < _Field.getNsites(); Site++) {
-        randomize(_Field[Site], scale, _Norm[0], _Rng[0]);
+        randomize(_Field[Site], scale, _Norm, _Rng);
     }
     _Action.lattice_sync(_Field);
 }
@@ -246,34 +252,32 @@ template <class Action>
 void MetropolisWorker<Action>::sweep() {
     uint       Acc = 0;       // acceptance
     ActionType SVarTot(0.0);  // cumulative action variation
+    _McStats.softReset();
 
     // Loop over the entire lattice
     uintvect<Action::Dims> SubVols = _Field.getSubVols();
 
-#pragma omp parallel for num_threads(_Threads) schedule(static, SubVols[0])
     for (uint Site = 0; Site < _Field.getNsites(); Site++) {
-        uint ThId = omp_get_thread_num();
+        // uint ThId = omp_get_thread_num();
         // Generate a randomized local field variation
         FieldType FieldVar;  // local field variation
-        randomize(FieldVar, 0.2, _UnifC[ThId], _Rng[ThId]);
+        randomize(FieldVar, 0.2, _UnifC, _Rng);
 
         // Compute the associated action variation
         ActionType SVar = _Action.compute_dS_loc(_Field, FieldVar, Site);
 
         // Metropolis acceptance check
-        if (exp(-SVar.real()) > _Unif[ThId](_Rng[ThId])) {
-#pragma omp critical
-            {
-                Acc++;
-                _Field[Site] += FieldVar;
-                SVarTot += SVar;
-            }
+        if (exp(-SVar.real()) > _Unif(_Rng)) {
+            Acc++;
+            _Field[Site] += FieldVar;
+            SVarTot += SVar;
         }
-        // advance the coordinate to the next site
     }
 
     // Update montecarlo stats
-    _McStats.update(static_cast<double>(Acc) / _Field.getNsites(), SVarTot);
+    _McStats._Acceptance += Acc;
+    _McStats._S += SVarTot;
+    _McStats._DS += SVarTot;
 }
 
 template <class Action>
@@ -296,7 +300,7 @@ void MetropolisWorker<Action>::thermalize(uint nSteps, bool hot_start, double sc
 
     // Initialize the value of the action
     ActionType SInit = _Action.compute_S(_Field);
-    _McStats.setS(SInit);
+    _McStats._S = SInit;
 
     // Perform the thermalization sweeps
     for (uint Iter = 0; Iter < nSteps; Iter++) {
@@ -341,15 +345,15 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
 
     // Initialize the starting value of S
     ActionType SInit = _Action.compute_S(_Field);
-    _McStats.setS(SInit);
+    _McStats._S = SInit;
 
     // Keep track of the iteration number
     unsigned long Iteration = 0;
 
     // simulation workflow for indefinite end
     if (nMC == 0) {
-        LogMessage << IO::LI_void() << "        OpenMP threads : " << omp_get_max_threads() << "\n"
-                   << IO::LI_void() << "         Total Updates : inf (Soft exit via single Ctrl+C)\n"
+        // LogMessage << IO::LI_void() << "        OpenMP threads : " << omp_get_max_threads() << "\n"
+        LogMessage << IO::LI_void() << "         Total Updates : inf (Soft exit via single Ctrl+C)\n"
                    << IO::LI_void() << "           Mesure step : " << MeasureStep << "\n";
         _Logger << LogMessage;
 
@@ -388,35 +392,38 @@ void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool
         SignalHandler::SIGINT_reset();
 
     } else {
-        LogMessage << IO::LI_void() << "        OpenMP threads : " << omp_get_max_threads() << "\n"
-                   << IO::LI_void() << "         Total Updates : " << nMC << "\n"
+        // LogMessage << IO::LI_void() << "        OpenMP threads : " << omp_get_max_threads() << "\n"
+        LogMessage << IO::LI_void() << "         Total Updates : " << nMC << "\n"
                    << IO::LI_void() << "           Mesure step : " << MeasureStep << "\n";
         _Logger << LogMessage;
 
         for (uint Iter = 0; Iter < nMC; Iter++) {
             // perform a sweep
             sweep();
-            // measure if this is a MeasureStep-th iteration
-            if (Iter % MeasureStep == 0) {
-                // Save the configuration
-                if (save_config) {
-                    save_Configuration(Iter);
+            {
+                // measure if this is a MeasureStep-th iteration
+                if (Iter % MeasureStep == 0) {
+                    // Save the configuration
+                    if (save_config) {
+                        save_Configuration(Iter);
+                    }
+                    // Add measurements to buffer
+                    Stats.emplace_back(_McStats);
+                    Obs.push_back(_Action.Measure(_Field));
+                    // if the buffer are full save to file and flush
+                    if (Obs.size() == _MaxBufferSize) {
+                        // save data
+                        save_Measurements(Stats, Obs);
+                        // clear the vectors
+                        Stats.clear();
+                        Obs.clear();
+                        _Logger << IO::LI_void() +
+                                       "Meassurements buffers saved to files on iteration: " + std::to_string(Iter) +
+                                       "\n";
+                    }
                 }
-                // Add measurements to buffer
-                Stats.emplace_back(_McStats);
-                Obs.push_back(_Action.Measure(_Field));
-                // if the buffer are full save to file and flush
-                if (Obs.size() == _MaxBufferSize) {
-                    // save data
-                    save_Measurements(Stats, Obs);
-                    // clear the vectors
-                    Stats.clear();
-                    Obs.clear();
-                    _Logger << IO::LI_void() +
-                                   "Meassurements buffers saved to files on iteration: " + std::to_string(Iter) + "\n";
-                }
+                Iteration++;
             }
-            Iteration++;
         }
     }
 

@@ -12,9 +12,10 @@
 
 #pragma once
 
+#include <unistd.h>
+
 #include <array>
 #include <format>
-#include <iostream>
 #include <numeric>
 #include <sstream>
 #include <string>
@@ -111,16 +112,16 @@ class WeakFieldEuclideanGR {
     double kappa;
 
     /* Vector storing the current values of the curvature for each lattice point*/
-    std::vector<ActionType>          _R;
+    std::vector<ActionType>          _LGR;
     std::vector<std::array<uint, 5>> _Checks;
 
     /* compute the check indexes */
     void make_checks(const Lattice<FieldType, 4>& field);
 
     /* Compute the curvature at a specific lattice point */
-    void        update_R(const Lattice<FieldType, 4>& field);
-    static auto compute_R_loc(const Lattice<FieldType, 4>& field, uint site) -> ActionType;
-    auto        check_pos_R(uint site, std::vector<ActionType> RPost, ActionType DR = 0.0) -> bool;
+    void               update_LGR(const Lattice<FieldType, 4>& field);
+    [[nodiscard]] auto compute_LGR_loc(const Lattice<FieldType, 4>& field, uint site) const -> ActionType;
+    auto               check_pos_R(uint site, std::vector<ActionType> RPost, ActionType DR = 0.0) -> bool;
 };
 
 /*--------------------------------------------------------------------------------------------------
@@ -128,28 +129,28 @@ class WeakFieldEuclideanGR {
 --------------------------------------------------------------------------------------------------*/
 
 auto WeakFieldEuclideanGR::compute_S(const Lattice<FieldType, 4>& field) -> ActionType {
-    // Update the the lattice
-    update_R(field);
-    // Accumulate the curvature
-    ActionType STot = std::reduce(_R.begin(), _R.end());
+    // Update the lattice
+    update_LGR(field);
+    // Accumulate the Lagrangian
+    ActionType STot = std::reduce(_LGR.begin(), _LGR.end());
 
     return STot;
 }
 
 void WeakFieldEuclideanGR::lattice_sync(const Lattice<FieldType, 4>& field) {
+    // Initialize parameters values here
+    aa = 0.5 * exp(-1.6804 - 1.7331 * (p.beta - 6.0) + 0.7849 * pow(p.beta - 6.0, 2) - 0.4428 * pow(p.beta - 6.0, 3));
+    a_invGeV = aa / hbarc_GeVfm;
+    kappa = kappa_GeV2 * a_invGeV * a_invGeV;
+
     // Resize and cleat the curvature latice to match the lattice sizes
-    _R.resize(field.getNsites(), 0.0);
+    _LGR.resize(field.getNsites(), 0.0);
 
     // Build the check indexing vector
     make_checks(field);
 
     // Updates the curvature values
-    update_R(field);
-
-    // Initialize parameters values here
-    aa = 0.5 * exp(-1.6804 - 1.7331 * (p.beta - 6.0) + 0.7849 * pow(p.beta - 6.0, 2) - 0.4428 * pow(p.beta - 6.0, 3));
-    a_invGeV = aa / hbarc_GeVfm;
-    kappa = kappa_GeV2 * a_invGeV * a_invGeV;
+    update_LGR(field);
 }
 
 /*--------------------------------------------------------------------------------------------------
@@ -162,20 +163,20 @@ void WeakFieldEuclideanGR::make_checks(const Lattice<FieldType, 4>& field) {
         _Checks.push_back({
             Site,                    //
             field.prevId(Site, _t),  //
-            field.prevId(Site, _t),  //
-            field.prevId(Site, _t),  //
-            field.prevId(Site, _t)   //
+            field.prevId(Site, _x),  //
+            field.prevId(Site, _y),  //
+            field.prevId(Site, _z)   //
         });
     }
 }
 
-void WeakFieldEuclideanGR::update_R(const Lattice<FieldType, 4>& field) {
-    for (uint Site = 0; Site < _R.size(); Site++) {
-        _R[Site] = compute_R_loc(field, Site);
+void WeakFieldEuclideanGR::update_LGR(const Lattice<FieldType, 4>& field) {
+    for (uint Site = 0; Site < _LGR.size(); Site++) {
+        _LGR[Site] = compute_LGR_loc(field, Site);
     }
 }
 
-auto WeakFieldEuclideanGR::compute_R_loc(const Lattice<FieldType, 4>& field, uint site) -> ActionType {
+auto WeakFieldEuclideanGR::compute_LGR_loc(const Lattice<FieldType, 4>& field, uint site) const -> ActionType {
     // Compute local derivatives
     std::array<FieldType, 4> Dhmn;
     HField_math::diff(Dhmn[_t], field.next(site, _t), field[site]);
@@ -256,7 +257,7 @@ auto WeakFieldEuclideanGR::compute_R_loc(const Lattice<FieldType, 4>& field, uin
             Dhmn[3][MUNU_32] * Dhmn[2][MUNU_33] + Dhmn[3][MUNU_33] * Dhmn[3][MUNU_33];
     Ans4 *= 0.5;
 
-    return Ans1 + Ans2 + Ans3 + Ans4;
+    return kappa * (Ans1 + Ans2 + Ans3 + Ans4);
 }
 }  // namespace reticolo::action
 
@@ -271,54 +272,42 @@ void montecarlo::MetropolisWorker<action::WeakFieldEuclideanGR>::sweep() {
     uint       Acc = 0;       // acceptance
     ActionType SVarTot(0.0);  // cumulative action variation
 
-    // Loop over the entire lattice
-    uintvect<action::WeakFieldEuclideanGR::Dims> SubVols = _Field.getSubVols();
+    _McStats.softReset();
 
-#pragma omp parallel for num_threads(_Threads) schedule(static, SubVols[0])
     for (uint Site = 0; Site < _Field.getNsites(); Site++) {
-        uint ThId = omp_get_thread_num();
         // Generate a randomized local field variation
         FieldType FieldVar;  // local field variation
         FieldType FieldOld = _Field[Site];
         RealD     Scale = 0.1 * _Action.lP_fm / _Action.aa;
-        randomize(FieldVar, Scale, _UnifC[ThId], _Rng[ThId]);
-
+        randomize(FieldVar, Scale, _UnifC, _Rng);
         HField_math::sum(_Field[Site], _Field[Site], FieldVar);
 
-        // check that the curvature is still positive in the surrounding sites
-        std::vector<ActionType> RPost;
-        ActionType              DR = 0.0;
-
-        for (auto& CId : _Action._Checks[Site]) {
-            RealD Tmp = _Action.compute_R_loc(_Field, CId);
+        // Compute the updated Lagrangian in the surrounding sites
+        std::vector<ActionType> LGRPost;   // Vector storing the new curvature values in the check sites
+        ActionType              DS = 0.0;  // Cumulative curvature variation
+        for (uint& CheckSite : _Action._Checks[Site]) {
+            RealD Tmp = _Action.compute_LGR_loc(_Field, CheckSite);
+            // std::cout << Tmp << " ";
             if (Tmp > 0.0) {
-                RPost.push_back(Tmp);
-                DR += Tmp - _Action._R[CId];
+                LGRPost.push_back(Tmp);
+                DS += Tmp - _Action._LGR[CheckSite];
             }
         }
-
-        if (RPost.size() == 5) {
-            double DS = _Action.kappa * DR;
-
-            if (exp(-DS) > _Unif[ThId](_Rng[ThId])) {
-#pragma omp critical
-                {
-                    Acc++;
-                    SVarTot += DS;
-                }
-                for (uint CheckSite = 0; CheckSite < 5; CheckSite++) {
-                    _Action._R[_Action._Checks[Site][CheckSite]] = RPost[CheckSite];
-                }
-            } else {
-                _Field[Site] = FieldOld;
+        // Metropolis acceptance + positive action
+        if (LGRPost.size() == 5 && exp(-DS) > _Unif(_Rng)) {
+            Acc++;
+            SVarTot += DS;
+            for (uint CheckSite = 0; CheckSite < 5; CheckSite++) {
+                _Action._LGR[_Action._Checks[Site][CheckSite]] = LGRPost[CheckSite];
             }
         } else {
             _Field[Site] = FieldOld;
         }
     }
-    _McStats.update(Acc / double(_Field.getNsites()), SVarTot);
 
-    std::cout << _McStats.dump_str() << '\n';
-}
+    _McStats._Acceptance += Acc;
+    _McStats._S += SVarTot;
+    _McStats._DS += SVarTot;
+}  // namespace reticolo
 
 }  // namespace reticolo
