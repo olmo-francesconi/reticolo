@@ -26,8 +26,6 @@ auto main(int argc, char* argv[]) -> int {
     /* Define the lattice volume */
     uintvect<4> Volume = {4, 4, 4, 4};
 
-    // Lattice<RealD, 4> Lattice(Volume);
-
     /*  Set the output folder to be ./MetropolisMonteCarlo */
     std::string OutPath = "MetropolisMonteCarlo_out";
 
