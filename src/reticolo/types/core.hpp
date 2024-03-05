@@ -54,7 +54,7 @@ using uintvect = std::array<uint, dim>;
 template <size_t dim>
 auto operator*(const uintvect<dim>& lhs, const uintvect<dim>& rhs) -> uint {
     uint Res = 0;
-    for (int Comp = 0; Comp < dim; Comp++) {
+    for (uint Comp = 0; Comp < dim; Comp++) {
         Res += lhs[Comp] * rhs[Comp];
     }
     return Res;
@@ -63,7 +63,7 @@ auto operator*(const uintvect<dim>& lhs, const uintvect<dim>& rhs) -> uint {
 template <size_t dim>
 inline void advance_coord(const uintvect<dim>& sizes, uintvect<dim>& coord) {
     coord.back()++;
-    for (int Dir = dim - 1; Dir >= 0; Dir--) {
+    for (uint Dir = dim - 1; Dir > 0; Dir--) {
         if (coord[Dir] == sizes[Dir]) {
             coord[Dir] = 0;
             coord[Dir - 1]++;
