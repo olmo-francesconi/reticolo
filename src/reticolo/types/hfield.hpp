@@ -52,9 +52,12 @@ class HField {
 
   public:
     HField() = default;
+    // HField(const HField&) = delete;
+    // HField(HField&&) = delete;
+    // HField& operator=(HField&&) = delete;
     HField(T val) { std::fill(_Mat.begin(), _Mat.end(), val); }
-    HField(HField& other) = default;
-    HField(HField&& other) = default;
+    // HField(HField& other) = default;
+    // HField(HField&& other) = default;
 
     ~HField() = default;
 
@@ -79,7 +82,44 @@ class HField {
         return *this;
     }
 
+    auto operator+=(const HField& other) -> HField& {
+        for (size_t Comp = 0; Comp < HfieldNumComp; Comp++) {
+            this->_Mat[Comp] += other._Mat[Comp];
+        }
+        return *this;
+    }
+
+    auto operator-=(const HField& other) -> HField& {
+        for (size_t Comp = 0; Comp < HfieldNumComp; Comp++) {
+            this->_Mat[Comp] -= other._Mat[Comp];
+        }
+        return *this;
+    }
+
+    auto operator*=(const double& other) -> HField& {
+        for (size_t Comp = 0; Comp < HfieldNumComp; Comp++) {
+            this->_Mat[Comp] *= other;
+        }
+        return *this;
+    }
+
+    friend auto operator+(HField lhs, const HField& rhs) -> HField {
+        lhs += rhs;
+        return lhs;
+    }
+
+    friend auto operator-(HField lhs, const HField& rhs) -> HField {
+        lhs -= rhs;
+        return lhs;
+    }
+
+    friend auto operator*(double lhs, HField rhs) -> HField {
+        rhs *= lhs;
+        return rhs;
+    }
+
     [[nodiscard]] auto trace() const -> T;
+    [[nodiscard]] auto dot() const -> T;
 
     void print();
 };  // struct HField
@@ -87,6 +127,15 @@ class HField {
 template <RealValue T>
 inline auto HField<T>::trace() const -> T {
     return _Mat[0] + _Mat[4] + _Mat[7] + _Mat[9];
+}
+
+template <RealValue T>
+inline auto HField<T>::dot() const -> T {
+    T Res = 0.0;
+    for (const auto& Elem : _Mat) {
+        Res += Elem;
+    }
+    return Res;
 }
 
 template <RealValue T>
