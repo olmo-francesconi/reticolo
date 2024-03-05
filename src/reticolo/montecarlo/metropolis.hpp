@@ -2,7 +2,7 @@
 
  - reticolo (www.github.com/olmo-francesconi/reticolo.git)
 
- - SourceFile: montecarlo/metropolis.hpp
+ - SourceFile: mc/hmc.hpp
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
@@ -10,516 +10,57 @@
 
 #pragma once
 
-#include <H5Cpp.h>
-#include <unistd.h>
-
-#include <array>
-#include <cstddef>
-#include <cstdlib>
-#include <exception>
-#include <filesystem>
-#include <format>
-#include <iostream>
-#include <random>
-#include <sstream>
 #include <string>
-#include <utility>
-#include <vector>
 
-#include "reticolo/lattice/lattice.hpp"
-#include "reticolo/montecarlo/montecarlo_data.hpp"
-#include "reticolo/tools/io_utils.hpp"
-#include "reticolo/tools/logger.hpp"
-#include "reticolo/tools/signalHandler.hpp"
-#include "reticolo/tools/timer.hpp"
-#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
+#include "reticolo/montecarlo/MonteCarloHandler.hpp"
 #include "reticolo/types/core.hpp"
-#include "reticolo/types/random.hpp"
-
-namespace fs = std::filesystem;
 
 namespace reticolo::montecarlo {
 
-/*--------------------------------------------------------------------------------------------------
-  LLRWorker Class Declaration
---------------------------------------------------------------------------------------------------*/
+template <class T>
+concept MetropolisCapable = T::IsMetropolisCapable;
 
-template <class Action>
-class MetropolisWorker {
+template <MetropolisCapable Action>
+class Metropolis : public MonteCarloHandler<Action> {
   private:
-    /* Define types */
+    /* Types definitions */
     using ActionType = typename Action::ActionType;
     using FieldType = typename Action::FieldType;
-    using LatticeType = Lattice<typename Action::FieldType, Action::Dims>;
-    using ObsType = typename Action::Observables;
-    using ObsVectType = std::vector<typename Action::Observables>;
-    using McDataType = montecarlo::data<typename Action::ActionType>;
-    using McDataVectType = std::vector<montecarlo::data<typename Action::ActionType>>;
-
-    /* Metadata and output */
-    std::string _RunName;        // Run identifier
-    fs::path    _WorkspacePath;  // Workspace folder path
-
-    /* hdf5 stuff */
-    fs::path           _Hdf5OutputFile;                                  // output file complete path
-    const uint         _MaxBufferSize = 1000;                            // Maximun size for the measure buffer
-    const H5::CompType _McCompType = McDataType::make_hdf5_CompType();   // CompType for Monte Carlo stats
-    const H5::CompType _ObsCompType = Action::make_obs_hdf5_CompType();  // CompType for Action observables
-
-    /* Physics stuff */
-    Action      _Action;   // Action
-    LatticeType _Field;    // Lattice of the type specified by action
-    McDataType  _McStats;  // MonteCarlo stats
-
-    // /* OpenMP multi-threading */
-    // const uint _MaxThreads = omp_get_max_threads();  // Maximum number fo OpenMP threads available
-    // uint       _Threads;                             // Actual number of threads used
-
-    /* RNG stuff */
-    std::mt19937_64                        _Rng;    // Random Number Generator
-    std::uniform_real_distribution<double> _Unif;   // Uniform distribution [0.0, 1.0]
-    std::uniform_real_distribution<double> _UnifC;  // Uniform distribution [-1.0, 1.0]
-    std::normal_distribution<double>       _Norm;   // Normal distibution (mean: 0.0, stddev: 1.0 )
-
-    /* Timing and logging */
-    Timer      _T;       // LLRWorker Private Timer
-    IO::Logger _Logger;  // LLRWorker Private Logger
-
-    /* Various logging utilities */
-    void log_MC(uint iter);                 // Log MonteCarlo data
-    void log_obs(uint iter, ObsType& obs);  // Log Action observables
-
-    /* File output utilities */
-    void save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect);  // save measurements
-    void save_Configuration(uint Iter);  // Save curretn configuration stored in _Lattice
 
   public:
-    /* Constructor */
-    MetropolisWorker(std::string RunName, Action& act, uintvect<Action::Dims> sizes, uint seed,
-                     const fs::path& output_path);
+    /* Inherit all base class constructors from MonteCarloHandler */
+    using MonteCarloHandler<Action>::MonteCarloHandler;
 
-    /* Randomize the field (hot start)*/
-    void randomizeField(double scale = 1.0);
+    /* override virtual updateField() method */
+    void updateField() override {
+        uint       Acc = 0;       // acceptance
+        ActionType SVarTot(0.0);  // cumulative action variation
 
-    /* Clear the field (cold start)*/
-    void resetField();
+        // Loop over the entire lattice
+        for (uint Site = 0; Site < this->_Field.getNsites(); Site++) {
+            // uint ThId = omp_get_thread_num();
+            // Generate a randomized local field variation
+            FieldType FieldVar;  // local field variation
+            randomize(FieldVar, 0.2, this->_UnifC, this->_Rng);
 
-    /* Performs a single sweep of the lattice (updates worker::MC_stats) */
-    void sweep();
+            // Compute the associated action variation
+            ActionType SVar = this->_Action.compute_dS_loc(this->_Field, FieldVar, Site);
 
-    /* Performs nSteps thermalization steps and no measurements */
-    void thermalize(uint nSteps, bool hot_start = false, double scale = 1.0);
+            // Metropolis acceptance check
+            if (exp(-SVar.real()) > this->_Unif(this->_Rng)) {
+                Acc++;
+                this->_Field[Site] += FieldVar;
+                SVarTot += SVar;
+            }
+        }
 
-    /* Performs nMC Monte Carlo steps and returns a montecarlo::data object with the averages */
-    void run(uint nMC, uint nTherm, uint MeasureStep = 1, bool hot_start = false, double hs_scale = 1.0,
-             bool save_config = false);
-
-    /* Memory report */
-    auto memoryReport() -> size_t;
+        // Update montecarlo stats
+        this->_McStats.update(static_cast<double>(Acc) / this->_Field.getNsites(), SVarTot);
+    }
 };
 
-/*--------------------------------------------------------------------------------------------------
-    Public Methods Implmentations
---------------------------------------------------------------------------------------------------*/
-template <class Action>
-MetropolisWorker<Action>::MetropolisWorker(std::string RunName, Action& act, uintvect<Action::Dims> sizes, uint seed,
-                                           const fs::path& output_path)
-    : _RunName(std::move(RunName)), _Action(act) {
-    _T.reset();
+/* Argument deduction guide */
+template <MetropolisCapable Action>
+Metropolis(std::string, Action&, uintvect<Action::Dims>, uint, std::string&) -> Metropolis<Action>;
 
-    // Initialize the folder structure
-    try {
-        _WorkspacePath = fs::absolute(output_path);
-
-        fs::create_directories(_WorkspacePath);
-        _WorkspacePath = fs::canonical(_WorkspacePath);
-        _Hdf5OutputFile = _WorkspacePath / "meas" / (_RunName + ".h5");
-        fs::create_directories(_WorkspacePath / "logs");
-        fs::create_directories(_WorkspacePath / "meas");
-        fs::create_directories(_WorkspacePath / "cnfg");
-    } catch (const std::exception& e) {
-        std::cerr << e.what() << '\n';
-        exit(EXIT_FAILURE);
-    }
-
-    // Initialize the logger
-    try {
-        _Logger.init(output_path / "logs", _RunName + ".log", _RunName + "LOGGER", true);
-    } catch (const std::exception& Exept) {
-        std::cerr << Exept.what() << '\n';
-        exit(EXIT_FAILURE);
-    }
-
-    std::stringstream LogMessage;
-
-    // Log that the folder and loggind stuff has bee initialized properly
-    LogMessage << IO::LI_time() << "MetropolisWorker - Initialization started...\n"
-               << IO::LI_void() << "    main oputput folder: " << _WorkspacePath.string() << "\n"
-               << IO::LI_void() << "    measurements folder: " << (_WorkspacePath / "meas").string() << "\n"
-               << IO::LI_void() << "  configurations folder: " << (_WorkspacePath / "cnfg").string() << "\n";
-
-    _Logger << LogMessage;
-
-    // Initialize the output file
-    try {
-        // Create empty but unlimited dataspace
-        std::array<hsize_t, 1> Hdf5Entries = {0};
-        std::array<hsize_t, 1> Hdf5MaxDims = {H5S_UNLIMITED};
-        H5::DataSpace          Hdf5DataSpace(1, Hdf5Entries.data(), Hdf5MaxDims.data());
-        // Create file (truncation access)
-        H5::H5File Hdf5File(_Hdf5OutputFile, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-        // Create Group
-        H5::Group Hdf5Group = Hdf5File.createGroup(_RunName);
-        // Create creation properties for dataset
-        H5::DSetCreatPropList  Hdf5CParms;
-        std::array<hsize_t, 1> Hdf5ChunkDims = {_MaxBufferSize};
-        Hdf5CParms.setChunk(1, Hdf5ChunkDims.data());
-        // Create DataSet
-        H5::DataSet Hdf5ObsDataSet =
-            Hdf5File.createDataSet(_RunName + "/Observables", _ObsCompType, Hdf5DataSpace, Hdf5CParms);
-        // Create DataSet
-        H5::DataSet Hdf5McDataSet =
-            Hdf5File.createDataSet(_RunName + "/MonteCarlo", _McCompType, Hdf5DataSpace, Hdf5CParms);
-    } catch (H5::Exception& _) {
-        exit(EXIT_FAILURE);
-    }
-
-    // Log stuff
-    LogMessage << IO::LI_void() << "            output file: " << _Hdf5OutputFile.string() << "\n"
-               << IO::LI_void() << "MetropolisWorker - Action-info\n"
-               << IO::LI_void() << "                  name : " << _Action.action_name() << "\n"
-               << IO::LI_void() << "            parameters : " << _Action.action_parameters() << "\n"
-               << IO::LI_void() << "               lattice : " << IO::print(sizes) << "\n";
-    _Logger << LogMessage;
-
-    // Initialize the lattice
-    _Field.init(sizes);
-
-    // initialize the action
-    _Action.lattice_sync(_Field);
-    if (!RealValue<ActionType>) {
-        LogMessage << IO::LI_warn() << "This is a complex-valued action -> Performing a phase-quenched simulation!!\n";
-    }
-
-    // // Initialize threads numbers
-    // if (_Field.getNt() % Action::Stencil != 0) {
-    //     _Threads = 1;
-    //     LogMessage << IO::LI_warn() << "       multi-threading : action and lattice not compatibles\n";
-    // } else {
-    //     if (_MaxThreads * Action::Stencil >= _Field.getNt()) {
-    //         _Threads = _Field.getNt() / Action::Stencil;
-    //     } else {
-    //         _Threads = _MaxThreads;
-    //     }
-    //     while (_Field.getNt() % (_Threads * Action::Stencil) != 0) {
-    //         _Threads--;
-    //     }
-    //     LogMessage << IO::LI_void() << "       multi-threading : available [" << _Threads << " threads]\n";
-    // }
-
-    // RNGs stuff
-    std::random_device MainRd;
-    _Rng.seed(MainRd());
-
-    _Unif = std::uniform_real_distribution<double>(0.0, 1.0);
-    _UnifC = std::uniform_real_distribution<double>(-1.0, 1.0);
-    _Norm = std::normal_distribution<double>(0.0, 1.0);
-
-    // Log stuff
-    LogMessage << IO::LI_time() << "MetropolisWorker - Initialization completed in "
-               << std::format("{:.3f}", _T.elapsed_ms()) << " ms\n"
-               << IO::LI_void() << "      memory allocated : " << IO::pretty_bytes(memoryReport()) << std::endl;
-    _Logger << LogMessage;
-}
-
-template <class Action>
-void MetropolisWorker<Action>::randomizeField(double scale) {
-    for (size_t Site = 0; Site < _Field.getNsites(); Site++) {
-        randomize(_Field[Site], scale, _Norm, _Rng);
-    }
-    _Action.lattice_sync(_Field);
-}
-
-template <class Action>
-void MetropolisWorker<Action>::resetField() {
-    for (size_t Site = 0; Site < _Field.getNsites(); Site++) {
-        _Field[Site] = FieldType(0.0);
-    }
-    _Action.lattice_sync(_Field);
-}
-
-template <class Action>
-void MetropolisWorker<Action>::sweep() {
-    uint       Acc = 0;       // acceptance
-    ActionType SVarTot(0.0);  // cumulative action variation
-    _McStats.softReset();
-
-    // Loop over the entire lattice
-    uintvect<Action::Dims> SubVols = _Field.getSubVols();
-
-    for (uint Site = 0; Site < _Field.getNsites(); Site++) {
-        // uint ThId = omp_get_thread_num();
-        // Generate a randomized local field variation
-        FieldType FieldVar;  // local field variation
-        randomize(FieldVar, 0.2, _UnifC, _Rng);
-
-        // Compute the associated action variation
-        ActionType SVar = _Action.compute_dS_loc(_Field, FieldVar, Site);
-
-        // Metropolis acceptance check
-        if (exp(-SVar.real()) > _Unif(_Rng)) {
-            Acc++;
-            _Field[Site] += FieldVar;
-            SVarTot += SVar;
-        }
-    }
-
-    // Update montecarlo stats
-    _McStats._Acceptance += Acc;
-    _McStats._S += SVarTot;
-    _McStats._DS += SVarTot;
-}
-
-template <class Action>
-void MetropolisWorker<Action>::thermalize(uint nSteps, bool hot_start, double scale) {
-    std::stringstream LogMessage;
-    // Log that the folder and loggind stuff has bee initialized properly
-    LogMessage << IO::LI_time() << "MetropolisWorker - Thermalization started...\n"
-               << IO::LI_void() << "  thermalizatoin steps : " << nSteps << "\n";
-    if (hot_start) {
-        randomizeField(scale);
-        LogMessage << IO::LI_void() << "    initial conditions : hot start\n";
-    } else {
-        resetField();
-        LogMessage << IO::LI_void() << "    initial conditions : cold start\n";
-    }
-    _Logger << LogMessage;
-
-    // Reset the timer
-    _T.reset();
-
-    // Initialize the value of the action
-    ActionType SInit = _Action.compute_S(_Field);
-    _McStats._S = SInit;
-
-    // Perform the thermalization sweeps
-    for (uint Iter = 0; Iter < nSteps; Iter++) {
-        sweep();
-    }
-
-    // Log timing information
-    LogMessage << IO::LI_time() << "MetropolisWorker - Thermalization finished in "
-               << std::format("{:.2f}", _T.elapsed_ms()) << " ms\n";
-    _Logger << LogMessage;
-}
-
-template <class Action>
-void MetropolisWorker<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool hot_start, double hs_scale,
-                                   bool save_config) {
-    // Log Run parameters
-    std::stringstream LogMessage;
-    LogMessage << IO::LI_time() << "MetropolisWorker - Starting Monte Carlo updates..\n";
-    _Logger << LogMessage;
-
-    if (nTherm > 0) {
-        thermalize(nTherm, hot_start, hs_scale);
-    }
-
-    // do checks on nMC and MeasureStep -> sanitize nMC from unnecessary iterations
-
-    LogMessage << IO::LI_void() << "MetropolisWorker - Starting Measurements..\n";
-    _Logger << LogMessage;
-
-    // Reset the timer
-    _T.reset();
-
-    // Initialize std::vector of Monte Carlo stats
-    McDataVectType Stats;
-    Stats.clear();
-    Stats.reserve(_MaxBufferSize);
-
-    // Initialize std::vector of observable measurements
-    std::vector<typename Action::Observables> Obs;
-    Obs.clear();
-    Obs.reserve(_MaxBufferSize);
-
-    // Initialize the starting value of S
-    ActionType SInit = _Action.compute_S(_Field);
-    _McStats._S = SInit;
-
-    // Keep track of the iteration number
-    unsigned long Iteration = 0;
-
-    // simulation workflow for indefinite end
-    if (nMC == 0) {
-        // LogMessage << IO::LI_void() << "        OpenMP threads : " << omp_get_max_threads() << "\n"
-        LogMessage << IO::LI_void() << "         Total Updates : inf (Soft exit via single Ctrl+C)\n"
-                   << IO::LI_void() << "           Mesure step : " << MeasureStep << "\n";
-        _Logger << LogMessage;
-
-        // Set the SIGINT handler to perform a SoftExit
-        // [Ctrl+C]x1 -> stop simulation on the next iteration
-        // [Ctrl+C]x2 -> immediate stop, possible datacorruption if that
-        //               happpens during data output
-        SignalHandler::set_SIGINT_handler(SignalHandler::SIGINT_SoftExit);
-
-        while (!SignalHandler::SoftExitRequested) {
-            // perform a sweep
-            sweep();
-            // measure if this is a MeasureStep-th iteration
-            if (Iteration % MeasureStep == 0) {
-                // Save the configuration
-                if (save_config) {
-                    save_Configuration(Iteration);
-                }
-
-                Stats.emplace_back(_McStats);
-                Obs.push_back(_Action.Measure(_Field));
-                // if the buffer are full save to file and flush
-                if (Obs.size() == _MaxBufferSize) {
-                    // save data
-                    save_Measurements(Stats, Obs);
-                    // clear the vectors
-                    Stats.clear();
-                    Obs.clear();
-                    _Logger << IO::LI_void() +
-                                   "Meassurements buffers saved to files on iteration: " + std::to_string(Iteration) +
-                                   "\n";
-                }
-            }
-            Iteration++;
-        }
-        SignalHandler::SIGINT_reset();
-
-    } else {
-        // LogMessage << IO::LI_void() << "        OpenMP threads : " << omp_get_max_threads() << "\n"
-        LogMessage << IO::LI_void() << "         Total Updates : " << nMC << "\n"
-                   << IO::LI_void() << "           Mesure step : " << MeasureStep << "\n";
-        _Logger << LogMessage;
-
-        for (uint Iteration = 0; Iteration < nMC; Iteration++) {
-            // perform a sweep
-            sweep();
-            {
-                // measure if this is a MeasureStep-th iteration
-                if (Iteration % MeasureStep == 0) {
-                    handle_Output(Iteration, Stats, Obs, save_config);
-                    // Save the configuration
-                    if (save_config) {
-                        save_Configuration(Iteration);
-                    }
-                    // Add measurements to buffer
-                    Stats.emplace_back(_McStats);
-                    Obs.push_back(_Action.Measure(_Field));
-                    // if the buffer are full save to file and flush
-                    if (Obs.size() == _MaxBufferSize) {
-                        // save data
-                        save_Measurements(Stats, Obs);
-                        // clear the vectors
-                        Stats.clear();
-                        Obs.clear();
-                        _Logger << IO::LI_void() + "Meassurements buffers saved to files on iteration: " +
-                                       std::to_string(Iteration) + "\n";
-                    }
-                }
-            }
-        }
-    }
-
-    // save the last measurements in the buffer and flush
-    if (Stats.size() != 0 && Obs.size() != 0) {
-        save_Measurements(Stats, Obs);
-        Stats.clear();
-        Obs.clear();
-        LogMessage << IO::LI_void() << "Final data saved\n";
-        _Logger << LogMessage;
-    }
-
-    LogMessage << IO::LI_time() << "MetropolisWorker - Measurements done in " << std::format("{:.3f}", _T.elapsed_s())
-               << " s\n";
-    _Logger << LogMessage;
-}
-
-template <class Action>
-auto MetropolisWorker<Action>::memoryReport() -> size_t {
-    size_t Memory = 0;
-    Memory += _Field.memoryReport();
-
-    return Memory;
-}
-
-/*--------------------------------------------------------------------------------------------------
-    Private Methods Implmentations
---------------------------------------------------------------------------------------------------*/
-
-template <class Action>
-void MetropolisWorker<Action>::save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect) {
-    try {
-        // Define dimension of stuff to write
-        std::array<hsize_t, 1> Hdf5BufferSize = {ObsVect.size()};
-        H5::DataSpace          Hdf5BufferMemorySpace(1, Hdf5BufferSize.data());
-
-        // Open file
-        H5::H5File Hdf5File(_Hdf5OutputFile, H5F_ACC_RDWR, H5P_DEFAULT, H5P_DEFAULT);
-
-        // Observables //
-        // Open DataSet
-        H5::DataSet Hdf5ObsDataSet = Hdf5File.openDataSet(_RunName + "/Observables");
-        // Get current size of the dataset
-        H5::DataSpace          Hdf5ObsDataSpace = Hdf5ObsDataSet.getSpace();
-        std::array<hsize_t, 1> Hdf5ObsDimsOld;
-        Hdf5ObsDataSpace.getSimpleExtentDims(Hdf5ObsDimsOld.data());
-        // Extend dataspace dimension
-        std::array<hsize_t, 1> Hdf5ObsDimsNew = {Hdf5ObsDimsOld[0] + Hdf5BufferSize[0]};
-        Hdf5ObsDataSet.extend(Hdf5ObsDimsNew.data());
-        // Update dataspace
-        Hdf5ObsDataSpace = Hdf5ObsDataSet.getSpace();
-        // Select Hyperslab
-        Hdf5ObsDataSpace.selectHyperslab(H5S_SELECT_SET, Hdf5BufferSize.data(), Hdf5ObsDimsOld.data());
-        // Write to dataset
-        Hdf5ObsDataSet.write(ObsVect.data(), _ObsCompType, Hdf5BufferMemorySpace, Hdf5ObsDataSpace);
-
-        // MonteCarlo stuff //
-        // Open DataSet
-        H5::DataSet Hdf5McDataSet = Hdf5File.openDataSet(_RunName + "/MonteCarlo");
-        // Get current size of the dataset
-        H5::DataSpace          Hdf5McDataSpace = Hdf5McDataSet.getSpace();
-        std::array<hsize_t, 1> Hdf5McDimsOld;
-        Hdf5McDataSpace.getSimpleExtentDims(Hdf5McDimsOld.data());
-        // Extend dataspace dimension
-        std::array<hsize_t, 1> Hdf5McDimsNew = {Hdf5McDimsOld[0] + Hdf5BufferSize[0]};
-        Hdf5McDataSet.extend(Hdf5McDimsNew.data());
-        // Update dataspace
-        Hdf5McDataSpace = Hdf5McDataSet.getSpace();
-        // Select Hyperslab
-        Hdf5McDataSpace.selectHyperslab(H5S_SELECT_SET, Hdf5BufferSize.data(), Hdf5McDimsOld.data());
-        // Write to dataset
-        Hdf5McDataSet.write(McVect.data(), _McCompType, Hdf5BufferMemorySpace, Hdf5McDataSpace);
-    } catch (H5::Exception& _) {
-        exit(EXIT_FAILURE);
-    }
-}
-
-template <class Action>
-void MetropolisWorker<Action>::save_Configuration(uint Iter) {
-    hsize_t  FileSize;
-    fs::path FileName = _WorkspacePath / "cnfg" / (std::to_string(Iter) + ".h5");
-
-    try {
-        FileSize = _Field.save_Configuration(FileName);
-    } catch (H5::Exception& _) {
-        exit(EXIT_FAILURE);
-    }
-    _Logger << IO::LI_void() + "Saved configuration: " + FileName.string() + " [" + IO::pretty_bytes(FileSize) + "]\n";
-}
-
-template <class Action>
-void MetropolisWorker<Action>::log_MC(uint iter) {
-    _Logger.log_string(_RunName, std::format(" MC data_dump {} -> ", iter) + _McStats.dump_str());
-}
-
-template <class Action>
-void MetropolisWorker<Action>::log_obs(uint iter, ObsType& obs) {
-    _Logger.log_string(_RunName, std::format("obs data_dump {} -> ", iter) + obs.dump_str());
-}
 }  // namespace reticolo::montecarlo
