@@ -10,6 +10,5 @@
 
 #pragma once
 
-#include "reticolo/montecarlo/hmc.hpp"              // IWYU pragma: export
-#include "reticolo/montecarlo/metropolis.hpp"       // IWYU pragma: export
-#include "reticolo/montecarlo/montecarlo_data.hpp"  // IWYU pragma: export
+#include "reticolo/montecarlo/HMC.hpp"         // IWYU pragma: export
+#include "reticolo/montecarlo/Metropolis.hpp"  // IWYU pragma: export
