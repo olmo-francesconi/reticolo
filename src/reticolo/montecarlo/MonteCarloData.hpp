@@ -34,10 +34,9 @@ struct data<ActionType> {
     data() = default;  // Default
     data(double acc, ActionType action, ActionType action_change)
         : _Acceptance(acc), _S(double(action)), _DS(double(action_change)){};  // Parameter
-    data(data& other) = default;                                               // Copy
-    data(data&& other) = default;                                              // Move
 
     /* Update values */
+    void setS(ActionType S) { _S = S; }
     void update(double acc, ActionType dS) {
         _Acceptance = acc;
         _S += double(dS);
@@ -67,6 +66,13 @@ struct data<ActionType> {
     };
 
     /* Operators overloading */
+    auto operator=(const data<ActionType>& rhs) -> data<ActionType>& {
+        _Acceptance = rhs._Acceptance;
+        _S = rhs._S;
+        _DS = rhs._DS;
+        return *this;
+    }
+
     auto operator+=(const data<ActionType>& rhs) -> data<ActionType>& {
         _Acceptance += rhs._Acceptance;
         _S += rhs._S;
@@ -111,10 +117,12 @@ struct data<ActionType> {
           _SIm(double(action.imag())),
           _DSRe(double(action_change.real())),
           _DSIm(double(action_change.imag())){};  // Parameter
-    data(data& other) = default;                  // Copy
-    data(data&& other) = default;                 // Move
 
     /* Update values */
+    void setS(ActionType S) {
+        _SRe = S.real();
+        _SIm = S.imag();
+    }
     void update(double acc, ActionType dS) {
         _Acceptance = acc;
         _SRe += dS.real();
@@ -155,6 +163,15 @@ struct data<ActionType> {
     };
 
     /* Operators overloading */
+    auto operator=(const data<ActionType>& rhs) -> data<ActionType>& {
+        _Acceptance = rhs._Acceptance;
+        _SRe = rhs._SRe;
+        _SIm = rhs._SIm;
+        _DSRe = rhs._DSRe;
+        _DSIm = rhs._DSIm;
+        return *this;
+    }
+
     auto operator+=(const data<ActionType>& rhs) -> data<ActionType>& {
         _Acceptance += rhs._Acceptance;
         _SRe += rhs._SRe;
