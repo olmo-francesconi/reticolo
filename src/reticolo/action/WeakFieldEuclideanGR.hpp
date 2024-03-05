@@ -17,13 +17,12 @@
 #include <array>
 #include <format>
 #include <numeric>
-#include <sstream>
 #include <string>
 #include <vector>
 
 #include "H5Cpp.h"
+#include "reticolo/action/action_base.hpp"
 #include "reticolo/lattice/lattice.hpp"
-#include "reticolo/montecarlo/metropolis.hpp"
 #include "reticolo/physics/constants.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
@@ -38,26 +37,28 @@ namespace reticolo::action {
   WeakFieldEuclideanGR Class Declaration
 --------------------------------------------------------------------------------------------------*/
 
-class WeakFieldEuclideanGR {
+class WeakFieldEuclideanGR : action::ActionBase<HField<RealD>, RealD, 4> {
   public:
     /* Types and public action metadata */
-    using FieldType = reticolo::HField<RealD>;  // Type of the field variables
-    using ActionType = RealD;                   // Return type fo the action
-    const static int Dims = 4;                  // Dimensions of the action
-    const static int Stencil = 2;               // Minimum step size for multi-thread safety
+    using FieldType = HField<RealD>;  // Type of the field variables
+    using ActionType = RealD;         // Return type fo the action
+    const static int Dims = 4;        // Dimensions of the action
+    const static int Stencil = 2;     // Minimum step size for multi-thread safety
+
+    /* Algorithm capabilities */
+    const static bool IsMetropolisCapable = true;
+    const static bool IsHmcCapable = true;
 
     /* Action parameters */
     struct Params {
         double beta;
-
         Params() : beta(5.7){};
         Params(double beta) : beta(beta){};
     } p;
 
     /* Observables */
     struct Observables {
-        double R;
-
+        double             R;
         [[nodiscard]] auto dump_str() -> std::string { return std::format("{:+8e}", R); }
         [[nodiscard]] auto dump_data() const -> std::vector<double> { return std::vector<double>({R}); }
     };
@@ -73,30 +74,33 @@ class WeakFieldEuclideanGR {
     WeakFieldEuclideanGR(WeakFieldEuclideanGR&& other) = default;  // Move
 
     /* Initializer Construtors */
-    WeakFieldEuclideanGR(double beta) : p(beta){};  // Parameter List
+    WeakFieldEuclideanGR(double beta) : p(beta){};  // Parameter list
     WeakFieldEuclideanGR(Params par) : p(par){};    // Parameter struct
 
     /* Destructor*/
     ~WeakFieldEuclideanGR() = default;
 
     /* Sync with lattice */
-    void lattice_sync(const Lattice<FieldType, 4>& field);
+    void lattice_sync(const Lattice<FieldType, 4>& field) override;
 
     /* Gloabal and local action computations */
-    auto compute_S(const Lattice<FieldType, 4>& field) -> ActionType;
-    auto compute_S_loc(const Lattice<FieldType, 4>& field, uint site) -> ActionType;
-    auto compute_dS_loc(const Lattice<FieldType, 4>& field, const FieldType& dphi, uint site) -> ActionType;
+    auto compute_S(const Lattice<FieldType, 4>& field) -> ActionType override;
+    auto compute_S_loc(const Lattice<FieldType, 4>& field, uint site) -> ActionType override;
+    auto compute_dS_loc(const Lattice<FieldType, 4>& field, const FieldType& dphi, uint site) -> ActionType override;
+
+    /* HMC methods */
+    void compute_Forces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& Forces) override;
 
     /* Perform the measurements or returns updated Observable values*/
     static auto Measure(const Lattice<FieldType, 4>& field) -> Observables { return {0}; };
 
     /* Log stuff*/
-    static auto action_name() -> std::string { return "Relativistic Bose Gas (phi^4)"; };
-    auto        action_parameters() -> std::string {
-        std::stringstream Res;
-        Res << "[ beta : " << std::format("{:4.1f}", p.beta) << " ]";
-        return Res.str();
+    auto action_name() -> std::string override { return "Weak Field Euclidean General Relativity"; };
+    auto action_parameters() -> std::string override {
+        std::string ParamStr = std::format("[ beta : {:4.1f} ]", p.beta);
+        return ParamStr;
     }
+
     /*--------------------------------------------------------------------------
       Custom variables and methods for WeakFieldEuclideanGR Class
     --------------------------------------------------------------------------*/
@@ -122,22 +126,12 @@ class WeakFieldEuclideanGR {
     void               update_LGR(const Lattice<FieldType, 4>& field);
     [[nodiscard]] auto compute_LGR_loc(const Lattice<FieldType, 4>& field, uint site) const -> ActionType;
     auto               check_pos_R(uint site, std::vector<ActionType> RPost, ActionType DR = 0.0) -> bool;
-};
+};  // namespace reticolo::action
 
 /*--------------------------------------------------------------------------------------------------
   Public methods Implementatin
 --------------------------------------------------------------------------------------------------*/
-
-auto WeakFieldEuclideanGR::compute_S(const Lattice<FieldType, 4>& field) -> ActionType {
-    // Update the lattice
-    update_LGR(field);
-    // Accumulate the Lagrangian
-    ActionType STot = std::reduce(_LGR.begin(), _LGR.end());
-
-    return STot;
-}
-
-void WeakFieldEuclideanGR::lattice_sync(const Lattice<FieldType, 4>& field) {
+inline void WeakFieldEuclideanGR::lattice_sync(const Lattice<FieldType, 4>& field) {
     // Initialize parameters values here
     aa = 0.5 * exp(-1.6804 - 1.7331 * (p.beta - 6.0) + 0.7849 * pow(p.beta - 6.0, 2) - 0.4428 * pow(p.beta - 6.0, 3));
     a_invGeV = aa / hbarc_GeVfm;
@@ -153,11 +147,189 @@ void WeakFieldEuclideanGR::lattice_sync(const Lattice<FieldType, 4>& field) {
     update_LGR(field);
 }
 
+inline auto WeakFieldEuclideanGR::compute_S(const Lattice<FieldType, 4>& field) -> ActionType {
+    // Update the lattice
+    update_LGR(field);
+    // Accumulate the Lagrangian
+    ActionType STot = std::reduce(_LGR.begin(), _LGR.end());
+
+    return STot;
+}
+
+inline auto WeakFieldEuclideanGR::compute_S_loc(const Lattice<FieldType, 4>& field, uint site) -> ActionType {
+    return 0.0;
+};
+
+inline auto WeakFieldEuclideanGR::compute_dS_loc(const Lattice<FieldType, 4>& field, const FieldType& dphi, uint site)
+    -> ActionType {
+    return 0.0;
+};
+
+inline void WeakFieldEuclideanGR::compute_Forces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces) {
+    std::array<FieldType, 4>                Dhc;  // Central derivatives
+    std::array<std::array<FieldType, 4>, 4> Dhd;  // Diagonal derivatives
+    std::array<FieldType, 4>                Jhc;  // Central sum
+    std::array<std::array<FieldType, 4>, 4> Jhd;  // Diagonal Sum
+
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
+        // clang-format off
+        // Compute central derivatives
+        HField_math::diff(Dhc[_t], field.next(Site, _t), field.prev(Site, _t), 0.5);
+        HField_math::diff(Dhc[_x], field.next(Site, _x), field.prev(Site, _x), 0.5);
+        HField_math::diff(Dhc[_y], field.next(Site, _y), field.prev(Site, _y), 0.5);
+        HField_math::diff(Dhc[_z], field.next(Site, _z), field.prev(Site, _z), 0.5);
+        // Compute diagonal derivatives
+        HField_math::diff(Dhd[_t][_x], field.next(field.prevId(Site, _x), _t), field.next(field.prevId(Site, _t), _x), 0.5);
+        HField_math::diff(Dhd[_t][_y], field.next(field.prevId(Site, _y), _t), field.next(field.prevId(Site, _t), _y), 0.5);
+        HField_math::diff(Dhd[_t][_z], field.next(field.prevId(Site, _z), _t), field.next(field.prevId(Site, _t), _z), 0.5);
+        HField_math::diff(Dhd[_x][_t], field.next(field.prevId(Site, _t), _x), field.next(field.prevId(Site, _x), _t), 0.5);
+        HField_math::diff(Dhd[_x][_y], field.next(field.prevId(Site, _y), _x), field.next(field.prevId(Site, _x), _y), 0.5);
+        HField_math::diff(Dhd[_x][_z], field.next(field.prevId(Site, _z), _x), field.next(field.prevId(Site, _x), _z), 0.5);
+        HField_math::diff(Dhd[_y][_t], field.next(field.prevId(Site, _t), _y), field.next(field.prevId(Site, _y), _t), 0.5);
+        HField_math::diff(Dhd[_y][_x], field.next(field.prevId(Site, _x), _y), field.next(field.prevId(Site, _y), _x), 0.5);
+        HField_math::diff(Dhd[_y][_z], field.next(field.prevId(Site, _z), _y), field.next(field.prevId(Site, _y), _z), 0.5);
+        HField_math::diff(Dhd[_z][_t], field.next(field.prevId(Site, _t), _z), field.next(field.prevId(Site, _z), _t), 0.5);
+        HField_math::diff(Dhd[_z][_x], field.next(field.prevId(Site, _x), _z), field.next(field.prevId(Site, _z), _x), 0.5);
+        HField_math::diff(Dhd[_z][_y], field.next(field.prevId(Site, _y), _z), field.next(field.prevId(Site, _z), _y), 0.5);
+        // Compute central sums
+        HField_math::sum(Jhc[_t], field.next(Site, _t), field.prev(Site, _t), 0.5);
+        HField_math::sum(Jhc[_x], field.next(Site, _x), field.prev(Site, _x), 0.5);
+        HField_math::sum(Jhc[_y], field.next(Site, _y), field.prev(Site, _y), 0.5);
+        HField_math::sum(Jhc[_z], field.next(Site, _z), field.prev(Site, _z), 0.5);
+        // Compute diagonal sums
+        HField_math::sum(Jhd[_t][_x], field.next(field.prevId(Site, _x), _t), field.next(field.prevId(Site, _t), _x), 0.5);
+        HField_math::sum(Jhd[_t][_y], field.next(field.prevId(Site, _y), _t), field.next(field.prevId(Site, _t), _y), 0.5);
+        HField_math::sum(Jhd[_t][_z], field.next(field.prevId(Site, _z), _t), field.next(field.prevId(Site, _t), _z), 0.5);
+        HField_math::sum(Jhd[_x][_t], field.next(field.prevId(Site, _t), _x), field.next(field.prevId(Site, _x), _t), 0.5);
+        HField_math::sum(Jhd[_x][_y], field.next(field.prevId(Site, _y), _x), field.next(field.prevId(Site, _x), _y), 0.5);
+        HField_math::sum(Jhd[_x][_z], field.next(field.prevId(Site, _z), _x), field.next(field.prevId(Site, _x), _z), 0.5);
+        HField_math::sum(Jhd[_y][_t], field.next(field.prevId(Site, _t), _y), field.next(field.prevId(Site, _y), _t), 0.5);
+        HField_math::sum(Jhd[_y][_x], field.next(field.prevId(Site, _x), _y), field.next(field.prevId(Site, _y), _x), 0.5);
+        HField_math::sum(Jhd[_y][_z], field.next(field.prevId(Site, _z), _y), field.next(field.prevId(Site, _y), _z), 0.5);
+        HField_math::sum(Jhd[_z][_t], field.next(field.prevId(Site, _t), _z), field.next(field.prevId(Site, _z), _t), 0.5);
+        HField_math::sum(Jhd[_z][_x], field.next(field.prevId(Site, _x), _z), field.next(field.prevId(Site, _z), _x), 0.5);
+        HField_math::sum(Jhd[_z][_y], field.next(field.prevId(Site, _y), _z), field.next(field.prevId(Site, _z), _y), 0.5);
+        // clang-format on
+
+        // Diagonal Components
+        forces[Site][MUNU_00] = 2.0 * field[Site][MUNU_11] - Jhc[_y][MUNU_11] - Jhc[_z][MUNU_11]                      //
+                                + 2.0 * field[Site][MUNU_22] - Jhc[_x][MUNU_22] - Jhc[_z][MUNU_22]                    //
+                                + 2.0 * field[Site][MUNU_33] - Jhc[_x][MUNU_33] - Jhc[_y][MUNU_33]                    //
+                                - Dhc[_t][MUNU_01] + Dhc[_x][MUNU_01] + Dhd[_t][_x][MUNU_01]                          //
+                                - Dhc[_t][MUNU_02] + Dhc[_y][MUNU_02] + Dhd[_t][_y][MUNU_02]                          //
+                                - Dhc[_t][MUNU_03] + Dhc[_z][MUNU_03] + Dhd[_t][_z][MUNU_03]                          //
+                                - field[Site][MUNU_12] + Jhc[_x][MUNU_12] + Jhc[_y][MUNU_12] - Jhd[_x][_y][MUNU_12]   //
+                                - field[Site][MUNU_13] + Jhc[_x][MUNU_13] + Jhc[_z][MUNU_13] - Jhd[_x][_z][MUNU_13]   //
+                                - field[Site][MUNU_23] + Jhc[_y][MUNU_23] + Jhc[_z][MUNU_23] - Jhd[_y][_z][MUNU_23];  //
+
+        forces[Site][MUNU_11] = 2.0 * field[Site][MUNU_00] - Jhc[_y][MUNU_00] - Jhc[_z][MUNU_00]                      //
+                                + 2.0 * field[Site][MUNU_22] - Jhc[_t][MUNU_22] - Jhc[_z][MUNU_22]                    //
+                                + 2.0 * field[Site][MUNU_33] - Jhc[_t][MUNU_33] - Jhc[_y][MUNU_33]                    //
+                                + Dhc[_t][MUNU_01] - Dhc[_x][MUNU_01] - Dhd[_t][_x][MUNU_01]                          //
+                                - Dhc[_x][MUNU_12] + Dhc[_y][MUNU_12] + Dhd[_x][_y][MUNU_12]                          //
+                                - Dhc[_x][MUNU_13] + Dhc[_z][MUNU_13] + Dhd[_x][_z][MUNU_13]                          //
+                                - field[Site][MUNU_02] + Jhc[_t][MUNU_02] + Jhc[_y][MUNU_02] - Jhd[_t][_y][MUNU_02]   //
+                                - field[Site][MUNU_03] + Jhc[_t][MUNU_03] + Jhc[_z][MUNU_03] - Jhd[_t][_z][MUNU_03]   //
+                                - field[Site][MUNU_23] + Jhc[_y][MUNU_23] + Jhc[_z][MUNU_23] - Jhd[_y][_z][MUNU_23];  //
+
+        forces[Site][MUNU_22] = 2.0 * field[Site][MUNU_00] - Jhc[_x][MUNU_00] - Jhc[_z][MUNU_00]                      //
+                                + 2.0 * field[Site][MUNU_11] - Jhc[_t][MUNU_11] - Jhc[_z][MUNU_11]                    //
+                                + 2.0 * field[Site][MUNU_33] - Jhc[_t][MUNU_33] - Jhc[_x][MUNU_33]                    //
+                                + Dhc[_t][MUNU_02] - Dhc[_y][MUNU_02] - Dhd[_t][_y][MUNU_02]                          //
+                                + Dhc[_x][MUNU_12] - Dhc[_y][MUNU_12] - Dhd[_x][_y][MUNU_12]                          //
+                                - Dhc[_y][MUNU_23] + Dhc[_z][MUNU_23] + Dhd[_y][_z][MUNU_23]                          //
+                                - field[Site][MUNU_01] + Jhc[_t][MUNU_01] + Jhc[_x][MUNU_01] - Jhd[_t][_x][MUNU_01]   //
+                                - field[Site][MUNU_03] + Jhc[_t][MUNU_03] + Jhc[_z][MUNU_03] - Jhd[_t][_z][MUNU_03]   //
+                                - field[Site][MUNU_13] + Jhc[_x][MUNU_13] + Jhc[_z][MUNU_13] - Jhd[_x][_z][MUNU_13];  //
+
+        forces[Site][MUNU_33] = 2.0 * field[Site][MUNU_00] - Jhc[_x][MUNU_00] - Jhc[_y][MUNU_00]                      //
+                                + 2.0 * field[Site][MUNU_11] - Jhc[_t][MUNU_11] - Jhc[_y][MUNU_11]                    //
+                                + 2.0 * field[Site][MUNU_22] - Jhc[_t][MUNU_22] - Jhc[_x][MUNU_22]                    //
+                                + Dhc[_t][MUNU_03] - Dhc[_z][MUNU_03] - Dhd[_t][_z][MUNU_03]                          //
+                                + Dhc[_x][MUNU_13] - Dhc[_z][MUNU_13] - Dhd[_x][_z][MUNU_13]                          //
+                                + Dhc[_y][MUNU_23] - Dhc[_z][MUNU_23] - Dhd[_y][_z][MUNU_23]                          //
+                                - field[Site][MUNU_01] + Jhc[_t][MUNU_01] + Jhc[_x][MUNU_01] - Jhd[_t][_x][MUNU_01]   //
+                                - field[Site][MUNU_02] + Jhc[_t][MUNU_02] + Jhc[_y][MUNU_02] - Jhd[_t][_y][MUNU_02]   //
+                                - field[Site][MUNU_12] + Jhc[_x][MUNU_12] + Jhc[_z][MUNU_12] - Jhd[_x][_y][MUNU_12];  //
+
+        // Time-Space Components
+        // clang-format off
+        forces[Site][MUNU_01] = Dhc[_t][MUNU_00] - Dhc[_x][MUNU_00] - Dhd[_t][_x][MUNU_00]                  //
+                                - Dhc[_t][MUNU_11] + Dhc[_x][MUNU_11] + Dhd[_t][_x][MUNU_11]                //
+                                + Jhc[_t][MUNU_22] + Jhc[_x][MUNU_22] - Jhd[_t][_x][MUNU_22]                //
+                                + Jhc[_t][MUNU_33] + Jhc[_x][MUNU_33] - Jhd[_t][_x][MUNU_33]                //
+                                - 4.0 * field[Site][MUNU_01] - field[Site][MUNU_22] - field[Site][MUNU_33]  //
+                                + 2.0 * (Jhc[_y][MUNU_01] + Jhc[_z][MUNU_01])                               //
+                                + field[Site][MUNU_02] - field.next(Site, _x)[MUNU_02] - field.prev(Site, _y)[MUNU_02] + field.next(field.prevId(Site, _y), _x)[MUNU_02]  //
+                                + field[Site][MUNU_03] - field.next(Site, _x)[MUNU_03] - field.prev(Site, _z)[MUNU_03] + field.next(field.prevId(Site, _z), _x)[MUNU_03]  //
+                                + field[Site][MUNU_12] - field.next(Site, _t)[MUNU_12] - field.prev(Site, _y)[MUNU_12] + field.next(field.prevId(Site, _y), _t)[MUNU_12]  //
+                                + field[Site][MUNU_13] - field.next(Site, _t)[MUNU_13] - field.prev(Site, _z)[MUNU_13] + field.next(field.prevId(Site, _z), _t)[MUNU_13];
+
+        forces[Site][MUNU_02] = Dhc[_t][MUNU_00] - Dhc[_y][MUNU_00] - Dhd[_t][_y][MUNU_00]                  //
+                                - Dhc[_t][MUNU_22] + Dhc[_y][MUNU_22] + Dhd[_t][_y][MUNU_22]                //
+                                + Jhc[_t][MUNU_11] + Jhc[_y][MUNU_11] - Jhd[_t][_y][MUNU_11]                //
+                                + Jhc[_t][MUNU_33] + Jhc[_y][MUNU_33] - Jhd[_t][_y][MUNU_33]                //
+                                - 4.0 * field[Site][MUNU_02] - field[Site][MUNU_11] - field[Site][MUNU_33]  //
+                                + 2.0 * (Jhc[_x][MUNU_02] + Jhc[_z][MUNU_02])                               //
+                                + field[Site][MUNU_01] - field.next(Site, _y)[MUNU_01] - field.prev(Site, _x)[MUNU_01] + field.next(field.prevId(Site, _x), _y)[MUNU_01]  //
+                                + field[Site][MUNU_03] - field.next(Site, _y)[MUNU_03] - field.prev(Site, _z)[MUNU_03] + field.next(field.prevId(Site, _z), _y)[MUNU_03]  //
+                                + field[Site][MUNU_12] - field.next(Site, _t)[MUNU_12] - field.prev(Site, _x)[MUNU_12] + field.next(field.prevId(Site, _x), _t)[MUNU_12]  //
+                                + field[Site][MUNU_23] - field.next(Site, _t)[MUNU_23] - field.prev(Site, _z)[MUNU_23] + field.next(field.prevId(Site, _z), _t)[MUNU_23];
+
+        forces[Site][MUNU_03] = Dhc[_t][MUNU_00] - Dhc[_z][MUNU_00] - Dhd[_t][_z][MUNU_00]                  //
+                                - Dhc[_t][MUNU_33] + Dhc[_z][MUNU_33] + Dhd[_t][_z][MUNU_33]                //
+                                + Jhc[_t][MUNU_11] + Jhc[_z][MUNU_11] - Jhd[_t][_z][MUNU_11]                //
+                                + Jhc[_t][MUNU_22] + Jhc[_z][MUNU_22] - Jhd[_t][_z][MUNU_22]                //
+                                - 4.0 * field[Site][MUNU_03] - field[Site][MUNU_11] - field[Site][MUNU_22]  //
+                                + 2.0 * (Jhc[_x][MUNU_03] + Jhc[_y][MUNU_03])                               //
+                                + field[Site][MUNU_01] - field.next(Site, _z)[MUNU_01] - field.prev(Site, _x)[MUNU_01] + field.next(field.prevId(Site, _x), _z)[MUNU_01]  //
+                                + field[Site][MUNU_02] - field.next(Site, _z)[MUNU_02] - field.prev(Site, _y)[MUNU_02] + field.next(field.prevId(Site, _y), _z)[MUNU_02]  //
+                                + field[Site][MUNU_13] - field.next(Site, _t)[MUNU_13] - field.prev(Site, _y)[MUNU_13] + field.next(field.prevId(Site, _y), _t)[MUNU_13]  //
+                                + field[Site][MUNU_23] - field.next(Site, _t)[MUNU_23] - field.prev(Site, _y)[MUNU_23] + field.next(field.prevId(Site, _y), _t)[MUNU_23];
+
+        // Space-Space Components
+        forces[Site][MUNU_12] = Dhc[_x][MUNU_11] - Dhc[_y][MUNU_11] - Dhd[_x][_y][MUNU_11]                  //
+                                - Dhc[_x][MUNU_22] + Dhc[_y][MUNU_22] + Dhd[_x][_y][MUNU_22]                //
+                                + Jhc[_x][MUNU_00] + Jhc[_y][MUNU_00] - Jhd[_x][_y][MUNU_00]                //
+                                + Jhc[_x][MUNU_33] + Jhc[_y][MUNU_33] - Jhd[_x][_y][MUNU_33]                //
+                                - 4.0 * field[Site][MUNU_12] - field[Site][MUNU_00] - field[Site][MUNU_33]  //
+                                + 2.0 * (Jhc[_t][MUNU_12] + Jhc[_z][MUNU_12])                               //
+                                + field[Site][MUNU_01] - field.next(Site, _y)[MUNU_01] - field.prev(Site, _t)[MUNU_01] + field.next(field.prevId(Site, _t), _y)[MUNU_01]  //
+                                + field[Site][MUNU_02] - field.next(Site, _x)[MUNU_02] - field.prev(Site, _t)[MUNU_02] + field.next(field.prevId(Site, _t), _x)[MUNU_02]  //
+                                + field[Site][MUNU_13] - field.next(Site, _y)[MUNU_13] - field.prev(Site, _z)[MUNU_13] + field.next(field.prevId(Site, _z), _y)[MUNU_13]  //
+                                + field[Site][MUNU_23] - field.next(Site, _x)[MUNU_23] - field.prev(Site, _z)[MUNU_23] + field.next(field.prevId(Site, _z), _x)[MUNU_23];
+
+        forces[Site][MUNU_13] = Dhc[_x][MUNU_11] - Dhc[_z][MUNU_11] - Dhd[_x][_z][MUNU_11]                  //
+                                - Dhc[_x][MUNU_33] + Dhc[_z][MUNU_33] + Dhd[_x][_z][MUNU_33]                //
+                                + Jhc[_x][MUNU_00] + Jhc[_z][MUNU_00] - Jhd[_x][_z][MUNU_00]                //
+                                + Jhc[_x][MUNU_22] + Jhc[_z][MUNU_22] - Jhd[_x][_z][MUNU_22]                //
+                                - 4.0 * field[Site][MUNU_13] - field[Site][MUNU_00] - field[Site][MUNU_22]  //
+                                + 2.0 * (Jhc[_t][MUNU_13] + Jhc[_y][MUNU_13])                               //
+                                + field[Site][MUNU_01] - field.next(Site, _z)[MUNU_01] - field.prev(Site, _t)[MUNU_01] + field.next(field.prevId(Site, _t), _z)[MUNU_01]  //
+                                + field[Site][MUNU_03] - field.next(Site, _x)[MUNU_03] - field.prev(Site, _t)[MUNU_03] + field.next(field.prevId(Site, _t), _x)[MUNU_03]  //
+                                + field[Site][MUNU_12] - field.next(Site, _z)[MUNU_12] - field.prev(Site, _y)[MUNU_12] + field.next(field.prevId(Site, _y), _z)[MUNU_12]  //
+                                + field[Site][MUNU_23] - field.next(Site, _x)[MUNU_23] - field.prev(Site, _y)[MUNU_23] + field.next(field.prevId(Site, _y), _x)[MUNU_23];
+
+        forces[Site][MUNU_23] = Dhc[_y][MUNU_22] - Dhc[_z][MUNU_22] - Dhd[_y][_z][MUNU_22]                  //
+                                - Dhc[_y][MUNU_33] + Dhc[_z][MUNU_33] + Dhd[_y][_z][MUNU_33]                //
+                                + Jhc[_y][MUNU_00] + Jhc[_z][MUNU_00] - Jhd[_y][_z][MUNU_00]                //
+                                + Jhc[_y][MUNU_11] + Jhc[_z][MUNU_11] - Jhd[_y][_z][MUNU_11]                //
+                                - 4.0 * field[Site][MUNU_23] - field[Site][MUNU_00] - field[Site][MUNU_11]  //
+                                + 2.0 * (Jhc[_t][MUNU_23] + Jhc[_x][MUNU_23])                               //
+                                + field[Site][MUNU_02] - field.next(Site, _z)[MUNU_02] - field.prev(Site, _t)[MUNU_02] + field.next(field.prevId(Site, _t), _z)[MUNU_02]  //
+                                + field[Site][MUNU_03] - field.next(Site, _y)[MUNU_03] - field.prev(Site, _t)[MUNU_03] + field.next(field.prevId(Site, _t), _y)[MUNU_03]  //
+                                + field[Site][MUNU_12] - field.next(Site, _z)[MUNU_12] - field.prev(Site, _x)[MUNU_12] + field.next(field.prevId(Site, _x), _z)[MUNU_12]  //
+                                + field[Site][MUNU_13] - field.next(Site, _y)[MUNU_13] - field.prev(Site, _x)[MUNU_13] + field.next(field.prevId(Site, _x), _y)[MUNU_13];
+        // clang-format on
+
+        forces[Site] *= kappa;
+    }
+}
 /*--------------------------------------------------------------------------------------------------
-  Private methods Implementation
+      Custom variables and methods for WeakFieldEuclideanGR Class implementation
 --------------------------------------------------------------------------------------------------*/
 
-void WeakFieldEuclideanGR::make_checks(const Lattice<FieldType, 4>& field) {
+inline void WeakFieldEuclideanGR::make_checks(const Lattice<FieldType, 4>& field) {
     _Checks.clear();
     for (uint Site = 0; Site < field.getNsites(); Site++) {
         _Checks.push_back({
@@ -170,13 +342,13 @@ void WeakFieldEuclideanGR::make_checks(const Lattice<FieldType, 4>& field) {
     }
 }
 
-void WeakFieldEuclideanGR::update_LGR(const Lattice<FieldType, 4>& field) {
+inline void WeakFieldEuclideanGR::update_LGR(const Lattice<FieldType, 4>& field) {
     for (uint Site = 0; Site < _LGR.size(); Site++) {
         _LGR[Site] = compute_LGR_loc(field, Site);
     }
 }
 
-auto WeakFieldEuclideanGR::compute_LGR_loc(const Lattice<FieldType, 4>& field, uint site) const -> ActionType {
+inline auto WeakFieldEuclideanGR::compute_LGR_loc(const Lattice<FieldType, 4>& field, uint site) const -> ActionType {
     // Compute local derivatives
     std::array<FieldType, 4> Dhmn;
     HField_math::diff(Dhmn[_t], field.next(site, _t), field[site]);
@@ -262,17 +434,14 @@ auto WeakFieldEuclideanGR::compute_LGR_loc(const Lattice<FieldType, 4>& field, u
 }  // namespace reticolo::action
 
 /*--------------------------------------------------------------------------------------------------
-  montecarlo::metropolis::sweep() Specialization
+  montecarlo::Metropolis::updateField() Specialization
 --------------------------------------------------------------------------------------------------*/
-
-namespace reticolo {
+#include "reticolo/montecarlo/Metropolis.hpp"
 
 template <>
-void montecarlo::MetropolisWorker<action::WeakFieldEuclideanGR>::sweep() {
+void reticolo::montecarlo::Metropolis<reticolo::action::WeakFieldEuclideanGR>::updateField() {
     uint       Acc = 0;       // acceptance
     ActionType SVarTot(0.0);  // cumulative action variation
-
-    _McStats.softReset();
 
     for (uint Site = 0; Site < _Field.getNsites(); Site++) {
         // Generate a randomized local field variation
@@ -305,9 +474,99 @@ void montecarlo::MetropolisWorker<action::WeakFieldEuclideanGR>::sweep() {
         }
     }
 
-    _McStats._Acceptance += Acc;
+    _McStats._Acceptance = static_cast<double>(Acc) / _Field.getNsites();
     _McStats._S += SVarTot;
-    _McStats._DS += SVarTot;
-}  // namespace reticolo
+    _McStats._DS = SVarTot;
+}
 
-}  // namespace reticolo
+/*--------------------------------------------------------------------------------------------------
+  montecarlo::Metropolis::updateField() Specialization
+--------------------------------------------------------------------------------------------------*/
+#include "reticolo/montecarlo/HMC.hpp"
+
+template <>
+void reticolo::montecarlo::HMC<reticolo::action::WeakFieldEuclideanGR>::updateField() {
+    uint NSites = this->_Field.getNsites();
+
+    // save the old field configuration;
+    _OldField = this->_Field;
+
+    randomizeField(1.0 / _Action.kappa);
+
+    ActionType OldS = this->_Action.compute_S(this->_Field);
+    RealD      OldK(0.0);
+    // Generate gaussian-distributed momenta
+    for (uint Site = 0; Site < NSites; Site++) {
+        randomize(_Mom[Site], 1.0, this->_Norm, this->_Rng);
+        OldK += _Mom[Site].dot();
+    }
+    OldK *= 0.5;
+
+    // Compute Forces
+    this->_Action.compute_Forces(this->_Field, _Forces);
+    std::cout << "Force: \n";
+    _Forces[0].print();
+    // Momenta half step
+    for (uint Site = 0; Site < NSites; Site++) {
+        _Mom[Site] += 0.5 * _Stepsize * _Forces[Site];
+    }
+    std::cout << "Momentum: \n";
+    _Mom[0].print();
+
+    // Leapfrog algorithm
+    for (uint Step = 0; Step < _Steps - 1; Step++) {
+        // update field
+        std::cout << "Field: \n";
+        this->_Field[0].print();
+        for (uint Site = 0; Site < NSites; Site++) {
+            this->_Field[Site] += _Stepsize * _Mom[Site];
+        }
+        std::cout << "Updated Field: \n";
+        this->_Field[0].print();
+        // compute Updated forces
+        this->_Action.compute_Forces(this->_Field, _Forces);
+        std::cout << "Force: \n";
+        _Forces[0].print();
+        // Update momenta
+        for (uint Site = 0; Site < NSites; Site++) {
+            _Mom[Site] -= _Stepsize * _Forces[Site];
+        }
+        std::cout << "Momentum: \n";
+        _Mom[0].print();
+    }
+
+    // update field
+    for (uint Site = 0; Site < NSites; Site++) {
+        this->_Field[Site] += _Stepsize * _Mom[Site];
+    }
+
+    // compute Updated forces
+    this->_Action.compute_Forces(this->_Field, _Forces);
+
+    // Update momenta
+    for (uint Site = 0; Site < _Mom.getNsites(); Site++) {
+        _Mom[Site] -= 0.5 * _Stepsize * _Forces[Site];
+    }
+
+    ActionType NewS = this->_Action.compute_S(this->_Field);
+    RealD      NewK(0.0);
+    // Compute end Hamiltonian
+    for (uint Site = 0; Site < _Mom.getNsites(); Site++) {
+        NewK += _Mom[Site].dot();
+    }
+    NewK *= 0.5;
+
+    double Unif = this->_Unif(this->_Rng);
+
+    std::cout << NewS << ", " << OldS << '\n';
+    std::cout << NewK + NewS << ", " << OldK + OldS << '\n';
+    std::cout << NewK + NewS - (OldK + OldS) << '\n';
+    std::cout << exp(-(NewK + NewS - (OldK + OldS))) << " : " << Unif << '\n';
+
+    if (exp(-(NewK + NewS - (OldK + OldS))) > Unif) {
+        this->_McStats.setS(NewS);
+    } else {
+        this->_Field = _OldField;
+        this->_McStats.setS(OldS);
+    }
+}
