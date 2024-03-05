@@ -12,12 +12,15 @@
 
 #pragma once
 
+#include <cmath>
 #include <format>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include "H5Cpp.h"
+#include "reticolo/action/action_base.hpp"
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
@@ -28,13 +31,17 @@ namespace reticolo::action {
   RelativisticBoseGas Class Declaration
 --------------------------------------------------------------------------------------------------*/
 template <ComplexValue TField, ComplexValue TAction>
-class RelativisticBoseGas {
+class RelativisticBoseGas : ActionBase<TField, TAction, 4> {
   public:
     /* Types and public action metadata */
     using FieldType = TField;      // Type of the field variables
     using ActionType = TAction;    // Return type fo the action
     const static int Dims = 4;     // Dimensions of the action
     const static int Stencil = 2;  // Minimum step size for multi-thread safety
+
+    /* Algorithm capabilities */
+    const static bool IsMetropolisCapable = true;
+    const static bool IsHmcCapable = true;
 
     /* Action parameters */
     struct Params {
@@ -62,9 +69,7 @@ class RelativisticBoseGas {
     }
 
     /* Constructors */
-    RelativisticBoseGas() = default;                             // Default
-    RelativisticBoseGas(RelativisticBoseGas& other) = default;   // Copy
-    RelativisticBoseGas(RelativisticBoseGas&& other) = default;  // Move
+    RelativisticBoseGas() = default;  // Default
 
     /* Initializer Construtors */
     RelativisticBoseGas(double lambda, double eta, double chem_mu) : p(lambda, eta, chem_mu){};  // Parameter List
@@ -74,19 +79,22 @@ class RelativisticBoseGas {
     ~RelativisticBoseGas() = default;
 
     /* Sync with lattice */
-    void lattice_sync(const Lattice<FieldType, 4>& field){};  // Nothing to do here
+    void lattice_sync(const Lattice<FieldType, 4>& field) override{};  // Nothing to do here
 
     /* Gloabal and local action computations */
-    auto compute_S(const Lattice<FieldType, 4>& field) -> ActionType;
-    auto compute_S_loc(const Lattice<FieldType, 4>& field, uint site) -> ActionType;
-    auto compute_dS_loc(const Lattice<TField, 4>& field, const TField& dphi, uint site) -> ActionType;
+    auto compute_S(const Lattice<FieldType, 4>& field) -> ActionType override;
+    auto compute_S_loc(const Lattice<FieldType, 4>& field, uint site) -> ActionType override;
+    auto compute_dS_loc(const Lattice<TField, 4>& field, const TField& dphi, uint site) -> ActionType override;
+
+    /* HMC methods */
+    void compute_Forces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces) override;
 
     /* Perform the measurements or returns updated Observable values*/
     static auto Measure(const Lattice<FieldType, 4>& field) -> Observables;
 
-    /* Log stuff*/
-    auto action_name() -> std::string { return "Relativistic Bose Gas (phi^4)"; };
-    auto action_parameters() -> std::string {
+    /* Log stuff */
+    auto action_name() -> std::string override { return "Relativistic Bose Gas (phi^4)"; };
+    auto action_parameters() -> std::string override {
         std::stringstream Res;
         Res << "[ lambda : " << std::format("{:4.1f}", p.lambda) << ", eta : " << std::format("{:4.1f}", p.eta)
             << ", mu : " << std::format("{:4.1f}", p.mu) << " ]";
@@ -98,59 +106,59 @@ class RelativisticBoseGas {
   Public methods Implementatin
 --------------------------------------------------------------------------------------------------*/
 template <ComplexValue TField, ComplexValue TAction>
-inline auto RelativisticBoseGas<TField, TAction>::compute_S(const Lattice<TField, 4>& Field) -> TAction {
+inline auto RelativisticBoseGas<TField, TAction>::compute_S(const Lattice<TField, 4>& field) -> TAction {
     double  Real = 0.0;
     double  Imag = 0.0;
     TAction Phi;
 
-    for (uint Site = 0; Site < Field.getNsites(); Site++) {
-        Phi = Field[Site];
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
+        Phi = field[Site];
 
         double Phi2 = Phi.real() * Phi.real() + Phi.imag() * Phi.imag();
 
         Real += 0.5 * p.eta * Phi2 + 0.25 * p.lambda * Phi2 * Phi2 -
-                (Phi.real() * Field.next(Site, _x).real() + Phi.imag() * Field.next(Site, _x).imag()) -
-                (Phi.real() * Field.next(Site, _y).real() + Phi.imag() * Field.next(Site, _y).imag()) -
-                (Phi.real() * Field.next(Site, _z).real() + Phi.imag() * Field.next(Site, _z).imag()) -
-                cosh(p.mu) * (Phi.real() * Field.next(Site, _t).real() + Phi.imag() * Field.next(Site, _t).imag());
+                (Phi.real() * field.next(Site, _x).real() + Phi.imag() * field.next(Site, _x).imag()) -
+                (Phi.real() * field.next(Site, _y).real() + Phi.imag() * field.next(Site, _y).imag()) -
+                (Phi.real() * field.next(Site, _z).real() + Phi.imag() * field.next(Site, _z).imag()) -
+                cosh(p.mu) * (Phi.real() * field.next(Site, _t).real() + Phi.imag() * field.next(Site, _t).imag());
 
-        Imag += sinh(p.mu) * (Phi.real() * Field.next(Site, _t).imag() - Phi.imag() * Field.next(Site, _t).real());
+        Imag += sinh(p.mu) * (Phi.real() * field.next(Site, _t).imag() - Phi.imag() * field.next(Site, _t).real());
     }
 
     return {Real, Imag};
-};
+}
 
 template <ComplexValue TField, ComplexValue TAction>
-inline auto RelativisticBoseGas<TField, TAction>::compute_S_loc(const Lattice<TField, 4>& Field, uint Site) -> TAction {
-    TAction Phi = Field[Site];
-    TAction PhiNt = Field.next(Site, _t);
-    TAction PhiPt = Field.prev(Site, _t);
+inline auto RelativisticBoseGas<TField, TAction>::compute_S_loc(const Lattice<TField, 4>& field, uint site) -> TAction {
+    TAction Phi = field[site];
+    TAction PhiNt = field.next(site, _t);
+    TAction PhiPt = field.prev(site, _t);
 
     double Phi2 = Phi.real() * Phi.real() + Phi.imag() * Phi.imag();
 
     double Real = 0.5 * p.eta * Phi2 + 0.25 * p.lambda * Phi2 * Phi2 -
-                  Phi.real() * (Field.next(Site, _x).real() + Field.prev(Site, _x).real() +  //
-                                Field.next(Site, _y).real() + Field.prev(Site, _y).real() +  //
-                                Field.next(Site, _z).real() + Field.prev(Site, _z).real() +  //
+                  Phi.real() * (field.next(site, _x).real() + field.prev(site, _x).real() +  //
+                                field.next(site, _y).real() + field.prev(site, _y).real() +  //
+                                field.next(site, _z).real() + field.prev(site, _z).real() +  //
                                 cosh(p.mu) * PhiNt.real() + cosh(p.mu) * PhiPt.real()) -
-                  Phi.imag() * (Field.next(Site, _x).imag() + Field.prev(Site, _x).imag() +  //
-                                Field.next(Site, _y).imag() + Field.prev(Site, _y).imag() +  //
-                                Field.next(Site, _z).imag() + Field.prev(Site, _z).imag() +  //
+                  Phi.imag() * (field.next(site, _x).imag() + field.prev(site, _x).imag() +  //
+                                field.next(site, _y).imag() + field.prev(site, _y).imag() +  //
+                                field.next(site, _z).imag() + field.prev(site, _z).imag() +  //
                                 cosh(p.mu) * PhiNt.imag() + cosh(p.mu) * PhiPt.imag());
 
     double Imag = sinh(p.mu) * (Phi.real() * PhiNt.imag() - Phi.imag() * PhiNt.real()) +
                   sinh(p.mu) * (PhiPt.real() * Phi.imag() - PhiPt.imag() * Phi.real());
 
     return {Real, Imag};
-};
+}
 
 template <ComplexValue TField, ComplexValue TAction>
-inline auto RelativisticBoseGas<TField, TAction>::compute_dS_loc(const Lattice<TField, 4>& Field, const TField& dPhi,
-                                                                 uint Site) -> TAction {
-    TField PhiOld = Field[Site];
-    TField PhiNew = PhiOld + dPhi;
-    TField PhiNt = Field.next(Site, _t);
-    TField PhiPt = Field.prev(Site, _t);
+inline auto RelativisticBoseGas<TField, TAction>::compute_dS_loc(const Lattice<TField, 4>& field, const TField& dphi,
+                                                                 uint site) -> TAction {
+    TField PhiOld = field[site];
+    TField PhiNew = PhiOld + dphi;
+    TField PhiNt = field.next(site, _t);
+    TField PhiPt = field.prev(site, _t);
 
     double Phi2Old = PhiOld.real() * PhiOld.real() + PhiOld.imag() * PhiOld.imag();
     double Phi2New = PhiNew.real() * PhiNew.real() + PhiNew.imag() * PhiNew.imag();
@@ -158,19 +166,38 @@ inline auto RelativisticBoseGas<TField, TAction>::compute_dS_loc(const Lattice<T
     double Phi2Var = Phi2New - Phi2Old;
     double Phi4Var = Phi2New * Phi2New - Phi2Old * Phi2Old;
 
-    TField NeighborsSum = Field.next(Site, _x) + Field.prev(Site, _x) +  //
-                          Field.next(Site, _y) + Field.prev(Site, _y) +  //
-                          Field.next(Site, _z) + Field.prev(Site, _z) +  //
+    TField NeighborsSum = field.next(site, _x) + field.prev(site, _x) +  //
+                          field.next(site, _y) + field.prev(site, _y) +  //
+                          field.next(site, _z) + field.prev(site, _z) +  //
                           cosh(p.mu) * (PhiNt + PhiPt);
 
-    double Real = 0.5 * p.eta * Phi2Var + 0.25 * p.lambda * Phi4Var - dPhi.real() * NeighborsSum.real() -
-                  dPhi.imag() * NeighborsSum.imag();
+    double Real = 0.5 * p.eta * Phi2Var + 0.25 * p.lambda * Phi4Var - dphi.real() * NeighborsSum.real() -
+                  dphi.imag() * NeighborsSum.imag();
 
-    double Imag = (dPhi.real() * PhiNt.imag() - dPhi.imag() * PhiNt.real()) +
-                  (PhiPt.real() * dPhi.imag() - PhiPt.imag() * dPhi.real());
+    double Imag = (dphi.real() * PhiNt.imag() - dphi.imag() * PhiNt.real()) +
+                  (PhiPt.real() * dphi.imag() - PhiPt.imag() * dphi.real());
 
     return {Real, Imag};
-};
+}
+
+template <ComplexValue TField, ComplexValue TAction>
+inline void RelativisticBoseGas<TField, TAction>::compute_Forces(const Lattice<FieldType, 4>& field,
+                                                                 Lattice<FieldType, 4>&       forces) {
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
+        FieldType Phi = field[Site];
+        FieldType Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
+        FieldType Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
+
+        TField NeighborsSum = field.next(Site, _x) + field.prev(Site, _x) +                //
+                              field.next(Site, _y) + field.prev(Site, _y) +                //
+                              field.next(Site, _z) + field.prev(Site, _z) +                //
+                              cosh(p.mu) * (field.next(Site, _t) + field.prev(Site, _t));  //
+
+        auto Real = p.eta * Phi.real() + p.lambda * (Phi3.real() + Phi.real() * Phi2.imag()) - NeighborsSum.real();
+        auto Imag = p.eta * Phi.imag() + p.lambda * (Phi3.imag() + Phi.imag() * Phi2.real()) - NeighborsSum.imag();
+        forces[Site] = {Real, Imag};
+    }
+}
 
 template <ComplexValue TField, ComplexValue TAction>
 inline auto RelativisticBoseGas<TField, TAction>::Measure(const Lattice<TField, 4>& field)
@@ -184,6 +211,6 @@ inline auto RelativisticBoseGas<TField, TAction>::Measure(const Lattice<TField, 
     }
 
     return {0.5 * Phi2 / double(field.getNsites()), 0.0};
-};
+}
 
 }  // namespace reticolo::action
