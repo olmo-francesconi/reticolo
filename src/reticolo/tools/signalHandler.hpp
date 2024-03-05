@@ -7,6 +7,7 @@
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
 ******************************************************************************/
+#pragma once
 
 #include <csignal>
 #include <cstdlib>
