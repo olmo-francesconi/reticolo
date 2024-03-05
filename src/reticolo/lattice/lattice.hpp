@@ -46,7 +46,7 @@ class Lattice {
 
         _NSites = std::accumulate(_N.begin(), _N.end(), 1, std::multiplies<>());
 
-        for (int SubDim = 0; SubDim < dim - 1; SubDim++) {
+        for (uint SubDim = 0; SubDim < dim - 1; SubDim++) {
             _SubVols[SubDim] = std::accumulate(_N.begin() + SubDim + 1, _N.end(), 1, std::multiplies<>());
         }
         _SubVols.back() = 1;
