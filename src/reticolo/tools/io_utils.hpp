@@ -11,6 +11,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <format>
 #include <sstream>
@@ -63,7 +64,8 @@ inline auto pretty_bytes(size_t bytes) -> std::string {
 
 /* Default reticolo log line init with timing */
 inline auto LI_time() -> std::string {
-    std::string Message = "reticolo..." + std::format("{:.>10.3f}", GlobalTimer.elapsed_s()) + " s | ";
+    auto        Time = std::chrono::duration<double>(GlobalTimer.elapsed_s());
+    std::string Message = "reticolo......." + std::format("{:%T}", Time) + " | ";
     return Message;
 }
 
@@ -112,7 +114,7 @@ template <size_t dim>
 inline auto print(const uintvect<dim>& Vect) -> std::string {
     std::stringstream Res;
     Res << "[" << Vect[0];
-    for (int Comp = 1; Comp < dim; Comp++) {
+    for (uint Comp = 1; Comp < dim; Comp++) {
         Res << " x " << Vect[Comp];
     }
     Res << "]";
