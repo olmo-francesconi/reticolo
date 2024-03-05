@@ -26,7 +26,7 @@
 #include <vector>
 
 #include "reticolo/llr/worker.hpp"
-#include "reticolo/montecarlo/montecarlo_data.hpp"
+#include "reticolo/montecarlo/MonteCarloData.hpp"
 #include "reticolo/tools/io_utils.hpp"
 #include "reticolo/tools/logger.hpp"
 #include "reticolo/tools/timer.hpp"
@@ -142,7 +142,7 @@ void LLRController<Action>::init(const fs::path& out_path, uintvect<Action::Dims
     // Initialize Sk values
     _DeltaS = scale * (double)get_volume(lattice_size);
     _SkVect.resize(nWorkers);
-    for (int WorkerId = 0; WorkerId < nWorkers; WorkerId++) {
+    for (uint WorkerId = 0; WorkerId < nWorkers; WorkerId++) {
         _SkVect[WorkerId] = _DeltaS * ((double)WorkerId + 0.5);
     }
 
@@ -154,9 +154,8 @@ void LLRController<Action>::init(const fs::path& out_path, uintvect<Action::Dims
     _Workers.resize(nWorkers);
 #pragma omp parallel for schedule(static, 1)
     for (uint WorkerId = 0; WorkerId < nWorkers; WorkerId++) {
-        _Workers[WorkerId].init(out_path / "llr", WorkerId, lattice_size, _Rd(), _Action.p, _SkVect[WorkerId], _DeltaS,
-                                MC_log_mode);
-        _Workers[WorkerId].set_ak(_AkVect[WorkerId]);
+        _Workers[WorkerId].init(out_path / "llr", WorkerId, lattice_size, _Rd(), _Action, _AkVect[WorkerId],
+                                _SkVect[WorkerId], _DeltaS, MC_log_mode);
     }
 
     // Log stuff
@@ -258,9 +257,9 @@ void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint 
 template <class Action>
 void LLRController<Action>::NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carlo, std::string RunId) {
     // Newton-Raphson Iterations
-    for (int Step = 0; Step < nNewton_Raphson; Step++) {
+    for (uint Step = 0; Step < nNewton_Raphson; Step++) {
 #pragma omp parallel for schedule(static, 1)
-        for (int WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
+        for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
             montecarlo::data<typename Action::ActionType> Res;
 
             // MonteCarlo_thermalize to the newly updated value of ak
@@ -270,7 +269,7 @@ void LLRController<Action>::NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carl
             Res = _Workers[WorkerId].MonteCarlo_run(nMonte_Carlo, RunId, std::format("NR_{}", Step));
 
             // update the ak value
-            _AkVect[WorkerId] += -(_SkVect[WorkerId] - Res.S_im) / (_DeltaS * _DeltaS);
+            _AkVect[WorkerId] += -(_SkVect[WorkerId] - Res._SIm) / (_DeltaS * _DeltaS);
             _Workers[WorkerId].set_ak(_AkVect[WorkerId]);
         }
 
@@ -282,7 +281,7 @@ void LLRController<Action>::NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carl
 template <class Action>
 void LLRController<Action>::RobbinsMonro(uint nRobbins_Monro, uint nMonte_Carlo, std::string RunId) {
     // Robbins-Monro Iterations
-    for (int Step = 0; Step < nRobbins_Monro; Step++) {
+    for (uint Step = 0; Step < nRobbins_Monro; Step++) {
 #pragma omp parallel for schedule(static, 1)
         for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
             montecarlo::data<typename Action::ActionType> Res;
@@ -295,7 +294,7 @@ void LLRController<Action>::RobbinsMonro(uint nRobbins_Monro, uint nMonte_Carlo,
 
             // update the ak value
             _AkVect[WorkerId] +=
-                -(_SkVect[WorkerId] - Res.S_im) / (static_cast<double>(Step + 1) * (_DeltaS * _DeltaS));
+                -(_SkVect[WorkerId] - Res._SIm) / (static_cast<double>(Step + 1) * (_DeltaS * _DeltaS));
             _Workers[WorkerId].set_ak(_AkVect[WorkerId]);
         }
 

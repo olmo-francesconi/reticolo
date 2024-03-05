@@ -22,7 +22,7 @@
 #include <vector>
 
 #include "reticolo/lattice/lattice.hpp"
-#include "reticolo/montecarlo/montecarlo_data.hpp"
+#include "reticolo/montecarlo/MonteCarloData.hpp"
 #include "reticolo/tools/logger.hpp"
 #include "reticolo/tools/timer.hpp"
 #include "reticolo/types/core.hpp"
@@ -78,9 +78,8 @@ class LLRWorker {
     /* Default constructor (does nothing) */
     LLRWorker() = default;
 
-    /* Initializer function -> actually does all the set-up */
-    void init(const fs::path& output_path, uint id, uintvect<Action::Dims> sizes, uint seed, Action action, double Sk,
-              double width, LOG_mode log_mode = LOG_mode::silent);
+    void init(const fs::path& output_path, uint id, uintvect<Action::Dims> sizes, uint seed, Action& action, double ak,
+              double Sk, double width, LOG_mode log_mode = LOG_mode::silent);
 
     /* Randomize the field (hot start)*/
     void randomizeField(double scale = 1.0);
@@ -111,22 +110,22 @@ class LLRWorker {
 
 template <class Action>
 void LLRWorker<Action>::init(const fs::path& output_path, uint id, uintvect<Action::Dims> sizes, uint rng_seed,
-                             Action action, double Sk, double width, LOG_mode log_mode) {
+                             Action& action, double ak, double Sk, double width, LOG_mode log_mode) {
+    // Initialize the timer
     _T.reset();
 
+    // Initialize metadata
+    _OutPath = output_path;
     _Id = id;
     _Name = std::format("llr_worker[{:0>3d}]", _Id);
-    _OutPath = output_path;
-
-    _LogStatus = log_mode;
 
     // Initialize the logger
+    _LogStatus = log_mode;
     if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
         _Logger.init(output_path / "logs", _Name + ".log", _Name + "LOG", false);
     }
 
     // Initialize the output file
-
 #pragma omp critical
     if (_LogStatus == LOG_mode::file_only || _LogStatus == LOG_mode::all) {
         try {
@@ -139,19 +138,20 @@ void LLRWorker<Action>::init(const fs::path& output_path, uint id, uintvect<Acti
     // Initialize the lattice
     _Field.init(sizes);
 
-    // initialize the action
+    // Initialize the action
     _Action = action;
+    _Action.lattice_sync(_Field);
+
+    // Initialize LLR variables
+    _Ak = ak;
+    _Sk = Sk;
+    _Width = width;
 
     // RNGs stuff
     _Rng.seed(rng_seed);
     _Unif = std::uniform_real_distribution<double>(0.0, 1.0);
     _UnifC = std::uniform_real_distribution<double>(-1.0, 1.0);
     _Norm = std::normal_distribution<double>(0.0, 1.0);
-
-    // initialize the ak parameter
-    _Ak = 0.0;
-    _Sk = Sk;
-    _Width = width;
 
     double Elapsed = _T.elapsed_ms();
 
@@ -189,29 +189,26 @@ void LLRWorker<Action>::MCMC_sweep() {
 
     typename Action::FieldType FieldVar;  // local field variation
 
-    uintvect<Action::Dims> Sizes = _Field.getSizes();
-    uintvect<Action::Dims> Coord;
-    std::fill(Coord.begin(), Coord.end(), 0);
-    for (uint Site = 0; Site < _Field.getNsites(); advance_coord(Sizes, Coord), Site++) {
+    for (uint Site = 0; Site < _Field.getNsites(); Site++) {
         randomize(FieldVar, 0.2, _UnifC, _Rng);
 
-        SVar = _Action.compute_dS_loc(_Field, FieldVar, Coord);
+        SVar = _Action.compute_dS_loc(_Field, FieldVar, Site);
 
-        WindowWeight = (SVar.imag() * (SVar.imag() + 2.0 * _McStats.S_im - 2.0 * _Sk)) / (2.0 * _Width * _Width);
+        WindowWeight = (SVar.imag() * (SVar.imag() + 2.0 * _McStats._SIm - 2.0 * _Sk)) / (2.0 * _Width * _Width);
         LlrWeight = _Ak * SVar.imag();
 
         if (exp(-(SVar.real() + WindowWeight + LlrWeight)) > _Unif(_Rng)) {
             Acc++;
-            _Field[Coord] += FieldVar;
+            _Field[Site] += FieldVar;
             SVarTot += SVar;
-            _McStats.S_re += SVar.real();
-            _McStats.S_im += SVar.imag();
+            _McStats._SRe += SVar.real();
+            _McStats._SIm += SVar.imag();
         }
     }
 
-    _McStats.acceptance = static_cast<double>(Acc) / _Field.getNsites();
-    _McStats.dS_re = SVarTot.real();
-    _McStats.dS_im = SVarTot.imag();
+    _McStats._Acceptance = static_cast<double>(Acc) / _Field.getNsites();
+    _McStats._DSRe = SVarTot.real();
+    _McStats._DSIm = SVarTot.imag();
 }
 
 template <class Action>
@@ -220,8 +217,8 @@ void LLRWorker<Action>::MonteCarlo_thermalize(uint nSteps, std::string run_name,
 
     typename Action::ActionType SInit = _Action.compute_S(_Field);
 
-    _McStats.S_re = SInit.real();
-    _McStats.S_im = SInit.imag();
+    _McStats._SRe = SInit.real();
+    _McStats._SIm = SInit.imag();
 
     for (uint Iter = 0; Iter < nSteps; Iter++) {
         MCMC_sweep();
@@ -252,8 +249,8 @@ auto LLRWorker<Action>::MonteCarlo_run(uint nMC, std::string run_name, std::stri
 
     // Initialize the starting value of S
     typename Action::ActionType SInit = _Action.compute_S(_Field);
-    _McStats.S_re = SInit.real();
-    _McStats.S_im = SInit.imag();
+    _McStats._SRe = SInit.real();
+    _McStats._SIm = SInit.imag();
 
     for (uint Iter = 0; Iter < nMC; Iter++) {
         MCMC_sweep();
