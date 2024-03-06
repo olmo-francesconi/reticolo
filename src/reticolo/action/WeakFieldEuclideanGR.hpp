@@ -480,7 +480,7 @@ void reticolo::montecarlo::Metropolis<reticolo::action::WeakFieldEuclideanGR>::u
 }
 
 /*--------------------------------------------------------------------------------------------------
-  montecarlo::Metropolis::updateField() Specialization
+  montecarlo::HMC::updateField() Specialization
 --------------------------------------------------------------------------------------------------*/
 #include "reticolo/montecarlo/HMC.hpp"
 
