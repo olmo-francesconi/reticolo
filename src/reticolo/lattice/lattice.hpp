@@ -27,12 +27,13 @@ namespace reticolo {
 
 template <size_t dim>
 class Indexing {
+  public:
     uintvect<dim> _Sizes;    // Lattice size in each dimension
     uintvect<dim> _SubVols;  // Subvolumes
     uint          _NSites;   // Total number of lattice sites
 
-    inline static std::vector<uintvect<dim>> Next;
-    inline static std::vector<uintvect<dim>> Prev;
+    std::vector<uintvect<dim>> _Next;
+    std::vector<uintvect<dim>> _Prev;
 
     /* Constructor */
     Indexing(uintvect<dim> sizes) : _Sizes(sizes) {
@@ -47,16 +48,16 @@ class Indexing {
         uintvect<dim> PrevCoord;
         uintvect<dim> NextCoord;
         std::fill(Coord.begin(), Coord.end(), 0);
-        Next.resize(_NSites);
-        Prev.resize(_NSites);
+        _Next.resize(_NSites);
+        _Prev.resize(_NSites);
         for (uint Site = 0; Site < _NSites; advance_coord(_Sizes, Coord), Site++) {
             for (uint Dir = 0; Dir < dim; Dir++) {
                 NextCoord = Coord;
                 NextCoord[Dir] = (Coord[Dir] + 1) % _Sizes[Dir];
-                Next[Site][Dir] = site(NextCoord);
+                _Next[Site][Dir] = site(NextCoord);
                 PrevCoord = Coord;
                 PrevCoord[Dir] = (Coord[Dir] + (_Sizes[Dir] - 1)) % _Sizes[Dir];
-                Prev[Site][Dir] = site(PrevCoord);
+                _Prev[Site][Dir] = site(PrevCoord);
             }
         }
     };
@@ -67,45 +68,61 @@ class Indexing {
 };
 
 template <typename TField, size_t dim>
-class Lattice {
-    /* Indexing of the lattice*/
-    Indexing<dim> _Idx;
+class Lattice : public Indexing<dim> {
+    // /* Indexing of the lattice*/
+    // Indexing<dim> _Idx;
 
     /* Vector string the Field components */
     std::vector<TField> _Field;
 
   public:
     /* Constructor */
-    Lattice(uintvect<dim> sizes) : _Idx(sizes) {
+    Lattice(uintvect<dim> sizes) : Indexing<dim>(sizes) {
         _Field.clear();
-        _Field.resize(_Idx.NSites);
+        _Field.resize(this->_NSites);
     };
+
+    /* Copy assignment */
+    auto operator=(const Lattice& other) -> Lattice& {
+        // Guard self assignment
+        if (this == &other) {
+            return *this;
+        }
+        // Copy only if compatible
+        if (this->_Sizes == other._Sizes) {
+            std::copy(other._Field.begin(), other._Field.end(), _Field.begin());
+        } else {
+            std::cerr << IO::LI_erro() + "reticolo::Lattice - Copy Assigment failed [incompatible lattice sizes]\n";
+            exit(EXIT_FAILURE);
+        }
+        return *this;
+    }
 
     /* Data accessing operators */
     auto operator[](const uint site) -> TField& { return _Field[site]; }
     auto operator[](const uint site) const -> const TField& { return _Field[site]; }
 
     /* Getters for lattice parameters */
-    [[nodiscard]] auto getNt() const -> uint { return _Idx.Sizes[_t]; }
-    [[nodiscard]] auto getNx() const -> uint { return _Idx.Sizes[_x]; }
-    [[nodiscard]] auto getNy() const -> uint { return _Idx.Sizes[_y]; }
-    [[nodiscard]] auto getNz() const -> uint { return _Idx.Sizes[_z]; }
-    [[nodiscard]] auto getNi(uint Dir) const -> uint { return _Idx.Sizes[Dir]; }
+    [[nodiscard]] auto getNt() const -> uint { return this->_Sizes[_t]; }
+    [[nodiscard]] auto getNx() const -> uint { return this->_Sizes[_x]; }
+    [[nodiscard]] auto getNy() const -> uint { return this->_Sizes[_y]; }
+    [[nodiscard]] auto getNz() const -> uint { return this->_Sizes[_z]; }
+    [[nodiscard]] auto getNi(uint Dir) const -> uint { return this->_Sizes[Dir]; }
     [[nodiscard]] auto getDim() const -> uint { return dim; }
-    [[nodiscard]] auto getNsites() const -> uint { return _Idx.NSites; }
-    [[nodiscard]] auto getVolume() const -> uint { return _Idx.NSites; }
-    [[nodiscard]] auto getSubVols() const -> uintvect<dim> { return _Idx.SubVols; }
-    [[nodiscard]] auto getSizes() const -> uintvect<dim> { return _Idx.Sizes; }
+    [[nodiscard]] auto getNsites() const -> uint { return this->_NSites; }
+    [[nodiscard]] auto getVolume() const -> uint { return this->_NSites; }
+    [[nodiscard]] auto getSubVols() const -> uintvect<dim> { return this->_SubVols; }
+    [[nodiscard]] auto getSizes() const -> uintvect<dim> { return this->_Sizes; }
 
     /* Access next and previous sites */
-    auto               next(uint site, uint dir) -> TField& { return _Field[_Idx.Next[site][dir]]; }
-    auto               next(uint site, uint dir) const -> const TField& { return _Field[_Idx.Next[site][dir]]; }
-    auto               nextId(uint site, uint dir) -> uint& { return _Idx.Next[site][dir]; }
-    [[nodiscard]] auto nextId(uint site, uint dir) const -> const uint& { return _Idx.Next[site][dir]; }
-    auto               prev(uint site, uint dir) -> TField& { return _Field[_Idx.Prev[site][dir]]; }
-    auto               prev(uint site, uint dir) const -> const TField& { return _Field[_Idx.Prev[site][dir]]; }
-    auto               prevId(uint site, uint dir) -> uint& { return _Idx.Prev[site][dir]; }
-    [[nodiscard]] auto prevId(uint site, uint dir) const -> const uint& { return _Idx.Prev[site][dir]; }
+    auto               next(uint site, uint dir) -> TField& { return _Field[this->_Next[site][dir]]; }
+    auto               next(uint site, uint dir) const -> const TField& { return _Field[this->_Next[site][dir]]; }
+    auto               nextId(uint site, uint dir) -> uint& { return this->_Next[site][dir]; }
+    [[nodiscard]] auto nextId(uint site, uint dir) const -> const uint& { return this->_Next[site][dir]; }
+    auto               prev(uint site, uint dir) -> TField& { return _Field[this->_Prev[site][dir]]; }
+    auto               prev(uint site, uint dir) const -> const TField& { return _Field[this->_Prev[site][dir]]; }
+    auto               prevId(uint site, uint dir) -> uint& { return this->_Prev[site][dir]; }
+    [[nodiscard]] auto prevId(uint site, uint dir) const -> const uint& { return this->_Prev[site][dir]; }
 
     /* Get a memory report from Lattice */
     [[nodiscard]] auto memoryReport() const -> size_t {
@@ -127,7 +144,7 @@ class Lattice {
             // Open file
             H5::H5File File(FilePath, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
             // Create dataspace
-            std::array<hsize_t, 1> Dims = {_Idx.NSites};  // dim sizes of ds (on disk)
+            std::array<hsize_t, 1> Dims = {this->NSites};  // dim sizes of ds (on disk)
             H5::DataSpace          DataSpace(1, Dims.data());
             // Create datatype
             auto DataType = make_H5_Type<TField>();
@@ -161,7 +178,7 @@ class Lattice {
             // check DataSpaces
             H5::DataSpace FileDataSpace = DataSet.getSpace();
             hsize_t       FileDims = FileDataSpace.getSimpleExtentNdims();
-            if (FileDims != _Idx.NSites) {
+            if (FileDims != this->NSites) {
                 H5::DataSpaceIException Exeption("lattice::read_Configuration()", "File and data DataSpaces differ");
                 throw(Exeption);
             }
