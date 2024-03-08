@@ -59,20 +59,22 @@ class MonteCarloHandler {
     using McDataVectType = std::vector<montecarlo::data<typename Action::ActionType>>;
 
     /* Metadata and output */
-    std::string _RunName;        // Run identifier
-    fs::path    _WorkspacePath;  // Workspace folder path
+    const std::string _RunName;        // Run identifier
+    fs::path          _WorkspacePath;  // Workspace folder path
 
     /* hdf5 stuff */
     fs::path           _Hdf5OutputFile;                                  // output file complete path
-    const uint         _MaxBufferSize = 10000;                           // Maximun size for the measure buffer
+    const size_t       _MaxBufferSize = 10000;                           // Maximun size for the measure buffer
     const double       _MaxBufferWriteDelay = 60;                        // Maximum delay between data writes
     const H5::CompType _McCompType = McDataType::make_hdf5_CompType();   // CompType for Monte Carlo stats
     const H5::CompType _ObsCompType = Action::make_obs_hdf5_CompType();  // CompType for Action observables
 
     /* Physics stuff */
-    Action      _Action;   // Action
-    LatticeType _Field;    // Lattice of the type specified by action
-    McDataType  _McStats;  // MonteCarlo stats
+    const Action&      _Action;   // reference to the Action
+    const LatticeType& _Field;    // reference to the Lattice
+    McDataType         _McStats;  // MonteCarlo stats
+    McDataVectType     _Stats;    // MonteCarlo stats buffer
+    ObsVectType        _Obs;      // Observable measurements buffer
 
     /* RNG stuff */
     std::mt19937_64                        _Rng;    // Random Number Generator
@@ -83,10 +85,6 @@ class MonteCarloHandler {
     /* Timing and logging */
     Timer      _T;       // LLRWorker Private Timer
     IO::Logger _Logger;  // LLRWorker Private Logger
-
-    /* Various logging utilities */
-    void log_MC(uint iter);                 // Log MonteCarlo data
-    void log_obs(uint iter, ObsType& obs);  // Log Action observables
 
     /* File output utilities */
     void save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect);  // save measurements
@@ -99,13 +97,10 @@ class MonteCarloHandler {
     void resetField();
 
     /* Performs a single sweep of the lattice */
-    void updateField();
+    virtual void updateField() = 0;
 
     /* Performs nSteps thermalization steps and no measurements */
     void thermalize(uint nSteps, bool hot_start = false, double scale = 1.0);
-
-    /* Memory report */
-    auto memoryReport() -> size_t;
 
   public:
     /* Constructor */
@@ -121,15 +116,9 @@ class MonteCarloHandler {
     Public Methods Implmentations
 --------------------------------------------------------------------------------------------------*/
 template <class Action, size_t dim>
-MonteCarloHandler<Action, dim>::MonteCarloHandler(  //
-    std::string              run_name,              //
-    Action&                  action,                //
-    Lattice<FieldType, dim>& field,                 //
-    uint                     seed,                  //
-    const std::string&       output_path)
-    : _RunName(std::move(run_name)),  //
-      _Action(action),
-      _Field(field) {
+MonteCarloHandler<Action, dim>::MonteCarloHandler(std::string run_name, Action& action, Lattice<FieldType, dim>& field,
+                                                  uint seed, const std::string& output_path)
+    : _RunName(std::move(run_name)), _Action(action), _Field(field) {
     // Begin initialization
     _T.reset();
 
@@ -156,7 +145,7 @@ MonteCarloHandler<Action, dim>::MonteCarloHandler(  //
     }
 
     // Log that the folder and loggind stuff has bee initialized properly
-    _Logger << IO::LI_time() + "MetropolisWorker - Initialization started...\n";
+    _Logger << IO::LI_time() + "Monte Carlo Handler - Initialization started...\n";
     _Logger << IO::LI_void() + "    main oputput folder: " + _WorkspacePath.string() + '\n';
     _Logger << IO::LI_void() + "    measurements folder: " + (_WorkspacePath / "meas").string() + '\n';
     _Logger << IO::LI_void() + "  configurations folder: " + (_WorkspacePath / "cnfg").string() + '\n';
@@ -187,7 +176,7 @@ MonteCarloHandler<Action, dim>::MonteCarloHandler(  //
 
     // Log stuff
     _Logger << IO::LI_void() + "            output file: " + _Hdf5OutputFile.string() + "\n";
-    _Logger << IO::LI_void() + "MetropolisWorker - Action-info\n";
+    _Logger << IO::LI_void() + "Monte Carlo Handler - Action-info\n";
     _Logger << IO::LI_void() + "                  name : " + _Action.action_name() + "\n";
     _Logger << IO::LI_void() + "            parameters : " + _Action.action_parameters() + "\n";
     _Logger << IO::LI_void() + "               lattice : " + IO::print(_Field.getSizes()) + "\n";
@@ -204,22 +193,16 @@ MonteCarloHandler<Action, dim>::MonteCarloHandler(  //
     _UnifC = std::uniform_real_distribution<double>(-1.0, 1.0);
     _Norm = std::normal_distribution<double>(0.0, 1.0);
 
-    // Log stuff
-    _Logger << IO::LI_time() +
-                   std::format("MetropolisWorker - Initialization completed in {:.3f} ms\n", _T.elapsed_ms());
-    _Logger << IO::LI_void() + "      memory allocated : " + IO::pretty_bytes(memoryReport()) + '\n';
+    // Buffers
+    _Stats.reserve(_MaxBufferSize);
+    _Obs.reserve(_MaxBufferSize);
 }
 
 template <class Action, size_t dim>
-inline void MonteCarloHandler<Action, dim>::run(  //
-    uint   nMC,                                   //
-    uint   nTherm,                                //
-    uint   MeasureStep,                           //
-    bool   hot_start,                             //
-    double hs_scale,                              //
-    bool   save_config) {
+inline void MonteCarloHandler<Action, dim>::run(uint nMC, uint nTherm, uint MeasureStep, bool hot_start,
+                                                double hs_scale, bool save_config) {
     // Log Run parameters
-    _Logger << IO::LI_time() + "MetropolisWorker - Starting Monte Carlo updates..\n";
+    _Logger << IO::LI_time() + "Monte Carlo Handler - Starting Monte Carlo updates..\n";
 
     if (nTherm > 0) {
         thermalize(nTherm, hot_start, hs_scale);
@@ -227,7 +210,7 @@ inline void MonteCarloHandler<Action, dim>::run(  //
 
     // do checks on nMC and MeasureStep -> sanitize nMC from unnecessary iterations
 
-    _Logger << IO::LI_void() + "MetropolisWorker - Starting Measurements..\n";
+    _Logger << IO::LI_void() + "Monte Carlo Handler - Starting Measurements..\n";
 
     // Reset the timer
     _T.reset();
@@ -337,7 +320,7 @@ inline void MonteCarloHandler<Action, dim>::run(  //
         Obs.clear();
         _Logger << IO::LI_void() + "Final data saved\n";
     }
-    _Logger << IO::LI_time() + std::format("MetropolisWorker - Measurements done in {:.3f}  s\n", _T.elapsed_s());
+    _Logger << IO::LI_time() + std::format("Monte Carlo Handler - Measurements done in {:.3f}  s\n", _T.elapsed_s());
 }
 
 /*--------------------------------------------------------------------------------------------------
@@ -403,18 +386,8 @@ inline void MonteCarloHandler<Action, dim>::save_Configuration(uint Iter) {
 }
 
 template <class Action, size_t dim>
-inline void MonteCarloHandler<Action, dim>::log_MC(uint iter) {
-    _Logger.log_string(_RunName, std::format(" MC data_dump {} -> ", iter) + _McStats.dump_str());
-}
-
-template <class Action, size_t dim>
-inline void MonteCarloHandler<Action, dim>::log_obs(uint iter, ObsType& obs) {
-    _Logger.log_string(_RunName, std::format("obs data_dump {} -> ", iter) + obs.dump_str());
-}
-
-template <class Action, size_t dim>
 inline void MonteCarloHandler<Action, dim>::randomizeField(double scale) {
-    for (size_t Site = 0; Site < _Field.getNsites(); Site++) {
+    for (int Site = 0; Site < _Field.getNsites(); Site++) {
         randomize(_Field[Site], scale, _Norm, _Rng);
     }
     _Action.lattice_sync(_Field);
@@ -422,7 +395,7 @@ inline void MonteCarloHandler<Action, dim>::randomizeField(double scale) {
 
 template <class Action, size_t dim>
 inline void MonteCarloHandler<Action, dim>::resetField() {
-    for (size_t Site = 0; Site < _Field.getNsites(); Site++) {
+    for (int Site = 0; Site < _Field.getNsites(); Site++) {
         _Field[Site] = FieldType(0.0);
     }
     _Action.lattice_sync(_Field);
@@ -432,7 +405,7 @@ template <class Action, size_t dim>
 inline void MonteCarloHandler<Action, dim>::thermalize(uint nSteps, bool hot_start, double scale) {
     std::stringstream LogMessage;
     // Log that the folder and loggind stuff has bee initialized properly
-    LogMessage << IO::LI_time() << "MetropolisWorker - Thermalization started...\n"
+    LogMessage << IO::LI_time() << "Monte Carlo Handler - Thermalization started...\n"
                << IO::LI_void() << "  thermalizatoin steps : " << nSteps << "\n";
     if (hot_start) {
         randomizeField(scale);
@@ -456,17 +429,9 @@ inline void MonteCarloHandler<Action, dim>::thermalize(uint nSteps, bool hot_sta
     }
 
     // Log timing information
-    LogMessage << IO::LI_time() << "MetropolisWorker - Thermalization finished in "
+    LogMessage << IO::LI_time() << "Monte Carlo Handler - Thermalization finished in "
                << std::format("{:.2f}", _T.elapsed_ms()) << " ms\n";
     _Logger << LogMessage;
-}
-
-template <class Action, size_t dim>
-inline auto MonteCarloHandler<Action, dim>::memoryReport() -> size_t {
-    size_t Memory = 0;
-    Memory += _Field.memoryReport();
-
-    return Memory;
 }
 
 }  // namespace reticolo::montecarlo
