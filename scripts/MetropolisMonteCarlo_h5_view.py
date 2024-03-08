@@ -5,23 +5,47 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-steps = np.arange(10, 101, 10)
-stepsizes = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1]
+
 path = "/Users/olmo/software/source/reticolo/build/apps/test/meas/"
+names = {"Metropolis", "HMC"}
+MonteCarlo_data = {}
+Observables_data = {}
 
-for step in steps:
-    for stepsize in stepsizes:
-        name = "HMC_{}_{}".format(step, stepsize)
-        print(name)
-        f = h5py.File(path + name + ".h5", "r")
+# read data
+for name in names:
+    print(name)
+    f = h5py.File(path + name + ".h5", "r")
+    MonteCarlo_data[name] = pd.DataFrame(np.array(f[name + "/MonteCarlo"]))
+    Observables_data[name] = pd.DataFrame(np.array(f[name + "/Observables"]))
 
-        data = pd.DataFrame(np.array(f[name + "/MonteCarlo"]))
+# plot action history
+for name in names:
+    MonteCarlo_data[name]["S"].plot(alpha=0.75, lw=0.1, label=name)
+plt.title("$Action$")
+plt.legend(loc=0)
+plt.show()
 
-        autocorr = []
-        for t in range(1, 200):
-            autocorr.append(data["S_re"][10000:].autocorr(t))
+# plot action history
+for name in names:
+    MonteCarlo_data[name]["acceptance"].plot(alpha=0.75, lw=0.1, label=name)
+plt.title("$Acceptance$")
+plt.legend(loc=0)
+plt.show()
 
-        plt.plot(autocorr, label=name)
-
-    plt.legend(loc=0)
-    plt.show()
+# # plot Observables history
+# for name in names:
+#     Observables_data[name]["phi2"].plot(alpha=0.5, lw=0.1)
+# plt.show()
+# # plot Observables Histogram
+# for name in names:
+#     Observables_data[name]["phi2"].hist(bins=100, alpha=0.5, lw=0.1)
+# plt.show()
+# compare autocorrelations
+for name in names:
+    autocorr = []
+    for t in range(0, 200):
+        autocorr.append(MonteCarlo_data[name]["S"][50000:].autocorr(t))
+    plt.plot(autocorr, label=name)
+plt.title("$Autocorrelation$")
+plt.legend(loc=0)
+plt.show()
