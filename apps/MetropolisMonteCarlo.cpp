@@ -24,7 +24,7 @@ using namespace reticolo;
 
 auto main(int argc, char* argv[]) -> int {
     /* Define the lattice volume */
-    uintvect<4> Volume = {4, 4, 4, 4};
+    intvect<4> Volume = {4, 4, 4, 4};
 
     /*  Set the output folder to be ./MetropolisMonteCarlo */
     std::string OutPath = "MetropolisMonteCarlo_out";
