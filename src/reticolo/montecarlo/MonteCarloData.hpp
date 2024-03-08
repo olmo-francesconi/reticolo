@@ -36,7 +36,7 @@ struct data<ActionType> {
         : _Acceptance(acc), _S(double(action)), _DS(double(action_change)){};  // Parameter
 
     /* Update values */
-    void setS(ActionType S) { _S = S; }
+    void setS(ActionType SReal) { _S = SReal; }
     void update(double acc, ActionType dS) {
         _Acceptance = acc;
         _S += double(dS);
@@ -119,16 +119,16 @@ struct data<ActionType> {
           _DSIm(double(action_change.imag())){};  // Parameter
 
     /* Update values */
-    void setS(ActionType S) {
-        _SRe = S.real();
-        _SIm = S.imag();
+    void setS(ActionType SCmplx) {
+        _SRe = SCmplx.real();
+        _SIm = SCmplx.imag();
     }
-    void update(double acc, ActionType dS) {
+    void update(double acc, ActionType dSCmplx) {
         _Acceptance = acc;
-        _SRe += dS.real();
-        _SIm += dS.imag();
-        _DSRe = dS.real();
-        _DSIm = dS.imag();
+        _SRe += dSCmplx.real();
+        _SIm += dSCmplx.imag();
+        _DSRe = dSCmplx.real();
+        _DSIm = dSCmplx.imag();
     }
     void softReset() {
         _Acceptance = 0.0;
