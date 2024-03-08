@@ -27,8 +27,8 @@ class ActionBase {
 
     /* Gloabal and local action computations */
     virtual auto compute_S(const Lattice<FieldType, dim>& field) -> ActionType = 0;
-    virtual auto compute_S_loc(const Lattice<FieldType, dim>& field, uint site) -> ActionType = 0;
-    virtual auto compute_dS_loc(const Lattice<FieldType, dim>& field, const FieldType& dphi, uint site)
+    virtual auto compute_S_loc(const Lattice<FieldType, dim>& field, int site) -> ActionType = 0;
+    virtual auto compute_dS_loc(const Lattice<FieldType, dim>& field, const FieldType& dphi, int site)
         -> ActionType = 0;
 
     /* HMC methods */

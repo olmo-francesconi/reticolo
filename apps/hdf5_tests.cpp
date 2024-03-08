@@ -22,7 +22,7 @@ using namespace reticolo;
 
 auto main(int argc, char* argv[]) -> int {
     /* Define the lattice volume */
-    uintvect<4> Vol1 = {4, 4, 4, 4};
+    intvect<4> Vol1 = {4, 4, 4, 4};
 
     Lattice<ComplexD, 4> Latt1;
     Latt1.init(Vol1);
@@ -31,7 +31,7 @@ auto main(int argc, char* argv[]) -> int {
     }
     Latt1.save_Configuration("./test.h5");
 
-    uintvect<4> Vol2 = {6, 6, 6, 6};
+    intvect<4> Vol2 = {6, 6, 6, 6};
 
     Lattice<ComplexD, 4> Latt2;
     Latt2.init(Vol2);

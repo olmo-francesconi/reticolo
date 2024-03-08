@@ -47,7 +47,7 @@ inline auto pretty_welcome() -> std::string {
 const size_t KILO = 1024;  // Definition of what a Kilo of stuff is (Decimal: 1000, Binary: 1024)
 /* Returns a std::string representing the byte size in a convenient unit*/
 inline auto pretty_bytes(size_t bytes) -> std::string {
-    std::array<std::string, 7> Suffixes({"B", "KB", "MB", "GB", "TB", "PB", "EB"});
+    std::array<std::string, 7> Suffixes({" B", "KB", "MB", "GB", "TB", "PB", "EB"});
 
     uint   SuffixIndex = 0;  // Pretty suffix index
     double Count = bytes;    // Pretty value
@@ -55,7 +55,7 @@ inline auto pretty_bytes(size_t bytes) -> std::string {
         SuffixIndex++;
         Count /= KILO;
     }
-    return std::format("{:>6.2f}", Count) + " " + Suffixes[SuffixIndex];
+    return std::format("{:>7.2f}", Count) + " " + Suffixes[SuffixIndex];
 }
 
 /*--------------------------------------------------------------------------------------------------
@@ -111,7 +111,7 @@ auto print(T val) -> std::string {
 
 /* Print uint Vectors in standard format */
 template <size_t dim>
-inline auto print(const uintvect<dim>& Vect) -> std::string {
+inline auto print(const intvect<dim>& Vect) -> std::string {
     std::stringstream Res;
     Res << "[" << Vect[0];
     for (uint Comp = 1; Comp < dim; Comp++) {
