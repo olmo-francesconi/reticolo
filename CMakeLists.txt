@@ -20,6 +20,14 @@ endif()
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -Ofast")
 
+# IF(CMAKE_BUILD_TYPE EQUAL Debug)
+#   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -lprofiler -ltcmalloc")
+#   include_directories(/opt/homebrew/Cellar/gperftools/2.15/include)
+#   link_directories(/opt/homebrew/Cellar/gperftools/2.15/lib)
+#   link_libraries(profiler)
+#   link_libraries(tcmalloc)
+# endif()
+
 # Project name and a few useful settings. Other commands can pick up the results
 project(
   reticolo
