@@ -70,6 +70,7 @@ class HField {
         }
         return _Mat[4 * mu + nu - (mu * (mu + 1)) / 2];
     }
+
     auto operator()(size_t mu, size_t nu) const -> const T& {
         if (nu < mu) {
             std::swap(mu, nu);
@@ -133,7 +134,7 @@ template <RealValue T>
 inline auto HField<T>::dot() const -> T {
     T Res = 0.0;
     for (const auto& Elem : _Mat) {
-        Res += Elem;
+        Res += Elem * Elem;
     }
     return Res;
 }
