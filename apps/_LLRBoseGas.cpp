@@ -27,7 +27,7 @@
 
 #include "reticolo/action/RelativisticBoseGas.hpp"
 #include "reticolo/lattice/lattice.hpp"
-#include "reticolo/llr/controller.hpp"
+#include "reticolo/llr/_controller.hpp"
 #include "reticolo/types/core.hpp"
 
 using namespace reticolo;
@@ -44,16 +44,11 @@ auto main(int argc, char* argv[]) -> int {
 
     /* Initialize the action */
     action::RelativisticBoseGas::Params Par(1.0, 9.0, 0.0);
-    action::RelativisticBoseGas         Action(Lattice, Par);
 
     /* Declare the LLRController
         This will take care of setting up and running the simulation
         Spawn al the LLRWorkers and control the multi-threaded operation */
-    LLR::LLRController Cont(Action);
-
-    /* Initialize the LLRController
-        This will actually allocate memory and set up all the workers */
-    Cont.init(OutPath, Volume, 48, 0.0025);
+    LLR::LLRController<action::RelativisticBoseGas> Cont(Par, OutPath, Volume, 48, 0.0025);
 
     /* Run the LLR simulation
         This will perform nMonteCarlo updates for each NR or RM step */
