@@ -79,7 +79,7 @@ HMC<Action, dim>::HMC(std::string run_name, Action& action, Lattice<FieldType, d
       _OldField(field.getSizes()) {
     // Log stuff
     _Logger << IO::LI_time() +
-                   std::format("MetropolisWorker - Initialization completed in {:.3f} ms\n", _T.elapsed_ms());
+                   std::format("Monte Carlo Handler - Initialization completed in {:.3f} ms\n", _T.elapsed_ms());
 }
 
 template <HmcCapable Action, size_t dim>
