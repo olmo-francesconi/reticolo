@@ -131,6 +131,15 @@ inline auto operator%(intvect<dim> lhs, const intvect<dim>& rhs) -> intvect<dim>
 }
 
 template <size_t dim>
+inline auto getVolume(const intvect<dim>& Sizes) -> int {
+    int Res = 1;
+    for (uint Comp = 0; Comp < dim; Comp++) {
+        Res *= Sizes[Comp];
+    }
+    return Res;
+}
+
+template <size_t dim>
 inline auto getCoord(uint site, const intvect<dim>& subvols) -> intvect<dim> {
     intvect<dim> Res;
     for (uint Comp = 0; Comp < dim; Comp++) {
