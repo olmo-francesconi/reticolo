@@ -2,7 +2,7 @@
 
  - reticolo (www.github.com/olmo-francesconi/reticolo.git)
 
- - SourceFile: montecarlo/metropolis.hpp
+ - SourceFile: montecarlo/MonteCarloHandler.hpp
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
@@ -70,11 +70,11 @@ class MonteCarloHandler {
     const H5::CompType _ObsCompType = Action::make_obs_hdf5_CompType();  // CompType for Action observables
 
     /* Physics stuff */
-    const Action&      _Action;   // reference to the Action
-    const LatticeType& _Field;    // reference to the Lattice
-    McDataType         _McStats;  // MonteCarlo stats
-    McDataVectType     _Stats;    // MonteCarlo stats buffer
-    ObsVectType        _Obs;      // Observable measurements buffer
+    Action&        _Action;   // reference to the Action
+    LatticeType&   _Field;    // reference to the Lattice
+    McDataType     _McStats;  // MonteCarlo stats
+    McDataVectType _Stats;    // MonteCarlo stats buffer
+    ObsVectType    _Obs;      // Observable measurements buffer
 
     /* RNG stuff */
     std::mt19937_64                        _Rng;    // Random Number Generator
