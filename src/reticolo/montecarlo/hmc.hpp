@@ -11,7 +11,6 @@
 #pragma once
 
 #include <cmath>
-#include <cstddef>
 #include <string>
 
 #include "reticolo/lattice/lattice.hpp"
@@ -27,13 +26,13 @@ namespace reticolo::montecarlo {
 template <class T>
 concept HmcCapable = T::IsHmcCapable;
 
-template <HmcCapable Action, size_t dim>
-class HMC : public MonteCarloHandler<Action, dim> {
+template <HmcCapable Action>
+class HMC : public MonteCarloHandler<Action> {
   private:
     /* Types definitions */
     using ActionType = typename Action::ActionType;
     using FieldType = typename Action::FieldType;
-    using LatticeType = Lattice<typename Action::FieldType, dim>;
+    using LatticeType = Lattice<typename Action::FieldType, Action::Dims>;
 
     /* HMC support fields */
     LatticeType _Mom;
@@ -45,20 +44,19 @@ class HMC : public MonteCarloHandler<Action, dim> {
     uint   _Steps;
 
     /* Introduced names from MonteCarloHandler (avoids using this->...) */
-    using MonteCarloHandler<Action, dim>::_Field;
-    using MonteCarloHandler<Action, dim>::_Action;
-    using MonteCarloHandler<Action, dim>::_McStats;
-    using MonteCarloHandler<Action, dim>::_Unif;
-    using MonteCarloHandler<Action, dim>::_UnifC;
-    using MonteCarloHandler<Action, dim>::_Norm;
-    using MonteCarloHandler<Action, dim>::_Rng;
-    using MonteCarloHandler<Action, dim>::_Logger;
-    using MonteCarloHandler<Action, dim>::_T;
+    using MonteCarloHandler<Action>::_Field;
+    using MonteCarloHandler<Action>::_Action;
+    using MonteCarloHandler<Action>::_McStats;
+    using MonteCarloHandler<Action>::_Unif;
+    using MonteCarloHandler<Action>::_UnifC;
+    using MonteCarloHandler<Action>::_Norm;
+    using MonteCarloHandler<Action>::_Rng;
+    using MonteCarloHandler<Action>::_Logger;
+    using MonteCarloHandler<Action>::_T;
 
   public:
     /* Constructor */
-    HMC(std::string run_name, Action& action, Lattice<FieldType, dim>& field, uint seed,
-        const std::string& output_path);
+    HMC(std::string run_name, Action& action, LatticeType& field, uint seed, const std::string& output_path);
 
     /* override virtual updateField() method */
     void updateField() override;
@@ -70,10 +68,9 @@ class HMC : public MonteCarloHandler<Action, dim> {
     }
 };
 
-template <HmcCapable Action, size_t dim>
-HMC<Action, dim>::HMC(std::string run_name, Action& action, Lattice<FieldType, dim>& field, uint seed,
-                      const std::string& output_path)
-    : MonteCarloHandler<Action, dim>(run_name, action, field, seed, output_path),
+template <HmcCapable Action>
+HMC<Action>::HMC(std::string run_name, Action& action, LatticeType& field, uint seed, const std::string& output_path)
+    : MonteCarloHandler<Action>(run_name, action, field, seed, output_path),
       _Mom(field.getSizes()),
       _Forces(field.getSizes()),
       _OldField(field.getSizes()) {
@@ -82,13 +79,11 @@ HMC<Action, dim>::HMC(std::string run_name, Action& action, Lattice<FieldType, d
                    std::format("Monte Carlo Handler - Initialization completed in {:.3f} ms\n", _T.elapsed_ms());
 }
 
-template <HmcCapable Action, size_t dim>
-void HMC<Action, dim>::updateField() {
+template <HmcCapable Action>
+void HMC<Action>::updateField() {
     int NSites = _Field.getNsites();
     // save the old field configuration;
     _OldField = _Field;
-    // Compute initial action
-    ActionType OldS = _Action.compute_S(_Field);
     // Generate random momenta and compute initial kinetic term
     RealD OldK(0.0);
     for (int Site = 0; Site < NSites; Site++) {
@@ -128,8 +123,8 @@ void HMC<Action, dim>::updateField() {
     }
     NewK *= 0.5;
     // Final Metropolis check
-    if (exp(OldK - NewK + make_real(OldS - NewS)) > _Unif(_Rng)) {
-        this->_McStats.update(1, NewS - OldS);
+    if (exp(OldK - NewK + make_real(_McStats.getS() - NewS)) > _Unif(_Rng)) {
+        this->_McStats.update(1, NewS - _McStats.getS());
     } else {
         this->_Field = _OldField;
         this->_McStats.update(0, 0.0);
@@ -137,6 +132,6 @@ void HMC<Action, dim>::updateField() {
 }
 
 /* Argument deduction guide */
-template <HmcCapable Action, size_t dim>
-HMC(std::string, Action&, Lattice<typename Action::FieldType, dim>, uint, std::string&) -> HMC<Action, dim>;
+template <HmcCapable Action>
+HMC(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&) -> HMC<Action>;
 }  // namespace reticolo::montecarlo

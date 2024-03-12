@@ -23,7 +23,6 @@
 #include <format>
 #include <iostream>
 #include <random>
-#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -46,13 +45,13 @@ namespace reticolo::montecarlo {
   MonteCarloHandler Class Declaration
 --------------------------------------------------------------------------------------------------*/
 
-template <class Action, size_t dim>
+template <class Action>
 class MonteCarloHandler {
   protected:
     /* Define types */
     using ActionType = typename Action::ActionType;
     using FieldType = typename Action::FieldType;
-    using LatticeType = Lattice<FieldType, dim>;
+    using LatticeType = Lattice<FieldType, Action::Dims>;
     using ObsType = typename Action::Observables;
     using ObsVectType = std::vector<typename Action::Observables>;
     using McDataType = montecarlo::data<typename Action::ActionType>;
@@ -100,24 +99,24 @@ class MonteCarloHandler {
     virtual void updateField() = 0;
 
     /* Performs nSteps thermalization steps and no measurements */
-    void thermalize(uint nSteps, bool hot_start = false, double scale = 1.0);
+    void thermalize(uint nSteps, bool initialize_field = false, bool hot_start = false, double scale = 1.0);
 
   public:
     /* Constructor */
-    MonteCarloHandler(std::string run_name, Action& action, Lattice<FieldType, dim>& field, uint seed,
+    MonteCarloHandler(std::string run_name, Action& action, LatticeType& field, uint seed,
                       const std::string& output_path);
 
     /* Performs nMC Monte Carlo steps and returns a montecarlo::data object with the averages */
-    void run(uint nMC, uint nTherm, uint MeasureStep = 1, bool hot_start = false, double hs_scale = 1.0,
-             bool save_config = false);
+    void run(uint nMC, uint nTherm, uint MeasureStep = 1, bool initialize_field = false, bool hot_start = false,
+             double hs_scale = 1.0, bool save_config = false);
 };
 
 /*--------------------------------------------------------------------------------------------------
     Public Methods Implmentations
 --------------------------------------------------------------------------------------------------*/
-template <class Action, size_t dim>
-MonteCarloHandler<Action, dim>::MonteCarloHandler(std::string run_name, Action& action, Lattice<FieldType, dim>& field,
-                                                  uint seed, const std::string& output_path)
+template <class Action>
+MonteCarloHandler<Action>::MonteCarloHandler(std::string run_name, Action& action, LatticeType& field, uint seed,
+                                             const std::string& output_path)
     : _RunName(std::move(run_name)), _Action(action), _Field(field) {
     // Begin initialization
     _T.reset();
@@ -198,22 +197,19 @@ MonteCarloHandler<Action, dim>::MonteCarloHandler(std::string run_name, Action& 
     _Obs.reserve(_MaxBufferSize);
 }
 
-template <class Action, size_t dim>
-inline void MonteCarloHandler<Action, dim>::run(uint nMC, uint nTherm, uint MeasureStep, bool hot_start,
-                                                double hs_scale, bool save_config) {
+template <class Action>
+inline void MonteCarloHandler<Action>::run(uint nMC, uint nTherm, uint MeasureStep, bool initialize_field,
+                                           bool hot_start, double hs_scale, bool save_config) {
     // Log Run parameters
     _Logger << IO::LI_time() + "Monte Carlo Handler - Starting Monte Carlo updates..\n";
 
     if (nTherm > 0) {
-        thermalize(nTherm, hot_start, hs_scale);
+        thermalize(nTherm, initialize_field, hot_start, hs_scale);
     }
 
     // do checks on nMC and MeasureStep -> sanitize nMC from unnecessary iterations
 
     _Logger << IO::LI_void() + "Monte Carlo Handler - Starting Measurements..\n";
-
-    // Reset the timer
-    _T.reset();
 
     // Initialize std::vector of Monte Carlo stats
     McDataVectType Stats;
@@ -234,6 +230,8 @@ inline void MonteCarloHandler<Action, dim>::run(uint nMC, uint nTherm, uint Meas
     double        Time = GlobalTimer.elapsed_s();
     uint          SaveIter = 0;
 
+    // Reset the timer
+    _T.reset();
     // simulation workflow for indefinite end
     if (nMC == 0) {
         // LogMessage << IO::LI_void() << "        OpenMP threads : " << omp_get_max_threads() << "\n"
@@ -327,8 +325,8 @@ inline void MonteCarloHandler<Action, dim>::run(uint nMC, uint nTherm, uint Meas
     Private Methods Implmentations
 --------------------------------------------------------------------------------------------------*/
 
-template <class Action, size_t dim>
-inline void MonteCarloHandler<Action, dim>::save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect) {
+template <class Action>
+inline void MonteCarloHandler<Action>::save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect) {
     try {
         // Define dimension of stuff to write
         std::array<hsize_t, 1> Hdf5BufferSize = {ObsVect.size()};
@@ -375,8 +373,8 @@ inline void MonteCarloHandler<Action, dim>::save_Measurements(McDataVectType& Mc
     }
 }
 
-template <class Action, size_t dim>
-inline void MonteCarloHandler<Action, dim>::save_Configuration(uint Iter) {
+template <class Action>
+inline void MonteCarloHandler<Action>::save_Configuration(uint Iter) {
     fs::path FileName = _WorkspacePath / "cnfg" / (std::to_string(Iter) + ".h5");
     try {
         _Field.save_Configuration(FileName);
@@ -385,53 +383,49 @@ inline void MonteCarloHandler<Action, dim>::save_Configuration(uint Iter) {
     }
 }
 
-template <class Action, size_t dim>
-inline void MonteCarloHandler<Action, dim>::randomizeField(double scale) {
+template <class Action>
+inline void MonteCarloHandler<Action>::randomizeField(double scale) {
     for (int Site = 0; Site < _Field.getNsites(); Site++) {
         randomize(_Field[Site], scale, _Norm, _Rng);
     }
     _Action.lattice_sync(_Field);
 }
 
-template <class Action, size_t dim>
-inline void MonteCarloHandler<Action, dim>::resetField() {
+template <class Action>
+inline void MonteCarloHandler<Action>::resetField() {
     for (int Site = 0; Site < _Field.getNsites(); Site++) {
         _Field[Site] = FieldType(0.0);
     }
     _Action.lattice_sync(_Field);
 }
 
-template <class Action, size_t dim>
-inline void MonteCarloHandler<Action, dim>::thermalize(uint nSteps, bool hot_start, double scale) {
-    std::stringstream LogMessage;
+template <class Action>
+inline void MonteCarloHandler<Action>::thermalize(uint nSteps, bool initialize_field, bool hot_start, double scale) {
     // Log that the folder and loggind stuff has bee initialized properly
-    LogMessage << IO::LI_time() << "Monte Carlo Handler - Thermalization started...\n"
-               << IO::LI_void() << "  thermalizatoin steps : " << nSteps << "\n";
-    if (hot_start) {
-        randomizeField(scale);
-        LogMessage << IO::LI_void() << "    initial conditions : hot start\n";
-    } else {
-        resetField();
-        LogMessage << IO::LI_void() << "    initial conditions : cold start\n";
+    _Logger << IO::LI_time() + "Monte Carlo Handler - Thermalization started...\n";
+    _Logger << IO::LI_void() + std::format("  thermalizatoin steps : {}\n", nSteps);
+    if (initialize_field) {
+        if (hot_start) {
+            randomizeField(scale);
+            _Logger << IO::LI_void() + std::format("    initial conditions : hot start [scale : {}]\n", scale);
+        } else {
+            resetField();
+            _Logger << IO::LI_void() + "    initial conditions : cold start\n";
+        }
     }
-    _Logger << LogMessage;
-
     // Reset the timer
     _T.reset();
 
     // Initialize the value of the action
     ActionType SInit = _Action.compute_S(_Field);
     _McStats.setS(SInit);
-
     // Perform the thermalization sweeps
     for (uint Iter = 0; Iter < nSteps; Iter++) {
         updateField();
     }
-
     // Log timing information
-    LogMessage << IO::LI_time() << "Monte Carlo Handler - Thermalization finished in "
-               << std::format("{:.2f}", _T.elapsed_ms()) << " ms\n";
-    _Logger << LogMessage;
+    _Logger << IO::LI_time() +
+                   std::format("Monte Carlo Handler - Thermalization finished in {:.2f} ms\n", _T.elapsed_ms());
 }
 
 }  // namespace reticolo::montecarlo

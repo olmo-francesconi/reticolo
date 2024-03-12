@@ -10,7 +10,6 @@
 
 #pragma once
 
-#include <cstddef>
 #include <string>
 
 #include "reticolo/lattice/lattice.hpp"
@@ -24,31 +23,31 @@ namespace reticolo::montecarlo {
 template <class T>
 concept MetropolisCapable = T::IsMetropolisCapable;
 
-template <MetropolisCapable Action, size_t dim>
-class Metropolis : public MonteCarloHandler<Action, dim> {
+template <MetropolisCapable Action>
+class Metropolis : public MonteCarloHandler<Action> {
   private:
     /* Types definitions */
     using ActionType = typename Action::ActionType;
     using FieldType = typename Action::FieldType;
+    using LatticeType = Lattice<typename Action::FieldType, Action::Dims>;
 
     /* Introduced names from MonteCarloHandler (avoids using ...) */
-    using MonteCarloHandler<Action, dim>::_Field;
-    using MonteCarloHandler<Action, dim>::_Action;
-    using MonteCarloHandler<Action, dim>::_McStats;
-    using MonteCarloHandler<Action, dim>::_Unif;
-    using MonteCarloHandler<Action, dim>::_UnifC;
-    using MonteCarloHandler<Action, dim>::_Norm;
-    using MonteCarloHandler<Action, dim>::_Rng;
-    using MonteCarloHandler<Action, dim>::_Logger;
-    using MonteCarloHandler<Action, dim>::_T;
+    using MonteCarloHandler<Action>::_Field;
+    using MonteCarloHandler<Action>::_Action;
+    using MonteCarloHandler<Action>::_McStats;
+    using MonteCarloHandler<Action>::_Unif;
+    using MonteCarloHandler<Action>::_UnifC;
+    using MonteCarloHandler<Action>::_Norm;
+    using MonteCarloHandler<Action>::_Rng;
+    using MonteCarloHandler<Action>::_Logger;
+    using MonteCarloHandler<Action>::_T;
 
     /* Metropolis settings */
     double _ProposalWidth = 1.0;
 
   public:
     /* Constructor */
-    Metropolis(std::string run_name, Action& action, Lattice<FieldType, dim>& field, uint seed,
-               const std::string& output_path);
+    Metropolis(std::string run_name, Action& action, LatticeType& field, uint seed, const std::string& output_path);
 
     /* override virtual updateField() method */
     void updateField() override;
@@ -57,17 +56,17 @@ class Metropolis : public MonteCarloHandler<Action, dim> {
     void setParams(double propWidth) { _ProposalWidth = propWidth; }
 };
 
-template <MetropolisCapable Action, size_t dim>
-Metropolis<Action, dim>::Metropolis(std::string run_name, Action& action, Lattice<FieldType, dim>& field, uint seed,
-                                    const std::string& output_path)
-    : MonteCarloHandler<Action, dim>(run_name, action, field, seed, output_path) {
+template <MetropolisCapable Action>
+Metropolis<Action>::Metropolis(std::string run_name, Action& action, LatticeType& field, uint seed,
+                               const std::string& output_path)
+    : MonteCarloHandler<Action>(run_name, action, field, seed, output_path) {
     // Log stuff
     _Logger << IO::LI_time() +
                    std::format("MetropolisWorker - Initialization completed in {:.3f} ms\n", _T.elapsed_ms());
 }
 
-template <MetropolisCapable Action, size_t dim>
-void Metropolis<Action, dim>::updateField() {
+template <MetropolisCapable Action>
+void Metropolis<Action>::updateField() {
     uint       Acc = 0;       // acceptance
     ActionType SVarTot(0.0);  // cumulative action variation
 
@@ -94,7 +93,7 @@ void Metropolis<Action, dim>::updateField() {
 }
 
 /* Argument deduction guide */
-template <MetropolisCapable Action, size_t dim>
-Metropolis(std::string, Action&, Lattice<typename Action::FieldType, dim>, uint, std::string&)
-    -> Metropolis<Action, dim>;
+template <MetropolisCapable Action>
+Metropolis(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&)
+    -> Metropolis<Action>;
 }  // namespace reticolo::montecarlo

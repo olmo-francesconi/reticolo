@@ -37,6 +37,7 @@ struct data<ActionType> {
 
     /* Update values */
     void setS(ActionType SReal) { _S = SReal; }
+    auto getS() -> ActionType { return _S; }
     void update(double acc, ActionType dS) {
         _Acceptance = acc;
         _S += double(dS);
@@ -123,6 +124,7 @@ struct data<ActionType> {
         _SRe = SCmplx.real();
         _SIm = SCmplx.imag();
     }
+    auto getS() -> ActionType { return ActionType(_SRe, _SIm); }
     void update(double acc, ActionType dSCmplx) {
         _Acceptance = acc;
         _SRe += dSCmplx.real();
