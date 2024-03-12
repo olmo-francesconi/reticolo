@@ -2,12 +2,12 @@
 cmake_minimum_required(VERSION 3.14...3.28)
 
 # Compiler
-# set(CMAKE_C_COMPILER "/opt/homebrew/opt/llvm/bin/clang")
-# set(CMAKE_CXX_COMPILER "/opt/homebrew/opt/llvm/bin/clang++")
+set(CMAKE_C_COMPILER "/opt/homebrew/opt/llvm/bin/clang")
+set(CMAKE_CXX_COMPILER "/opt/homebrew/opt/llvm/bin/clang++")
 
-set(CMAKE_C_COMPILER "gcc-13")
-set(CMAKE_CXX_COMPILER "g++-13")
-set(CMAKE_CXX_FLAGS "-Wall -Wl,-ld_classic")
+# set(CMAKE_C_COMPILER "gcc-13")
+# set(CMAKE_CXX_COMPILER "g++-13")
+# set(CMAKE_CXX_FLAGS "-Wall -Wl,-ld_classic")
 
 # Export compilation commands
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -63,9 +63,14 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 endif()
 
 # HDF5
-set(HDF5_ROOT /opt/hdf5)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  set(HDF5_ROOT /opt/hdf5-llvm)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set(HDF5_ROOT /opt/hdf5-gnu)
+endif()
 set(HDF5_NO_FIND_PACKAGE_CONFIG_FILE true)
 find_package(HDF5 REQUIRED CXX HL)
+
 
 #OpenMP
 FIND_PACKAGE(OpenMP)
