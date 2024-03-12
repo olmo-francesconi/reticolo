@@ -87,8 +87,8 @@ class LLRWorker {
     /* Default constructor (does nothing) */
     LLRWorker() = default;
 
-    void init(const fs::path& output_path, uint id, intvect<Action::Dims> sizes, uint seed, Action& action, double ak,
-              double Sk, double width, LOG_mode log_mode = LOG_mode::silent);
+    void init(const fs::path& output_path, uint id, intvect<Action::Dims> sizes, uint seed, Action::Params par,
+              double ak, double Sk, double width, LOG_mode log_mode = LOG_mode::silent);
 
     /* Randomize the field (hot start)*/
     void randomizeField(double scale = 1.0);
@@ -119,7 +119,7 @@ class LLRWorker {
 
 template <class Action>
 void LLRWorker<Action>::init(const fs::path& output_path, uint id, intvect<Action::Dims> sizes, uint rng_seed,
-                             Action& action, double ak, double Sk, double width, LOG_mode log_mode) {
+                             Action::Params par, double ak, double Sk, double width, LOG_mode log_mode) {
     // Initialize the timer
     _T.reset();
 
@@ -148,8 +148,8 @@ void LLRWorker<Action>::init(const fs::path& output_path, uint id, intvect<Actio
     _Field.init(sizes);
 
     // Initialize the action
-    _Action = action;
-    _Action.lattice_sync(_Field);
+    _Action = Action(_Field, par);
+    // _Action.lattice_sync(_Field);
 
     // Initialize LLR variables
     _Ak = ak;
@@ -166,7 +166,8 @@ void LLRWorker<Action>::init(const fs::path& output_path, uint id, intvect<Actio
 
     if (_LogStatus == LOG_mode::log_only || _LogStatus == LOG_mode::all) {
         _Logger.log_memory(_Name, "Allocated", memoryReport());
-        _Logger.log_string(_Name, std::format("Action: \"{}\" ({})", action.action_name(), action.action_parameters()));
+        _Logger.log_string(_Name,
+                           std::format("Action: \"{}\" ({})", _Action.action_name(), _Action.action_parameters()));
         _Logger.log_string(_Name, std::format("LLR: Sk: {:>6f} width: {:>6f}", _Sk, _Width));
         _Logger.log_timing(_Name, "Initialization done", Elapsed);
     }

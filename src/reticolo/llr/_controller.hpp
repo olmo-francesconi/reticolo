@@ -25,12 +25,13 @@
 #include <string>
 #include <vector>
 
-#include "reticolo/llr/worker.hpp"
+#include "reticolo/llr/_worker.hpp"
 #include "reticolo/montecarlo/MonteCarloData.hpp"
 #include "reticolo/tools/io_utils.hpp"
 #include "reticolo/tools/logger.hpp"
 #include "reticolo/tools/timer.hpp"
 #include "reticolo/types/core.hpp"
+#include "reticolo/types/core_math.hpp"
 
 namespace fs = std::filesystem;
 
@@ -42,9 +43,6 @@ namespace reticolo::LLR {
 template <class Action>
 class LLRController {
   private:
-    /* Physics */
-    Action _Action;
-
     /* LLR workers vector */
     std::vector<LLRWorker<Action>> _Workers;
 
@@ -67,11 +65,8 @@ class LLRController {
 
   public:
     /* Constructor (only sets up the Action) */
-    LLRController(Action& act) : _Action(act){};
-
-    /* Initializer function -> actually does all the set-up */
-    void init(const fs::path& out_path, intvect<Action::Dims> lattice_size, uint nWorkers, double scale,
-              LOG_mode MC_log_mode = LOG_mode::silent);
+    LLRController(Action::Params par, const fs::path& out_path, intvect<Action::Dims> lattice_size, uint nWorkers,
+                  double scale, LOG_mode MC_log_mode = LOG_mode::silent);
 
     /* Run the actual LLR simulation */
     void run(uint nNewton_Raphson, uint nRobbins_Monro, uint nMonte_Carlo, const std::string& run_id, uint replicas);
@@ -85,19 +80,17 @@ class LLRController {
 --------------------------------------------------------------------------------------------------*/
 
 template <class Action>
-void LLRController<Action>::init(const fs::path& out_path, intvect<Action::Dims> lattice_size, uint nWorkers,
-                                 double scale, LOG_mode MC_log_mode) {
+LLRController<Action>::LLRController(Action::Params par, const fs::path& out_path, intvect<Action::Dims> lattice_size,
+                                     uint nWorkers, double scale, LOG_mode MC_log_mode) {
+    // Initialize the timer
     Timer Time;
-
     // Initialize the folder structure
     try {
         _OutputPath = fs::absolute(out_path);
-
         fs::create_directories(_OutputPath);
         _OutputPath = fs::canonical(_OutputPath);
         fs::create_directories(_OutputPath / "llr" / "logs");
         fs::create_directories(_OutputPath / "llr" / "meas");
-
         // We use the Global logger to log and print to stdout from the controller
         // Each worker will then have its own log
         IO::GlobalLogger.init(_OutputPath, "reticolo.log");
@@ -105,16 +98,12 @@ void LLRController<Action>::init(const fs::path& out_path, intvect<Action::Dims>
         std::cerr << Exept.what() << '\n';
         exit(EXIT_FAILURE);
     }
-
-    std::stringstream LogMessage;
-
     // Log that the folder and loggind stuff has bee initialized properly
     // clang-format off
-    LogMessage << IO::LI_time() << "llr_controller - Initialization started..." << "\n"
-               << IO::LI_void() << "    main oputput folder: " << _OutputPath.string() << "\n"
-               << IO::LI_void() << "    measurements folder: " << (_OutputPath / "llr" / "meas").string() << "\n"
-               << IO::LI_void() << "            logs folder: " << (_OutputPath / "llr" / "logs").string() << '\n';
-    IO::GlobalLogger << LogMessage;
+    IO::GlobalLogger << IO::LI_time() + "llr_controller - Initialization started...\n"
+                      + IO::LI_void() + "    main oputput folder: " + _OutputPath.string() + '\n'
+                      + IO::LI_void() + "    measurements folder: " + (_OutputPath / "llr" / "meas").string() + '\n'
+                      + IO::LI_void() + "            logs folder: " + (_OutputPath / "llr" / "logs").string() + '\n';
     // clang-format on
 
     // Initialize the output file
@@ -127,21 +116,20 @@ void LLRController<Action>::init(const fs::path& out_path, intvect<Action::Dims>
 
     // Log stuff
     // clang-format off
-    LogMessage << IO::LI_void() << "         ak output file: " << (_OutputPath / "llr" / "meas" / "llr.h5").string() << "\n"
-               << IO::LI_void() << "llr_controller - Action-info\n"
-               << IO::LI_void() << "                  name : " << _Action.action_name() << "\n"
-               << IO::LI_void() << "            parameters : " << _Action.action_parameters() << "\n"
-               << IO::LI_void() << "               lattice : " << IO::print(lattice_size) << "\n"
-               << IO::LI_time() << "llr_controller - Workers initialization started...\n"
-               << IO::LI_void() << "              workers #: " << nWorkers << "\n"
-               << IO::LI_void() << "             deltaS / V: " << scale << "\n"
-               << IO::LI_void() << "                 deltaS: " << scale * (double)get_volume(lattice_size) << std::endl;
-    IO::GlobalLogger << LogMessage;
+    IO::GlobalLogger << IO::LI_void() + "         ak output file: " + (_OutputPath / "llr" / "meas" / "llr.h5").string() + '\n'
+            //    + IO::LI_void() + "llr_controller - Action-info\n"
+            //    + IO::LI_void() + "                  name : " + Action::action_name() + '\n'
+            //    + IO::LI_void() + "            parameters : " + Action::action_parameters() + '\n'
+            //    + IO::LI_void() + "               lattice : " + IO::print(lattice_size) + '\n'
+               + IO::LI_time() + "llr_controller - Workers initialization started...\n"
+               + IO::LI_void() + "              workers #: " + std::to_string(nWorkers) + '\n'
+               + IO::LI_void() + "             deltaS / V: " + std::to_string(scale) + '\n'
+               + IO::LI_void() + "                 deltaS: " + std::to_string(scale * (double)getVolume(lattice_size)) + '\n';
     // clang-format on
 
     // Initialize Sk values
-    _DeltaS = scale * (double)get_volume(lattice_size);
-    _SkVect.resize(nWorkers);
+    _DeltaS = scale * (double)getVolume(lattice_size);
+    // _SkVect.resize(nWorkers);
     for (uint WorkerId = 0; WorkerId < nWorkers; WorkerId++) {
         _SkVect[WorkerId] = _DeltaS * ((double)WorkerId + 0.5);
     }
@@ -154,15 +142,15 @@ void LLRController<Action>::init(const fs::path& out_path, intvect<Action::Dims>
     _Workers.resize(nWorkers);
 #pragma omp parallel for schedule(static, 1)
     for (uint WorkerId = 0; WorkerId < nWorkers; WorkerId++) {
-        _Workers[WorkerId].init(out_path / "llr", WorkerId, lattice_size, _Rd(), _Action, _AkVect[WorkerId],
-                                _SkVect[WorkerId], _DeltaS, MC_log_mode);
+        _Workers[WorkerId].init(out_path / "llr", WorkerId, lattice_size, _Rd(), _AkVect[WorkerId], _SkVect[WorkerId],
+                                _DeltaS, MC_log_mode);
     }
 
     // Log stuff
-    LogMessage << IO::LI_time() << "llr_controller - Initialization completed in "
-               << std::format("{:.3f}", Time.elapsed_s()) << " s\n"
-               << IO::LI_void() << "     memory allocated : " << IO::pretty_bytes(memoryReport()) << std::endl;
-    IO::GlobalLogger << LogMessage;
+    // clang-format off
+    IO::GlobalLogger << IO::LI_time() + "llr_controller - Initialization completed in " + std::format("{:.3f}", Time.elapsed_s()) + " s\n" +
+                        IO::LI_void() + "     memory allocated : " + IO::pretty_bytes(memoryReport()) + '\n';
+    // clang-format on
 }
 
 template <class Action>
@@ -314,5 +302,10 @@ auto LLRController<Action>::memoryReport() -> size_t {
     }
     return Memory;
 }
+
+// /* Argument deduction guide */
+// template <class Action>
+// LLRController(Action::Params, const fs::path&, intvect<Action::Dims>, uint, double, LOG_mode) ->
+// LLRController<Action>;
 
 }  // namespace reticolo::LLR
