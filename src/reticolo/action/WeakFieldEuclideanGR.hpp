@@ -58,24 +58,17 @@ class WeakFieldEuclideanGR : action::ActionBase<HField<RealD>, RealD, 4> {
 
     /* Observables */
     struct Observables {
-        double             R;
-        [[nodiscard]] auto dump_str() -> std::string { return std::format("{:+8e}", R); }
-        [[nodiscard]] auto dump_data() const -> std::vector<double> { return std::vector<double>({R}); }
+        double R;
     };
-    static auto make_obs_hdf5_CompType() -> H5::CompType {
-        H5::CompType Type(sizeof(Observables));
-        Type.insertMember("R", HOFFSET(Observables, R), H5::PredType::NATIVE_DOUBLE);
-        return Type;
+    friend auto make_H5_Type<Observables>() {
+        hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(Observables));
+        H5Tinsert(DataTypeHid, "R", HOFFSET(Observables, R), H5T_NATIVE_DOUBLE);
+        return DataTypeHid;
     }
 
     /* Constructors */
-    WeakFieldEuclideanGR() = default;                              // Default
-    WeakFieldEuclideanGR(WeakFieldEuclideanGR& other) = default;   // Copy
-    WeakFieldEuclideanGR(WeakFieldEuclideanGR&& other) = default;  // Move
-
-    /* Initializer Construtors */
-    WeakFieldEuclideanGR(double beta) : p(beta){};  // Parameter list
-    WeakFieldEuclideanGR(Params par) : p(par){};    // Parameter struct
+    WeakFieldEuclideanGR(Lattice<FieldType, 4>& field, double beta) : p(beta) { lattice_sync(field); };
+    WeakFieldEuclideanGR(Lattice<FieldType, 4>& field, Params par) : p(par) { lattice_sync(field); };
 
     /* Destructor*/
     ~WeakFieldEuclideanGR() = default;
@@ -599,7 +592,7 @@ inline void WeakFieldEuclideanGR::compute_Force_loc(const Lattice<FieldType, 4>&
 #include "reticolo/montecarlo/Metropolis.hpp"
 
 template <>
-void reticolo::montecarlo::Metropolis<reticolo::action::WeakFieldEuclideanGR, 4>::updateField() {
+void reticolo::montecarlo::Metropolis<reticolo::action::WeakFieldEuclideanGR>::updateField() {
     uint       Acc = 0;       // acceptance
     ActionType SVarTot(0.0);  // cumulative action variation
 
@@ -642,7 +635,7 @@ void reticolo::montecarlo::Metropolis<reticolo::action::WeakFieldEuclideanGR, 4>
 #include "reticolo/montecarlo/HMC.hpp"
 
 template <>
-void reticolo::montecarlo::HMC<reticolo::action::WeakFieldEuclideanGR, 4>::updateField() {
+void reticolo::montecarlo::HMC<reticolo::action::WeakFieldEuclideanGR>::updateField() {
     int        NSites = _Field.getNsites();
     int        Acc = 0;
     ActionType SvarTot(0.0);
@@ -682,12 +675,12 @@ void reticolo::montecarlo::HMC<reticolo::action::WeakFieldEuclideanGR, 4>::updat
                 LGRPost.push_back(Tmp);
                 ActionChange += Tmp - _Action._LGR[CheckSite];
             } else {
-                Acc++;
                 break;
             }
         }
         // Metropolis acceptance + positive action
         if (LGRPost.size() == 5 && exp(-(ActionChange + NewK - OldK)) > _Unif(_Rng)) {
+            Acc++;
             SvarTot += ActionChange;
             for (uint CheckSite = 0; CheckSite < 5; CheckSite++) {
                 _Action._LGR[_Action._Checks[Site][CheckSite]] = LGRPost[CheckSite];

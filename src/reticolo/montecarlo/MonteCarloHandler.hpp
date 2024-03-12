@@ -62,11 +62,9 @@ class MonteCarloHandler {
     fs::path          _WorkspacePath;  // Workspace folder path
 
     /* hdf5 stuff */
-    fs::path           _Hdf5OutputFile;                                  // output file complete path
-    const size_t       _MaxBufferSize = 10000;                           // Maximun size for the measure buffer
-    const double       _MaxBufferWriteDelay = 60;                        // Maximum delay between data writes
-    const H5::CompType _McCompType = McDataType::make_hdf5_CompType();   // CompType for Monte Carlo stats
-    const H5::CompType _ObsCompType = Action::make_obs_hdf5_CompType();  // CompType for Action observables
+    fs::path     _Hdf5OutputFile;            // output file complete path
+    const size_t _MaxBufferSize = 10000;     // Maximun size for the measure buffer
+    const double _MaxBufferWriteDelay = 60;  // Maximum delay between data writes
 
     /* Physics stuff */
     Action&        _Action;   // reference to the Action
@@ -86,7 +84,6 @@ class MonteCarloHandler {
     IO::Logger _Logger;  // LLRWorker Private Logger
 
     /* File output utilities */
-    void save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect);  // save measurements
     void save_Configuration(uint Iter);  // Save curretn configuration stored in _Lattice
 
     /* Randomize the field (hot start)*/
@@ -150,28 +147,9 @@ MonteCarloHandler<Action>::MonteCarloHandler(std::string run_name, Action& actio
     _Logger << IO::LI_void() + "  configurations folder: " + (_WorkspacePath / "cnfg").string() + '\n';
 
     // Initialize the output file
-    try {
-        // Create empty but unlimited dataspace
-        std::array<hsize_t, 1> Hdf5Entries = {0};
-        std::array<hsize_t, 1> Hdf5MaxDims = {H5S_UNLIMITED};
-        H5::DataSpace          Hdf5DataSpace(1, Hdf5Entries.data(), Hdf5MaxDims.data());
-        // Create file (truncation access)
-        H5::H5File Hdf5File(_Hdf5OutputFile, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-        // Create Group
-        H5::Group Hdf5Group = Hdf5File.createGroup(_RunName);
-        // Create creation properties for dataset
-        H5::DSetCreatPropList  Hdf5CParms;
-        std::array<hsize_t, 1> Hdf5ChunkDims = {_MaxBufferSize};
-        Hdf5CParms.setChunk(1, Hdf5ChunkDims.data());
-        // Create DataSet
-        H5::DataSet Hdf5ObsDataSet =
-            Hdf5File.createDataSet(_RunName + "/Observables", _ObsCompType, Hdf5DataSpace, Hdf5CParms);
-        // Create DataSet
-        H5::DataSet Hdf5McDataSet =
-            Hdf5File.createDataSet(_RunName + "/MonteCarlo", _McCompType, Hdf5DataSpace, Hdf5CParms);
-    } catch (H5::Exception& _) {
-        exit(EXIT_FAILURE);
-    }
+    IO::GlobalHdf5Handler.initFile(_Hdf5OutputFile);
+    IO::GlobalHdf5Handler.setupExpandableDataset<ObsType>(_Hdf5OutputFile, "Observables", _MaxBufferSize);
+    IO::GlobalHdf5Handler.setupExpandableDataset<McDataType>(_Hdf5OutputFile, "MonteCarlo", _MaxBufferSize);
 
     // Log stuff
     _Logger << IO::LI_void() + "            output file: " + _Hdf5OutputFile.string() + "\n";
@@ -261,7 +239,9 @@ inline void MonteCarloHandler<Action>::run(uint nMC, uint nTherm, uint MeasureSt
                 double NewTime = GlobalTimer.elapsed_s();
                 if (Obs.size() == _MaxBufferSize || NewTime - Time > _MaxBufferWriteDelay) {
                     // save data
-                    save_Measurements(Stats, Obs);
+                    IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, "Observables", Obs);
+                    IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, "MonteCarlo", Stats);
+
                     // clear the vectors
                     Stats.clear();
                     Obs.clear();
@@ -297,7 +277,8 @@ inline void MonteCarloHandler<Action>::run(uint nMC, uint nTherm, uint MeasureSt
                 double NewTime = GlobalTimer.elapsed_s();
                 if (Obs.size() == _MaxBufferSize || NewTime - Time > _MaxBufferWriteDelay) {
                     // save data
-                    save_Measurements(Stats, Obs);
+                    IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, "Observables", Obs);
+                    IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, "MonteCarlo", Stats);
                     // clear the vectors
                     Stats.clear();
                     Obs.clear();
@@ -313,7 +294,8 @@ inline void MonteCarloHandler<Action>::run(uint nMC, uint nTherm, uint MeasureSt
 
     // save the last measurements in the buffer and flush
     if (Stats.size() != 0 && Obs.size() != 0) {
-        save_Measurements(Stats, Obs);
+        IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, "Observables", Obs);
+        IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, "MonteCarlo", Stats);
         Stats.clear();
         Obs.clear();
         _Logger << IO::LI_void() + "Final data saved\n";
@@ -324,54 +306,6 @@ inline void MonteCarloHandler<Action>::run(uint nMC, uint nTherm, uint MeasureSt
 /*--------------------------------------------------------------------------------------------------
     Private Methods Implmentations
 --------------------------------------------------------------------------------------------------*/
-
-template <class Action>
-inline void MonteCarloHandler<Action>::save_Measurements(McDataVectType& McVect, ObsVectType& ObsVect) {
-    try {
-        // Define dimension of stuff to write
-        std::array<hsize_t, 1> Hdf5BufferSize = {ObsVect.size()};
-        H5::DataSpace          Hdf5BufferMemorySpace(1, Hdf5BufferSize.data());
-
-        // Open file
-        H5::H5File Hdf5File(_Hdf5OutputFile, H5F_ACC_RDWR, H5P_DEFAULT, H5P_DEFAULT);
-
-        // Observables //
-        // Open DataSet
-        H5::DataSet Hdf5ObsDataSet = Hdf5File.openDataSet(_RunName + "/Observables");
-        // Get current size of the dataset
-        H5::DataSpace          Hdf5ObsDataSpace = Hdf5ObsDataSet.getSpace();
-        std::array<hsize_t, 1> Hdf5ObsDimsOld;
-        Hdf5ObsDataSpace.getSimpleExtentDims(Hdf5ObsDimsOld.data());
-        // Extend dataspace dimension
-        std::array<hsize_t, 1> Hdf5ObsDimsNew = {Hdf5ObsDimsOld[0] + Hdf5BufferSize[0]};
-        Hdf5ObsDataSet.extend(Hdf5ObsDimsNew.data());
-        // Update dataspace
-        Hdf5ObsDataSpace = Hdf5ObsDataSet.getSpace();
-        // Select Hyperslab
-        Hdf5ObsDataSpace.selectHyperslab(H5S_SELECT_SET, Hdf5BufferSize.data(), Hdf5ObsDimsOld.data());
-        // Write to dataset
-        Hdf5ObsDataSet.write(ObsVect.data(), _ObsCompType, Hdf5BufferMemorySpace, Hdf5ObsDataSpace);
-
-        // MonteCarlo stuff //
-        // Open DataSet
-        H5::DataSet Hdf5McDataSet = Hdf5File.openDataSet(_RunName + "/MonteCarlo");
-        // Get current size of the dataset
-        H5::DataSpace          Hdf5McDataSpace = Hdf5McDataSet.getSpace();
-        std::array<hsize_t, 1> Hdf5McDimsOld;
-        Hdf5McDataSpace.getSimpleExtentDims(Hdf5McDimsOld.data());
-        // Extend dataspace dimension
-        std::array<hsize_t, 1> Hdf5McDimsNew = {Hdf5McDimsOld[0] + Hdf5BufferSize[0]};
-        Hdf5McDataSet.extend(Hdf5McDimsNew.data());
-        // Update dataspace
-        Hdf5McDataSpace = Hdf5McDataSet.getSpace();
-        // Select Hyperslab
-        Hdf5McDataSpace.selectHyperslab(H5S_SELECT_SET, Hdf5BufferSize.data(), Hdf5McDimsOld.data());
-        // Write to dataset
-        Hdf5McDataSet.write(McVect.data(), _McCompType, Hdf5BufferMemorySpace, Hdf5McDataSpace);
-    } catch (H5::Exception& _) {
-        exit(EXIT_FAILURE);
-    }
-}
 
 template <class Action>
 inline void MonteCarloHandler<Action>::save_Configuration(uint Iter) {

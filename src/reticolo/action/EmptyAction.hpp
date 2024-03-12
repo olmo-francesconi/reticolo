@@ -51,14 +51,12 @@ class EmptyAction : ActionBase<TField, TAction, dim> {
 
     /* Observables */
     struct Observables {
-        double             obs;
-        [[nodiscard]] auto dump_str() -> std::string { return std::format("{:+8e}", obs); }
-        [[nodiscard]] auto dump_data() const -> std::vector<double> { return std::vector<double>({obs}); }
+        double obs;
     };
-    static auto make_obs_hdf5_CompType() -> H5::CompType {
-        H5::CompType Type(sizeof(Observables));
-        Type.insertMember("obs", HOFFSET(Observables, obs), H5::PredType::NATIVE_DOUBLE);
-        return Type;
+    friend auto make_H5_Type<Observables>() {
+        hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(Observables));
+        H5Tinsert(DataTypeHid, "obsName", HOFFSET(Observables, obs), H5T_NATIVE_DOUBLE);
+        return DataTypeHid;
     }
 
     /* Construtors */

@@ -16,6 +16,7 @@
 
 #include "H5Cpp.h"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
+#include "reticolo/types/core.hpp"
 
 namespace reticolo::montecarlo {
 /* Generic template declaration - requires the action type to be either real or complex */
@@ -52,19 +53,6 @@ struct data<ActionType> {
         _S = 0;
         _DS = 0;
     }
-
-    /* Get/Set and Data/Str dump */
-    [[nodiscard]] auto dump_str() -> std::string { return std::format("{:+8e},{:+8e},{:+8e}", _Acceptance, _S, _DS); }
-    [[nodiscard]] auto dump_data() const -> std::vector<double> { return std::vector<double>({_Acceptance, _S, _DS}); }
-
-    /* Hdf5 CompType */
-    static auto make_hdf5_CompType() -> H5::CompType {
-        H5::CompType Type(sizeof(data<ActionType>));
-        Type.insertMember("acceptance", HOFFSET(data<ActionType>, _Acceptance), H5::PredType::NATIVE_DOUBLE);
-        Type.insertMember("S", HOFFSET(data<ActionType>, _S), H5::PredType::NATIVE_DOUBLE);
-        Type.insertMember("dS", HOFFSET(data<ActionType>, _DS), H5::PredType::NATIVE_DOUBLE);
-        return Type;
-    };
 
     /* Operators overloading */
     auto operator=(const data<ActionType>& rhs) -> data<ActionType>& {
@@ -145,25 +133,6 @@ struct data<ActionType> {
         _DSIm = 0.0;
     }
 
-    /* Get/Set and Data/Str dump */
-    [[nodiscard]] auto dump_str() -> std::string {
-        return std::format("{:+8e},{:+8e},{:+8e},{:+8e},{:+8e}", _Acceptance, _SRe, _SIm, _DSRe, _DSIm);
-    }
-    [[nodiscard]] auto dump_data() const -> std::vector<double> {
-        return std::vector<double>({_Acceptance, _SRe, _SIm, _DSRe, _DSIm});
-    }
-
-    /* Hdf5 CompType */
-    static auto make_hdf5_CompType() -> H5::CompType {
-        H5::CompType Type(sizeof(data<ActionType>));
-        Type.insertMember("acceptance", HOFFSET(data<ActionType>, _Acceptance), H5::PredType::NATIVE_DOUBLE);
-        Type.insertMember("S_re", HOFFSET(data<ActionType>, _SRe), H5::PredType::NATIVE_DOUBLE);
-        Type.insertMember("S_im", HOFFSET(data<ActionType>, _SIm), H5::PredType::NATIVE_DOUBLE);
-        Type.insertMember("dS_re", HOFFSET(data<ActionType>, _DSRe), H5::PredType::NATIVE_DOUBLE);
-        Type.insertMember("dS_im", HOFFSET(data<ActionType>, _DSIm), H5::PredType::NATIVE_DOUBLE);
-        return Type;
-    };
-
     /* Operators overloading */
     auto operator=(const data<ActionType>& rhs) -> data<ActionType>& {
         _Acceptance = rhs._Acceptance;
@@ -208,3 +177,46 @@ struct data<ActionType> {
 };
 
 }  // namespace reticolo::montecarlo
+
+namespace reticolo {
+
+template <>
+auto make_H5_Type<montecarlo::data<RealF>>() {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(montecarlo::data<RealD>));
+    H5Tinsert(DataTypeHid, "acceptance", HOFFSET(montecarlo::data<RealD>, _Acceptance), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "S", HOFFSET(montecarlo::data<RealD>, _S), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "dS", HOFFSET(montecarlo::data<RealD>, _DS), H5T_NATIVE_DOUBLE);
+    return DataTypeHid;
+};
+
+template <>
+auto make_H5_Type<montecarlo::data<RealD>>() {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(montecarlo::data<RealD>));
+    H5Tinsert(DataTypeHid, "acceptance", HOFFSET(montecarlo::data<RealD>, _Acceptance), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "S", HOFFSET(montecarlo::data<RealD>, _S), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "dS", HOFFSET(montecarlo::data<RealD>, _DS), H5T_NATIVE_DOUBLE);
+    return DataTypeHid;
+};
+
+template <>
+auto make_H5_Type<montecarlo::data<ComplexF>>() {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(montecarlo::data<ComplexD>));
+    H5Tinsert(DataTypeHid, "acceptance", HOFFSET(montecarlo::data<ComplexD>, _Acceptance), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "S_re", HOFFSET(montecarlo::data<ComplexD>, _SRe), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "S_im", HOFFSET(montecarlo::data<ComplexD>, _SIm), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "dS_re", HOFFSET(montecarlo::data<ComplexD>, _DSRe), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "dS_im", HOFFSET(montecarlo::data<ComplexD>, _DSIm), H5T_NATIVE_DOUBLE);
+    return DataTypeHid;
+};
+
+template <>
+auto make_H5_Type<montecarlo::data<ComplexD>>() {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(montecarlo::data<ComplexD>));
+    H5Tinsert(DataTypeHid, "acceptance", HOFFSET(montecarlo::data<ComplexD>, _Acceptance), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "S_re", HOFFSET(montecarlo::data<ComplexD>, _SRe), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "S_im", HOFFSET(montecarlo::data<ComplexD>, _SIm), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "dS_re", HOFFSET(montecarlo::data<ComplexD>, _DSRe), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "dS_im", HOFFSET(montecarlo::data<ComplexD>, _DSIm), H5T_NATIVE_DOUBLE);
+    return DataTypeHid;
+};
+}  // namespace reticolo

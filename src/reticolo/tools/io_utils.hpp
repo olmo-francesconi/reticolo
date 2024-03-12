@@ -10,12 +10,18 @@
 
 #pragma once
 
+#include <hdf5.h>
+#include <omp.h>
+
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <filesystem>
 #include <format>
+#include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "reticolo/tools/timer.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
@@ -120,5 +126,112 @@ inline auto print(const intvect<dim>& Vect) -> std::string {
     Res << "]";
     return Res.str();
 }
+
+/*--------------------------------------------------------------------------------------------------
+    Hdf5Handler class
+--------------------------------------------------------------------------------------------------*/
+
+namespace fs = std::filesystem;
+
+class HdF5Handler {
+  private:
+    omp_lock_t _IoLock;
+
+  public:
+    HdF5Handler() { omp_init_lock(&_IoLock); };
+    ~HdF5Handler() { omp_destroy_lock(&_IoLock); }
+
+    /* File creation */
+    void initFile(const fs::path& FileName);
+    auto checkFile(const fs::path& FileName) -> bool;
+
+    /* Write to simple dataset */
+    template <typename T>
+    void writeDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data);
+
+    /* Write to extendable dataset */
+    template <typename T>
+    void setupExpandableDataset(const fs::path& FileName, const std::string& DataSetName, hsize_t ChunkSize);
+    template <typename T>
+    void appendDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data);
+
+    // template <typename T>
+    // void appendDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data);
+};
+
+void HdF5Handler::initFile(const fs::path& FileName) {
+    omp_set_lock(&_IoLock);
+    hid_t FileId = H5Fcreate(FileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+    H5Fclose(FileId);
+    omp_unset_lock(&_IoLock);
+}
+
+auto HdF5Handler::checkFile(const fs::path& FileName) -> bool {
+    omp_set_lock(&_IoLock);
+    hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    if (FileId == H5I_INVALID_HID) {
+        omp_unset_lock(&_IoLock);
+        return false;
+    }
+    H5Fclose(FileId);
+    omp_unset_lock(&_IoLock);
+    return true;
+}
+
+template <typename T>
+void HdF5Handler::writeDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data) {
+    omp_set_lock(&_IoLock);
+    std::array<hsize_t, 1> Entries = {data.size()};
+
+    hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+    hid_t DataSpaceId = H5Screate_simple(1, Entries.data(), H5P_DEFAULT);
+    hid_t DataTypeId = make_H5_Type<T>();
+    hid_t DataSetId =
+        H5Dcreate(FileId, DataSetName.c_str(), DataTypeId, DataSpaceId, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Dwrite(DataSetId, DataTypeId, H5S_ALL, H5S_ALL, H5P_DEFAULT, data.data());
+    H5close();
+    omp_unset_lock(&_IoLock);
+}
+
+template <typename T>
+void HdF5Handler::setupExpandableDataset(const fs::path& FileName, const std::string& DataSetName, hsize_t ChunkSize) {
+    omp_set_lock(&_IoLock);
+    hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+
+    hid_t DataSpaceId =
+        H5Screate_simple(1, (std::array<hsize_t, 1>){0}.data(), (std::array<hsize_t, 1>){H5S_UNLIMITED}.data());
+    hid_t DsCreationPropId = H5Pcreate(H5P_DATASET_CREATE);
+    H5Pset_chunk(DsCreationPropId, 1, (std::array<hsize_t, 1>){ChunkSize}.data());
+    hid_t DataTypeId = make_H5_Type<T>();
+    hid_t DataSetId =
+        H5Dcreate(FileId, DataSetName.c_str(), DataTypeId, DataSpaceId, H5P_DEFAULT, DsCreationPropId, H5P_DEFAULT);
+    H5close();
+    omp_unset_lock(&_IoLock);
+}
+
+template <typename T>
+void HdF5Handler::appendDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data) {
+    omp_set_lock(&_IoLock);
+    std::array<hsize_t, 1> OldSize;
+    std::array<hsize_t, 1> NewSize;
+    std::array<hsize_t, 1> ExtendSize = {data.size()};
+    std::array<hsize_t, 1> MaxSize;
+
+    hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+    hid_t DataSetId = H5Dopen(FileId, DataSetName.c_str(), H5P_DEFAULT);
+    hid_t DataTypeId = make_H5_Type<T>();
+    hid_t DataSpaceID = H5Dget_space(DataSetId);
+    H5Sget_simple_extent_dims(DataSpaceID, OldSize.data(), MaxSize.data());
+    NewSize[0] = OldSize[0] + ExtendSize[0];
+    H5Dset_extent(DataSetId, NewSize.data());
+    DataSpaceID = H5Dget_space(DataSetId);
+    H5Sselect_hyperslab(DataSpaceID, H5S_SELECT_SET, OldSize.data(), NULL, ExtendSize.data(), NULL);
+    hid_t BufferDataSpaceID = H5Screate_simple(1, ExtendSize.data(), ExtendSize.data());
+    H5Dwrite(DataSetId, DataTypeId, BufferDataSpaceID, DataSpaceID, H5P_DEFAULT, data.data());
+    H5close();
+    omp_unset_lock(&_IoLock);
+}
+
+inline HdF5Handler GlobalHdf5Handler;
 
 }  // namespace reticolo::IO

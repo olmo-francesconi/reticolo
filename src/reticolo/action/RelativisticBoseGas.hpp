@@ -54,16 +54,14 @@ class RelativisticBoseGas : ActionBase<ComplexD, ComplexD, 4> {
 
     /* Observables */
     struct Observables {
-        double             phi2;
-        double             density;
-        [[nodiscard]] auto dump_str() -> std::string { return std::format("{:+8e},{:+8e}", phi2, density); }
-        [[nodiscard]] auto dump_data() const -> std::vector<double> { return std::vector<double>({phi2, density}); }
+        double phi2;
+        double density;
     };
-    static auto make_obs_hdf5_CompType() -> H5::CompType {
-        H5::CompType Type(sizeof(Observables));
-        Type.insertMember("phi2", HOFFSET(Observables, phi2), H5::PredType::NATIVE_DOUBLE);
-        Type.insertMember("density", HOFFSET(Observables, density), H5::PredType::NATIVE_DOUBLE);
-        return Type;
+    friend auto make_H5_Type<Observables>() {
+        hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(Observables));
+        H5Tinsert(DataTypeHid, "phi2", HOFFSET(Observables, phi2), H5T_NATIVE_DOUBLE);
+        H5Tinsert(DataTypeHid, "density", HOFFSET(Observables, density), H5T_NATIVE_DOUBLE);
+        return DataTypeHid;
     }
 
     /* Constructors */
