@@ -10,12 +10,8 @@
 
 #pragma once
 
-#include <H5Cpp.h>
 #include <omp.h>
-#include <unistd.h>
 
-#include <array>
-#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <exception>
@@ -134,7 +130,7 @@ MonteCarloHandler<Action>::MonteCarloHandler(std::string run_name, Action& actio
 
     // Initialize the logger
     try {
-        _Logger.init(_WorkspacePath / "logs", _RunName + ".log", _RunName + "LOGGER", true);
+        _Logger.init(_WorkspacePath / "logs", _RunName + ".log", _RunName + "LOGGER", false);
     } catch (const std::exception& e) {
         std::cerr << e.what() << '\n';
         exit(EXIT_FAILURE);
@@ -204,9 +200,10 @@ inline void MonteCarloHandler<Action>::run(uint nMC, uint nTherm, uint MeasureSt
     _McStats.setS(SInit);
 
     // Keep track of the iteration number
-    unsigned long Iteration = 1;
-    double        Time = GlobalTimer.elapsed_s();
-    uint          SaveIter = 0;
+    unsigned long Iteration = 0;
+    unsigned long LastSaveIter = 0;
+
+    double Time = GlobalTimer.elapsed_s();
 
     // Reset the timer
     _T.reset();
@@ -245,10 +242,10 @@ inline void MonteCarloHandler<Action>::run(uint nMC, uint nTherm, uint MeasureSt
                     // clear the vectors
                     Stats.clear();
                     Obs.clear();
-                    double IterPerSec = static_cast<double>(Iteration - SaveIter) / (NewTime - Time);
+                    double IterPerSec = static_cast<double>(Iteration + 1 - LastSaveIter) / (NewTime - Time);
                     _Logger << IO::LI_time() +
                                    std::format("Data saved : conf {} [{:.2f} conf/s]\n", Iteration, IterPerSec);
-                    SaveIter = Iteration;
+                    LastSaveIter = Iteration;
                     Time = NewTime;
                 }
             }
@@ -282,10 +279,10 @@ inline void MonteCarloHandler<Action>::run(uint nMC, uint nTherm, uint MeasureSt
                     // clear the vectors
                     Stats.clear();
                     Obs.clear();
-                    double IterPerSec = static_cast<double>(Iteration - SaveIter) / (NewTime - Time);
+                    double IterPerSec = ((double)(Iteration - LastSaveIter)) / (NewTime - Time);
                     _Logger << IO::LI_time() +
                                    std::format("conf {:>12} : data saved [{:.2f} conf/s]\n", Iteration, IterPerSec);
-                    SaveIter = Iteration;
+                    LastSaveIter = Iteration;
                     Time = NewTime;
                 }
             }

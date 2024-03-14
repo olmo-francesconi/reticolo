@@ -87,9 +87,7 @@ void Metropolis<Action>::updateField() {
             SVarTot += SVar;
         }
     }
-
-    // Update montecarlo stats
-    _McStats.update(static_cast<double>(Acc) / _Field.getNsites(), SVarTot);
+    _McStats.update(((double)Acc) / _Field.getNsites(), SVarTot);
 }
 
 /* Argument deduction guide */
