@@ -10,9 +10,7 @@
 
 #pragma once
 
-#include <format>
-#include <string>
-#include <vector>
+#include <H5Tpublic.h>
 
 #include "H5Cpp.h"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
@@ -33,8 +31,8 @@ struct data<ActionType> {
 
     /* Constructors*/
     data() = default;  // Default
-    data(double acc, ActionType action, ActionType action_change)
-        : _Acceptance(acc), _S(double(action)), _DS(double(action_change)){};  // Parameter
+    data(double acceptance, ActionType action, ActionType action_change)
+        : _Acceptance(acceptance), _S(double(action)), _DS(double(action_change)){};  // Parameter
 
     /* Update values */
     void setS(ActionType SReal) { _S = SReal; }
@@ -43,15 +41,6 @@ struct data<ActionType> {
         _Acceptance = acc;
         _S += double(dS);
         _DS = double(dS);
-    }
-    void softReset() {
-        _Acceptance = 0;
-        _DS = 0;
-    }
-    void hardReset() {
-        _Acceptance = 0;
-        _S = 0;
-        _DS = 0;
     }
 
     /* Operators overloading */
@@ -100,8 +89,8 @@ struct data<ActionType> {
 
     /* Constructors*/
     data() = default;  // Default
-    data(double acc, ActionType action, ActionType action_change)
-        : _Acceptance(acc),
+    data(double acceptance, ActionType action, ActionType action_change)
+        : _Acceptance(acceptance),
           _SRe(double(action.real())),
           _SIm(double(action.imag())),
           _DSRe(double(action_change.real())),
