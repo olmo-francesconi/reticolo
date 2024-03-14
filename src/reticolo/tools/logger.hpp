@@ -105,13 +105,13 @@ inline void Logger::init(const std::filesystem::path& OutPath, const std::string
     if (_SdtOut) {
         std::cout << pretty_welcome() << '\n';
     }
-    _File << pretty_welcome() << '\n';
+    _File << pretty_welcome() << '\n' << std::flush;
 }
 
 inline void Logger::log_string(const std::string& who, const std::string& what) {
     if (_State == 1) {
         _Msg = LI_time() + who + " - " + what + '\n';
-        _File << _Msg;
+        _File << _Msg << std::flush;
         if (_SdtOut) {
             std::cout << _Msg;
         }
@@ -123,7 +123,7 @@ inline void Logger::log_string(const std::string& who, const std::string& what) 
 inline void Logger::log_timing(const std::string& who, const std::string& what, double time) {
     if (_State == 1) {
         _Msg = LI_time() + who + " - " + what + "\t[" + std::format("{:.2f}", time) + " ms]\n";
-        _File << _Msg;
+        _File << _Msg << std::flush;
         if (_SdtOut) {
             std::cout << _Msg;
         }
@@ -135,7 +135,7 @@ inline void Logger::log_timing(const std::string& who, const std::string& what, 
 inline void Logger::log_memory(const std::string& who, const std::string& what, size_t memory) {
     if (_State == 1) {
         _Msg = LI_time() + who + " - " + what + " " + pretty_bytes(memory) + '\n';
-        _File << _Msg;
+        _File << _Msg << std::flush;
         if (_SdtOut) {
             std::cout << _Msg;
         }
@@ -147,7 +147,7 @@ inline void Logger::log_memory(const std::string& who, const std::string& what, 
 inline void Logger::log_threadig(const std::string& who, size_t nThreads) {
     if (_State == 1) {
         _Msg = LI_time() + who + " - Running on " + std::to_string(nThreads) + " threads" + '\n';
-        _File << _Msg;
+        _File << _Msg << std::flush;
         if (_SdtOut) {
             std::cout << _Msg;
         }
@@ -159,7 +159,7 @@ inline void Logger::log_threadig(const std::string& who, size_t nThreads) {
 inline void Logger::log(std::stringstream& message) {
     if (_State == 1) {
         _Msg = message.str();
-        _File << _Msg;
+        _File << _Msg << std::flush;
         if (_SdtOut) {
             std::cout << _Msg;
         }
@@ -172,7 +172,7 @@ inline void Logger::log(std::stringstream& message) {
 inline void Logger::operator<<(std::stringstream& message) {
     if (_State == 1) {
         _Msg = message.str();
-        _File << _Msg;
+        _File << _Msg << std::flush;
         if (_SdtOut) {
             std::cout << _Msg;
         }
@@ -184,7 +184,7 @@ inline void Logger::operator<<(std::stringstream& message) {
 
 inline void Logger::operator<<(const std::string& message) {
     if (_State == 1) {
-        _File << message;
+        _File << message << std::flush;
         if (_SdtOut) {
             std::cout << message;
         }
