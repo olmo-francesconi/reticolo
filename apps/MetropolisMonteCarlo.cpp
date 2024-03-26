@@ -17,23 +17,25 @@
 #include <string>
 
 #include "reticolo/action/RelativisticBoseGas.hpp"
-#include "reticolo/montecarlo/metropolis.hpp"
+#include "reticolo/lattice/lattice.hpp"
+#include "reticolo/montecarlo/HMC.hpp"
 #include "reticolo/types/core.hpp"
 
 using namespace reticolo;
 
 auto main(int argc, char* argv[]) -> int {
-    /* Define the lattice volume */
-    intvect<4> Volume = {4, 4, 4, 4};
-
     /*  Set the output folder to be ./MetropolisMonteCarlo */
     std::string OutPath = "MetropolisMonteCarlo_out";
 
+    /* Initialize the lattice */
+    Lattice<ComplexD, 4> Lattice({8, 8, 8, 8});
+
     /* Initialize the action */
-    action::RelativisticBoseGas<ComplexD, ComplexD> Action(1.0, 9.0, 1.0);
+    action::RelativisticBoseGas::Params Par(1.0, 9.0, 0.0);
+    action::RelativisticBoseGas         Action(Lattice, Par);
 
     // simulation workflow for indefinite end
-    montecarlo::MetropolisWorker Worker("MetropolisMonteCarlo", Action, Volume, 0, OutPath);
+    montecarlo::HMC Worker("HMC", Action, Lattice, 0, OutPath);
 
     Worker.run(100000, 1000, 10);
 
