@@ -10,27 +10,29 @@
 
 #pragma once
 
-#include <H5Cpp.h>
-
 #include <algorithm>
-#include <array>
-#include <cstddef>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <iterator>
+#include <memory>
+#include <numeric>
+#include <ostream>
 #include <random>
-#include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "reticolo/lattice/lattice.hpp"
 #include "reticolo/llr/worker.hpp"
 #include "reticolo/montecarlo/MonteCarloData.hpp"
 #include "reticolo/tools/io_utils.hpp"
 #include "reticolo/tools/logger.hpp"
 #include "reticolo/tools/timer.hpp"
 #include "reticolo/types/core.hpp"
+#include "reticolo/types/core_math.hpp"
 
 namespace fs = std::filesystem;
 
@@ -42,42 +44,57 @@ namespace reticolo::LLR {
 template <class Action>
 class LLRController {
   private:
-    /* Physics */
-    Action _Action;
+    /* Private types definitions */
+    using ActionType = typename Action::ActionType;
+    using FieldType = typename Action::FieldType;
+    using LatticeType = Lattice<typename Action::FieldType, Action::Dims>;
+    using McDataType = montecarlo::data<typename Action::ActionType>;
+    using ObsType = typename Action::Observables;
+
+    /* Main Workspace folder */
+    fs::path _WorkspacePath;
+    fs::path _Hdf5OutputFile;
 
     /* LLR workers vector */
-    std::vector<LLRWorker<Action>> _Workers;
+    std::vector<std::unique_ptr<LlrHmcWorker<Action>>> _Workers;
 
-    /* Output */
-    fs::path _OutputPath;
+    /* Vector of Lattices */
+    std::vector<std::unique_ptr<LatticeType>> _Fields;
+
+    /* Vector of actions */
+    std::vector<std::unique_ptr<Action>> _Actions;
 
     /* Main random device*/
     std::random_device _Rd;
 
-    /* LLR parameters and data */
-    std::vector<double>              _AkVect;
-    std::vector<std::vector<double>> _AkHist;
-    std::vector<double>              _SkVect;
-    double                           _DeltaS;
+    /* RNG for replica excange */
+    std::mt19937_64                        _Rng;    // Random Number Generator
+    std::uniform_real_distribution<double> _Unif;   // Uniform distribution [0.0, 1.0]
+    std::uniform_real_distribution<double> _UnifC;  // Uniform distribution [-1.0, 1.0]
+    std::normal_distribution<double>       _Norm;   // Normal distibution (mean: 0.0, stddev: 1.0 )
 
-    /* Private methods */
-    void NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carlo, std::string RunId);
-    void RobbinsMonro(uint nRobbins_Monro, uint nMonte_Carlo, std::string RunId);
+    /* LLR parameters and data */
+    double                               _DeltaS;
+    std::vector<double>                  _AkVect;
+    std::vector<std::vector<double>>     _AkHist;
+    std::vector<double>                  _SkVect;
+    std::vector<std::vector<McDataType>> _McHist;
+    std::vector<std::vector<ObsType>>    _ObsHist;
+
+    /* Timing and logging */
+    Timer      _T;       // Private Timer
+    IO::Logger _Logger;  // Private Logger
+
     void ReplicaExcange();
 
   public:
     /* Constructor (only sets up the Action) */
-    LLRController(Action& act) : _Action(act){};
-
-    /* Initializer function -> actually does all the set-up */
-    void init(const fs::path& out_path, intvect<Action::Dims> lattice_size, uint nWorkers, double scale,
-              LOG_mode MC_log_mode = LOG_mode::silent);
+    LLRController(Action::Params par, const fs::path& out_path, intvect<Action::Dims> lattice_size, uint nIntervals,
+                  double scale);
 
     /* Run the actual LLR simulation */
-    void run(uint nNewton_Raphson, uint nRobbins_Monro, uint nMonte_Carlo, const std::string& run_id, uint replicas);
-
-    /* Various logging utilities */
-    auto memoryReport() -> size_t;
+    void run(const std::string& run_id, uint nNewton_Raphson, uint nRobbins_Monro, uint nMonte_Carlo, bool save_data,
+             bool save_config);
 };
 
 /*--------------------------------------------------------------------------------------------------
@@ -85,234 +102,253 @@ class LLRController {
 --------------------------------------------------------------------------------------------------*/
 
 template <class Action>
-void LLRController<Action>::init(const fs::path& out_path, intvect<Action::Dims> lattice_size, uint nWorkers,
-                                 double scale, LOG_mode MC_log_mode) {
-    Timer Time;
+LLRController<Action>::LLRController(Action::Params par, const fs::path& out_path, intvect<Action::Dims> lattice_size,
+                                     uint nIntervals, double scale) {
+    // Begin initialization
+    _T.reset();
 
     // Initialize the folder structure
     try {
-        _OutputPath = fs::absolute(out_path);
-
-        fs::create_directories(_OutputPath);
-        _OutputPath = fs::canonical(_OutputPath);
-        fs::create_directories(_OutputPath / "llr" / "logs");
-        fs::create_directories(_OutputPath / "llr" / "meas");
-
-        // We use the Global logger to log and print to stdout from the controller
-        // Each worker will then have its own log
-        IO::GlobalLogger.init(_OutputPath, "reticolo.log");
+        _WorkspacePath = fs::absolute(out_path);
+        fs::create_directories(_WorkspacePath);
+        _WorkspacePath = fs::canonical(_WorkspacePath);
+        fs::create_directories(_WorkspacePath / "raw_data");
     } catch (const std::exception& Exept) {
         std::cerr << Exept.what() << '\n';
         exit(EXIT_FAILURE);
     }
 
-    std::stringstream LogMessage;
+    // Initialize the Logger
+    try {
+        _Logger.init(_WorkspacePath, "controller.log", "LLR_controller_LOGGER", true);
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << '\n';
+        exit(EXIT_FAILURE);
+    }
 
-    // Log that the folder and loggind stuff has bee initialized properly
-    // clang-format off
-    LogMessage << IO::LI_time() << "llr_controller - Initialization started..." << "\n"
-               << IO::LI_void() << "    main oputput folder: " << _OutputPath.string() << "\n"
-               << IO::LI_void() << "    measurements folder: " << (_OutputPath / "llr" / "meas").string() << "\n"
-               << IO::LI_void() << "            logs folder: " << (_OutputPath / "llr" / "logs").string() << '\n';
-    IO::GlobalLogger << LogMessage;
-    // clang-format on
+    // Log folder structure
+    _Logger << IO::LI_time() + "llr_controller - Initialization started...\n";
+    _Logger << IO::LI_void() + "    main oputput folder: " + _WorkspacePath.string() + '\n';
+    _Logger << IO::LI_void() + "    measurements folder: " + (_WorkspacePath / "raw_data").string() + '\n';
 
     // Initialize the output file
+    _Hdf5OutputFile = _WorkspacePath / "llr.h5";
     try {
-        H5::H5File File(_OutputPath / "llr" / "meas" / "llr.h5", H5F_ACC_TRUNC);
-        // write attributes
+        IO::GlobalHdf5Handler.initFile(_Hdf5OutputFile);
     } catch (H5::Exception& _) {
         exit(EXIT_FAILURE);
     }
 
-    // Log stuff
-    // clang-format off
-    LogMessage << IO::LI_void() << "         ak output file: " << (_OutputPath / "llr" / "meas" / "llr.h5").string() << "\n"
-               << IO::LI_void() << "llr_controller - Action-info\n"
-               << IO::LI_void() << "                  name : " << _Action.action_name() << "\n"
-               << IO::LI_void() << "            parameters : " << _Action.action_parameters() << "\n"
-               << IO::LI_void() << "               lattice : " << IO::print(lattice_size) << "\n"
-               << IO::LI_time() << "llr_controller - Workers initialization started...\n"
-               << IO::LI_void() << "              workers #: " << nWorkers << "\n"
-               << IO::LI_void() << "             deltaS / V: " << scale << "\n"
-               << IO::LI_void() << "                 deltaS: " << scale * (double)get_volume(lattice_size) << std::endl;
-    IO::GlobalLogger << LogMessage;
-    // clang-format on
+    // Log llr info
+    _Logger << IO::LI_void() + "         ak output file: " + _Hdf5OutputFile.string() + '\n';
+    _Logger << IO::LI_void() + "             Intervals : " + std::to_string(nIntervals) + '\n';
+    _Logger << IO::LI_void() + "             deltaS / V: " + std::to_string(scale) + '\n';
 
     // Initialize Sk values
-    _DeltaS = scale * (double)get_volume(lattice_size);
-    _SkVect.resize(nWorkers);
-    for (uint WorkerId = 0; WorkerId < nWorkers; WorkerId++) {
-        _SkVect[WorkerId] = _DeltaS * ((double)WorkerId + 0.5);
+    _DeltaS = scale * (double)getVolume(lattice_size);
+    _Logger << IO::LI_void() + "                 deltaS: " + std::to_string(_DeltaS) + '\n';
+    _SkVect.reserve(nIntervals);
+    for (uint Interval = 0; Interval < nIntervals; Interval++) {
+        _SkVect.push_back(_DeltaS * ((double)Interval + 0.5));
     }
+
+    // Initialize field, actions and Workers
+    _Actions.resize(_SkVect.size());
+    _Fields.resize(_SkVect.size());
+    // #pragma omp parallel for schedule(static, 1)
+    for (uint Interval = 0; Interval < nIntervals; Interval++) {
+        // Initialize field
+        _Fields[Interval] = std::make_unique<LatticeType>(lattice_size);
+        // Initialize action
+        _Actions[Interval] = std::make_unique<Action>(*_Fields[Interval], par);
+    }
+    std::cout << "ok\n";
+    // Initialize the internal RNG
+    _Rng.seed(_Rd());
+
+    // Log initialization finish
+    _Logger << IO::LI_time() + std::format("llr_controller - Initialization completed in {:.3f} s\n", _T.elapsed_s());
+}
+
+template <class Action>
+void LLRController<Action>::run(const std::string& run_id, uint nNewton_Raphson, uint nRobbins_Monro, uint nMonte_Carlo,
+                                bool save_data, bool save_config) {
+    // Initalize timer
+    _T.reset();
+    _Logger << IO::LI_time() + "llr_controller - Starting run [" + run_id + "]\n";
 
     // Initialize ak values
-    _AkVect.resize(nWorkers);
+    _AkVect.resize(_SkVect.size());
     std::fill(_AkVect.begin(), _AkVect.end(), 0.0);
+    // Clears the ak history vector
+    _AkHist.clear();
+    _AkHist.push_back(_AkVect);
 
-    // Initialize workers
-    _Workers.resize(nWorkers);
-#pragma omp parallel for schedule(static, 1)
-    for (uint WorkerId = 0; WorkerId < nWorkers; WorkerId++) {
-        _Workers[WorkerId].init(out_path / "llr", WorkerId, lattice_size, _Rd(), _Action, _AkVect[WorkerId],
-                                _SkVect[WorkerId], _DeltaS, MC_log_mode);
+    // Initialize field, actions and Workers
+    _Workers.resize(_SkVect.size());
+    for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
+        // Initialize worker
+        _Workers[WorkerId] = std::make_unique<LlrHmcWorker<Action>>(  //
+            std::format("llr_worker[{:0>3}]", WorkerId),              // workerId
+            *_Actions[WorkerId],                                      // Action reference
+            *_Fields[WorkerId],                                       // Field reference
+            _Rd(),                                                    // random seed
+            _WorkspacePath / "raw_data" / run_id,                     // Output path
+            false,                                                    // StdOut
+            save_data,                                                // Save raw Monte Carlo and Observables
+            save_config);                                             // Save configurations
+        // Set parameters
+        _Workers[WorkerId]->setHMCParams(30, 0.01);
+        _Workers[WorkerId]->setLLRParams(_AkVect[WorkerId], _SkVect[WorkerId], _DeltaS);
     }
 
-    // Log stuff
-    LogMessage << IO::LI_time() << "llr_controller - Initialization completed in "
-               << std::format("{:.3f}", Time.elapsed_s()) << " s\n"
-               << IO::LI_void() << "     memory allocated : " << IO::pretty_bytes(memoryReport()) << std::endl;
-    IO::GlobalLogger << LogMessage;
-}
-
-template <class Action>
-void LLRController<Action>::run(uint nNewton_Raphson, uint nRobbins_Monro, uint nMonte_Carlo, const std::string& run_id,
-                                uint replicas) {
-    // Initalize timer
-    Timer Time;
-
-    std::stringstream LogMessage;
-
-    // Main loop over replicas
-    for (uint Rep = 0; Rep < replicas; Rep++) {
-        std::string RunName = run_id + std::format("_{}", Rep);
-
-        IO::GlobalLogger.log_string("llr_controller", "Starting run : " + RunName);
-
-        // Initialize ak values and history vector
-        // resets them if they were set already
-        std::fill(_AkVect.begin(), _AkVect.end(), 0.0);
-        _AkHist.clear();
-        _AkHist.push_back(_AkVect);
-        for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
-            _Workers[WorkerId].set_ak(_AkVect[WorkerId]);
-        }
-
-        // initial thermalization
-        Time.reset();
-#pragma omp parallel for schedule(static, 1)
+#pragma omp parallel
+    {
+        // initial burn in
+#pragma omp for schedule(static, 1)
         for (auto& Worker : _Workers) {
-            Worker.randomizeField(0.1);
-            Worker.MonteCarlo_thermalize(1000, RunName, "burn-in");
+            Worker->run("burn-in", 1000, 0, 0, false);
         }
 
-        LogMessage << IO::LI_void() << "llr_controller - Thermalization completed    ("
-                   << std::format("{:.3f}", Time.elapsed_s()) << " s)\n";
-        IO::GlobalLogger << LogMessage;
+#pragma omp single
+        {
+            _Logger << IO::LI_time() +
+                           std::format("[{}] Burn-in completed           [{:.3f} s]\n", run_id, _T.elapsed_s());
+            _T.reset();
+        }
 
-        // Newton - Raphson Iterations
-        Time.reset();
-        NewtonRaphson(nNewton_Raphson, nMonte_Carlo, RunName);
-
-        LogMessage << IO::LI_void() << "llr_controller - Newton-Raphson done         ("
-                   << std::format("{:.3f}", Time.elapsed_s()) << " s)\n";
-        IO::GlobalLogger << LogMessage;
-
-        // Robbins - Monro Iterations
-        Time.reset();
-        RobbinsMonro(nRobbins_Monro, nMonte_Carlo, RunName);
-
-        LogMessage << IO::LI_void() << "llr_controller - Robbins-Monro done in       ("
-                   << std::format("{:.3f}", Time.elapsed_s()) << " s)\n";
-        IO::GlobalLogger << LogMessage;
-
-        // File output
-        Time.reset();
-        try {
-            // Create the file and group
-            H5::H5File File(_OutputPath / "llr" / "meas" / "llr.h5", H5F_ACC_TRUNC);
-            H5::Group  Group = File.createGroup("/" + RunName);
-
-            // Create dataspace
-            std::array<hsize_t, 1> Entries = {_AkHist.size()};
-            H5::DataSpace          DataSpace(1, Entries.data());
-
-            // Create datatype
-            H5::FloatType DataType = H5::PredType::NATIVE_DOUBLE;
-
-            for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
-                std::vector<double> Data;
-                Data.reserve(_AkHist.size());
-                for (const auto& Val : _AkHist) {
-                    Data.push_back(Val[WorkerId]);
-                }
-                // Create dataset and write the observables dataset
-                H5::DataSet Dataset =
-                    File.createDataSet("/" + RunName + "/ak" + std::format("_{:0>3d}", WorkerId), DataType, DataSpace);
-                Dataset.write(Data.data(), DataType);
+        // Newton-Raphson iterations
+        for (uint Step = 0; Step < nNewton_Raphson; Step++) {
+#pragma omp single
+            {
+                _Logger << IO::LI_time() + std::format("[{}] Started NR iteration {}\n", run_id, Step);
+                _McHist.push_back(std::vector<McDataType>(_Workers.size()));
+                _ObsHist.push_back(std::vector<ObsType>(_Workers.size()));
             }
-        } catch (H5::Exception& _) {
-            exit(EXIT_FAILURE);
+            std::string RunName = std::format("NR_{}", Step);
+#pragma omp for schedule(static, 1)
+            for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
+                _Workers[WorkerId]->run(RunName, nMonte_Carlo, 100, 1, false);
+                _McHist.back()[WorkerId] = _Workers[WorkerId]->get_McAVG();
+                _ObsHist.back()[WorkerId] = _Workers[WorkerId]->get_ObsAVG();
+                // update the ak value
+                double DSIm = _McHist.back()[WorkerId]._SIm - _SkVect[WorkerId];
+                _AkVect[WorkerId] += DSIm / (_DeltaS * _DeltaS);
+                _Workers[WorkerId]->set_ak(_AkVect[WorkerId]);
+            }
+#pragma omp single
+            {
+                _AkHist.push_back(_AkVect);
+                ReplicaExcange();
+            }
         }
 
-        LogMessage << IO::LI_void() << "llr_controller - Data saved                  ("
-                   << std::format("{:.3f}", Time.elapsed_s()) << " s)\n";
-        IO::GlobalLogger << LogMessage;
-    }
-}
-
-/*--------------------------------------------------------------------------------------------------
-    Private methods implementation
---------------------------------------------------------------------------------------------------*/
-template <class Action>
-void LLRController<Action>::NewtonRaphson(uint nNewton_Raphson, uint nMonte_Carlo, std::string RunId) {
-    // Newton-Raphson Iterations
-    for (uint Step = 0; Step < nNewton_Raphson; Step++) {
-#pragma omp parallel for schedule(static, 1)
-        for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
-            montecarlo::data<typename Action::ActionType> Res;
-
-            // MonteCarlo_thermalize to the newly updated value of ak
-            _Workers[WorkerId].MonteCarlo_thermalize(100, RunId, std::format("thNR_{}", Step));
-
-            // run the montecarlo steps
-            Res = _Workers[WorkerId].MonteCarlo_run(nMonte_Carlo, RunId, std::format("NR_{}", Step));
-
-            // update the ak value
-            _AkVect[WorkerId] += -(_SkVect[WorkerId] - Res._SIm) / (_DeltaS * _DeltaS);
-            _Workers[WorkerId].set_ak(_AkVect[WorkerId]);
+#pragma omp single
+        {
+            _Logger << IO::LI_time() +
+                           std::format("[{}] Newton-Raphson done         [{:.3f} s]\n", run_id, _T.elapsed_s());
+            _T.reset();
         }
 
-        _AkHist.push_back(_AkVect);
-        // replica excange
-    }
-}
-
-template <class Action>
-void LLRController<Action>::RobbinsMonro(uint nRobbins_Monro, uint nMonte_Carlo, std::string RunId) {
-    // Robbins-Monro Iterations
-    for (uint Step = 0; Step < nRobbins_Monro; Step++) {
-#pragma omp parallel for schedule(static, 1)
-        for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
-            montecarlo::data<typename Action::ActionType> Res;
-
-            // MonteCarlo_thermalize to the newly updated value of ak
-            _Workers[WorkerId].MonteCarlo_thermalize(100, RunId, std::format("thRM_{}", Step));
-
-            // run the montecarlo steps
-            Res = _Workers[WorkerId].MonteCarlo_run(nMonte_Carlo, RunId, std::format("RM_{}", Step));
-
-            // update the ak value
-            _AkVect[WorkerId] +=
-                -(_SkVect[WorkerId] - Res._SIm) / (static_cast<double>(Step + 1) * (_DeltaS * _DeltaS));
-            _Workers[WorkerId].set_ak(_AkVect[WorkerId]);
+        // Robbins-Monro Iterations
+        for (uint Step = 0; Step < nRobbins_Monro; Step++) {
+#pragma omp single
+            {
+                _Logger << IO::LI_time() + std::format("[{}] started RM iteration {}\n", run_id, Step);
+                _McHist.push_back(std::vector<McDataType>(_Workers.size()));
+                _ObsHist.push_back(std::vector<ObsType>(_Workers.size()));
+            }
+            std::string RunName = std::format("RM_{}", Step);
+#pragma omp for schedule(static, 1)
+            for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
+                _Workers[WorkerId]->run(RunName, nMonte_Carlo, 100, 1, false);
+                _McHist.back()[WorkerId] = _Workers[WorkerId]->get_McAVG();
+                _ObsHist.back()[WorkerId] = _Workers[WorkerId]->get_ObsAVG();
+                // update the ak value
+                double DSIm = _McHist.back()[WorkerId]._SIm - _SkVect[WorkerId];
+                _AkVect[WorkerId] += DSIm / ((double)(Step + 1) * (_DeltaS * _DeltaS));
+                _Workers[WorkerId]->set_ak(_AkVect[WorkerId]);
+            }
+#pragma omp single
+            {
+                _AkHist.push_back(_AkVect);
+                ReplicaExcange();
+            }
         }
-
-        _AkHist.push_back(_AkVect);
-        // replica excange
     }
-}
+    _Logger << IO::LI_time() + std::format("[{}] Robbins-Monro done in       [{:.3f} s]\n", run_id, _T.elapsed_s());
+
+    _T.reset();
+    std::vector<double>     AkBuffer;
+    std::vector<McDataType> McBuffer;
+    std::vector<ObsType>    ObsBuffer;
+    AkBuffer.reserve(_AkHist.size());
+    IO::GlobalHdf5Handler.createGroup(_Hdf5OutputFile, run_id);
+    for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
+        AkBuffer.clear();
+        for (const auto& Elem : _AkHist) {
+            AkBuffer.push_back(Elem[WorkerId]);
+        }
+        McBuffer.clear();
+        for (const auto& Elem : _McHist) {
+            McBuffer.push_back(Elem[WorkerId]);
+        }
+        ObsBuffer.clear();
+        for (const auto& Elem : _ObsHist) {
+            ObsBuffer.push_back(Elem[WorkerId]);
+        }
+        IO::GlobalHdf5Handler.writeDataset(_Hdf5OutputFile, std::format("{}/ak_{}", run_id, WorkerId), AkBuffer);
+        IO::GlobalHdf5Handler.writeDataset(_Hdf5OutputFile, std::format("{}/mc_{}", run_id, WorkerId), McBuffer);
+        IO::GlobalHdf5Handler.writeDataset(_Hdf5OutputFile, std::format("{}/obs_{}", run_id, WorkerId), ObsBuffer);
+    }
+    _Logger << IO::LI_void() + std::format("[{}] Data saved                  [{:.3f} s]\n", run_id, _T.elapsed_s());
+}  // namespace reticolo::LLR
 
 template <class Action>
-void LLRController<Action>::ReplicaExcange() {}
+void LLRController<Action>::ReplicaExcange() {
+    // _Logger << IO::LI_void() + "llr_controller - replica excange :\n";
+    RealD SImA;
+    RealD SImB;
+    RealD SkA;
+    RealD SkB;
+    RealD AkA;
+    RealD AkB;
 
-template <class Action>
-auto LLRController<Action>::memoryReport() -> size_t {
-    size_t Memory = 0;
-    for (auto& Worker : _Workers) {
-        Memory += Worker.memoryReport();
+    std::vector<int> SwapIds(_Workers.size() - 1);
+    std::iota(std::begin(SwapIds), std::end(SwapIds), 0);
+    std::ranges::shuffle(SwapIds, _Rng);
+
+    for (const auto& SwapId : SwapIds) {
+        SImA = _Workers[SwapId]->get_McCUR()._SIm;
+        AkA = _AkVect[SwapId];
+        SkA = _SkVect[SwapId];
+        SImB = _Workers[SwapId + 1]->get_McCUR()._SIm;
+        AkB = _AkVect[SwapId + 1];
+        SkB = _SkVect[SwapId + 1];
+
+        RealD SwapWeight =                                                                   //
+            (SImA - SkA) * (SImA - SkA) / (2.0 * _DeltaS * _DeltaS) + AkA * (SImA - SkA)     // weight of A in A
+            - (SImA - SkB) * (SImA - SkB) / (2.0 * _DeltaS * _DeltaS) - AkB * (SImA - SkB)   // weight of A in B
+            + (SImB - SkB) * (SImB - SkB) / (2.0 * _DeltaS * _DeltaS) + AkB * (SImB - SkB)   // weight of B in B
+            - (SImB - SkA) * (SImB - SkA) / (2.0 * _DeltaS * _DeltaS) - AkA * (SImB - SkA);  // weight of B in A
+
+        if (exp(SwapWeight) > _Unif(_Rng)) {
+            std::swap(_Workers[SwapId], _Workers[SwapId + 1]);
+            _Workers[SwapId]->setLLRParams(_AkVect[SwapId], _SkVect[SwapId], _DeltaS);
+            _Workers[SwapId + 1]->setLLRParams(_AkVect[SwapId + 1], _SkVect[SwapId + 1], _DeltaS);
+            // _Logger
+            //     << IO::LI_void() +
+            //            std::format(
+            //                "                       swapped: {:>3} <-> {:<3} : {:6.2f}, {:6.2f}, {:6.2f}, {:6.2f}\n",
+            //                // SwapId, SwapId + 1, SImA, SImB, _DeltaS, exp(SwapWeight));
+        } else {
+            // _Logger
+            //     << IO::LI_void() +
+            //            std::format(
+            //                "                   not swapped: {:>3} <-> {:<3} : {:6.2f}, {:6.2f}, {:6.2f}, {:6.2f}\n",
+            //                // SwapId, SwapId + 1, SImA, SImB, _DeltaS, exp(SwapWeight));
+        }
     }
-    return Memory;
 }
 
 }  // namespace reticolo::LLR
