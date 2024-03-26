@@ -144,6 +144,9 @@ class HdF5Handler {
     void initFile(const fs::path& FileName);
     auto checkFile(const fs::path& FileName) -> bool;
 
+    /* Create group */
+    void createGroup(const fs::path& FileName, const std::string& GrouName);
+
     /* Write to simple dataset */
     template <typename T>
     void writeDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data);
@@ -160,7 +163,7 @@ class HdF5Handler {
 
 void HdF5Handler::initFile(const fs::path& FileName) {
     omp_set_lock(&_IoLock);
-    hid_t FileId = H5Fcreate(FileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t FileId = H5Fcreate(FileName.c_str(), H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT);
     H5Fclose(FileId);
     omp_unset_lock(&_IoLock);
 }
@@ -175,6 +178,15 @@ auto HdF5Handler::checkFile(const fs::path& FileName) -> bool {
     H5Fclose(FileId);
     omp_unset_lock(&_IoLock);
     return true;
+}
+
+void HdF5Handler::createGroup(const fs::path& FileName, const std::string& GrouName) {
+    omp_set_lock(&_IoLock);
+    hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+    hid_t GroupId = H5Gcreate(FileId, GrouName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Gclose(GroupId);
+    H5Fclose(FileId);
+    omp_unset_lock(&_IoLock);
 }
 
 template <typename T>
