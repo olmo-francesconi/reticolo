@@ -5,6 +5,9 @@ cmake_minimum_required(VERSION 3.14...3.28)
 set(CMAKE_C_COMPILER "/opt/homebrew/opt/llvm/bin/clang")
 set(CMAKE_CXX_COMPILER "/opt/homebrew/opt/llvm/bin/clang++")
 
+# Set install folder
+set(CMAKE_INSTALL_PREFIX "/opt/reticolo")
+
 # set(CMAKE_C_COMPILER "gcc-13")
 # set(CMAKE_CXX_COMPILER "g++-13")
 # set(CMAKE_CXX_FLAGS "-Wall -Wl,-ld_classic")

@@ -1,4 +1,4 @@
-add_executable(LLRBoseGas _LLRBoseGas.cpp)
+add_executable(LLRBoseGas LLRBoseGas.cpp)
 target_link_libraries(LLRBoseGas PRIVATE reticolo)
 
 add_executable(MetropolisMonteCarlo MetropolisMonteCarlo.cpp)
@@ -6,6 +6,9 @@ target_link_libraries(MetropolisMonteCarlo PRIVATE reticolo)
 
 add_executable(WeakFieldEuclideanGR_MCMC WeakFieldEuclideanGR_MCMC.cpp)
 target_link_libraries(WeakFieldEuclideanGR_MCMC PRIVATE reticolo)
+
+add_executable(WeakFieldEuclideanGR_HMC WeakFieldEuclideanGR_HMC.cpp)
+target_link_libraries(WeakFieldEuclideanGR_HMC PRIVATE reticolo)
 
 add_executable(hdf5_tests hdf5_tests.cpp)
 target_link_libraries(hdf5_tests PRIVATE reticolo)
