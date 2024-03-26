@@ -37,7 +37,7 @@ namespace reticolo::action {
   WeakFieldEuclideanGR Class Declaration
 --------------------------------------------------------------------------------------------------*/
 
-class WeakFieldEuclideanGR : action::ActionBase<HField<RealD>, RealD, 4> {
+class WeakFieldEuclideanGR : public action::ActionBase<HField<RealD>, RealD, 4> {
   public:
     /* Types and public action metadata */
     using FieldType = HField<RealD>;  // Type of the field variables
@@ -88,8 +88,10 @@ class WeakFieldEuclideanGR : action::ActionBase<HField<RealD>, RealD, 4> {
     static auto Measure(const Lattice<FieldType, 4>& field) -> Observables { return {0}; };
 
     /* Log stuff*/
-    auto action_name() -> std::string override { return "Weak Field Euclidean General Relativity"; };
-    auto action_parameters() -> std::string override {
+    auto name() -> std::string override { return "Weak Field Euclidean General Relativity"; };
+    auto name_short() -> std::string override { return "LQGR"; };
+
+    auto parameters() -> std::string override {
         std::string ParamStr = std::format("[ beta : {:4.1f} ]", p.beta);
         return ParamStr;
     }

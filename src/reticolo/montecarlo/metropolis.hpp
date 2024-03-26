@@ -47,7 +47,8 @@ class Metropolis : public MonteCarloHandler<Action> {
 
   public:
     /* Constructor */
-    Metropolis(std::string run_name, Action& action, LatticeType& field, uint seed, const std::string& output_path);
+    Metropolis(std::string run_name, Action& action, LatticeType& field, uint seed, const std::string& output_path,
+               bool StdOut);
 
     /* override virtual updateField() method */
     void updateField() override;
@@ -58,8 +59,8 @@ class Metropolis : public MonteCarloHandler<Action> {
 
 template <MetropolisCapable Action>
 Metropolis<Action>::Metropolis(std::string run_name, Action& action, LatticeType& field, uint seed,
-                               const std::string& output_path)
-    : MonteCarloHandler<Action>(run_name, action, field, seed, output_path) {
+                               const std::string& output_path, bool StdOut)
+    : MonteCarloHandler<Action>(run_name, action, field, seed, output_path, StdOut) {
     // Log stuff
     _Logger << IO::LI_time() +
                    std::format("MetropolisWorker - Initialization completed in {:.3f} ms\n", _T.elapsed_ms());

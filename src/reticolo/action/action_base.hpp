@@ -34,8 +34,9 @@ class ActionBase {
     virtual void compute_Forces(const Lattice<FieldType, dim>& field, Lattice<FieldType, dim>& Forces) = 0;
 
     /* Log stuff */
-    virtual auto action_name() -> std::string = 0;        // return the action name
-    virtual auto action_parameters() -> std::string = 0;  // prints action parameters
+    virtual auto name() -> std::string = 0;        // return the action name
+    virtual auto name_short() -> std::string = 0;  // return the action name
+    virtual auto parameters() -> std::string = 0;  // prints action parameters
 };
 
 }  // namespace reticolo::action

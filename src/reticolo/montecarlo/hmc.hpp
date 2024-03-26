@@ -56,7 +56,8 @@ class HMC : public MonteCarloHandler<Action> {
 
   public:
     /* Constructor */
-    HMC(std::string run_name, Action& action, LatticeType& field, uint seed, const std::string& output_path);
+    HMC(std::string run_name, Action& action, LatticeType& field, uint seed, const std::string& output_path,
+        bool StdOut);
 
     /* override virtual updateField() method */
     void updateField() override;
@@ -69,8 +70,9 @@ class HMC : public MonteCarloHandler<Action> {
 };
 
 template <HmcCapable Action>
-HMC<Action>::HMC(std::string run_name, Action& action, LatticeType& field, uint seed, const std::string& output_path)
-    : MonteCarloHandler<Action>(run_name, action, field, seed, output_path),
+HMC<Action>::HMC(std::string run_name, Action& action, LatticeType& field, uint seed, const std::string& output_path,
+                 bool StdOut)
+    : MonteCarloHandler<Action>(run_name, action, field, seed, output_path, StdOut),
       _Mom(field.getSizes()),
       _Forces(field.getSizes()),
       _OldField(field.getSizes()) {

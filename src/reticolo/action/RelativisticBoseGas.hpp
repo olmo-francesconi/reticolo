@@ -16,7 +16,6 @@
 #include <format>
 #include <sstream>
 #include <string>
-#include <vector>
 
 #include "H5Cpp.h"
 #include "reticolo/action/action_base.hpp"
@@ -30,7 +29,7 @@ namespace reticolo::action {
 /*--------------------------------------------------------------------------------------------------
   RelativisticBoseGas Class Declaration
 --------------------------------------------------------------------------------------------------*/
-class RelativisticBoseGas : ActionBase<ComplexD, ComplexD, 4> {
+class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
   public:
     /* Types and public action metadata */
     using FieldType = ComplexD;    // Type of the field variables
@@ -41,7 +40,7 @@ class RelativisticBoseGas : ActionBase<ComplexD, ComplexD, 4> {
     /* Algorithm capabilities */
     const static bool IsMetropolisCapable = true;
     const static bool IsHmcCapable = true;
-    const static bool IsLLRCapable = false;
+    const static bool IsLLRCapable = true;
 
     /* Action parameters */
     struct Params {
@@ -56,6 +55,17 @@ class RelativisticBoseGas : ActionBase<ComplexD, ComplexD, 4> {
     struct Observables {
         double phi2;
         double density;
+        void   reset() { phi2 = 0.0, density = 0.0; };
+        auto   operator+=(const Observables& rhs) -> Observables {
+            phi2 += rhs.phi2;
+            density += rhs.density;
+            return *this;
+        };
+        auto operator/=(const double& rhs) -> Observables {
+            phi2 /= rhs;
+            density /= rhs;
+            return *this;
+        };
     };
     friend auto make_H5_Type<Observables>() {
         hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(Observables));
@@ -81,13 +91,17 @@ class RelativisticBoseGas : ActionBase<ComplexD, ComplexD, 4> {
 
     /* HMC methods */
     void compute_Forces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces) override;
+    void compute_LLRForces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces, double Sk, double width,
+                           double ak);
 
     /* Perform the measurements or returns updated Observable values*/
     static auto Measure(const Lattice<FieldType, 4>& field) -> Observables;
 
     /* Log stuff */
-    auto action_name() -> std::string override { return "Relativistic Bose Gas (phi^4)"; };
-    auto action_parameters() -> std::string override {
+    auto name() -> std::string override { return "Relativistic Bose Gas"; };
+    auto name_short() -> std::string override { return "Phi^4"; };
+
+    auto parameters() -> std::string override {
         std::stringstream Res;
         Res << "[ lambda : " << std::format("{:4.1f}", p.lambda) << ", eta : " << std::format("{:4.1f}", p.eta)
             << ", mu : " << std::format("{:4.1f}", p.mu) << " ]";
@@ -120,7 +134,7 @@ inline auto RelativisticBoseGas::compute_S(const Lattice<FieldType, 4>& field) -
                 (Phi.real() * field.next(Site, _z).real() + Phi.imag() * field.next(Site, _z).imag()) -
                 cosh(p.mu) * (Phi.real() * field.next(Site, _t).real() + Phi.imag() * field.next(Site, _t).imag());
 
-        Imag += sinh(p.mu) * (Phi.real() * field.next(Site, _t).imag() - Phi.imag() * field.next(Site, _t).real());
+        Imag += Phi.real() * field.next(Site, _t).imag() - Phi.imag() * field.next(Site, _t).real();
     }
 
     return {Real, Imag};
@@ -143,8 +157,8 @@ inline auto RelativisticBoseGas::compute_S_loc(const Lattice<FieldType, 4>& fiel
                                field.next(site, _z).imag() + field.prev(site, _z).imag() +  //
                                cosh(p.mu) * PhiNt.imag() + cosh(p.mu) * PhiPt.imag());
 
-    RealD Imag = sinh(p.mu) * (Phi.real() * PhiNt.imag() - Phi.imag() * PhiNt.real()) +
-                 sinh(p.mu) * (PhiPt.real() * Phi.imag() - PhiPt.imag() * Phi.real());
+    RealD Imag =
+        Phi.real() * PhiNt.imag() - Phi.imag() * PhiNt.real() + PhiPt.real() * Phi.imag() - PhiPt.imag() * Phi.real();
 
     return {Real, Imag};
 }
@@ -189,6 +203,44 @@ inline void RelativisticBoseGas::compute_Forces(const Lattice<FieldType, 4>& fie
         RealD Real = p.eta * Phi.real() + p.lambda * (Phi3.real() + Phi.real() * Phi2.imag()) - NeighborsSum.real();
         RealD Imag = p.eta * Phi.imag() + p.lambda * (Phi3.imag() + Phi.imag() * Phi2.real()) - NeighborsSum.imag();
         forces[Site] = {Real, Imag};
+    }
+}
+
+inline void RelativisticBoseGas::compute_LLRForces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces,
+                                                   double Sk, double width, double ak) {
+    FieldType Phi;
+    FieldType Phi2;
+    FieldType Phi3;
+    ComplexD  NeighborsSum;
+    RealD     ForcePhiRe;
+    RealD     ForceLLRPhiRe;
+    RealD     ForcePhiIm;
+    RealD     ForceLLRPhiIm;
+
+    // compute current value of the imaginary action
+    RealD SIm = 0.0;
+    for (int Site = 0; Site < field.getNsites(); Site++) {
+        Phi = field[Site];
+        SIm += Phi.real() * field.next(Site, _t).imag() - Phi.imag() * field.next(Site, _t).real();
+    }
+    RealD LLRForcePref = ((SIm - Sk) / (width * width) + ak);
+
+    for (int Site = 0; Site < field.getNsites(); Site++) {
+        Phi = field[Site];
+        Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
+        Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
+        NeighborsSum = field.next(Site, _x) + field.prev(Site, _x) +                //
+                       field.next(Site, _y) + field.prev(Site, _y) +                //
+                       field.next(Site, _z) + field.prev(Site, _z) +                //
+                       cosh(p.mu) * (field.next(Site, _t) + field.prev(Site, _t));  //
+        // Standard forces
+        ForcePhiRe = p.eta * Phi.real() + p.lambda * (Phi3.real() + Phi.real() * Phi2.imag()) - NeighborsSum.real();
+        ForcePhiIm = p.eta * Phi.imag() + p.lambda * (Phi3.imag() + Phi.imag() * Phi2.real()) - NeighborsSum.imag();
+        // LLR Forces
+        ForceLLRPhiRe = LLRForcePref * (field.next(Site, _t).imag() - field.prev(Site, _t).imag());
+        ForceLLRPhiIm = LLRForcePref * (field.prev(Site, _t).real() - field.next(Site, _t).real());
+
+        forces[Site] = {ForcePhiRe + ForceLLRPhiRe, ForcePhiIm + ForceLLRPhiIm};
     }
 }
 
