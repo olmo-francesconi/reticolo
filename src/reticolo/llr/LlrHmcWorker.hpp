@@ -2,7 +2,7 @@
 
  - reticolo (www.github.com/olmo-francesconi/reticolo.git)
 
- - SourceFile: llr/worker.hpp
+ - SourceFile: llr/LlrHmcWorker.hpp
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
@@ -76,7 +76,7 @@ class LlrHmcWorker : public montecarlo::MonteCarloHandler<Action> {
     void updateField() override;
 
     /* Initialize parameters */
-    void setHMCParams(uint steps, double stepsize) {
+    void setParams(uint steps, double stepsize) {
         _Stepsize = stepsize;
         _Steps = steps;
     }
