@@ -65,14 +65,16 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   endif()
 endif()
 
+include(FetchContent)
+
 # HDF5
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  set(HDF5_ROOT /opt/hdf5-llvm)
+  set(HDF5_ROOT /opt/hdf5/llvm/c-threadsafe)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set(HDF5_ROOT /opt/hdf5-gnu)
+  set(HDF5_ROOT /opt/hdf5/gnu/c-threadsafe)
 endif()
 set(HDF5_NO_FIND_PACKAGE_CONFIG_FILE true)
-find_package(HDF5 REQUIRED CXX HL)
+find_package(HDF5 REQUIRED C)
 
 # OpenMP
 FIND_PACKAGE(OpenMP)
@@ -80,6 +82,22 @@ FIND_PACKAGE(OpenMP)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
   ENDIF()
+
+# yaml-cpp
+FetchContent_Declare(
+  yaml-cpp
+  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+  GIT_TAG 0.8.0 # Can be a tag (yaml-cpp-x.x.x), a commit hash, or a branch name (master)
+)
+FetchContent_GetProperties(yaml-cpp)
+
+if(NOT yaml-cpp_POPULATED)
+  message(STATUS "Fetching yaml-cpp...")
+  FetchContent_Populate(yaml-cpp)
+  add_subdirectory(${yaml-cpp_SOURCE_DIR} ${yaml-cpp_BINARY_DIR})
+endif()
+
+link_libraries(yaml-cpp::yaml-cpp)
 
 # The compiled library code is here
 add_subdirectory(src)
