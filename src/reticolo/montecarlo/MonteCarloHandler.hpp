@@ -32,6 +32,7 @@
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
 #include "reticolo/types/random.hpp"
+#include "yaml-cpp/node/node.h"
 
 namespace fs = std::filesystem;
 
@@ -108,6 +109,8 @@ class MonteCarloHandler {
     MonteCarloHandler(const std::string& output_path, std::string handler_name, Action& action, LatticeType& field,
                       uint seed, bool StdOut, bool save_data, bool save_config);
 
+    void init(const YAML::Node& config);
+
     /* Performs nMC Monte Carlo steps and returns a montecarlo::data object with the averages */
     void run(const std::string& RunName, uint nMC, uint nTherm, uint MeasureStep = 1, bool initialize_field = false,
              bool hot_start = false, double hs_scale = 1.0);
@@ -118,7 +121,11 @@ class MonteCarloHandler {
         Res /= (double)_NMeasurements;
         return Res;
     }
-    // auto get_McSTD() -> McDataType { return _McStatsSUM2 / _NMeasurements; }
+    auto get_McVAR() -> McDataType {
+        McDataType ExpSquare = _McStatsSUM2 / (double)_NMeasurements;
+        McDataType Exp = _McStatsSUM / (double)_NMeasurements;
+        return ExpSquare - Exp * Exp;
+    }
     auto get_ObsCUR() -> ObsType { return _Obs; }
     auto get_ObsAVG() -> ObsType {
         ObsType Res = _ObsSUM;
@@ -253,6 +260,7 @@ inline void MonteCarloHandler<Action>::run(const std::string& RunName, uint nMC,
     }
     // Initialize measurements accumulator
     _McStatsSUM = McDataType();
+    _McStatsSUM2 = McDataType();
     _ObsSUM = ObsType();
     _NMeasurements = 0;
     // Initialize the starting value of S
@@ -315,11 +323,7 @@ inline void MonteCarloHandler<Action>::run(const std::string& RunName, uint nMC,
 template <class Action>
 inline void MonteCarloHandler<Action>::save_Configuration(uint Iter) {
     fs::path FileName = _WorkspacePath / "cnfg" / (std::to_string(Iter) + ".h5");
-    try {
-        _Field.save_Configuration(FileName);
-    } catch (H5::Exception& _) {
-        exit(EXIT_FAILURE);
-    }
+    _Field.save_Configuration(FileName);
 }
 
 template <class Action>
@@ -344,7 +348,7 @@ inline void MonteCarloHandler<Action>::measure_utility(const std::string& RunNam
     _Obs = _Action.Measure(_Field);
     // Update AVGs and STDs
     _McStatsSUM += _McStats;
-    // _McStatsSUM2 += _McStats * _McStats;
+    _McStatsSUM2 += _McStats * _McStats;
     _ObsSUM += _Obs;
     // _ObsSUM2 += _Obs * _Obs;
     _NMeasurements++;

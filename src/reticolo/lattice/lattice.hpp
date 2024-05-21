@@ -10,10 +10,11 @@
 
 #pragma once
 
-#include <H5Cpp.h>
+#include <H5public.h>
+#include <yaml-cpp/node/node.h>
+#include <yaml-cpp/yaml.h>
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdlib>
 #include <functional>
@@ -28,7 +29,7 @@
 
 namespace reticolo {
 
-enum neighbour { prev = 0, next = 1 };
+// enum neighbour { prev = 0, next = 1 };
 
 template <size_t dims>
 class Indexing {
@@ -42,6 +43,31 @@ class Indexing {
     std::vector<intvect<dims>> _Prev;
     /* Constructor */
     Indexing(intvect<dims> sizes) : _Sizes(sizes) {
+        _NSites = std::accumulate(_Sizes.begin(), _Sizes.end(), 1, std::multiplies<>());
+        for (uint SubDim = 0; SubDim < dims - 1; SubDim++) {
+            _SubVols[SubDim] = std::accumulate(_Sizes.begin() + SubDim + 1, _Sizes.end(), 1, std::multiplies<>());
+        }
+        _SubVols.back() = 1;
+        intvect<dims> Coord;
+        intvect<dims> PrevCoord;
+        intvect<dims> NextCoord;
+        std::fill(Coord.begin(), Coord.end(), 0);
+        _Next.resize(_NSites);
+        _Prev.resize(_NSites);
+        for (int Site = 0; Site < _NSites; advance_coord(_Sizes, Coord), Site++) {
+            for (uint Dir = 0; Dir < dims; Dir++) {
+                NextCoord = Coord;
+                NextCoord[Dir] = (Coord[Dir] + 1) % _Sizes[Dir];
+                _Next[Site][Dir] = site(NextCoord);
+                PrevCoord = Coord;
+                PrevCoord[Dir] = (Coord[Dir] + (_Sizes[Dir] - 1)) % _Sizes[Dir];
+                _Prev[Site][Dir] = site(PrevCoord);
+            }
+        }
+    };
+
+    void init(const YAML::Node& config) {
+        _Sizes = config["sizes"];
         _NSites = std::accumulate(_Sizes.begin(), _Sizes.end(), 1, std::multiplies<>());
         for (uint SubDim = 0; SubDim < dims - 1; SubDim++) {
             _SubVols[SubDim] = std::accumulate(_Sizes.begin() + SubDim + 1, _Sizes.end(), 1, std::multiplies<>());
@@ -85,6 +111,12 @@ class Lattice : public Indexing<dim> {
   public:
     /* Constructor */
     Lattice(intvect<dim> sizes) : Indexing<dim>(sizes) {
+        _Field.clear();
+        _Field.resize(_NSites);
+    };
+
+    void init(const YAML::Node& config) {
+        Indexing<dim>::init(config);
         _Field.clear();
         _Field.resize(_NSites);
     };
@@ -134,59 +166,59 @@ class Lattice : public Indexing<dim> {
     /* Save current field configuration */
     inline auto save_Configuration(const std::string& FilePath) -> hsize_t {
         hsize_t FileSize;
-        try {
-            // Open file
-            H5::H5File File(FilePath, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-            // Create dataspace
-            std::array<hsize_t, 1> Dims = {static_cast<hsize_t>(_NSites)};  // dim sizes of ds (on disk)
-            H5::DataSpace          DataSpace(1, Dims.data());
-            // Create datatype
-            auto DataType = make_H5_Type<TField>();
-            // Create dataset
-            H5::DataSet Dataset = File.createDataSet("field", DataType, DataSpace);
-            // Write dataset
-            Dataset.write(_Field.data(), DataType);
-            // Get file size
-            FileSize = File.getFileSize();
-        } catch (H5::Exception& _) {
-            exit(EXIT_FAILURE);
-        }
+        // try {
+        //     // Open file
+        //     H5::H5File File(FilePath, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+        //     // Create dataspace
+        //     std::array<hsize_t, 1> Dims = {static_cast<hsize_t>(_NSites)};  // dim sizes of ds (on disk)
+        //     H5::DataSpace          DataSpace(1, Dims.data());
+        //     // Create datatype
+        //     auto DataType = make_H5_Type<TField>();
+        //     // Create dataset
+        //     H5::DataSet Dataset = File.createDataSet("field", DataType, DataSpace);
+        //     // Write dataset
+        //     Dataset.write(_Field.data(), DataType);
+        //     // Get file size
+        //     FileSize = File.getFileSize();
+        // } catch (H5::Exception& _) {
+        //     exit(EXIT_FAILURE);
+        // }
         return FileSize;
     }
 
     /* Read configuration from disk */
     inline auto read_Configuration(const std::string& FilePath) -> hsize_t {
         hsize_t DataSize;
-        try {
-            // Open file
-            H5::H5File File(FilePath, H5F_ACC_RDONLY, H5P_DEFAULT, H5P_DEFAULT);
-            // Open DataSet
-            H5::DataSet DataSet = File.openDataSet("field");
-            // check DataTypes
-            H5::DataType FileDataType = DataSet.getDataType();
-            H5::DataType LatticeDataType = make_H5_Type<TField>();
-            if (FileDataType != LatticeDataType) {
-                H5::DataTypeIException Exeption("lattice::read_Configuration()", "File and data DataType differ");
-                throw(Exeption);
-            }
-            // check DataSpaces
-            H5::DataSpace FileDataSpace = DataSet.getSpace();
-            hsize_t       FileDims = FileDataSpace.getSimpleExtentNdims();
-            if (FileDims != _NSites) {
-                H5::DataSpaceIException Exeption("lattice::read_Configuration()", "File and data DataSpaces differ");
-                throw(Exeption);
-            }
-            // read data
-            DataSet.read(_Field.data(), LatticeDataType);
-            // get data size
-            DataSize = DataSet.getInMemDataSize();
-        } catch (H5::DataTypeIException& e) {
-            std::cerr << IO::LI_erro() << e.getFuncName() << " : " << e.getDetailMsg() << '\n';
-            exit(EXIT_FAILURE);
-        } catch (H5::DataSpaceIException& e) {
-            std::cerr << IO::LI_erro() << e.getFuncName() << " : " << e.getDetailMsg() << '\n';
-            exit(EXIT_FAILURE);
-        }
+        // try {
+        //     // Open file
+        //     H5::H5File File(FilePath, H5F_ACC_RDONLY, H5P_DEFAULT, H5P_DEFAULT);
+        //     // Open DataSet
+        //     H5::DataSet DataSet = File.openDataSet("field");
+        //     // check DataTypes
+        //     H5::DataType FileDataType = DataSet.getDataType();
+        //     H5::DataType LatticeDataType = make_H5_Type<TField>();
+        //     if (FileDataType != LatticeDataType) {
+        //         H5::DataTypeIException Exeption("lattice::read_Configuration()", "File and data DataType differ");
+        //         throw(Exeption);
+        //     }
+        //     // check DataSpaces
+        //     H5::DataSpace FileDataSpace = DataSet.getSpace();
+        //     hsize_t       FileDims = FileDataSpace.getSimpleExtentNdims();
+        //     if (FileDims != _NSites) {
+        //         H5::DataSpaceIException Exeption("lattice::read_Configuration()", "File and data DataSpaces differ");
+        //         throw(Exeption);
+        //     }
+        //     // read data
+        //     DataSet.read(_Field.data(), LatticeDataType);
+        //     // get data size
+        //     DataSize = DataSet.getInMemDataSize();
+        // } catch (H5::DataTypeIException& e) {
+        //     std::cerr << IO::LI_erro() << e.getFuncName() << " : " << e.getDetailMsg() << '\n';
+        //     exit(EXIT_FAILURE);
+        // } catch (H5::DataSpaceIException& e) {
+        //     std::cerr << IO::LI_erro() << e.getFuncName() << " : " << e.getDetailMsg() << '\n';
+        //     exit(EXIT_FAILURE);
+        // }
         return DataSize;
     }
 };

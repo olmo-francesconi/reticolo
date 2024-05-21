@@ -26,7 +26,7 @@
 #include <vector>
 
 #include "reticolo/lattice/lattice.hpp"
-#include "reticolo/llr/worker.hpp"
+#include "reticolo/llr/LlrHmcMetWorker.hpp"
 #include "reticolo/montecarlo/MonteCarloData.hpp"
 #include "reticolo/tools/io_utils.hpp"
 #include "reticolo/tools/logger.hpp"
@@ -56,7 +56,7 @@ class LLRController {
     fs::path _Hdf5OutputFile;
 
     /* LLR workers vector */
-    std::vector<std::unique_ptr<LlrHmcWorker<Action>>> _Workers;
+    std::vector<std::unique_ptr<LlrHmcMetWorker<Action>>> _Workers;
 
     /* Vector of Lattices */
     std::vector<std::unique_ptr<LatticeType>> _Fields;
@@ -78,7 +78,8 @@ class LLRController {
     std::vector<double>                  _AkVect;
     std::vector<std::vector<double>>     _AkHist;
     std::vector<double>                  _SkVect;
-    std::vector<std::vector<McDataType>> _McHist;
+    std::vector<std::vector<McDataType>> _McAvgHist;
+    std::vector<std::vector<McDataType>> _McVarHist;
     std::vector<std::vector<ObsType>>    _ObsHist;
 
     /* Timing and logging */
@@ -133,11 +134,7 @@ LLRController<Action>::LLRController(Action::Params par, const fs::path& out_pat
 
     // Initialize the output file
     _Hdf5OutputFile = _WorkspacePath / "llr.h5";
-    try {
-        IO::GlobalHdf5Handler.initFile(_Hdf5OutputFile);
-    } catch (H5::Exception& _) {
-        exit(EXIT_FAILURE);
-    }
+    IO::GlobalHdf5Handler.initFile(_Hdf5OutputFile);
 
     // Log llr info
     _Logger << IO::LI_void() + "         ak output file: " + _Hdf5OutputFile.string() + '\n';
@@ -162,7 +159,7 @@ LLRController<Action>::LLRController(Action::Params par, const fs::path& out_pat
         // Initialize action
         _Actions[Interval] = std::make_unique<Action>(*_Fields[Interval], par);
     }
-    std::cout << "ok\n";
+
     // Initialize the internal RNG
     _Rng.seed(_Rd());
 
@@ -184,21 +181,28 @@ void LLRController<Action>::run(const std::string& run_id, uint nNewton_Raphson,
     _AkHist.clear();
     _AkHist.push_back(_AkVect);
 
+    // Clears the history vectors
+    _McAvgHist.clear();
+    _McVarHist.clear();
+    _ObsHist.clear();
+
     // Initialize field, actions and Workers
     _Workers.resize(_SkVect.size());
     for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
         // Initialize worker
-        _Workers[WorkerId] = std::make_unique<LlrHmcWorker<Action>>(  //
-            std::format("llr_worker[{:0>3}]", WorkerId),              // workerId
-            *_Actions[WorkerId],                                      // Action reference
-            *_Fields[WorkerId],                                       // Field reference
-            _Rd(),                                                    // random seed
-            _WorkspacePath / "raw_data" / run_id,                     // Output path
-            false,                                                    // StdOut
-            save_data,                                                // Save raw Monte Carlo and Observables
-            save_config);                                             // Save configurations
+        _Workers[WorkerId] =
+            std::make_unique<LlrHmcMetWorker<Action>>(std::format("llr_worker[{:0>3}]", WorkerId),  // workerId
+                                                      *_Actions[WorkerId],                          // Action reference
+                                                      *_Fields[WorkerId],                           // Field reference
+                                                      _Rd(),                                        // random seed
+                                                      _WorkspacePath / "raw_data" / run_id,         // Output path
+                                                      false,                                        // StdOut
+                                                      save_data,     // Save raw Monte Carlo and Observables
+                                                      save_config);  // Save configurations
         // Set parameters
-        _Workers[WorkerId]->setHMCParams(30, 0.01);
+        _Workers[WorkerId]->setParams(5, 0.05, 0.2);
+        // _Workers[WorkerId]->setParams(10, 0.03);
+        // _Workers[WorkerId]->setParams(0.2);
         _Workers[WorkerId]->setLLRParams(_AkVect[WorkerId], _SkVect[WorkerId], _DeltaS);
     }
 
@@ -222,17 +226,19 @@ void LLRController<Action>::run(const std::string& run_id, uint nNewton_Raphson,
 #pragma omp single
             {
                 _Logger << IO::LI_time() + std::format("[{}] Started NR iteration {}\n", run_id, Step);
-                _McHist.push_back(std::vector<McDataType>(_Workers.size()));
+                _McAvgHist.push_back(std::vector<McDataType>(_Workers.size()));
+                _McVarHist.push_back(std::vector<McDataType>(_Workers.size()));
                 _ObsHist.push_back(std::vector<ObsType>(_Workers.size()));
             }
             std::string RunName = std::format("NR_{}", Step);
 #pragma omp for schedule(static, 1)
             for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
                 _Workers[WorkerId]->run(RunName, nMonte_Carlo, 100, 1, false);
-                _McHist.back()[WorkerId] = _Workers[WorkerId]->get_McAVG();
+                _McAvgHist.back()[WorkerId] = _Workers[WorkerId]->get_McAVG();
+                _McVarHist.back()[WorkerId] = _Workers[WorkerId]->get_McVAR();
                 _ObsHist.back()[WorkerId] = _Workers[WorkerId]->get_ObsAVG();
                 // update the ak value
-                double DSIm = _McHist.back()[WorkerId]._SIm - _SkVect[WorkerId];
+                double DSIm = _McAvgHist.back()[WorkerId]._SIm - _SkVect[WorkerId];
                 _AkVect[WorkerId] += DSIm / (_DeltaS * _DeltaS);
                 _Workers[WorkerId]->set_ak(_AkVect[WorkerId]);
             }
@@ -255,17 +261,19 @@ void LLRController<Action>::run(const std::string& run_id, uint nNewton_Raphson,
 #pragma omp single
             {
                 _Logger << IO::LI_time() + std::format("[{}] started RM iteration {}\n", run_id, Step);
-                _McHist.push_back(std::vector<McDataType>(_Workers.size()));
+                _McAvgHist.push_back(std::vector<McDataType>(_Workers.size()));
+                _McVarHist.push_back(std::vector<McDataType>(_Workers.size()));
                 _ObsHist.push_back(std::vector<ObsType>(_Workers.size()));
             }
             std::string RunName = std::format("RM_{}", Step);
 #pragma omp for schedule(static, 1)
             for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
                 _Workers[WorkerId]->run(RunName, nMonte_Carlo, 100, 1, false);
-                _McHist.back()[WorkerId] = _Workers[WorkerId]->get_McAVG();
+                _McAvgHist.back()[WorkerId] = _Workers[WorkerId]->get_McAVG();
+                _McVarHist.back()[WorkerId] = _Workers[WorkerId]->get_McVAR();
                 _ObsHist.back()[WorkerId] = _Workers[WorkerId]->get_ObsAVG();
                 // update the ak value
-                double DSIm = _McHist.back()[WorkerId]._SIm - _SkVect[WorkerId];
+                double DSIm = _McAvgHist.back()[WorkerId]._SIm - _SkVect[WorkerId];
                 _AkVect[WorkerId] += DSIm / ((double)(Step + 1) * (_DeltaS * _DeltaS));
                 _Workers[WorkerId]->set_ak(_AkVect[WorkerId]);
             }
@@ -280,7 +288,8 @@ void LLRController<Action>::run(const std::string& run_id, uint nNewton_Raphson,
 
     _T.reset();
     std::vector<double>     AkBuffer;
-    std::vector<McDataType> McBuffer;
+    std::vector<McDataType> McAvgBuffer;
+    std::vector<McDataType> McVarBuffer;
     std::vector<ObsType>    ObsBuffer;
     AkBuffer.reserve(_AkHist.size());
     IO::GlobalHdf5Handler.createGroup(_Hdf5OutputFile, run_id);
@@ -289,17 +298,23 @@ void LLRController<Action>::run(const std::string& run_id, uint nNewton_Raphson,
         for (const auto& Elem : _AkHist) {
             AkBuffer.push_back(Elem[WorkerId]);
         }
-        McBuffer.clear();
-        for (const auto& Elem : _McHist) {
-            McBuffer.push_back(Elem[WorkerId]);
+        McAvgBuffer.clear();
+        for (const auto& Elem : _McAvgHist) {
+            McAvgBuffer.push_back(Elem[WorkerId]);
+        }
+        McVarBuffer.clear();
+        for (const auto& Elem : _McVarHist) {
+            McVarBuffer.push_back(Elem[WorkerId]);
         }
         ObsBuffer.clear();
         for (const auto& Elem : _ObsHist) {
             ObsBuffer.push_back(Elem[WorkerId]);
         }
-        IO::GlobalHdf5Handler.writeDataset(_Hdf5OutputFile, std::format("{}/ak_{}", run_id, WorkerId), AkBuffer);
-        IO::GlobalHdf5Handler.writeDataset(_Hdf5OutputFile, std::format("{}/mc_{}", run_id, WorkerId), McBuffer);
-        IO::GlobalHdf5Handler.writeDataset(_Hdf5OutputFile, std::format("{}/obs_{}", run_id, WorkerId), ObsBuffer);
+        IO::GlobalHdf5Handler.writeDataset(_Hdf5OutputFile, std::format("{}/[{}]ak", run_id, WorkerId), AkBuffer);
+        IO::GlobalHdf5Handler.writeDataset(_Hdf5OutputFile, std::format("{}/[{}]mc", run_id, WorkerId), McAvgBuffer);
+        IO::GlobalHdf5Handler.writeDataset(_Hdf5OutputFile, std::format("{}/[{}]mc_var", run_id, WorkerId),
+                                           McVarBuffer);
+        IO::GlobalHdf5Handler.writeDataset(_Hdf5OutputFile, std::format("{}/[{}]obs", run_id, WorkerId), ObsBuffer);
     }
     _Logger << IO::LI_void() + std::format("[{}] Data saved                  [{:.3f} s]\n", run_id, _T.elapsed_s());
 }  // namespace reticolo::LLR
