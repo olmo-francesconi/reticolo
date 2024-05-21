@@ -10,7 +10,10 @@
 
 #pragma once
 
-#include <H5Cpp.h>
+#include <H5Ipublic.h>
+#include <H5Tpublic.h>
+#include <H5public.h>
+#include <H5version.h>
 
 #include <algorithm>
 #include <array>
@@ -42,15 +45,14 @@
 #define MUNU_32 8
 #define MUNU_33 9
 
-const size_t HfieldNumComp = 10;
-
 namespace reticolo {
 // Basic matrix class to store h fields
 template <RealValue T>
-class HField {
-    std::array<T, HfieldNumComp> _Mat;
+struct HField {
+    static const size_t NumComp = 10;
 
-  public:
+    std::array<T, NumComp> _Mat;
+
     HField() = default;
     // HField(const HField&) = delete;
     // HField(HField&&) = delete;
@@ -84,21 +86,21 @@ class HField {
     }
 
     auto operator+=(const HField& other) -> HField& {
-        for (size_t Comp = 0; Comp < HfieldNumComp; Comp++) {
+        for (size_t Comp = 0; Comp < NumComp; Comp++) {
             this->_Mat[Comp] += other._Mat[Comp];
         }
         return *this;
     }
 
     auto operator-=(const HField& other) -> HField& {
-        for (size_t Comp = 0; Comp < HfieldNumComp; Comp++) {
+        for (size_t Comp = 0; Comp < NumComp; Comp++) {
             this->_Mat[Comp] -= other._Mat[Comp];
         }
         return *this;
     }
 
     auto operator*=(const double& other) -> HField& {
-        for (size_t Comp = 0; Comp < HfieldNumComp; Comp++) {
+        for (size_t Comp = 0; Comp < NumComp; Comp++) {
             this->_Mat[Comp] *= other;
         }
         return *this;
@@ -157,16 +159,16 @@ inline void HField<T>::print() {
 
 template <>
 auto make_H5_Type<HField<RealF>>() {
-    std::array<hsize_t, 1> Dims = {10};
-    H5::ArrayType          Type(H5::PredType::NATIVE_FLOAT, 1, Dims.data());
-    return Type;
+    std::array<hsize_t, 1> Dims = {HField<RealF>::NumComp};
+    hid_t                  DataTypeHid = H5Tarray_create(H5T_NATIVE_FLOAT, 1, Dims.data());
+    return DataTypeHid;
 }
 
 template <>
 auto make_H5_Type<HField<RealD>>() {
-    std::array<hsize_t, 1> Dims = {10};
-    H5::ArrayType          Type(H5::PredType::NATIVE_DOUBLE, 1, Dims.data());
-    return Type;
+    std::array<hsize_t, 1> Dims = {HField<RealF>::NumComp};
+    hid_t                  DataTypeHid = H5Tarray_create(H5T_NATIVE_DOUBLE, 1, Dims.data());
+    return DataTypeHid;
 }
 
 /*--------------------------------------------------------------------------------------------------
@@ -178,7 +180,7 @@ namespace HField_math {
 // compute res = c * (A - B) element wise
 template <RealValue T>
 inline void diff(HField<T>& res, const HField<T>& lhs, const HField<T>& rhs, const double Offset = 1.0) {
-    for (size_t Comp = 0; Comp < HfieldNumComp; Comp++) {
+    for (size_t Comp = 0; Comp < HField<T>::NumComp; Comp++) {
         res[Comp] = Offset * (lhs[Comp] - rhs[Comp]);
     }
 }
@@ -186,7 +188,7 @@ inline void diff(HField<T>& res, const HField<T>& lhs, const HField<T>& rhs, con
 // compute res = c * (A + B) element wise
 template <RealValue T>
 inline void sum(HField<T>& res, const HField<T>& lhs, const HField<T>& rhs, const double Offset = 1.0) {
-    for (size_t Comp = 0; Comp < HfieldNumComp; Comp++) {
+    for (size_t Comp = 0; Comp < HField<T>::NumComp; Comp++) {
         res[Comp] = Offset * (lhs[Comp] + rhs[Comp]);
     }
 }
@@ -194,7 +196,7 @@ inline void sum(HField<T>& res, const HField<T>& lhs, const HField<T>& rhs, cons
 // compute res = a * B element-wise
 template <RealValue T>
 inline void prod(HField<T>& res, const T lhs, const HField<T>& rhs) {
-    for (size_t Comp = 0; Comp < HfieldNumComp; Comp++) {
+    for (size_t Comp = 0; Comp < HField<T>::NumComp; Comp++) {
         res[Comp] = lhs * rhs[Comp];
     }
 }

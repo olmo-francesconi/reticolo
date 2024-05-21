@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include <H5Ipublic.h>
+#include <H5Tpublic.h>
 #include <unistd.h>
 
 #include <array>
@@ -20,7 +22,6 @@
 #include <string>
 #include <vector>
 
-#include "H5Cpp.h"
 #include "reticolo/action/action_base.hpp"
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/physics/constants.hpp"
@@ -588,6 +589,7 @@ inline void WeakFieldEuclideanGR::compute_Force_loc(const Lattice<FieldType, 4>&
     // force *= kappa;
 }
 }  // namespace reticolo::action
+
 /*--------------------------------------------------------------------------------------------------
   montecarlo::Metropolis::updateField() Specialization
 --------------------------------------------------------------------------------------------------*/

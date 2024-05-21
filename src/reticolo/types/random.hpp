@@ -36,7 +36,7 @@ template <RealValue T, RNGDist DistType, RNGGen GenType>
 inline void randomize(HField<T>& Val, T Scale, DistType& Dist, GenType& Gen)
     requires std::same_as<T, typename DistType::result_type>
 {
-    for (uint Comp = 0; Comp < HfieldNumComp; Comp++) {
+    for (uint Comp = 0; Comp < HField<T>::NumComp; Comp++) {
         Val[Comp] = Scale * Dist(Gen);
     }
 }

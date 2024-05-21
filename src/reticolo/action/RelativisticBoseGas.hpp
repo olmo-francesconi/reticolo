@@ -12,12 +12,14 @@
 
 #pragma once
 
+#include <H5Ipublic.h>
+#include <H5Tpublic.h>
+
 #include <cmath>
 #include <format>
 #include <sstream>
 #include <string>
 
-#include "H5Cpp.h"
 #include "reticolo/action/action_base.hpp"
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
@@ -67,12 +69,13 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
             return *this;
         };
     };
-    friend auto make_H5_Type<Observables>() {
-        hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(Observables));
-        H5Tinsert(DataTypeHid, "phi2", HOFFSET(Observables, phi2), H5T_NATIVE_DOUBLE);
-        H5Tinsert(DataTypeHid, "density", HOFFSET(Observables, density), H5T_NATIVE_DOUBLE);
-        return DataTypeHid;
-    }
+    friend auto make_H5_Type<Observables>();
+    //  {
+    //     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(Observables));
+    //     H5Tinsert(DataTypeHid, "phi2", HOFFSET(Observables, phi2), H5T_NATIVE_DOUBLE);
+    //     H5Tinsert(DataTypeHid, "density", HOFFSET(Observables, density), H5T_NATIVE_DOUBLE);
+    //     return DataTypeHid;
+    // }
 
     /* Constructors */
     RelativisticBoseGas(Lattice<FieldType, 4>& field, double lambda, double eta, double chem_mu)
@@ -92,7 +95,7 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
     /* HMC methods */
     void compute_Forces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces) override;
     void compute_LLRForces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces, double Sk, double width,
-                           double ak);
+                           double ak) const;
 
     /* Perform the measurements or returns updated Observable values*/
     static auto Measure(const Lattice<FieldType, 4>& field) -> Observables;
@@ -207,7 +210,7 @@ inline void RelativisticBoseGas::compute_Forces(const Lattice<FieldType, 4>& fie
 }
 
 inline void RelativisticBoseGas::compute_LLRForces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces,
-                                                   double Sk, double width, double ak) {
+                                                   double Sk, double width, double ak) const {
     FieldType Phi;
     FieldType Phi2;
     FieldType Phi3;
@@ -257,3 +260,17 @@ inline auto RelativisticBoseGas::Measure(const Lattice<FieldType, 4>& field) -> 
 }
 
 }  // namespace reticolo::action
+
+/*--------------------------------------------------------------------------------------------------
+  HDF5 helper method Implementatin
+--------------------------------------------------------------------------------------------------*/
+
+namespace reticolo {
+template <>
+auto make_H5_Type<action::RelativisticBoseGas::Observables>() {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGas::Observables));
+    H5Tinsert(DataTypeHid, "phi2", HOFFSET(action::RelativisticBoseGas::Observables, phi2), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGas::Observables, density), H5T_NATIVE_DOUBLE);
+    return DataTypeHid;
+}
+}  // namespace reticolo

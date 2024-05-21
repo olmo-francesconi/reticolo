@@ -10,6 +10,14 @@
 
 #pragma once
 
+#include <H5Dpublic.h>
+#include <H5Fpublic.h>
+#include <H5Gpublic.h>
+#include <H5Ipublic.h>
+#include <H5Ppublic.h>
+#include <H5Spublic.h>
+#include <H5public.h>
+#include <H5version.h>
 #include <hdf5.h>
 #include <omp.h>
 

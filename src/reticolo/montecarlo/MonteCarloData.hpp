@@ -10,9 +10,9 @@
 
 #pragma once
 
+#include <H5Ipublic.h>
 #include <H5Tpublic.h>
 
-#include "H5Cpp.h"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
 
@@ -141,6 +141,24 @@ struct data<ActionType> {
         return *this;
     }
 
+    auto operator-=(const data<ActionType>& rhs) -> data<ActionType>& {
+        _Acceptance -= rhs._Acceptance;
+        _SRe -= rhs._SRe;
+        _SIm -= rhs._SIm;
+        _DSRe -= rhs._DSRe;
+        _DSIm -= rhs._DSIm;
+        return *this;
+    }
+
+    auto operator*=(const data<ActionType>& rhs) -> data<ActionType>& {
+        _Acceptance *= rhs._Acceptance;
+        _SRe *= rhs._SRe;
+        _SIm *= rhs._SIm;
+        _DSRe *= rhs._DSRe;
+        _DSIm *= rhs._DSIm;
+        return *this;
+    }
+
     auto operator*=(const double& rhs) -> data<ActionType>& {
         _Acceptance *= rhs;
         _SRe *= rhs;
@@ -161,6 +179,21 @@ struct data<ActionType> {
 
     friend auto operator+(data<ActionType> lhs, const data<ActionType>& rhs) -> data<ActionType> {
         lhs += rhs;
+        return lhs;
+    }
+
+    friend auto operator-(data<ActionType> lhs, const data<ActionType>& rhs) -> data<ActionType> {
+        lhs -= rhs;
+        return lhs;
+    }
+
+    friend auto operator*(data<ActionType> lhs, const data<ActionType>& rhs) -> data<ActionType> {
+        lhs *= rhs;
+        return lhs;
+    }
+
+    friend auto operator/(data<ActionType> lhs, const double& rhs) -> data<ActionType> {
+        lhs /= rhs;
         return lhs;
     }
 };
