@@ -2,7 +2,7 @@
 add_library(reticolo INTERFACE)
 
 # target HDF5
-target_link_libraries(reticolo INTERFACE HDF5::HDF5)
+target_link_libraries(reticolo INTERFACE hdf5::hdf5)
 
 # include 
 target_include_directories(reticolo INTERFACE ".")
