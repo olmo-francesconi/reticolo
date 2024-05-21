@@ -12,3 +12,6 @@ target_link_libraries(WeakFieldEuclideanGR_HMC PRIVATE reticolo)
 
 add_executable(hdf5_tests hdf5_tests.cpp)
 target_link_libraries(hdf5_tests PRIVATE reticolo)
+
+add_executable(random_test test.cpp)
+target_link_libraries(random_test PRIVATE reticolo)
