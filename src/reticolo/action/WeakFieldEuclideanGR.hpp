@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include <array>
+#include <cmath>
 #include <format>
 #include <numeric>
 #include <string>

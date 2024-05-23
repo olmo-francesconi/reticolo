@@ -69,13 +69,7 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
             return *this;
         };
     };
-    friend auto make_H5_Type<Observables>();
-    //  {
-    //     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(Observables));
-    //     H5Tinsert(DataTypeHid, "phi2", HOFFSET(Observables, phi2), H5T_NATIVE_DOUBLE);
-    //     H5Tinsert(DataTypeHid, "density", HOFFSET(Observables, density), H5T_NATIVE_DOUBLE);
-    //     return DataTypeHid;
-    // }
+    // friend auto make_H5_Type<Observables>();
 
     /* Constructors */
     RelativisticBoseGas(Lattice<FieldType, 4>& field, double lambda, double eta, double chem_mu)
