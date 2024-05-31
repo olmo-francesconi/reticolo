@@ -209,7 +209,7 @@ template <class Action>
 inline void MonteCarloHandler<Action>::run(const std::string& RunName, uint nMC, uint nTherm, uint MeasureStep,
                                            bool initialize_field, bool hot_start, double hs_scale) {
     // set reasonable hdf5 dataset chunk size
-    uint ChunkSize = (nMC % MeasureStep >= 100) ? nMC % MeasureStep : 10;
+    uint ChunkSize = (nMC / MeasureStep >= 100) ? nMC / MeasureStep : 100;
     if (_saveData && MeasureStep > 0) {
         IO::GlobalHdf5Handler.createGroup(_Hdf5OutputFile, RunName);
         IO::GlobalHdf5Handler.setupExpandableDataset<ObsType>(  //
