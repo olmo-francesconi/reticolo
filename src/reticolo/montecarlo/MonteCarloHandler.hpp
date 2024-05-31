@@ -208,12 +208,14 @@ MonteCarloHandler<Action>::MonteCarloHandler(const std::string& output_path, std
 template <class Action>
 inline void MonteCarloHandler<Action>::run(const std::string& RunName, uint nMC, uint nTherm, uint MeasureStep,
                                            bool initialize_field, bool hot_start, double hs_scale) {
+    // set decent Chunk size
+    uint ChunkSize = (nMC % MeasureStep >= 100) ? nMC % MeasureStep : 10;
     if (_saveData && MeasureStep > 0) {
         IO::GlobalHdf5Handler.createGroup(_Hdf5OutputFile, RunName);
         IO::GlobalHdf5Handler.setupExpandableDataset<ObsType>(  //
-            _Hdf5OutputFile, RunName + "/Observables", _MaxBufferSize);
+            _Hdf5OutputFile, RunName + "/Observables", ChunkSize);
         IO::GlobalHdf5Handler.setupExpandableDataset<McDataType>(  //
-            _Hdf5OutputFile, RunName + "/MonteCarlo", _MaxBufferSize);
+            _Hdf5OutputFile, RunName + "/MonteCarlo", ChunkSize);
     }
     // Log Run parameters
     _Logger << IO::LI_time() + "[" + RunName + "] - Starting Monte Carlo updates..\n";
@@ -363,7 +365,7 @@ inline void MonteCarloHandler<Action>::measure_utility(const std::string& RunNam
         _McStatsBuffer.emplace_back(_McStats);
         _ObsBuffer.emplace_back(_Obs);
         // Save to file and flush if:
-        //   - The buffers are full (_MaxBudderSize)
+        //   - The buffers are full (_MaxBufferSize)
         //   - Too much time has passed since last save (_MaxBufferWriteDelay)
         double Elapsed = _T.elapsed_s();
         if (_ObsBuffer.size() == _MaxBufferSize || Elapsed > _MaxBufferWriteDelay) {
