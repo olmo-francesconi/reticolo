@@ -161,7 +161,8 @@ class HdF5Handler {
 
     /* Write to extendable dataset */
     template <typename T>
-    void setupExpandableDataset(const fs::path& FileName, const std::string& DataSetName, hsize_t ChunkSize);
+    void setupExpandableDataset(const fs::path& FileName, const std::string& DataSetName, hsize_t ChunkSize,
+                                bool Compressed);
     template <typename T>
     void appendDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data);
 
@@ -213,7 +214,8 @@ void HdF5Handler::writeDataset(const fs::path& FileName, const std::string& Data
 }
 
 template <typename T>
-void HdF5Handler::setupExpandableDataset(const fs::path& FileName, const std::string& DataSetName, hsize_t ChunkSize) {
+void HdF5Handler::setupExpandableDataset(const fs::path& FileName, const std::string& DataSetName, hsize_t ChunkSize,
+                                         bool Compressed) {
     omp_set_lock(&_IoLock);
     hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
 
@@ -221,6 +223,9 @@ void HdF5Handler::setupExpandableDataset(const fs::path& FileName, const std::st
         H5Screate_simple(1, (std::array<hsize_t, 1>){0}.data(), (std::array<hsize_t, 1>){H5S_UNLIMITED}.data());
     hid_t DsCreationPropId = H5Pcreate(H5P_DATASET_CREATE);
     H5Pset_chunk(DsCreationPropId, 1, (std::array<hsize_t, 1>){ChunkSize}.data());
+    if (Compressed) {
+        H5Pset_deflate(DsCreationPropId, 2);
+    }
     hid_t DataTypeId = make_H5_Type<T>();
     hid_t DataSetId =
         H5Dcreate(FileId, DataSetName.c_str(), DataTypeId, DataSpaceId, H5P_DEFAULT, DsCreationPropId, H5P_DEFAULT);
