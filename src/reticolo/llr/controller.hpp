@@ -11,6 +11,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -201,8 +202,6 @@ void LLRController<Action>::run(const std::string& run_id, uint nNewton_Raphson,
                                                       save_config);  // Save configurations
         // Set parameters
         _Workers[WorkerId]->setParams(5, 0.05, 0.2);
-        // _Workers[WorkerId]->setParams(10, 0.03);
-        // _Workers[WorkerId]->setParams(0.2);
         _Workers[WorkerId]->setLLRParams(_AkVect[WorkerId], _SkVect[WorkerId], _DeltaS);
     }
 
@@ -211,7 +210,7 @@ void LLRController<Action>::run(const std::string& run_id, uint nNewton_Raphson,
         // initial burn in
 #pragma omp for schedule(static, 1)
         for (auto& Worker : _Workers) {
-            Worker->run("burn-in", 1000, 0, 0, false);
+            Worker->run("burn-in", 1000, 0, 1, true, false);
         }
 
 #pragma omp single
@@ -321,7 +320,7 @@ void LLRController<Action>::run(const std::string& run_id, uint nNewton_Raphson,
 
 template <class Action>
 void LLRController<Action>::ReplicaExcange() {
-    // _Logger << IO::LI_void() + "llr_controller - replica excange :\n";
+    _Logger << IO::LI_void() + "llr_controller - replica excange :\n";
     RealD SImA;
     RealD SImB;
     RealD SkA;
@@ -351,17 +350,15 @@ void LLRController<Action>::ReplicaExcange() {
             std::swap(_Workers[SwapId], _Workers[SwapId + 1]);
             _Workers[SwapId]->setLLRParams(_AkVect[SwapId], _SkVect[SwapId], _DeltaS);
             _Workers[SwapId + 1]->setLLRParams(_AkVect[SwapId + 1], _SkVect[SwapId + 1], _DeltaS);
-            // _Logger
-            //     << IO::LI_void() +
-            //            std::format(
-            //                "                       swapped: {:>3} <-> {:<3} : {:6.2f}, {:6.2f}, {:6.2f}, {:6.2f}\n",
-            //                // SwapId, SwapId + 1, SImA, SImB, _DeltaS, exp(SwapWeight));
+            _Logger << IO::LI_void() +
+                           std::format(
+                               "                       swapped: {:>3} <-> {:<3} : {:6.2f}, {:6.2f}, {:6.2f}, {:6.2f}\n",
+                               SwapId, SwapId + 1, SImA, SImB, _DeltaS, exp(SwapWeight));
         } else {
-            // _Logger
-            //     << IO::LI_void() +
-            //            std::format(
-            //                "                   not swapped: {:>3} <-> {:<3} : {:6.2f}, {:6.2f}, {:6.2f}, {:6.2f}\n",
-            //                // SwapId, SwapId + 1, SImA, SImB, _DeltaS, exp(SwapWeight));
+            _Logger << IO::LI_void() +
+                           std::format(
+                               "                   not swapped: {:>3} <-> {:<3} : {:6.2f}, {:6.2f}, {:6.2f}, {:6.2f}\n",
+                               SwapId, SwapId + 1, SImA, SImB, _DeltaS, exp(SwapWeight));
         }
     }
 }
