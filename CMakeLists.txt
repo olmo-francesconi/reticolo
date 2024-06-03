@@ -21,7 +21,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -Ofast")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -Ofast -Wno-nan-infinity-disabled")
 
 # IF(CMAKE_BUILD_TYPE EQUAL Debug)
 #   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -lprofiler -ltcmalloc")
