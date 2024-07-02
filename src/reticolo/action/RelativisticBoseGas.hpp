@@ -58,7 +58,8 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
         double phi2;
         double density;
         void   reset() { phi2 = 0.0, density = 0.0; };
-        auto   operator+=(const Observables& rhs) -> Observables {
+
+        auto operator+=(const Observables& rhs) -> Observables {
             phi2 += rhs.phi2;
             density += rhs.density;
             return *this;
