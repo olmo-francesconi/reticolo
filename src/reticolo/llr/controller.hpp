@@ -328,6 +328,7 @@ void LLRController<Action>::ReplicaExcange() {
     RealD AkA;
     RealD AkB;
 
+    // Generate random order for swaps
     std::vector<int> SwapIds(_Workers.size() - 1);
     std::iota(std::begin(SwapIds), std::end(SwapIds), 0);
     std::ranges::shuffle(SwapIds, _Rng);
@@ -340,11 +341,11 @@ void LLRController<Action>::ReplicaExcange() {
         AkB = _AkVect[SwapId + 1];
         SkB = _SkVect[SwapId + 1];
 
-        RealD SwapWeight =                                                                   //
-            (SImA - SkA) * (SImA - SkA) / (2.0 * _DeltaS * _DeltaS) + AkA * (SImA - SkA)     // weight of A in A
-            - (SImA - SkB) * (SImA - SkB) / (2.0 * _DeltaS * _DeltaS) - AkB * (SImA - SkB)   // weight of A in B
-            + (SImB - SkB) * (SImB - SkB) / (2.0 * _DeltaS * _DeltaS) + AkB * (SImB - SkB)   // weight of B in B
-            - (SImB - SkA) * (SImB - SkA) / (2.0 * _DeltaS * _DeltaS) - AkA * (SImB - SkA);  // weight of B in A
+        RealD SwapWeight =                                                                  //
+            (SImA - SkA) * (SImA - SkA) / (2.0 * _DeltaS * _DeltaS) + AkA * (SImA - SkA) -  // weight of A in A
+            (SImA - SkB) * (SImA - SkB) / (2.0 * _DeltaS * _DeltaS) - AkB * (SImA - SkB) +  // weight of A in B
+            (SImB - SkB) * (SImB - SkB) / (2.0 * _DeltaS * _DeltaS) + AkB * (SImB - SkB) -  // weight of B in B
+            (SImB - SkA) * (SImB - SkA) / (2.0 * _DeltaS * _DeltaS) - AkA * (SImB - SkA);   // weight of B in A
 
         if (exp(SwapWeight) > _Unif(_Rng)) {
             std::swap(_Workers[SwapId], _Workers[SwapId + 1]);
