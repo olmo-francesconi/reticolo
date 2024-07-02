@@ -6,14 +6,15 @@ from matplotlib import cm
 import numpy as np
 import pandas as pd
 
-# Workspace = "/Volumes/Extreme SSD/Physics/LLR/BoseGas_4x4x4x4"
-Workspace = "/Users/olmo/Desktop/bose_gas_llr/4_4_4_4"
-mu = [0.8]  # [0.0, 0.1, 0.2, 0.3, 0.4, 1.0, 2.0]
+# Workspace = "/Volumes/Extreme SSD/Physics/bose_gas_llr/4_4_4_4"
+Workspace = "/Volumes/Extreme SSD/Physics/bose_gas_llr/6_6_6_6"
+# Workspace = "/Users/olmo/Desktop/bose_gas_llr/4_4_4_4"
+mu = [0.4]  # , 0.8, 1.2, 1.6]  # [0.0, 0.1, 0.2, 0.3, 0.4, 1.0, 2.0]
 mu_lbl = ["{:.1f}".format(u) for u in mu]
 mu_map = dict(zip(mu_lbl, mu))
 print(mu_lbl)
 NIntervals = 64
-DeltaS = 0.0025 * 8**4
+DeltaS = 0.0025 * 6**4
 
 print("Generating ak values plot")
 fig_ak, ax_ak = plt.subplots(1, figsize=(12, 6))

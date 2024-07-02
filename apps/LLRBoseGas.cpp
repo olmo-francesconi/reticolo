@@ -37,16 +37,18 @@ using namespace reticolo;
 
 auto main(int argc, char* argv[]) -> int {
     /* Define the lattice volume */
-    intvect<4> Volume = {8, 8, 8, 8};
+    // intvect<4> Volume = {8, 8, 8, 8};
+    intvect<4> Volume = {6, 6, 6, 6};
     // intvect<4> Volume = {4, 4, 4, 4};
 
     /*  Set the output folder */
-    // std::string OutPath = std::format("/Volumes/Extreme SSD/Physics/LLR/BoseGas_4x4x4x4/{}/", argv[1]);
+    // std::string OutPath = std::format("/Volumes/Extreme SSD/Physics/bose_gas_llr/8_8_8_8/{}/", argv[2]);
+    std::string OutPath = std::format("/Volumes/Extreme SSD/Physics/bose_gas_llr/6_6_6_6/{}/", argv[1]);
     // std::string OutPath = std::format("/Users/olmo/Desktop/bose_gas_llr/4_4_4_4/{}/", argv[1]);
-    std::string OutPath = std::format("/Users/olmo/Desktop/bose_gas_llr/8_8_8_8/{}/", argv[2]);
+    // std::string OutPath = std::format("/Users/olmo/Desktop/bose_gas_llr/8_8_8_8/{}/", argv[2]);
 
     /* Initialize the action parameters */
-    action::RelativisticBoseGas::Params Par(1.0, 9.0, std::stod(argv[2]));
+    action::RelativisticBoseGas::Params Par(1.0, 9.0, std::stod(argv[1]));
 
     /* Declare the LLRController
         This will take care of setting up and running the simulation
@@ -55,13 +57,13 @@ auto main(int argc, char* argv[]) -> int {
 
     /* Run the LLR simulation
         This will perform nMonteCarlo updates for each NR or RM step */
-    // for (int Rep = 0; Rep < 10; Rep++) {
-    // std::string RunName = std::format("replica_{}", Rep);
-    std::string RunName = argv[1];
-    bool        SaveData = false;
-    bool        SaveConfig = false;
-    Cont.run(RunName, 100, 1000, 2000, SaveData, SaveConfig);
-    // }
+    for (int Rep = 0; Rep < 10; Rep++) {
+        std::string RunName = std::format("replica_{}", Rep);
+        // std::string RunName = std::format("{}", argv[1]);
+        bool SaveData = true;
+        bool SaveConfig = false;
+        Cont.run(RunName, 10, 500, 2000, SaveData, SaveConfig);
+    }
 
     return EXIT_SUCCESS;
 }
