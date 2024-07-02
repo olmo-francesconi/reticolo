@@ -41,11 +41,6 @@ class LlrMetWorker : public montecarlo::MonteCarloHandler<Action> {
     using McDataType = montecarlo::data<typename Action::ActionType>;
     using ObsType = typename Action::Observables;
 
-    /* HMC support fields */
-    LatticeType _Mom;
-    LatticeType _Forces;
-    LatticeType _OldField;
-
     /* Met settings */
     double _ProposalWidth;
 
@@ -101,10 +96,7 @@ LlrMetWorker<Action>::LlrMetWorker(std::string        handler_name,  //
                                             seed,           //
                                             StdOut,         //
                                             save_data,      //
-                                            save_config),
-      _Mom(field.getSizes()),
-      _Forces(field.getSizes()),
-      _OldField(field.getSizes()) {
+                                            save_config) {
     // Log stuff
     _Logger << IO::LI_time() +
                    std::format("Monte Carlo Handler - Initialization completed in {:.3f} ms\n", _T.elapsed_ms());
@@ -142,61 +134,6 @@ void LlrMetWorker<Action>::updateField() {
     _McStats._Acceptance = static_cast<double>(Acc) / _Field.getNsites();
     _McStats._DSRe = SVarTot.real();
     _McStats._DSIm = SVarTot.imag();
-
-    // int NSites = _Field.getNsites();
-    // // save the old field configuration;
-    // _OldField = _Field;
-    // // Generate random momenta and compute initial kinetic term
-    // RealD OldK(0.0);
-    // for (int Site = 0; Site < NSites; Site++) {
-    //     randomize(_Mom[Site], 1.0, _Norm, _Rng);
-    //     OldK += dot(_Mom[Site]);
-    // }
-    // OldK *= 0.5;
-    // // Compute Forces
-    // _Action.compute_LLRForces(_Field, _Forces, _Sk, _Width, _Ak);
-    // // Momenta half step
-    // for (int Site = 0; Site < NSites; Site++) {
-    //     _Mom[Site] -= 0.5 * _Stepsize * _Forces[Site];
-    // }
-    // // Leapfrog algorithm
-    // for (uint Step = 0; Step < _Steps; Step++) {
-    //     // Update field
-    //     for (int Site = 0; Site < NSites; Site++) {
-    //         _Field[Site] += _Stepsize * _Mom[Site];
-    //     }
-    //     // Compute updated forces
-    //     _Action.compute_LLRForces(_Field, _Forces, _Sk, _Width, _Ak);
-    //     // Update momenta
-    //     for (int Site = 0; Site < NSites; Site++) {
-    //         _Mom[Site] -= _Stepsize * _Forces[Site];
-    //     }
-    // }
-    // // Momenta half step roll-back
-    // for (int Site = 0; Site < _Mom.getNsites(); Site++) {
-    //     _Mom[Site] += 0.5 * _Stepsize * _Forces[Site];
-    // }
-    // // Compute final action
-    // ActionType OldS = _McStats.getS();
-    // ActionType NewS = _Action.compute_S(_Field);
-    // // Compute end kinetic term
-    // RealD NewK(0.0);
-    // for (int Site = 0; Site < _Mom.getNsites(); Site++) {
-    //     NewK += dot(_Mom[Site]);
-    // }
-    // NewK *= 0.5;
-    // RealD SVarFull = NewS.real() - OldS.real() +                                            //
-    //                  (NewS.imag() - _Sk) * (NewS.imag() - _Sk) / (2.0 * _Width * _Width) -  //
-    //                  (OldS.imag() - _Sk) * (OldS.imag() - _Sk) / (2.0 * _Width * _Width) +
-    //                  _Ak * (NewS.imag() - OldS.imag());
-
-    // // Final Metropolis check
-    // if (exp(OldK - NewK - SVarFull) > _Unif(_Rng)) {
-    //     this->_McStats.update(1, NewS - _McStats.getS());
-    // } else {
-    //     this->_Field = _OldField;
-    //     this->_McStats.update(0, 0.0);
-    // }
 }
 
 /* Argument deduction guide */
