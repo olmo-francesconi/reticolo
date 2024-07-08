@@ -12,12 +12,13 @@
 
 #pragma once
 
+#include <H5Ipublic.h>
+#include <H5Tpublic.h>
+
 #include <cstddef>
 #include <format>
 #include <string>
-#include <vector>
 
-#include "H5Cpp.h"
 #include "reticolo/action/action_base.hpp"
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
