@@ -56,8 +56,8 @@ class HMC : public MonteCarloHandler<Action> {
 
   public:
     /* Constructor */
-    HMC(std::string run_name, Action& action, LatticeType& field, uint seed, const std::string& output_path,
-        bool StdOut);
+    HMC(std::string handler_name, Action& action, LatticeType& field, uint seed, const std::string& output_path,
+        bool StdOut, bool save_data, bool save_config);
 
     /* override virtual updateField() method */
     void updateField() override;
@@ -70,9 +70,21 @@ class HMC : public MonteCarloHandler<Action> {
 };
 
 template <HmcCapable Action>
-HMC<Action>::HMC(std::string run_name, Action& action, LatticeType& field, uint seed, const std::string& output_path,
-                 bool StdOut)
-    : MonteCarloHandler<Action>(run_name, action, field, seed, output_path, StdOut),
+HMC<Action>::HMC(std::string        handler_name,  //
+                 Action&            action,        //
+                 LatticeType&       field,         //
+                 uint               seed,          //
+                 const std::string& output_path,   //
+                 bool               StdOut,        //
+                 bool               save_data,     //
+                 bool               save_config)
+    : montecarlo::MonteCarloHandler<Action>(output_path,    //
+                                            handler_name,   //
+                                            action, field,  //
+                                            seed,           //
+                                            StdOut,         //
+                                            save_data,      //
+                                            save_config),
       _Mom(field.getSizes()),
       _Forces(field.getSizes()),
       _OldField(field.getSizes()) {
@@ -135,5 +147,6 @@ void HMC<Action>::updateField() {
 
 /* Argument deduction guide */
 template <HmcCapable Action>
-HMC(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&) -> HMC<Action>;
+HMC(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&, bool, bool, bool)
+    -> HMC<Action>;
 }  // namespace reticolo::montecarlo
