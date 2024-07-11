@@ -50,6 +50,7 @@ class WeakFieldEuclideanGR : public action::ActionBase<HField<RealD>, RealD, 4> 
     /* Algorithm capabilities */
     const static bool IsMetropolisCapable = true;
     const static bool IsHmcCapable = true;
+    const static bool IsLLRCapable = false;
 
     /* Action parameters */
     struct Params {
@@ -61,12 +62,15 @@ class WeakFieldEuclideanGR : public action::ActionBase<HField<RealD>, RealD, 4> 
     /* Observables */
     struct Observables {
         double R;
+        auto   operator+=(const Observables& rhs) -> Observables {
+            R += rhs.R;
+            return *this;
+        };
+        auto operator/=(const double& rhs) -> Observables {
+            R /= rhs;
+            return *this;
+        };
     };
-    friend auto make_H5_Type<Observables>() {
-        hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(Observables));
-        H5Tinsert(DataTypeHid, "R", HOFFSET(Observables, R), H5T_NATIVE_DOUBLE);
-        return DataTypeHid;
-    }
 
     /* Constructors */
     WeakFieldEuclideanGR(Lattice<FieldType, 4>& field, double beta) : p(beta) { lattice_sync(field); };
@@ -592,6 +596,19 @@ inline void WeakFieldEuclideanGR::compute_Force_loc(const Lattice<FieldType, 4>&
 }  // namespace reticolo::action
 
 /*--------------------------------------------------------------------------------------------------
+  HDF5 helper method Implementatin
+--------------------------------------------------------------------------------------------------*/
+
+namespace reticolo {
+template <>
+auto make_H5_Type<action::WeakFieldEuclideanGR::Observables>() {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::WeakFieldEuclideanGR::Observables));
+    H5Tinsert(DataTypeHid, "R", HOFFSET(action::WeakFieldEuclideanGR::Observables, R), H5T_NATIVE_DOUBLE);
+    return DataTypeHid;
+}
+}  // namespace reticolo
+
+/*--------------------------------------------------------------------------------------------------
   montecarlo::Metropolis::updateField() Specialization
 --------------------------------------------------------------------------------------------------*/
 #include "reticolo/montecarlo/Metropolis.hpp"
@@ -614,10 +631,11 @@ void reticolo::montecarlo::Metropolis<reticolo::action::WeakFieldEuclideanGR>::u
         ActionType              ActionChange = 0.0;  // Cumulative curvature variation
         for (int& CheckSite : _Action._Checks[Site]) {
             RealD Tmp = _Action.compute_LGR_loc(_Field, CheckSite);
-            // std::cout << Tmp << " ";
             if (Tmp > 0.0) {
                 LGRPost.push_back(Tmp);
                 ActionChange += Tmp - _Action._LGR[CheckSite];
+            } else {
+                break;
             }
         }
         // Metropolis acceptance + positive action
