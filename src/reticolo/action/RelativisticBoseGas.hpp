@@ -70,7 +70,6 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
             return *this;
         };
     };
-    // friend auto make_H5_Type<Observables>();
 
     /* Constructors */
     RelativisticBoseGas(Lattice<FieldType, 4>& field, double lambda, double eta, double chem_mu)
