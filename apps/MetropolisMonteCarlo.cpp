@@ -16,10 +16,12 @@
 #include <cstdlib>
 #include <string>
 
-#include "reticolo/action/RelativisticBoseGas.hpp"
+// #include "reticolo/action/RelativisticBoseGas.hpp"
+#include "reticolo/action/WeakFieldEuclideanGR.hpp"
 #include "reticolo/lattice/lattice.hpp"
-#include "reticolo/montecarlo/HMC.hpp"
+#include "reticolo/montecarlo/Metropolis.hpp"
 #include "reticolo/types/core.hpp"
+#include "reticolo/types/hfield.hpp"
 
 using namespace reticolo;
 
@@ -28,16 +30,23 @@ auto main(int argc, char* argv[]) -> int {
     std::string OutPath = "MetropolisMonteCarlo_out";
 
     /* Initialize the lattice */
-    Lattice<ComplexD, 4> Lattice({8, 8, 8, 8});
+    Lattice<HField<RealD>, 4> Lattice({6, 6, 6, 6});
 
     /* Initialize the action */
-    action::RelativisticBoseGas::Params Par(1.0, 9.0, 0.0);
-    action::RelativisticBoseGas         Action(Lattice, Par);
+    action::WeakFieldEuclideanGR::Params Par(5.7);
+    action::WeakFieldEuclideanGR         Action(Lattice, Par);
 
     // simulation workflow for indefinite end
-    montecarlo::HMC Worker("HMC", Action, Lattice, 0, OutPath);
+    montecarlo::Metropolis MetropolisWorker("RelativisticBoseGas_Worker",  // Worker name
+                                            Action,                        // Action
+                                            Lattice,                       // Lattice
+                                            0,                             // RNG seed
+                                            OutPath,                       // Output directory
+                                            true,                          // Print to stdout
+                                            true,                          // Save measurements
+                                            false);                        // Save configs
 
-    Worker.run(100000, 1000, 10);
+    MetropolisWorker.run("mcmc", 0, 0, 1, true, false);
 
     return EXIT_SUCCESS;
 }

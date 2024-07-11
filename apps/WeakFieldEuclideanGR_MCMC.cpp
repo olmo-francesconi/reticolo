@@ -14,6 +14,7 @@
 ******************************************************************************/
 
 #include <omp.h>
+#include <sys/types.h>
 
 #include <cstdlib>
 #include <format>
@@ -46,9 +47,9 @@ auto main(int argc, char* argv[]) -> int {
     action::WeakFieldEuclideanGR         Action(Lattice, Par);
 
     /* Set up and run Monte Carlo */
-    montecarlo::Metropolis MetropolisWorker(RunName, Action, Lattice, 0, OutPath, true);
+    montecarlo::Metropolis MetropolisWorker(RunName, Action, Lattice, 0, OutPath, true, false, false);
     MetropolisWorker.setParams(0.1);
-    MetropolisWorker.run(NUpdates, 0, 1);
+    MetropolisWorker.run("LQGR", NUpdates, 0, 1);
 
     return EXIT_SUCCESS;
 }
