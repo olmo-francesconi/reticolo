@@ -42,6 +42,15 @@ struct data<ActionType> {
         _S += double(dS);
         _DS = double(dS);
     }
+    void softReset() {
+        _Acceptance = 0.0;
+        _DS = 0.0;
+    }
+    void hardReset() {
+        _Acceptance = 0;
+        _S = 0.0;
+        _DS = 0.0;
+    }
 
     /* Operators overloading */
     auto operator=(const data<ActionType>& rhs) -> data<ActionType>& {
@@ -55,6 +64,20 @@ struct data<ActionType> {
         _Acceptance += rhs._Acceptance;
         _S += rhs._S;
         _DS += rhs._DS;
+        return *this;
+    }
+
+    auto operator-=(const data<ActionType>& rhs) -> data<ActionType>& {
+        _Acceptance -= rhs._Acceptance;
+        _S -= rhs._S;
+        _DS -= rhs._DS;
+        return *this;
+    }
+
+    auto operator*=(const data<ActionType>& rhs) -> data<ActionType>& {
+        _Acceptance *= rhs._Acceptance;
+        _S *= rhs._S;
+        _DS *= rhs._DS;
         return *this;
     }
 
@@ -74,6 +97,21 @@ struct data<ActionType> {
 
     friend auto operator+(data<ActionType> lhs, const data<ActionType>& rhs) -> data<ActionType> {
         lhs += rhs;
+        return lhs;
+    }
+
+    friend auto operator-(data<ActionType> lhs, const data<ActionType>& rhs) -> data<ActionType> {
+        lhs -= rhs;
+        return lhs;
+    }
+
+    friend auto operator*(data<ActionType> lhs, const data<ActionType>& rhs) -> data<ActionType> {
+        lhs *= rhs;
+        return lhs;
+    }
+
+    friend auto operator/(data<ActionType> lhs, const double& rhs) -> data<ActionType> {
+        lhs /= rhs;
         return lhs;
     }
 };
