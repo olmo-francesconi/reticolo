@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include <omp.h>
+
 #include <cmath>
 #include <string>
 
@@ -64,8 +66,8 @@ class HMC : public MonteCarloHandler<Action> {
 
     /* Initialize parameters */
     void setParams(uint steps, double stepsize) {
-        _Stepsize = stepsize;
         _Steps = steps;
+        _Stepsize = stepsize;
     }
 };
 

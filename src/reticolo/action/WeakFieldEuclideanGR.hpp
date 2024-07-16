@@ -91,7 +91,7 @@ class WeakFieldEuclideanGR : public action::ActionBase<HField<RealD>, RealD, 4> 
     void compute_Forces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& Forces) override;
 
     /* Perform the measurements or returns updated Observable values*/
-    static auto Measure(const Lattice<FieldType, 4>& field) -> Observables { return {0}; };
+    auto Measure(const Lattice<FieldType, 4>& field) -> Observables;
 
     /* Log stuff*/
     auto name() -> std::string override { return "Weak Field Euclidean General Relativity"; };
@@ -327,6 +327,10 @@ inline void WeakFieldEuclideanGR::compute_Forces(const Lattice<FieldType, 4>& fi
 
         forces[Site] *= kappa;
     }
+}
+
+inline auto WeakFieldEuclideanGR::Measure(const Lattice<FieldType, 4>& field) -> Observables {
+    return {std::reduce(_LGR.begin(), _LGR.end())};
 }
 /*--------------------------------------------------------------------------------------------------
       Custom variables and methods for WeakFieldEuclideanGR Class implementation

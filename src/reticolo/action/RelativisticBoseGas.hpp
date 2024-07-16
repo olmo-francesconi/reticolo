@@ -92,7 +92,7 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
                            double ak) const;
 
     /* Perform the measurements or returns updated Observable values*/
-    static auto Measure(const Lattice<FieldType, 4>& field) -> Observables;
+    auto Measure(const Lattice<FieldType, 4>& field) -> Observables;
 
     /* Log stuff */
     auto name() -> std::string override { return "Relativistic Bose Gas"; };

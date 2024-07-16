@@ -31,7 +31,7 @@ class ActionBase {
         -> ActionType = 0;
 
     /* HMC methods */
-    virtual void compute_Forces(const Lattice<FieldType, dim>& field, Lattice<FieldType, dim>& Forces) = 0;
+    virtual void compute_Forces(const Lattice<FieldType, dim>& field, Lattice<FieldType, dim>& forces) = 0;
 
     /* Log stuff */
     virtual auto name() -> std::string = 0;        // return the action name
