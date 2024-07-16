@@ -6,17 +6,11 @@
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
-    Montecarlo workspace folder structure:
-        OutPath
-        ├── meas
-        │   └── Run_name.h5
-        └── reticolo.log
 ******************************************************************************/
 
 #include <cstdlib>
 #include <string>
 
-// #include "reticolo/action/RelativisticBoseGas.hpp"
 #include "reticolo/action/WeakFieldEuclideanGR.hpp"
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/montecarlo/Metropolis.hpp"
@@ -26,7 +20,7 @@
 using namespace reticolo;
 
 auto main(int argc, char* argv[]) -> int {
-    /*  Set the output folder to be ./MetropolisMonteCarlo */
+    /*  Set the output folder to be ./MetropolisMonteCarlo_out */
     std::string OutPath = "MetropolisMonteCarlo_out";
 
     /* Initialize the lattice */
@@ -37,16 +31,23 @@ auto main(int argc, char* argv[]) -> int {
     action::WeakFieldEuclideanGR         Action(Lattice, Par);
 
     // simulation workflow for indefinite end
-    montecarlo::Metropolis MetropolisWorker("RelativisticBoseGas_Worker",  // Worker name
-                                            Action,                        // Action
-                                            Lattice,                       // Lattice
-                                            0,                             // RNG seed
-                                            OutPath,                       // Output directory
-                                            true,                          // Print to stdout
-                                            true,                          // Save measurements
-                                            false);                        // Save configs
+    montecarlo::Metropolis MetropolisWorker("LQGR",   // Worker name
+                                            Action,   // Action
+                                            Lattice,  // Lattice
+                                            0,        // RNG seed
+                                            OutPath,  // Output directory
+                                            true,     // Print to stdout
+                                            true,     // Save measurements
+                                            false);   // Save configs
 
-    MetropolisWorker.run("mcmc", 0, 0, 1, true, false);
+    MetropolisWorker.setParams(1.0);
+
+    MetropolisWorker.run("mcmc",  // Run name
+                         0,       // Total Monte Carlo Updates (0=infinite, stop with CTRL+C)
+                         0,       // Initial thermalization steps
+                         1,       // Measure interval
+                         true,    // Field initialization
+                         false);  // Hot start (random field initialization)
 
     return EXIT_SUCCESS;
 }
