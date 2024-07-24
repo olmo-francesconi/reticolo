@@ -32,7 +32,6 @@
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
 #include "reticolo/types/random.hpp"
-#include "yaml-cpp/node/node.h"
 
 namespace fs = std::filesystem;
 
@@ -59,23 +58,19 @@ class MonteCarloHandler {
     fs::path          _WorkspacePath;  // Workspace folder path
 
     /* hdf5 stuff */
-    fs::path     _Hdf5OutputFile;            // output file complete path
-    const size_t _MaxBufferSize = 10000;     // Maximun size for the measure buffer
-    const double _MaxBufferWriteDelay = 60;  // Maximum delay between data writes
-    bool         _saveConfig;                // whether or not save the configurations to disk
-    bool         _saveData;                  // whether or not save Monte Carlo and Observables to disk
+    fs::path _Hdf5OutputFile;             // output file complete path
+    size_t   _MaxBufferSize = 10000;      // Maximun size for the measure buffer
+    double   _MaxBufferWriteDelay = 600;  // Maximum delay between data writes in seconds
+    bool     _saveConfig;                 // whether or not save the configurations to disk
+    bool     _saveData;                   // whether or not save Monte Carlo and Observables to disk
 
     /* Physics stuff */
     Action&      _Action;  // reference to the Action
     LatticeType& _Field;   // reference to the Lattice
 
     McDataType     _McStats;        // current MonteCarlo status
-    McDataType     _McStatsSUM;     // MonteCarlo average over measurements
-    McDataType     _McStatsSUM2;    // MonteCarlo std dev over measurements
     McDataVectType _McStatsBuffer;  // MonteCarlo status buffer
     ObsType        _Obs;            // latest measurements values
-    ObsType        _ObsSUM;         // Observables average over measurements
-    ObsType        _ObsSUM2;        // Observables std dev over measurements
     ObsVectType    _ObsBuffer;      // Observables measurements buffer
     unsigned long  _NMeasurements;  // Total numebr of measurements
 
@@ -90,7 +85,7 @@ class MonteCarloHandler {
     IO::Logger _Logger;  // Private Logger
 
     /* File output utilities */
-    void save_Configuration(uint Iter);  // Save curretn configuration stored in _Lattice
+    void saveConfiguration(uint Iter);  // Save curretn configuration stored in _Lattice
 
     /* Randomize the field (hot start)*/
     void randomizeField(double scale = 1.0);
@@ -109,30 +104,17 @@ class MonteCarloHandler {
     MonteCarloHandler(const std::string& output_path, std::string handler_name, Action& action, LatticeType& field,
                       uint seed, bool StdOut, bool save_data, bool save_config);
 
-    void init(const YAML::Node& config);
-
-    /* Performs nMC Monte Carlo steps and returns a montecarlo::data object with the averages */
+    /* Performs nMC Monte Carlo steps */
     void run(const std::string& RunName, uint nMC, uint nTherm, uint MeasureStep = 1, bool initialize_field = false,
              bool hot_start = false, double hs_scale = 1.0);
 
-    auto get_McCUR() -> McDataType { return _McStats; }
-    auto get_McAVG() -> McDataType {
-        McDataType Res = _McStatsSUM;
-        Res /= (double)_NMeasurements;
-        return Res;
-    }
-    auto get_McVAR() -> McDataType {
-        McDataType ExpSquare = _McStatsSUM2 / (double)_NMeasurements;
-        McDataType Exp = _McStatsSUM / (double)_NMeasurements;
-        return ExpSquare - Exp * Exp;
-    }
-    auto get_ObsCUR() -> ObsType { return _Obs; }
-    auto get_ObsAVG() -> ObsType {
-        ObsType Res = _ObsSUM;
-        Res /= (double)_NMeasurements;
-        return Res;
-    }
-    // auto get_ObsSTD() -> ObsType { return _ObsSUM2 / _NMeasurements; }
+    /* Runs indefinitely */
+    void run_cont(const std::string& RunName, uint nTherm, uint MeasureStep, bool initialize_field, bool hot_start,
+                  double hs_scale);
+
+    /* Getters for Monte Carlo stats and Observables */
+    auto getMCStats() -> McDataType { return _McStats; }
+    auto getObs() -> ObsType { return _Obs; }
 };
 
 /*--------------------------------------------------------------------------------------------------
@@ -157,8 +139,12 @@ MonteCarloHandler<Action>::MonteCarloHandler(const std::string& output_path, std
         _WorkspacePath = fs::canonical(_WorkspacePath);
         _Hdf5OutputFile = _WorkspacePath / "measurements" / (_HandlerName + ".h5");
         fs::create_directories(_WorkspacePath / "logs");
-        fs::create_directories(_WorkspacePath / "configurations");
-        fs::create_directories(_WorkspacePath / "measurements");
+        if (save_config) {
+            fs::create_directories(_WorkspacePath / "configurations");
+        }
+        if (save_data) {
+            fs::create_directories(_WorkspacePath / "measurements");
+        }
     } catch (const std::exception& e) {
         std::cerr << e.what() << '\n';
         exit(EXIT_FAILURE);
@@ -209,10 +195,10 @@ template <class Action>
 inline void MonteCarloHandler<Action>::run(const std::string& RunName, uint nMC, uint nTherm, uint MeasureStep,
                                            bool initialize_field, bool hot_start, double hs_scale) {
     // set reasonable hdf5 dataset chunk size
-    uint ChunkSize = 1000;
-    uint TotMeasurements = nMC / MeasureStep;
-    if (TotMeasurements < ChunkSize) {
-        ChunkSize = TotMeasurements;
+    uint ChunkSize = 10000;
+    uint TotMeasure = nMC / MeasureStep;
+    if (TotMeasure < ChunkSize) {
+        ChunkSize = TotMeasure;
     }
     if (ChunkSize == 0) {
         ChunkSize = 1;
@@ -223,6 +209,89 @@ inline void MonteCarloHandler<Action>::run(const std::string& RunName, uint nMC,
             _Hdf5OutputFile, RunName + "/Observables", ChunkSize, true);
         IO::GlobalHdf5Handler.setupExpandableDataset<McDataType>(  //
             _Hdf5OutputFile, RunName + "/MonteCarlo", ChunkSize, true);
+    }
+
+    // Log Run parameters
+    _Logger << IO::LI_time() + "[" + RunName + "] - Starting Monte Carlo updates..\n";
+
+    // Initialize the field
+    if (initialize_field) {
+        if (hot_start) {
+            _Logger << IO::LI_void() + std::format("    initial conditions : hot start [scale : {}]\n", hs_scale);
+            randomizeField(hs_scale);
+        } else {
+            _Logger << IO::LI_void() + "    initial conditions : cold start\n";
+            resetField();
+        }
+    }
+
+    // Initialize the starting value of the Action
+    ActionType SInit = _Action.compute_S(_Field);
+    _McStats.setS(SInit);
+
+    // Thermalize the field
+    if (nTherm > 0) {
+        // Log that the folder and logging stuff has bee initialized properly
+        _Logger << IO::LI_time() + "[" + RunName + "] - Thermalization started...\n";
+        _Logger << IO::LI_void() + std::format("  thermalizatoin steps : {}\n", nTherm);
+        // Reset the timer
+        _T.reset();
+        // Perform the thermalization sweeps
+        for (uint Iter = 0; Iter < nTherm; Iter++) {
+            updateField();
+        }
+        // Log timing information
+        _Logger << IO::LI_time() +
+                       std::format("[{}] - Thermalization finished in {:.2f} ms\n", RunName, _T.elapsed_ms());
+    }
+    // do checks on nMC and MeasureStep -> sanitize nMC from unnecessary iterations
+    _Logger << IO::LI_void() + "[" + RunName + "] - Starting Measurements..\n";
+
+    if (_saveData) {
+        // Initialize std::vector of Monte Carlo stats
+        _McStatsBuffer.clear();
+        _McStatsBuffer.reserve(TotMeasure);
+        // Initialize std::vector of observable measurements
+        _ObsBuffer.clear();
+        _ObsBuffer.reserve(TotMeasure);
+    }
+
+    _Logger << IO::LI_void() + "         Total updates : " + std::to_string(nMC) + '\n';
+    _Logger << IO::LI_void() + "           Mesure step : " + std::to_string(MeasureStep) + '\n';
+    _Logger << IO::LI_void() + "    Total measurements : " + std::to_string(TotMeasure) + '\n';
+    _T.reset();
+
+    for (uint Iteration = 1; Iteration <= nMC; Iteration++) {
+        // perform a sweep
+        updateField();
+        // measure if this is a MeasureStep-th iteration
+        if (Iteration % MeasureStep == 0) {
+            measure_utility(RunName, Iteration);
+        }
+    }
+
+    // save the last measurements in the buffer and flush
+    if (_saveData && _McStatsBuffer.size() != 0 && _ObsBuffer.size() != 0) {
+        IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/Observables", _ObsBuffer);
+        IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/MonteCarlo", _McStatsBuffer);
+        _McStatsBuffer.clear();
+        _ObsBuffer.clear();
+        _Logger << IO::LI_void() + "Final data saved\n";
+    }
+
+    _Logger << IO::LI_time() + std::format("[{}] - Measurements done in {:.3f}  s\n", RunName, _T.elapsed_s());
+}
+
+template <class Action>
+inline void MonteCarloHandler<Action>::run_cont(const std::string& RunName, uint nTherm, uint MeasureStep,
+                                                bool initialize_field, bool hot_start, double hs_scale) {
+    // set reasonable hdf5 dataset chunk size
+    if (_saveData && MeasureStep > 0) {
+        IO::GlobalHdf5Handler.createGroup(_Hdf5OutputFile, RunName);
+        IO::GlobalHdf5Handler.setupExpandableDataset<ObsType>(  //
+            _Hdf5OutputFile, RunName + "/Observables", 10000, true);
+        IO::GlobalHdf5Handler.setupExpandableDataset<McDataType>(  //
+            _Hdf5OutputFile, RunName + "/MonteCarlo", 10000, true);
     }
     // Log Run parameters
     _Logger << IO::LI_time() + "[" + RunName + "] - Starting Monte Carlo updates..\n";
@@ -238,6 +307,10 @@ inline void MonteCarloHandler<Action>::run(const std::string& RunName, uint nMC,
         }
     }
 
+    // Initialize the starting value of the Action
+    ActionType SInit = _Action.compute_S(_Field);
+    _McStats.setS(SInit);
+
     // Thermalize the field
     if (nTherm > 0) {
         // Log that the folder and loggind stuff has bee initialized properly
@@ -245,9 +318,6 @@ inline void MonteCarloHandler<Action>::run(const std::string& RunName, uint nMC,
         _Logger << IO::LI_void() + std::format("  thermalizatoin steps : {}\n", nTherm);
         // Reset the timer
         _T.reset();
-        // Initialize the value of the action
-        ActionType SInit = _Action.compute_S(_Field);
-        _McStats.setS(SInit);
         // Perform the thermalization sweeps
         for (uint Iter = 0; Iter < nTherm; Iter++) {
             updateField();
@@ -267,52 +337,28 @@ inline void MonteCarloHandler<Action>::run(const std::string& RunName, uint nMC,
         _ObsBuffer.clear();
         _ObsBuffer.reserve(_MaxBufferSize);
     }
-    // Initialize measurements accumulator
-    _McStatsSUM = McDataType();
-    _McStatsSUM2 = McDataType();
-    _ObsSUM = ObsType();
-    _NMeasurements = 0;
-    // Initialize the starting value of S
-    ActionType SInit = _Action.compute_S(_Field);
-    _McStats.setS(SInit);
+
+    _Logger << IO::LI_void() + "         Total updates : inf (Soft exit via single Ctrl+C)\n";
+    _Logger << IO::LI_void() + "           Mesure step : " + std::to_string(MeasureStep) + '\n';
+    _T.reset();
+
+    // Set the SIGINT handler to perform a SoftExit
+    // [Ctrl+C]x1 -> stop simulation on the next iteration
+    // [Ctrl+C]x2 -> immediate stop, possible datacorruption if that
+    //               happpens during data output
+    SignalHandler::set_SIGINT_handler(SignalHandler::SIGINT_SoftExit);
     // Keep track of the iteration number
     unsigned long Iteration = 0;
-    _NMeasurements = 0;
-    // Reset the timer
-    _T.reset();
-    // simulation workflow for indefinite end
-    if (nMC == 0) {
-        // LogMessage << IO::LI_void() << "        OpenMP threads : " << omp_get_max_threads() << "\n"
-        _Logger << IO::LI_void() + "         Total Updates : inf (Soft exit via single Ctrl+C)\n";
-        _Logger << IO::LI_void() + "           Mesure step : " + std::to_string(MeasureStep) + '\n';
-        // Set the SIGINT handler to perform a SoftExit
-        // [Ctrl+C]x1 -> stop simulation on the next iteration
-        // [Ctrl+C]x2 -> immediate stop, possible datacorruption if that
-        //               happpens during data output
-        SignalHandler::set_SIGINT_handler(SignalHandler::SIGINT_SoftExit);
-        while (!SignalHandler::SoftExitRequested) {
-            // perform a sweep
-            updateField();
-            // measure if this is a MeasureStep-th iteration
-            if (Iteration % MeasureStep == 0) {
-                measure_utility(RunName, Iteration);
-            }
-            Iteration++;
+    while (!SignalHandler::SoftExitRequested) {
+        // perform a sweep
+        updateField();
+        // measure if this is a MeasureStep-th iteration
+        if (Iteration % MeasureStep == 0) {
+            measure_utility(RunName, Iteration);
         }
-        SignalHandler::SIGINT_reset();
-    } else {
-        // LogMessage << IO::LI_void() << "        OpenMP threads : " << omp_get_max_threads() << "\n"
-        _Logger << IO::LI_void() + "         Total Updates : " + std::to_string(nMC) + '\n';
-        _Logger << IO::LI_void() + "           Mesure step : " + std::to_string(MeasureStep) + '\n';
-        for (uint Iteration = 1; Iteration <= nMC; Iteration++) {
-            // perform a sweep
-            updateField();
-            // measure if this is a MeasureStep-th iteration
-            if (Iteration % MeasureStep == 0) {
-                measure_utility(RunName, Iteration);
-            }
-        }
+        Iteration++;
     }
+    SignalHandler::SIGINT_reset();
 
     // save the last measurements in the buffer and flush
     if (_saveData && _McStatsBuffer.size() != 0 && _ObsBuffer.size() != 0) {
@@ -330,7 +376,7 @@ inline void MonteCarloHandler<Action>::run(const std::string& RunName, uint nMC,
 --------------------------------------------------------------------------------------------------*/
 
 template <class Action>
-inline void MonteCarloHandler<Action>::save_Configuration(uint Iter) {
+inline void MonteCarloHandler<Action>::saveConfiguration(uint Iter) {
     fs::path FileName = _WorkspacePath / "cnfg" / (std::to_string(Iter) + ".h5");
     _Field.save_Configuration(FileName);
 }
@@ -355,16 +401,11 @@ template <class Action>
 inline void MonteCarloHandler<Action>::measure_utility(const std::string& RunName, unsigned long Iteration) {
     // Measure observables
     _Obs = _Action.Measure(_Field);
-    // Update AVGs and STDs
-    _McStatsSUM += _McStats;
-    _McStatsSUM2 += _McStats * _McStats;
-    _ObsSUM += _Obs;
-    // _ObsSUM2 += _Obs * _Obs;
-    _NMeasurements++;
 
+    _NMeasurements++;
     // Save the configuration
     if (_saveConfig) {
-        save_Configuration(Iteration);
+        saveConfiguration(Iteration);
     }
     // Save Monte Carlo data and Observables
     if (_saveData) {
