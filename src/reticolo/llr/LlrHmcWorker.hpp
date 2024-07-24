@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <format>
 #include <string>
 
@@ -32,7 +33,7 @@ concept LLRCapable = T::IsLLRCapable;
 --------------------------------------------------------------------------------------------------*/
 
 template <LLRCapable Action>
-class LlrHmcWorker : public montecarlo::MonteCarloHandler<Action> {
+class LLRHMCWorker : public montecarlo::MonteCarloHandler<Action> {
   private:
     /* Types definitions */
     using ActionType = typename Action::ActionType;
@@ -69,16 +70,16 @@ class LlrHmcWorker : public montecarlo::MonteCarloHandler<Action> {
 
   public:
     /* Constructor */
-    LlrHmcWorker(std::string handler_name, Action& action, LatticeType& field, uint seed,
+    LLRHMCWorker(std::string handler_name, Action& action, LatticeType& field, uint seed,
                  const std::string& output_path, bool StdOut, bool save_data, bool save_config);
 
     /* override virtual updateField() method */
     void updateField() override;
 
     /* Initialize parameters */
-    void setParams(uint steps, double stepsize) {
-        _Stepsize = stepsize;
+    void setParams(double traj_length, uint steps) {
         _Steps = steps;
+        _Stepsize = traj_length / _Steps;
     }
     void setLLRParams(double ak, double sk, double width) {
         _Ak = ak;
@@ -90,7 +91,7 @@ class LlrHmcWorker : public montecarlo::MonteCarloHandler<Action> {
 };
 
 template <LLRCapable Action>
-LlrHmcWorker<Action>::LlrHmcWorker(   //
+LLRHMCWorker<Action>::LLRHMCWorker(   //
     std::string        handler_name,  //
     Action&            action,        //
     LatticeType&       field,         //
@@ -116,7 +117,7 @@ LlrHmcWorker<Action>::LlrHmcWorker(   //
 }
 
 template <LLRCapable Action>
-void LlrHmcWorker<Action>::updateField() {
+void LLRHMCWorker<Action>::updateField() {
     int NSites = _Field.getNsites();
     // save the old field configuration;
     _OldField = _Field;
@@ -175,7 +176,7 @@ void LlrHmcWorker<Action>::updateField() {
 
 /* Argument deduction guide */
 template <LLRCapable Action>
-LlrHmcWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&)
-    -> LlrHmcWorker<Action>;
+LLRHMCWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&)
+    -> LLRHMCWorker<Action>;
 
 }  // namespace reticolo::LLR

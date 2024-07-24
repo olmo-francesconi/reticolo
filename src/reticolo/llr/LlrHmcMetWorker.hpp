@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <format>
 #include <string>
 
@@ -32,7 +33,7 @@ concept LLRCapable = T::IsLLRCapable;
 --------------------------------------------------------------------------------------------------*/
 
 template <LLRCapable Action>
-class LlrHmcMetWorker : public montecarlo::MonteCarloHandler<Action> {
+class LLRHMCMetWorker : public montecarlo::MonteCarloHandler<Action> {
   private:
     /* Types definitions */
     using ActionType = typename Action::ActionType;
@@ -72,17 +73,17 @@ class LlrHmcMetWorker : public montecarlo::MonteCarloHandler<Action> {
 
   public:
     /* Constructor */
-    LlrHmcMetWorker(std::string handler_name, Action& action, LatticeType& field, uint seed,
+    LLRHMCMetWorker(std::string handler_name, Action& action, LatticeType& field, uint seed,
                     const std::string& output_path, bool StdOut, bool save_data, bool save_config);
 
     /* override virtual updateField() method */
     void updateField() override;
 
     /* Initialize parameters */
-    void setParams(uint steps, double stepsize, double propWidth) {
-        _Stepsize = stepsize;
-        _Steps = steps;
-        _ProposalWidth = propWidth;
+    void setParams(double hmc_traj_len, uint hmc_steps, double met_prop_width) {
+        _Steps = hmc_steps;
+        _Stepsize = hmc_traj_len / hmc_steps;
+        _ProposalWidth = met_prop_width;
     }
     void setLLRParams(double ak, double sk, double width) {
         _Ak = ak;
@@ -94,7 +95,7 @@ class LlrHmcMetWorker : public montecarlo::MonteCarloHandler<Action> {
 };
 
 template <LLRCapable Action>
-LlrHmcMetWorker<Action>::LlrHmcMetWorker(  //
+LLRHMCMetWorker<Action>::LLRHMCMetWorker(  //
     std::string        handler_name,       //
     Action&            action,             //
     LatticeType&       field,              //
@@ -120,7 +121,7 @@ LlrHmcMetWorker<Action>::LlrHmcMetWorker(  //
 }
 
 template <LLRCapable Action>
-void LlrHmcMetWorker<Action>::updateField() {
+void LLRHMCMetWorker<Action>::updateField() {
     int NSites = _Field.getNsites();
     // save the old field configuration;
     _OldField = _Field;
@@ -211,7 +212,7 @@ void LlrHmcMetWorker<Action>::updateField() {
 
 /* Argument deduction guide */
 template <LLRCapable Action>
-LlrHmcMetWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&)
-    -> LlrHmcMetWorker<Action>;
+LLRHMCMetWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&)
+    -> LLRHMCMetWorker<Action>;
 
 }  // namespace reticolo::LLR

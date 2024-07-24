@@ -57,16 +57,15 @@ inline auto pretty_welcome() -> std::string {
     return WelcomeLogo;
 }
 
-const size_t KILO = 1024;  // Definition of what a Kilo of stuff is (Decimal: 1000, Binary: 1024)
 /* Returns a std::string representing the byte size in a convenient unit*/
 inline auto pretty_bytes(size_t bytes) -> std::string {
     std::array<std::string, 7> Suffixes({" B", "KB", "MB", "GB", "TB", "PB", "EB"});
 
     uint   SuffixIndex = 0;  // Pretty suffix index
     double Count = bytes;    // Pretty value
-    while (Count >= KILO && SuffixIndex < Suffixes.size()) {
+    while (Count >= 1024 && SuffixIndex < Suffixes.size()) {
         SuffixIndex++;
-        Count /= KILO;
+        Count /= 1024;
     }
     return std::format("{:>7.2f}", Count) + " " + Suffixes[SuffixIndex];
 }
@@ -140,20 +139,20 @@ inline auto print(const intvect<dim>& Vect) -> std::string {
 
 namespace fs = std::filesystem;
 
-class HdF5Handler {
+class HDF5Handler {
   private:
     omp_lock_t _IoLock;
 
   public:
-    HdF5Handler() { omp_init_lock(&_IoLock); };
-    ~HdF5Handler() { omp_destroy_lock(&_IoLock); }
+    HDF5Handler() { omp_init_lock(&_IoLock); };
+    ~HDF5Handler() { omp_destroy_lock(&_IoLock); }
 
     /* File creation */
     void initFile(const fs::path& FileName);
     auto checkFile(const fs::path& FileName) -> bool;
 
     /* Create group */
-    void createGroup(const fs::path& FileName, const std::string& GrouName);
+    void createGroup(const fs::path& FileName, const std::string& GroupName);
 
     /* Write to simple dataset */
     template <typename T>
@@ -170,14 +169,14 @@ class HdF5Handler {
     // void appendDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data);
 };
 
-void HdF5Handler::initFile(const fs::path& FileName) {
+void HDF5Handler::initFile(const fs::path& FileName) {
     omp_set_lock(&_IoLock);
     hid_t FileId = H5Fcreate(FileName.c_str(), H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT);
     H5Fclose(FileId);
     omp_unset_lock(&_IoLock);
 }
 
-auto HdF5Handler::checkFile(const fs::path& FileName) -> bool {
+auto HDF5Handler::checkFile(const fs::path& FileName) -> bool {
     omp_set_lock(&_IoLock);
     hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     if (FileId == H5I_INVALID_HID) {
@@ -189,17 +188,17 @@ auto HdF5Handler::checkFile(const fs::path& FileName) -> bool {
     return true;
 }
 
-void HdF5Handler::createGroup(const fs::path& FileName, const std::string& GrouName) {
+void HDF5Handler::createGroup(const fs::path& FileName, const std::string& GroupName) {
     omp_set_lock(&_IoLock);
     hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
-    hid_t GroupId = H5Gcreate(FileId, GrouName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t GroupId = H5Gcreate(FileId, GroupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5Gclose(GroupId);
     H5Fclose(FileId);
     omp_unset_lock(&_IoLock);
 }
 
 template <typename T>
-void HdF5Handler::writeDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data) {
+void HDF5Handler::writeDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data) {
     omp_set_lock(&_IoLock);
     std::array<hsize_t, 1> Entries = {data.size()};
 
@@ -214,7 +213,7 @@ void HdF5Handler::writeDataset(const fs::path& FileName, const std::string& Data
 }
 
 template <typename T>
-void HdF5Handler::setupExpandableDataset(const fs::path& FileName, const std::string& DataSetName, hsize_t ChunkSize,
+void HDF5Handler::setupExpandableDataset(const fs::path& FileName, const std::string& DataSetName, hsize_t ChunkSize,
                                          bool Compressed) {
     omp_set_lock(&_IoLock);
     hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
@@ -234,7 +233,7 @@ void HdF5Handler::setupExpandableDataset(const fs::path& FileName, const std::st
 }
 
 template <typename T>
-void HdF5Handler::appendDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data) {
+void HDF5Handler::appendDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data) {
     omp_set_lock(&_IoLock);
     std::array<hsize_t, 1> OldSize;
     std::array<hsize_t, 1> NewSize;
@@ -249,13 +248,13 @@ void HdF5Handler::appendDataset(const fs::path& FileName, const std::string& Dat
     NewSize[0] = OldSize[0] + ExtendSize[0];
     H5Dset_extent(DataSetId, NewSize.data());
     DataSpaceID = H5Dget_space(DataSetId);
-    H5Sselect_hyperslab(DataSpaceID, H5S_SELECT_SET, OldSize.data(), NULL, ExtendSize.data(), NULL);
+    H5Sselect_hyperslab(DataSpaceID, H5S_SELECT_SET, OldSize.data(), nullptr, ExtendSize.data(), nullptr);
     hid_t BufferDataSpaceID = H5Screate_simple(1, ExtendSize.data(), ExtendSize.data());
     H5Dwrite(DataSetId, DataTypeId, BufferDataSpaceID, DataSpaceID, H5P_DEFAULT, data.data());
     H5close();
     omp_unset_lock(&_IoLock);
 }
 
-inline HdF5Handler GlobalHdf5Handler;
+inline HDF5Handler GlobalHdf5Handler;
 
 }  // namespace reticolo::IO

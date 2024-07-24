@@ -79,7 +79,7 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
     RelativisticBoseGas(Lattice<FieldType, 4>& field, Params par) : p(par) { lattice_sync(field); };
 
     /* Sync with lattice */
-    void lattice_sync(const Lattice<FieldType, 4>& field) override;  // Nothing to do here
+    void lattice_sync(const Lattice<FieldType, 4>& field) override;
 
     /* Gloabal and local action computations */
     auto compute_S(const Lattice<FieldType, 4>& field) -> ActionType override;
@@ -92,7 +92,7 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
                            double ak) const;
 
     /* Perform the measurements or returns updated Observable values*/
-    auto Measure(const Lattice<FieldType, 4>& field) -> Observables;
+    static auto Measure(const Lattice<FieldType, 4>& field) -> Observables;
 
     /* Log stuff */
     auto name() -> std::string override { return "Relativistic Bose Gas"; };
@@ -244,13 +244,14 @@ inline void RelativisticBoseGas::compute_LLRForces(const Lattice<FieldType, 4>& 
 inline auto RelativisticBoseGas::Measure(const Lattice<FieldType, 4>& field) -> RelativisticBoseGas::Observables {
     FieldType Phi;
     RealD     Phi2 = 0.0;
+    auto      Norm = static_cast<RealD>(field.getNsites());
 
     for (int Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
         Phi2 += static_cast<RealD>(dot(Phi));
     }
 
-    return {0.5 * Phi2 / static_cast<RealD>(field.getNsites()), 0.0};
+    return {0.5 * Phi2 / Norm, 0.0};
 }
 
 }  // namespace reticolo::action

@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <format>
 #include <string>
 
@@ -32,7 +33,7 @@ concept LLRCapable = T::IsLLRCapable;
 --------------------------------------------------------------------------------------------------*/
 
 template <LLRCapable Action>
-class LlrMetWorker : public montecarlo::MonteCarloHandler<Action> {
+class LLRMetWorker : public montecarlo::MonteCarloHandler<Action> {
   private:
     /* Types definitions */
     using ActionType = typename Action::ActionType;
@@ -63,7 +64,7 @@ class LlrMetWorker : public montecarlo::MonteCarloHandler<Action> {
 
   public:
     /* Constructor */
-    LlrMetWorker(std::string handler_name, Action& action, LatticeType& field, uint seed,
+    LLRMetWorker(std::string handler_name, Action& action, LatticeType& field, uint seed,
                  const std::string& output_path, bool StdOut, bool save_data, bool save_config);
 
     /* override virtual updateField() method */
@@ -82,7 +83,7 @@ class LlrMetWorker : public montecarlo::MonteCarloHandler<Action> {
 };
 
 template <LLRCapable Action>
-LlrMetWorker<Action>::LlrMetWorker(std::string        handler_name,  //
+LLRMetWorker<Action>::LLRMetWorker(std::string        handler_name,  //
                                    Action&            action,        //
                                    LatticeType&       field,         //
                                    uint               seed,          //
@@ -103,7 +104,7 @@ LlrMetWorker<Action>::LlrMetWorker(std::string        handler_name,  //
 }
 
 template <LLRCapable Action>
-void LlrMetWorker<Action>::updateField() {
+void LLRMetWorker<Action>::updateField() {
     uint Acc = 0;  // acceptance
 
     double WindowWeight;  // weight of the windowing function   [normal distribution]
@@ -138,7 +139,7 @@ void LlrMetWorker<Action>::updateField() {
 
 /* Argument deduction guide */
 template <LLRCapable Action>
-LlrMetWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&)
-    -> LlrMetWorker<Action>;
+LLRMetWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&)
+    -> LLRMetWorker<Action>;
 
 }  // namespace reticolo::LLR
