@@ -65,9 +65,9 @@ class HMC : public MonteCarloHandler<Action> {
     void updateField() override;
 
     /* Initialize parameters */
-    void setParams(uint steps, double stepsize) {
+    void setParams(double traj_length, uint steps) {
         _Steps = steps;
-        _Stepsize = stepsize;
+        _Stepsize = traj_length / _Steps;
     }
 };
 
@@ -140,10 +140,10 @@ void HMC<Action>::updateField() {
     NewK *= 0.5;
     // Final Metropolis check
     if (exp(OldK - NewK + make_real(_McStats.getS() - NewS)) > _Unif(_Rng)) {
-        this->_McStats.update(1, NewS - _McStats.getS());
+        _McStats.update(1, NewS - _McStats.getS());
     } else {
-        this->_Field = _OldField;
-        this->_McStats.update(0, 0.0);
+        _Field = _OldField;
+        _McStats.update(0, 0.0);
     }
 }
 
