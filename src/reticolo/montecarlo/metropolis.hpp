@@ -12,7 +12,7 @@
 
 #include <string>
 
-#include "reticolo/lattice/lattice.hpp"
+#include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/montecarlo/MonteCarloHandler.hpp"
 #include "reticolo/tools/io_utils.hpp"
 #include "reticolo/types/core.hpp"
@@ -29,21 +29,21 @@ class Metropolis : public MonteCarloHandler<Action> {
     /* Types definitions */
     using ActionType = typename Action::ActionType;
     using FieldType = typename Action::FieldType;
-    using LatticeType = Lattice<typename Action::FieldType, Action::Dims>;
+    using LatticeType = Lattice<typename Action::FieldType>;
 
     /* Introduced names from MonteCarloHandler (avoids using ...) */
-    using MonteCarloHandler<Action>::_Field;
-    using MonteCarloHandler<Action>::_Action;
-    using MonteCarloHandler<Action>::_McStats;
-    using MonteCarloHandler<Action>::_Unif;
-    using MonteCarloHandler<Action>::_UnifC;
-    using MonteCarloHandler<Action>::_Norm;
-    using MonteCarloHandler<Action>::_Rng;
-    using MonteCarloHandler<Action>::_Logger;
-    using MonteCarloHandler<Action>::_T;
+    using MonteCarloHandler<Action>::m_Field;
+    using MonteCarloHandler<Action>::m_Action;
+    using MonteCarloHandler<Action>::m_McStats;
+    using MonteCarloHandler<Action>::m_Unif;
+    using MonteCarloHandler<Action>::m_UnifC;
+    using MonteCarloHandler<Action>::m_Norm;
+    using MonteCarloHandler<Action>::m_Rng;
+    using MonteCarloHandler<Action>::m_Logger;
+    using MonteCarloHandler<Action>::m_Timer;
 
     /* Metropolis settings */
-    double _ProposalWidth = 1.0;
+    double m_ProposalWidth = 1.0;
 
   public:
     /* Constructor */
@@ -54,7 +54,7 @@ class Metropolis : public MonteCarloHandler<Action> {
     void updateField() override;
 
     /* Initialize parameters */
-    void setParams(double propWidth) { _ProposalWidth = propWidth; }
+    void setParams(double propWidth) { m_ProposalWidth = propWidth; }
 };
 
 template <MetropolisCapable Action>
@@ -74,8 +74,8 @@ Metropolis<Action>::Metropolis(std::string        handler_name,  //
                                             save_data,      //
                                             save_config) {
     // Log stuff
-    _Logger << IO::LI_time() +
-                   std::format("MetropolisWorker - Initialization completed in {:.3f} ms\n", _T.elapsed_ms());
+    m_Logger << IO::LI_time() +
+                    std::format("MetropolisWorker - Initialization completed in {:.3f} ms\n", m_Timer.elapsed_ms());
 }
 
 template <MetropolisCapable Action>
@@ -84,27 +84,27 @@ void Metropolis<Action>::updateField() {
     ActionType SVarTot(0.0);  // cumulative action variation
 
     // Loop over the entire lattice
-    for (int Site = 0; Site < _Field.getNsites(); Site++) {
+    for (int Site = 0; Site < m_Field.getNsites(); Site++) {
         // uint ThId = omp_get_thread_num();
         // Generate a randomized local field variation
         FieldType FieldVar;  // local field variation
-        randomize(FieldVar, _ProposalWidth, _UnifC, _Rng);
+        randomize(FieldVar, m_ProposalWidth, m_UnifC, m_Rng);
 
         // Compute the associated action variation
-        ActionType SVar = _Action.compute_dS_loc(_Field, FieldVar, Site);
+        ActionType SVar = m_Action.compute_dS_loc(m_Field, FieldVar, Site);
 
         // Metropolis acceptance check
-        if (exp(-make_real(SVar)) > _Unif(_Rng)) {
+        if (exp(-make_real(SVar)) > m_Unif(m_Rng)) {
             Acc++;
-            _Field[Site] += FieldVar;
+            m_Field[Site] += FieldVar;
             SVarTot += SVar;
         }
     }
-    _McStats.update(((double)Acc) / _Field.getNsites(), SVarTot);
+    m_McStats.update(((double)Acc) / m_Field.getNsites(), SVarTot);
 }
 
 /* Argument deduction guide */
 template <MetropolisCapable Action>
-Metropolis(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&, bool, bool,
+Metropolis(std::string, Action&, Lattice<typename Action::FieldType>, uint, std::string&, bool, bool,
            bool) -> Metropolis<Action>;
 }  // namespace reticolo::montecarlo

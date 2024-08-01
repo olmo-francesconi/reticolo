@@ -24,45 +24,45 @@ namespace reticolo {
 
 class MemoryReportLayer {
   private:
-    MemoryReportLayer*              _Parent;
-    std::vector<MemoryReportLayer*> _Daughters;
-    std::string                     _Name;
-    uint                            _Depth{0};
-    size_t                          _Tot{0};
-    std::map<std::string, size_t>   _LayerReport;
+    MemoryReportLayer*              m_Parent;
+    std::vector<MemoryReportLayer*> m_Daughters;
+    std::string                     m_Name;
+    uint                            m_Depth{0};
+    size_t                          m_Tot{0};
+    std::map<std::string, size_t>   m_LayerReport;
 
   public:
     explicit MemoryReportLayer(std::string LayerName, MemoryReportLayer* Parent = nullptr)
-        : _Parent(Parent), _Name(std::move(LayerName)) {}
-    auto getName() -> std::string { return _Name; }
-    auto getParent() -> MemoryReportLayer* { return _Parent; }
+        : m_Parent(Parent), m_Name(std::move(LayerName)) {}
+    auto getName() -> std::string { return m_Name; }
+    auto getParent() -> MemoryReportLayer* { return m_Parent; }
     void increaseDepth() {
-        _Depth++;
-        for (auto* const Daughter : _Daughters) {
+        m_Depth++;
+        for (auto* const Daughter : m_Daughters) {
             Daughter->increaseDepth();
         }
     }
 
-    [[nodiscard]] auto getDepth() const -> int { return _Depth; }
-    [[nodiscard]] auto getTot() const -> size_t { return _Tot; }
+    [[nodiscard]] auto getDepth() const -> int { return m_Depth; }
+    [[nodiscard]] auto getTot() const -> size_t { return m_Tot; }
 
     void addDaughter(MemoryReportLayer* NewDaughter) {
-        _Daughters.push_back(NewDaughter);
-        _Tot += NewDaughter->getTot();
+        m_Daughters.push_back(NewDaughter);
+        m_Tot += NewDaughter->getTot();
         NewDaughter->increaseDepth();
     }
     void addEntry(const std::string& key, size_t value) {
-        _LayerReport.insert({key, value});
-        _Tot += value;
+        m_LayerReport.insert({key, value});
+        m_Tot += value;
     }
 
     auto getFullReport() -> std::string {
         std::string Res;
-        Res += std::format("{:.<48}[{}]\n", std::string(2 * _Depth, ' ') + _Name, IO::pretty_bytes(_Tot));
-        for (const auto& [key, value] : _LayerReport) {
-            Res += std::format("{:<48}[{}]\n", std::string(2 * (_Depth + 1), ' ') + key, IO::pretty_bytes(value));
+        Res += std::format("{:.<48}[{}]\n", std::string(2 * m_Depth, ' ') + m_Name, IO::pretty_bytes(m_Tot));
+        for (const auto& [key, value] : m_LayerReport) {
+            Res += std::format("{:<48}[{}]\n", std::string(2 * (m_Depth + 1), ' ') + key, IO::pretty_bytes(value));
         }
-        for (auto* const Daughter : _Daughters) {
+        for (auto* const Daughter : m_Daughters) {
             Res += Daughter->getFullReport();
         }
         return Res;
@@ -70,13 +70,13 @@ class MemoryReportLayer {
 
     auto getShortReport() -> std::string {
         std::string Res;
-        Res += std::format("{:.<48}[{}]\n", std::string(2 * _Depth, ' ') + _Name, IO::pretty_bytes(_Tot));
+        Res += std::format("{:.<48}[{}]\n", std::string(2 * m_Depth, ' ') + m_Name, IO::pretty_bytes(m_Tot));
         size_t OtherTot = 0;
-        for (const auto& [_, value] : _LayerReport) {
+        for (const auto& [_, value] : m_LayerReport) {
             OtherTot += value;
         }
-        Res += std::format("{:<48}[{}]\n", std::string(2 * (_Depth + 1), ' ') + "Others", IO::pretty_bytes(OtherTot));
-        for (auto* const Daughter : _Daughters) {
+        Res += std::format("{:<48}[{}]\n", std::string(2 * (m_Depth + 1), ' ') + "Others", IO::pretty_bytes(OtherTot));
+        for (auto* const Daughter : m_Daughters) {
             Res += Daughter->getShortReport();
         }
         return Res;

@@ -15,7 +15,7 @@
 #include <cmath>
 #include <string>
 
-#include "reticolo/lattice/lattice.hpp"
+#include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/montecarlo/MonteCarloHandler.hpp"
 #include "reticolo/tools/io_utils.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
@@ -34,27 +34,27 @@ class HMC : public MonteCarloHandler<Action> {
     /* Types definitions */
     using ActionType = typename Action::ActionType;
     using FieldType = typename Action::FieldType;
-    using LatticeType = Lattice<typename Action::FieldType, Action::Dims>;
+    using LatticeType = Lattice<typename Action::FieldType>;
 
     /* HMC support fields */
-    LatticeType _Mom;
-    LatticeType _Forces;
-    LatticeType _OldField;
+    LatticeType m_Mom;
+    LatticeType m_Forces;
+    LatticeType m_OldField;
 
     /* HMC settings */
-    double _Stepsize;
-    uint   _Steps;
+    double m_Stepsize;
+    uint   m_Steps;
 
     /* Introduced names from MonteCarloHandler (avoids using this->...) */
-    using MonteCarloHandler<Action>::_Field;
-    using MonteCarloHandler<Action>::_Action;
-    using MonteCarloHandler<Action>::_McStats;
-    using MonteCarloHandler<Action>::_Unif;
-    using MonteCarloHandler<Action>::_UnifC;
-    using MonteCarloHandler<Action>::_Norm;
-    using MonteCarloHandler<Action>::_Rng;
-    using MonteCarloHandler<Action>::_Logger;
-    using MonteCarloHandler<Action>::_T;
+    using MonteCarloHandler<Action>::m_Field;
+    using MonteCarloHandler<Action>::m_Action;
+    using MonteCarloHandler<Action>::m_McStats;
+    using MonteCarloHandler<Action>::m_Unif;
+    using MonteCarloHandler<Action>::m_UnifC;
+    using MonteCarloHandler<Action>::m_Norm;
+    using MonteCarloHandler<Action>::m_Rng;
+    using MonteCarloHandler<Action>::m_Logger;
+    using MonteCarloHandler<Action>::m_Timer;
 
   public:
     /* Constructor */
@@ -66,8 +66,8 @@ class HMC : public MonteCarloHandler<Action> {
 
     /* Initialize parameters */
     void setParams(double traj_length, uint steps) {
-        _Steps = steps;
-        _Stepsize = traj_length / _Steps;
+        m_Steps = steps;
+        m_Stepsize = traj_length / m_Steps;
     }
 };
 
@@ -87,68 +87,67 @@ HMC<Action>::HMC(std::string        handler_name,  //
                                             StdOut,         //
                                             save_data,      //
                                             save_config),
-      _Mom(field.getSizes()),
-      _Forces(field.getSizes()),
-      _OldField(field.getSizes()) {
+      m_Mom(field.getSizes()),
+      m_Forces(field.getSizes()),
+      m_OldField(field.getSizes()) {
     // Log stuff
-    _Logger << IO::LI_time() +
-                   std::format("Monte Carlo Handler - Initialization completed in {:.3f} ms\n", _T.elapsed_ms());
+    m_Logger << IO::LI_time() +
+                    std::format("Monte Carlo Handler - Initialization completed in {:.3f} ms\n", m_Timer.elapsed_ms());
 }
 
 template <HmcCapable Action>
 void HMC<Action>::updateField() {
-    int NSites = _Field.getNsites();
+    int NSites = m_Field.getNsites();
     // save the old field configuration;
-    _OldField = _Field;
+    m_OldField = m_Field;
     // Generate random momenta and compute initial kinetic term
     RealD OldK(0.0);
     for (int Site = 0; Site < NSites; Site++) {
-        randomize(_Mom[Site], 1.0, _Norm, _Rng);
-        OldK += dot(_Mom[Site]);
+        randomize(m_Mom[Site], 1.0, m_Norm, m_Rng);
+        OldK += dot(m_Mom[Site]);
     }
     OldK *= 0.5;
     // Compute Forces
-    _Action.compute_Forces(_Field, _Forces);
+    m_Action.compute_Forces(m_Field, m_Forces);
     // Momenta half step
     for (int Site = 0; Site < NSites; Site++) {
-        _Mom[Site] -= 0.5 * _Stepsize * _Forces[Site];
+        m_Mom[Site] -= 0.5 * m_Stepsize * m_Forces[Site];
     }
     // Leapfrog algorithm
-    for (uint Step = 0; Step < _Steps; Step++) {
+    for (uint Step = 0; Step < m_Steps; Step++) {
         // Update field
         for (int Site = 0; Site < NSites; Site++) {
-            _Field[Site] += _Stepsize * _Mom[Site];
+            m_Field[Site] += m_Stepsize * m_Mom[Site];
         }
         // Compute updated forces
-        _Action.compute_Forces(_Field, _Forces);
+        m_Action.compute_Forces(m_Field, m_Forces);
         // Update momenta
         for (int Site = 0; Site < NSites; Site++) {
-            _Mom[Site] -= _Stepsize * _Forces[Site];
+            m_Mom[Site] -= m_Stepsize * m_Forces[Site];
         }
     }
     // Momenta half step roll-back
-    for (int Site = 0; Site < _Mom.getNsites(); Site++) {
-        _Mom[Site] += 0.5 * _Stepsize * _Forces[Site];
+    for (int Site = 0; Site < m_Mom.getNsites(); Site++) {
+        m_Mom[Site] += 0.5 * m_Stepsize * m_Forces[Site];
     }
     // Compute final action
-    ActionType NewS = _Action.compute_S(_Field);
+    ActionType NewS = m_Action.compute_S(m_Field);
     // Compute end kinetic term
     RealD NewK(0.0);
-    for (int Site = 0; Site < _Mom.getNsites(); Site++) {
-        NewK += dot(_Mom[Site]);
+    for (int Site = 0; Site < m_Mom.getNsites(); Site++) {
+        NewK += dot(m_Mom[Site]);
     }
     NewK *= 0.5;
     // Final Metropolis check
-    if (exp(OldK - NewK + make_real(_McStats.getS() - NewS)) > _Unif(_Rng)) {
-        _McStats.update(1, NewS - _McStats.getS());
+    if (exp(OldK - NewK + make_real(m_McStats.getS() - NewS)) > m_Unif(m_Rng)) {
+        m_McStats.update(1, NewS - m_McStats.getS());
     } else {
-        _Field = _OldField;
-        _McStats.update(0, 0.0);
+        m_Field = m_OldField;
+        m_McStats.update(0, 0.0);
     }
 }
 
 /* Argument deduction guide */
 template <HmcCapable Action>
-HMC(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&, bool, bool, bool)
-    -> HMC<Action>;
+HMC(std::string, Action&, Lattice<typename Action::FieldType>, uint, std::string&, bool, bool, bool) -> HMC<Action>;
 }  // namespace reticolo::montecarlo

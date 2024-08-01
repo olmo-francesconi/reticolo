@@ -23,20 +23,20 @@ class Timer {
     using ms_ = std::chrono::duration<double, std::milli>;
     using us_ = std::chrono::duration<double, std::micro>;
 
-    std::chrono::time_point<clock_> _Beg;
+    std::chrono::time_point<clock_> m_Beg;
 
   public:
-    Timer() : _Beg(clock_::now()) {}
-    void reset() { _Beg = clock_::now(); }
+    Timer() : m_Beg(clock_::now()) {}
+    void reset() { m_Beg = clock_::now(); }
 
     [[nodiscard]] auto elapsed_s() const -> double {
-        return std::chrono::duration_cast<s_>(clock_::now() - _Beg).count();
+        return std::chrono::duration_cast<s_>(clock_::now() - m_Beg).count();
     }
     [[nodiscard]] auto elapsed_ms() const -> double {
-        return std::chrono::duration_cast<ms_>(clock_::now() - _Beg).count();
+        return std::chrono::duration_cast<ms_>(clock_::now() - m_Beg).count();
     }
     [[nodiscard]] auto elapsed_us() const -> double {
-        return std::chrono::duration_cast<us_>(clock_::now() - _Beg).count();
+        return std::chrono::duration_cast<us_>(clock_::now() - m_Beg).count();
     }
 };
 
