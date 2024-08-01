@@ -14,7 +14,7 @@
 #include <format>
 #include <string>
 
-#include "reticolo/lattice/lattice.hpp"
+#include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/montecarlo/MonteCarloData.hpp"
 #include "reticolo/montecarlo/MonteCarloHandler.hpp"
 #include "reticolo/tools/io_utils.hpp"
@@ -38,29 +38,29 @@ class LLRMetWorker : public montecarlo::MonteCarloHandler<Action> {
     /* Types definitions */
     using ActionType = typename Action::ActionType;
     using FieldType = typename Action::FieldType;
-    using LatticeType = Lattice<typename Action::FieldType, Action::Dims>;
+    using LatticeType = Lattice<typename Action::FieldType>;
     using McDataType = montecarlo::data<typename Action::ActionType>;
     using ObsType = typename Action::Observables;
 
+    /* Introduced names from MonteCarloHandler (avoids using this->...) */
+    using montecarlo::MonteCarloHandler<Action>::m_Field;
+    using montecarlo::MonteCarloHandler<Action>::m_Action;
+    using montecarlo::MonteCarloHandler<Action>::m_McStats;
+    using montecarlo::MonteCarloHandler<Action>::m_NMeasurements;
+    using montecarlo::MonteCarloHandler<Action>::m_Unif;
+    using montecarlo::MonteCarloHandler<Action>::m_UnifC;
+    using montecarlo::MonteCarloHandler<Action>::m_Norm;
+    using montecarlo::MonteCarloHandler<Action>::m_Rng;
+    using montecarlo::MonteCarloHandler<Action>::m_Logger;
+    using montecarlo::MonteCarloHandler<Action>::m_Timer;
+
     /* Met settings */
-    double _ProposalWidth;
+    double m_ProposalWidth;
 
     /* LLR parameters */
-    double _Sk;
-    double _Ak;
-    double _Width;
-
-    /* Introduced names from MonteCarloHandler (avoids using this->...) */
-    using montecarlo::MonteCarloHandler<Action>::_Field;
-    using montecarlo::MonteCarloHandler<Action>::_Action;
-    using montecarlo::MonteCarloHandler<Action>::_McStats;
-    using montecarlo::MonteCarloHandler<Action>::_NMeasurements;
-    using montecarlo::MonteCarloHandler<Action>::_Unif;
-    using montecarlo::MonteCarloHandler<Action>::_UnifC;
-    using montecarlo::MonteCarloHandler<Action>::_Norm;
-    using montecarlo::MonteCarloHandler<Action>::_Rng;
-    using montecarlo::MonteCarloHandler<Action>::_Logger;
-    using montecarlo::MonteCarloHandler<Action>::_T;
+    double m_Sk;
+    double m_Ak;
+    double m_Width;
 
   public:
     /* Constructor */
@@ -71,15 +71,15 @@ class LLRMetWorker : public montecarlo::MonteCarloHandler<Action> {
     void updateField() override;
 
     /* Initialize parameters */
-    void setParams(double propWidth) { _ProposalWidth = propWidth; }
+    void setParams(double propWidth) { m_ProposalWidth = propWidth; }
 
     void setLLRParams(double ak, double sk, double width) {
-        _Ak = ak;
-        _Sk = sk;
-        _Width = width;
+        m_Ak = ak;
+        m_Sk = sk;
+        m_Width = width;
     }
 
-    void set_ak(double ak) { _Ak = ak; }
+    void set_ak(double ak) { m_Ak = ak; }
 };
 
 template <LLRCapable Action>
@@ -99,8 +99,8 @@ LLRMetWorker<Action>::LLRMetWorker(std::string        handler_name,  //
                                             save_data,      //
                                             save_config) {
     // Log stuff
-    _Logger << IO::LI_time() +
-                   std::format("Monte Carlo Handler - Initialization completed in {:.3f} ms\n", _T.elapsed_ms());
+    m_Logger << IO::LI_time() +
+                    std::format("Monte Carlo Handler - Initialization completed in {:.3f} ms\n", m_Timer.elapsed_ms());
 }
 
 template <LLRCapable Action>
@@ -115,31 +115,30 @@ void LLRMetWorker<Action>::updateField() {
 
     FieldType FieldVar;  // local field variation
 
-    for (uint Site = 0; Site < _Field.getNsites(); Site++) {
-        randomize(FieldVar, _ProposalWidth, _UnifC, _Rng);
+    for (uint Site = 0; Site < m_Field.getNsites(); Site++) {
+        randomize(FieldVar, m_ProposalWidth, m_UnifC, m_Rng);
 
-        SVar = _Action.compute_dS_loc(_Field, FieldVar, Site);
+        SVar = m_Action.compute_dS_loc(m_Field, FieldVar, Site);
 
-        WindowWeight = (SVar.imag() * (SVar.imag() + 2.0 * _McStats._SIm - 2.0 * _Sk)) / (2.0 * _Width * _Width);
-        LlrWeight = _Ak * SVar.imag();
+        WindowWeight = (SVar.imag() * (SVar.imag() + 2.0 * m_McStats._SIm - 2.0 * m_Sk)) / (2.0 * m_Width * m_Width);
+        LlrWeight = m_Ak * SVar.imag();
 
-        if (exp(-(SVar.real() + WindowWeight + LlrWeight)) > _Unif(_Rng)) {
+        if (exp(-(SVar.real() + WindowWeight + LlrWeight)) > m_Unif(m_Rng)) {
             Acc++;
-            _Field[Site] += FieldVar;
+            m_Field[Site] += FieldVar;
             SVarTot += SVar;
-            _McStats._SRe += SVar.real();
-            _McStats._SIm += SVar.imag();
+            m_McStats._SRe += SVar.real();
+            m_McStats._SIm += SVar.imag();
         }
     }
 
-    _McStats._Acceptance = static_cast<double>(Acc) / _Field.getNsites();
-    _McStats._DSRe = SVarTot.real();
-    _McStats._DSIm = SVarTot.imag();
+    m_McStats._Acceptance = static_cast<double>(Acc) / m_Field.getNsites();
+    m_McStats._DSRe = SVarTot.real();
+    m_McStats._DSIm = SVarTot.imag();
 }
 
 /* Argument deduction guide */
 template <LLRCapable Action>
-LLRMetWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&)
-    -> LLRMetWorker<Action>;
+LLRMetWorker(std::string, Action&, Lattice<typename Action::FieldType>, uint, std::string&) -> LLRMetWorker<Action>;
 
 }  // namespace reticolo::LLR

@@ -14,7 +14,7 @@
 #include <format>
 #include <string>
 
-#include "reticolo/lattice/lattice.hpp"
+#include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/montecarlo/MonteCarloData.hpp"
 #include "reticolo/montecarlo/MonteCarloHandler.hpp"
 #include "reticolo/tools/io_utils.hpp"
@@ -38,35 +38,35 @@ class LLRHMCWorker : public montecarlo::MonteCarloHandler<Action> {
     /* Types definitions */
     using ActionType = typename Action::ActionType;
     using FieldType = typename Action::FieldType;
-    using LatticeType = Lattice<typename Action::FieldType, Action::Dims>;
+    using LatticeType = Lattice<typename Action::FieldType>;
     using McDataType = montecarlo::data<typename Action::ActionType>;
     using ObsType = typename Action::Observables;
 
+    /* Introduced names from MonteCarloHandler (avoids using this->...) */
+    using montecarlo::MonteCarloHandler<Action>::m_Field;
+    using montecarlo::MonteCarloHandler<Action>::m_Action;
+    using montecarlo::MonteCarloHandler<Action>::m_McStats;
+    using montecarlo::MonteCarloHandler<Action>::m_NMeasurements;
+    using montecarlo::MonteCarloHandler<Action>::m_Unif;
+    using montecarlo::MonteCarloHandler<Action>::m_UnifC;
+    using montecarlo::MonteCarloHandler<Action>::m_Norm;
+    using montecarlo::MonteCarloHandler<Action>::m_Rng;
+    using montecarlo::MonteCarloHandler<Action>::m_Logger;
+    using montecarlo::MonteCarloHandler<Action>::m_Timer;
+
     /* HMC support fields */
-    LatticeType _Mom;
-    LatticeType _Forces;
-    LatticeType _OldField;
+    LatticeType m_Mom;
+    LatticeType m_Forces;
+    LatticeType m_OldField;
 
     /* HMC settings */
-    double _Stepsize;
-    uint   _Steps;
+    double m_Stepsize;
+    uint   m_Steps;
 
     /* LLR parameters */
-    double _Sk;
-    double _Ak;
-    double _Width;
-
-    /* Introduced names from MonteCarloHandler (avoids using this->...) */
-    using montecarlo::MonteCarloHandler<Action>::_Field;
-    using montecarlo::MonteCarloHandler<Action>::_Action;
-    using montecarlo::MonteCarloHandler<Action>::_McStats;
-    using montecarlo::MonteCarloHandler<Action>::_NMeasurements;
-    using montecarlo::MonteCarloHandler<Action>::_Unif;
-    using montecarlo::MonteCarloHandler<Action>::_UnifC;
-    using montecarlo::MonteCarloHandler<Action>::_Norm;
-    using montecarlo::MonteCarloHandler<Action>::_Rng;
-    using montecarlo::MonteCarloHandler<Action>::_Logger;
-    using montecarlo::MonteCarloHandler<Action>::_T;
+    double m_Sk;
+    double m_Ak;
+    double m_Width;
 
   public:
     /* Constructor */
@@ -78,16 +78,16 @@ class LLRHMCWorker : public montecarlo::MonteCarloHandler<Action> {
 
     /* Initialize parameters */
     void setParams(double traj_length, uint steps) {
-        _Steps = steps;
-        _Stepsize = traj_length / _Steps;
+        m_Steps = steps;
+        m_Stepsize = traj_length / m_Steps;
     }
     void setLLRParams(double ak, double sk, double width) {
-        _Ak = ak;
-        _Sk = sk;
-        _Width = width;
+        m_Ak = ak;
+        m_Sk = sk;
+        m_Width = width;
     }
 
-    void set_ak(double ak) { _Ak = ak; }
+    void set_ak(double ak) { m_Ak = ak; }
 };
 
 template <LLRCapable Action>
@@ -108,75 +108,74 @@ LLRHMCWorker<Action>::LLRHMCWorker(   //
           StdOut,                             //
           save_data,                          //
           save_config),
-      _Mom(field.getSizes()),
-      _Forces(field.getSizes()),
-      _OldField(field.getSizes()) {
+      m_Mom(field.getSizes()),
+      m_Forces(field.getSizes()),
+      m_OldField(field.getSizes()) {
     // Log stuff
-    _Logger << IO::LI_time() +
-                   std::format("Monte Carlo Handler - Initialization completed in {:.3f} ms\n", _T.elapsed_ms());
+    m_Logger << IO::LI_time() +
+                    std::format("Monte Carlo Handler - Initialization completed in {:.3f} ms\n", m_Timer.elapsed_ms());
 }
 
 template <LLRCapable Action>
 void LLRHMCWorker<Action>::updateField() {
-    int NSites = _Field.getNsites();
+    int NSites = m_Field.getNsites();
     // save the old field configuration;
-    _OldField = _Field;
+    m_OldField = m_Field;
     // Generate random momenta and compute initial kinetic term
     RealD OldK(0.0);
     for (int Site = 0; Site < NSites; Site++) {
-        randomize(_Mom[Site], 1.0, _Norm, _Rng);
-        OldK += dot(_Mom[Site]);
+        randomize(m_Mom[Site], 1.0, m_Norm, m_Rng);
+        OldK += dot(m_Mom[Site]);
     }
     OldK *= 0.5;
     // Compute Forces
-    _Action.compute_LLRForces(_Field, _Forces, _Sk, _Width, _Ak);
+    m_Action.compute_LLRForces(m_Field, m_Forces, m_Sk, m_Width, m_Ak);
     // Momenta half step
     for (int Site = 0; Site < NSites; Site++) {
-        _Mom[Site] -= 0.5 * _Stepsize * _Forces[Site];
+        m_Mom[Site] -= 0.5 * m_Stepsize * m_Forces[Site];
     }
     // Leapfrog algorithm
-    for (uint Step = 0; Step < _Steps; Step++) {
+    for (uint Step = 0; Step < m_Steps; Step++) {
         // Update field
         for (int Site = 0; Site < NSites; Site++) {
-            _Field[Site] += _Stepsize * _Mom[Site];
+            m_Field[Site] += m_Stepsize * m_Mom[Site];
         }
         // Compute updated forces
-        _Action.compute_LLRForces(_Field, _Forces, _Sk, _Width, _Ak);
+        m_Action.compute_LLRForces(m_Field, m_Forces, m_Sk, m_Width, m_Ak);
         // Update momenta
         for (int Site = 0; Site < NSites; Site++) {
-            _Mom[Site] -= _Stepsize * _Forces[Site];
+            m_Mom[Site] -= m_Stepsize * m_Forces[Site];
         }
     }
     // Momenta half step roll-back
-    for (int Site = 0; Site < _Mom.getNsites(); Site++) {
-        _Mom[Site] += 0.5 * _Stepsize * _Forces[Site];
+    for (int Site = 0; Site < m_Mom.getNsites(); Site++) {
+        m_Mom[Site] += 0.5 * m_Stepsize * m_Forces[Site];
     }
     // Compute final action
-    ActionType OldS = _McStats.getS();
-    ActionType NewS = _Action.compute_S(_Field);
+    ActionType OldS = m_McStats.getS();
+    ActionType NewS = m_Action.compute_S(m_Field);
     // Compute end kinetic term
     RealD NewK(0.0);
-    for (int Site = 0; Site < _Mom.getNsites(); Site++) {
-        NewK += dot(_Mom[Site]);
+    for (int Site = 0; Site < m_Mom.getNsites(); Site++) {
+        NewK += dot(m_Mom[Site]);
     }
     NewK *= 0.5;
-    RealD SVarFull = NewS.real() - OldS.real() +                                            //
-                     (NewS.imag() - _Sk) * (NewS.imag() - _Sk) / (2.0 * _Width * _Width) -  //
-                     (OldS.imag() - _Sk) * (OldS.imag() - _Sk) / (2.0 * _Width * _Width) +
-                     _Ak * (NewS.imag() - OldS.imag());
+    RealD SVarFull = NewS.real() - OldS.real() +                                                //
+                     (NewS.imag() - m_Sk) * (NewS.imag() - m_Sk) / (2.0 * m_Width * m_Width) -  //
+                     (OldS.imag() - m_Sk) * (OldS.imag() - m_Sk) / (2.0 * m_Width * m_Width) +
+                     m_Ak * (NewS.imag() - OldS.imag());
 
     // Final Metropolis check
-    if (exp(OldK - NewK - SVarFull) > _Unif(_Rng)) {
-        this->_McStats.update(1, NewS - _McStats.getS());
+    if (exp(OldK - NewK - SVarFull) > m_Unif(m_Rng)) {
+        m_McStats.update(1, NewS - m_McStats.getS());
     } else {
-        this->_Field = _OldField;
-        this->_McStats.update(0, 0.0);
+        m_Field = m_OldField;
+        m_McStats.update(0, 0.0);
     }
 }
 
 /* Argument deduction guide */
 template <LLRCapable Action>
-LLRHMCWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&)
-    -> LLRHMCWorker<Action>;
+LLRHMCWorker(std::string, Action&, Lattice<typename Action::FieldType>, uint, std::string&) -> LLRHMCWorker<Action>;
 
 }  // namespace reticolo::LLR
