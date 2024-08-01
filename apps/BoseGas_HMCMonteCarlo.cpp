@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "reticolo/action/RelativisticBoseGas.hpp"
-#include "reticolo/lattice/lattice.hpp"
+#include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/montecarlo/HMC.hpp"
 #include "reticolo/types/core.hpp"
 
@@ -29,7 +29,7 @@ auto main(int argc, char* argv[]) -> int {
         std::string OutPath = argv[1];
 
         /* Initialize the lattice */
-        Lattice<ComplexD, 4> Lattice({12, 12, 12, 12});
+        Lattice<ComplexD> Lattice({12, 12, 12, 12});
 
         /* Initialize the action */
         action::RelativisticBoseGas::Params Par(1.0, 9.0, 0.0);

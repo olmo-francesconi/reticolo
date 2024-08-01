@@ -68,21 +68,20 @@ auto main(int argc, char* argv[]) -> int {
         //             }
         //         }
 
-#pragma omp for schedule(static, 1)
-        for (const auto& StepSize : MetStepSizes) {
-            std::string RunName = std::format("met_{:f}", StepSize);
-#pragma omp critical
-            std::cout << "starting run: " << RunName << '\n';
-            Timer                                Timer;
-            Lattice<HField<RealD>, 4>            Lattice(Volume);
-            action::WeakFieldEuclideanGR::Params Par(5.7);
-            action::WeakFieldEuclideanGR         Action(Lattice, Par);
-            montecarlo::Metropolis               MetropolisWorker(RunName, Action, Lattice, 0, OutPath, true);
-            MetropolisWorker.setParams(StepSize);
-            MetropolisWorker.run(NUpdates, 0, 1);
-#pragma omp critical
-            std::cout << "finished run: " << RunName << std::format(" [{:.2f} s]\n", Timer.elapsed_s());
-        }
+        // #pragma omp for schedule(static, 1)
+        //         for (const auto& StepSize : MetStepSizes) {
+        //             std::string RunName = std::format("met_{:f}", StepSize);
+        // #pragma omp critical
+        //             std::cout << "starting run: " << RunName << '\n';
+        //             Timer                                Timer;
+        //             Lattice<HField<RealD>, 4>            Lattice(Volume);
+        //             action::WeakFieldEuclideanGR::Params Par(5.7);
+        //             action::WeakFieldEuclideanGR         Action(Lattice, Par);
+        //             montecarlo::Metropolis               MetropolisWorker(RunName, Action, Lattice, 0, OutPath,
+        //             true); MetropolisWorker.setParams(StepSize); MetropolisWorker.run(NUpdates, 0, 1);
+        // #pragma omp critical
+        //             std::cout << "finished run: " << RunName << std::format(" [{:.2f} s]\n", Timer.elapsed_s());
+        //         }
     }
 
     return EXIT_SUCCESS;

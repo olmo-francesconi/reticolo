@@ -12,7 +12,7 @@
 #include <string>
 
 #include "reticolo/action/RelativisticBoseGas.hpp"
-#include "reticolo/lattice/lattice.hpp"
+#include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/montecarlo/Metropolis.hpp"
 #include "reticolo/types/core.hpp"
 
@@ -23,7 +23,7 @@ auto main(int argc, char* argv[]) -> int {
     std::string OutPath = "BoseGas_Metropolis";
 
     /* Initialize the lattice */
-    Lattice<ComplexD, 4> Lattice({8, 8, 8, 8});
+    Lattice<ComplexD> Lattice({4, 4, 4, 4});
 
     /* Initialize the action */
     action::RelativisticBoseGas::Params Par(1.0, 9.0, 0.0);
@@ -38,7 +38,7 @@ auto main(int argc, char* argv[]) -> int {
                                             true,        // Save measurements
                                             false);      // Save configs
 
-    for (int Idx = 0; Idx < 10; Idx++) {
+    for (int Idx = 0; Idx < 1; Idx++) {
         RealD PropWidth = 0.1 * (Idx + 1);
 
         MonteCarloWorker.setParams(PropWidth);

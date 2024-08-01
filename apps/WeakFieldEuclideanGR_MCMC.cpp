@@ -19,9 +19,10 @@
 #include <cstdlib>
 #include <format>
 #include <string>
+#include <vector>
 
 #include "reticolo/action/WeakFieldEuclideanGR.hpp"
-#include "reticolo/lattice/lattice.hpp"
+#include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/montecarlo/Metropolis.hpp"
 #include "reticolo/types/core.hpp"
 #include "reticolo/types/hfield.hpp"
@@ -39,8 +40,8 @@ auto main(int argc, char* argv[]) -> int {
     std::string RunName = std::format("{0}x{1}^3", Tmax, Lmax);
 
     /* Set up Lattice */
-    intvect<4>                Volume = {Tmax, Lmax, Lmax, Lmax};
-    Lattice<HField<RealD>, 4> Lattice(Volume);
+    std::vector<int>       Volume = {Tmax, Lmax, Lmax, Lmax};
+    Lattice<HField<RealD>> Lattice(Volume);
 
     /* Set up Action */
     action::WeakFieldEuclideanGR::Params Par(5.7);
