@@ -10,7 +10,10 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstddef>
+#include <numeric>
+#include <vector>
 
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
@@ -44,121 +47,30 @@ inline auto dot(const T& lhs, const T& rhs) -> T::value_type {
     return lhs.real() * rhs.real() + lhs.imag() * rhs.imag();
 }
 
-template <size_t dim>
-inline auto dot(const intvect<dim>& vect) -> uint {
-    uint Res = 0;
-    for (uint Comp = 0; Comp < dim; Comp++) {
-        Res += vect[Comp] * vect[Comp];
-    }
-    return Res;
+template <typename T>
+inline auto dot(const std::vector<T>& vect) -> T {
+    return std::accumulate(vect.begin(), vect.end(), 0, [](int sum, int value) { return sum + value * value; });
 }
 
-template <size_t dim>
-inline auto dot(const intvect<dim>& lhs, const intvect<dim>& rhs) -> uint {
-    uint Res = 0;
-    for (uint Comp = 0; Comp < dim; Comp++) {
-        Res += lhs[Comp] * rhs[Comp];
-    }
-    return Res;
+template <typename T>
+inline auto dot(const std::vector<T>& vec1, const std::vector<T>& vec2) -> T {
+    return std::inner_product(vec1.begin(), vec1.end(), vec2.begin(), 0);
 }
 
-template <size_t dim>
-inline auto operator+=(intvect<dim>& lhs, const intvect<dim>& rhs) -> intvect<dim>& {
-    for (uint Comp = 0; Comp < dim; Comp++) {
-        lhs[Comp] += rhs[Comp];
-    }
-    return lhs;
-}
-
-template <size_t dim>
-inline auto operator-=(intvect<dim>& lhs, const intvect<dim>& rhs) -> intvect<dim>& {
-    for (uint Comp = 0; Comp < dim; Comp++) {
-        lhs[Comp] -= rhs[Comp];
-    }
-    return lhs;
-}
-template <size_t dim>
-inline auto operator*=(intvect<dim>& lhs, const intvect<dim>& rhs) -> intvect<dim>& {
-    for (uint Comp = 0; Comp < dim; Comp++) {
-        lhs[Comp] *= rhs[Comp];
-    }
-    return lhs;
-}
-
-template <size_t dim>
-inline auto operator/=(intvect<dim>& lhs, const intvect<dim>& rhs) -> intvect<dim>& {
-    for (uint Comp = 0; Comp < dim; Comp++) {
-        lhs[Comp] /= rhs[Comp];
-    }
-    return lhs;
-}
-
-template <size_t dim>
-inline auto operator%=(intvect<dim>& lhs, const intvect<dim>& rhs) -> intvect<dim>& {
-    for (uint Comp = 0; Comp < dim; Comp++) {
-        lhs[Comp] %= rhs[Comp];
-    }
-    return lhs;
-}
-
-template <size_t dim>
-inline auto operator+(intvect<dim> lhs, const intvect<dim>& rhs) -> intvect<dim> {
-    lhs += rhs;
-    return lhs;
-}
-
-template <size_t dim>
-inline auto operator-(intvect<dim> lhs, const intvect<dim>& rhs) -> intvect<dim> {
-    lhs -= rhs;
-    return lhs;
-}
-template <size_t dim>
-inline auto operator*(intvect<dim> lhs, const intvect<dim>& rhs) -> intvect<dim> {
-    lhs *= rhs;
-    return lhs;
-}
-
-template <size_t dim>
-inline auto operator/(intvect<dim> lhs, const intvect<dim>& rhs) -> intvect<dim> {
-    lhs /= rhs;
-    return lhs;
-}
-
-template <size_t dim>
-inline auto operator%(intvect<dim> lhs, const intvect<dim>& rhs) -> intvect<dim> {
-    lhs %= rhs;
-    return lhs;
-}
-
-template <size_t dim>
-inline auto getVolume(const intvect<dim>& Sizes) -> int {
-    int Res = 1;
-    for (uint Comp = 0; Comp < dim; Comp++) {
-        Res *= Sizes[Comp];
-    }
-    return Res;
-}
-
-template <size_t dim>
-inline auto getCoord(uint site, const intvect<dim>& subvols) -> intvect<dim> {
-    intvect<dim> Res;
-    for (uint Comp = 0; Comp < dim; Comp++) {
-        Res[Comp] = site / subvols[Comp];
-        site = site % subvols[Comp];
-    }
-    return Res;
-}
-
-template <size_t dim>
-inline void advance_coord(const intvect<dim>& sizes, intvect<dim>& coord) {
+template <typename T>
+inline void advance_coord(const std::vector<T>& sizes, std::vector<T>& coord) {
+    assert(sizes.size() == coord.size());
     coord.back()++;
-    for (uint Dir = dim - 1; Dir > 0; Dir--) {
+    for (uint Dir = sizes.size() - 1; Dir > 0; Dir--) {
         if (coord[Dir] == sizes[Dir]) {
             coord[Dir] = 0;
             coord[Dir - 1]++;
         } else {
             return;
         }
+    }
+    if (coord[0] == sizes[0]) {
+        coord[0] = 0;
     }
 }
 

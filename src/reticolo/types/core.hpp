@@ -14,7 +14,6 @@
 #include <H5Tpublic.h>
 #include <hdf5.h>
 
-#include <array>
 #include <complex>
 #include <cstddef>
 
@@ -46,10 +45,6 @@ using RealF = float;
 using RealD = double;
 using ComplexF = std::complex<float>;
 using ComplexD = std::complex<double>;
-
-// uint vector types
-template <size_t dim>
-using intvect = std::array<int, dim>;
 
 /*--------------------------------------------------------------------------------------------------
     Hdf5 Types for core DataTypes

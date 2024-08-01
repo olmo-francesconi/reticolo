@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include <concepts>
+
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
 #include "reticolo/types/hfield.hpp"

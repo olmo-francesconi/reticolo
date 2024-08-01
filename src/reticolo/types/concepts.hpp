@@ -24,10 +24,6 @@ concept RealValue = std::same_as<T, RealD> || std::same_as<T, RealF>;
 template <typename T>
 concept ComplexValue = std::same_as<T, ComplexD> || std::same_as<T, ComplexF>;
 
-/* Vector and Array Type concepts */
-template <typename T, uint size>
-concept IntVectType = std::same_as<T, intvect<size>>;
-
 /* RNG concepts */
 template <typename T>
 concept RNGDist = std::same_as<T, std::normal_distribution<typename T::result_type>> ||
