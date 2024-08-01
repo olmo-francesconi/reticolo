@@ -13,7 +13,7 @@
 #include <cstddef>
 #include <string>
 
-#include "reticolo/lattice/lattice.hpp"
+#include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 
 namespace reticolo::action {
@@ -22,16 +22,15 @@ template <typename FieldType, typename ActionType, size_t dim>
 class ActionBase {
   public:
     /* Sync with lattice */
-    virtual void lattice_sync(const Lattice<FieldType, dim>& field) = 0;
+    virtual void lattice_sync(const Lattice<FieldType>& field) = 0;
 
     /* Gloabal and local action computations */
-    virtual auto compute_S(const Lattice<FieldType, dim>& field) -> ActionType = 0;
-    virtual auto compute_S_loc(const Lattice<FieldType, dim>& field, int site) -> ActionType = 0;
-    virtual auto compute_dS_loc(const Lattice<FieldType, dim>& field, const FieldType& dphi, int site)
-        -> ActionType = 0;
+    virtual auto compute_S(const Lattice<FieldType>& field) -> ActionType = 0;
+    virtual auto compute_S_loc(const Lattice<FieldType>& field, int site) -> ActionType = 0;
+    virtual auto compute_dS_loc(const Lattice<FieldType>& field, const FieldType& dphi, int site) -> ActionType = 0;
 
     /* HMC methods */
-    virtual void compute_Forces(const Lattice<FieldType, dim>& field, Lattice<FieldType, dim>& forces) = 0;
+    virtual void compute_Forces(const Lattice<FieldType>& field, Lattice<FieldType>& forces) = 0;
 
     /* Log stuff */
     virtual auto name() -> std::string = 0;        // return the action name

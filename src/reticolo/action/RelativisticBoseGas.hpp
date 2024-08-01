@@ -15,13 +15,14 @@
 #include <H5Ipublic.h>
 #include <H5Tpublic.h>
 
+#include <cassert>
 #include <cmath>
 #include <format>
 #include <sstream>
 #include <string>
 
 #include "reticolo/action/action_base.hpp"
-#include "reticolo/lattice/lattice.hpp"
+#include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
 #include "reticolo/types/core_math.hpp"
@@ -49,8 +50,8 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
         double lambda;
         double eta;
         double mu;
-        Params() : lambda(1.0), eta(9.0), mu(0){};
-        Params(double lambda, double eta, double chem_mu) : lambda(lambda), eta(eta), mu(chem_mu){};
+        Params() : lambda(1.0), eta(9.0), mu(0) {};
+        Params(double lambda, double eta, double chem_mu) : lambda(lambda), eta(eta), mu(chem_mu) {};
     } p;
 
     /* Observables */
@@ -72,27 +73,27 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
     };
 
     /* Constructors */
-    RelativisticBoseGas(Lattice<FieldType, 4>& field, double lambda, double eta, double chem_mu)
+    RelativisticBoseGas(Lattice<FieldType>& field, double lambda, double eta, double chem_mu)
         : p(lambda, eta, chem_mu) {
         lattice_sync(field);
     };
-    RelativisticBoseGas(Lattice<FieldType, 4>& field, Params par) : p(par) { lattice_sync(field); };
+    RelativisticBoseGas(Lattice<FieldType>& field, Params par) : p(par) { lattice_sync(field); };
 
     /* Sync with lattice */
-    void lattice_sync(const Lattice<FieldType, 4>& field) override;
+    void lattice_sync(const Lattice<FieldType>& field) override;
 
     /* Gloabal and local action computations */
-    auto compute_S(const Lattice<FieldType, 4>& field) -> ActionType override;
-    auto compute_S_loc(const Lattice<FieldType, 4>& field, int site) -> ActionType override;
-    auto compute_dS_loc(const Lattice<FieldType, 4>& field, const FieldType& dphi, int site) -> ActionType override;
+    auto compute_S(const Lattice<FieldType>& field) -> ActionType override;
+    auto compute_S_loc(const Lattice<FieldType>& field, int site) -> ActionType override;
+    auto compute_dS_loc(const Lattice<FieldType>& field, const FieldType& dphi, int site) -> ActionType override;
 
     /* HMC methods */
-    void compute_Forces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces) override;
-    void compute_LLRForces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces, double Sk, double width,
+    void compute_Forces(const Lattice<FieldType>& field, Lattice<FieldType>& forces) override;
+    void compute_LLRForces(const Lattice<FieldType>& field, Lattice<FieldType>& forces, double Sk, double width,
                            double ak) const;
 
     /* Perform the measurements or returns updated Observable values*/
-    static auto Measure(const Lattice<FieldType, 4>& field) -> Observables;
+    static auto Measure(const Lattice<FieldType>& field) -> Observables;
 
     /* Log stuff */
     auto name() -> std::string override { return "Relativistic Bose Gas"; };
@@ -110,11 +111,11 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
   Public methods Implementatin
 --------------------------------------------------------------------------------------------------*/
 
-inline void RelativisticBoseGas::lattice_sync(const Lattice<FieldType, 4>& field) {
+inline void RelativisticBoseGas::lattice_sync(const Lattice<FieldType>& field) {
     // Maybe do some checks here
 }
 
-inline auto RelativisticBoseGas::compute_S(const Lattice<FieldType, 4>& field) -> ActionType {
+inline auto RelativisticBoseGas::compute_S(const Lattice<FieldType>& field) -> ActionType {
     RealD    Real = 0.0;
     RealD    Imag = 0.0;
     ComplexD Phi;
@@ -137,7 +138,7 @@ inline auto RelativisticBoseGas::compute_S(const Lattice<FieldType, 4>& field) -
     return {Real, Imag};
 }
 
-inline auto RelativisticBoseGas::compute_S_loc(const Lattice<FieldType, 4>& field, int site) -> ActionType {
+inline auto RelativisticBoseGas::compute_S_loc(const Lattice<FieldType>& field, int site) -> ActionType {
     ComplexD Phi = field[site];
     ComplexD PhiNt = field.next(site, _t);
     ComplexD PhiPt = field.prev(site, _t);
@@ -160,8 +161,8 @@ inline auto RelativisticBoseGas::compute_S_loc(const Lattice<FieldType, 4>& fiel
     return {Real, Imag};
 }
 
-inline auto RelativisticBoseGas::compute_dS_loc(const Lattice<FieldType, 4>& field, const FieldType& dphi, int site)
-    -> ActionType {
+inline auto RelativisticBoseGas::compute_dS_loc(const Lattice<FieldType>& field, const FieldType& dphi,
+                                                int site) -> ActionType {
     FieldType PhiOld = field[site];
     FieldType PhiNew = PhiOld + dphi;
     FieldType PhiNt = field.next(site, _t);
@@ -186,7 +187,7 @@ inline auto RelativisticBoseGas::compute_dS_loc(const Lattice<FieldType, 4>& fie
     return {Real, Imag};
 }
 
-inline void RelativisticBoseGas::compute_Forces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces) {
+inline void RelativisticBoseGas::compute_Forces(const Lattice<FieldType>& field, Lattice<FieldType>& forces) {
     for (int Site = 0; Site < field.getNsites(); Site++) {
         FieldType Phi = field[Site];
         FieldType Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
@@ -203,7 +204,7 @@ inline void RelativisticBoseGas::compute_Forces(const Lattice<FieldType, 4>& fie
     }
 }
 
-inline void RelativisticBoseGas::compute_LLRForces(const Lattice<FieldType, 4>& field, Lattice<FieldType, 4>& forces,
+inline void RelativisticBoseGas::compute_LLRForces(const Lattice<FieldType>& field, Lattice<FieldType>& forces,
                                                    double Sk, double width, double ak) const {
     FieldType Phi;
     FieldType Phi2;
@@ -241,7 +242,7 @@ inline void RelativisticBoseGas::compute_LLRForces(const Lattice<FieldType, 4>& 
     }
 }
 
-inline auto RelativisticBoseGas::Measure(const Lattice<FieldType, 4>& field) -> RelativisticBoseGas::Observables {
+inline auto RelativisticBoseGas::Measure(const Lattice<FieldType>& field) -> RelativisticBoseGas::Observables {
     FieldType Phi;
     RealD     Phi2 = 0.0;
     auto      Norm = static_cast<RealD>(field.getNsites());
