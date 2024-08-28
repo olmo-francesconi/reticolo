@@ -1,5 +1,6 @@
 # Works with 3.14 and tested through 3.28
 cmake_minimum_required(VERSION 3.14...3.28)
+include(FetchContent)
 
 # Set install folder
 set(CMAKE_INSTALL_PREFIX "/opt/reticolo")
@@ -65,8 +66,6 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   endif()
 endif()
 
-include(FetchContent)
-
 # HDF5
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   set(HDF5_ROOT /opt/hdf5/llvm/c-threadsafe)
@@ -90,14 +89,26 @@ FetchContent_Declare(
   GIT_TAG 0.8.0 # Can be a tag (yaml-cpp-x.x.x), a commit hash, or a branch name (master)
 )
 FetchContent_GetProperties(yaml-cpp)
-
 if(NOT yaml-cpp_POPULATED)
   message(STATUS "Fetching yaml-cpp...")
-  FetchContent_Populate(yaml-cpp)
-  add_subdirectory(${yaml-cpp_SOURCE_DIR} ${yaml-cpp_BINARY_DIR})
+  FetchContent_MakeAvailable(yaml-cpp)
+  # add_subdirectory(${yaml-cpp_SOURCE_DIR} ${yaml-cpp_BINARY_DIR})
 endif()
-
 link_libraries(yaml-cpp::yaml-cpp)
+
+# cxxopts
+FetchContent_Declare(
+  cxxopts
+  GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
+  GIT_TAG master
+)
+FetchContent_GetProperties(cxxopts)
+if(NOT cxxopts_POPULATED)
+  message(STATUS "Fetching cxxopts...")
+  FetchContent_MakeAvailable(cxxopts)
+  # add_subdirectory(${cxxopts_SOURCE_DIR} ${cxxopts_BINARY_DIR})
+endif()
+link_libraries(cxxopts::cxxopts)
 
 # The compiled library code is here
 add_subdirectory(src)
