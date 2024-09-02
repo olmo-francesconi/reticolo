@@ -11,7 +11,6 @@
 #pragma once
 
 #include <functional>
-#include <iostream>
 #include <numeric>
 #include <vector>
 
