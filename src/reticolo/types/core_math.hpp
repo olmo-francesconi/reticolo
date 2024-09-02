@@ -11,19 +11,29 @@
 #pragma once
 
 #include <cassert>
-#include <cstddef>
 #include <numeric>
 #include <vector>
 
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
-// #include "reticolo/types/core.hpp"
 
 namespace reticolo {
 
 /*--------------------------------------------------------------------------------------------------
     Math functions for core DataTypes
 --------------------------------------------------------------------------------------------------*/
+
+/* Reset/Initialization methods */
+
+template <RealValue T>
+inline void reset(T& val) {
+    val = 0.0;
+}
+
+template <ComplexValue T>
+inline void reset(T& val) {
+    val = {0.0, 0.0};
+}
 
 /* Dot and other Multiplication */
 
