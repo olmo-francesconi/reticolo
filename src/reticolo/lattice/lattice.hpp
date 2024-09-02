@@ -13,9 +13,10 @@
 #include <H5public.h>
 
 #include <algorithm>
-#include <cstddef>
+#include <concepts>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -23,30 +24,42 @@
 #include "reticolo/tools/io_utils.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
+#include "reticolo/types/core_math.hpp"
 
 namespace reticolo {
 
 template <typename TField>
-class Lattice : public Indexing {
-    /* Vector string the Field components */
-    std::vector<TField> m_Field;
-
-    /* Introduced names from Indexing<dim> (avoids using this->...) */
-    using Indexing::m_Dims;
-    using Indexing::m_Next;
-    using Indexing::m_NSites;
-    using Indexing::m_Prev;
-    using Indexing::m_Sizes;
-    using Indexing::m_SubVols;
-
+class Lattice : public std::vector<TField> {
   public:
+    std::shared_ptr<Indexing> Idx;
+
+    using SizeType = Indexing::SizeType;
+
     /* Constructor */
-    Lattice(const std::vector<int>& sizes) : Indexing(sizes) {
-        std::cout << "initializing the lattice data..\n";
-        m_Field.clear();
-        m_Field.resize(m_NSites);
-        std::cout << "allocated" << IO::pretty_bytes(m_Field.size() * sizeof(TField)) << "\n";
+    Lattice(const std::vector<SizeType>& shape) {
+        Idx = std::make_shared<Indexing>(shape);
+        this->resize(Idx->NSites);
     };
+    /* Value-initialized Constructor*/
+    Lattice(const std::vector<SizeType>& shape, TField val) {
+        Idx = std::make_shared<Indexing>(shape);
+        this->resize(Idx->NSites, val);
+    };
+    /* Copy Constructor */
+    Lattice(const Lattice& obj) {
+        Idx = obj.Idx;
+        this->insert(this->begin(), obj.begin(), obj.end());
+    };
+    /* Copy Constructor (templated) */
+    template <typename T>
+        requires(!std::same_as<TField, T>)
+    Lattice(const Lattice<T>& obj) {
+        Idx = obj.Idx;
+        this->resize(Idx->NSites);
+        std::cout << this->size() << "\n";
+    };
+    /* Destructor */
+    ~Lattice() = default;
 
     /* Copy assignment */
     auto operator=(const Lattice& other) -> Lattice& {
@@ -55,8 +68,8 @@ class Lattice : public Indexing {
             return *this;
         }
         // Copy only if compatible
-        if (m_Sizes == other.m_Sizes) {
-            std::copy(other.m_Field.begin(), other.m_Field.end(), m_Field.begin());
+        if (this->getSizes() == other.getSizes()) {
+            std::copy(other.begin(), other.end(), this->begin());
         } else {
             std::cerr << IO::LI_erro() + "reticolo::Lattice - Copy Assigment failed [incompatible lattice sizes]\n";
             exit(EXIT_FAILURE);
@@ -64,50 +77,57 @@ class Lattice : public Indexing {
         return *this;
     }
 
-    /* Expose stl iterators */
-    auto begin() -> std::vector<TField>::iterator { return m_Field.begin(); };
-    auto end() -> std::vector<TField>::iterator { return m_Field.end(); };
-    auto cbegin() -> std::vector<TField>::iterator { return m_Field.cbegin(); };
-    auto cend() -> std::vector<TField>::iterator { return m_Field.cend(); };
-    auto rbegin() -> std::vector<TField>::iterator { return m_Field.rbegin(); };
-    auto rend() -> std::vector<TField>::iterator { return m_Field.rend(); };
-
-    /* Data accessing operators */
-    auto operator[](const int site) -> TField& { return m_Field[site]; }
-    auto operator[](const int site) const -> const TField& { return m_Field[site]; }
-
     /* Getters for lattice parameters */
-    [[nodiscard]] auto getNt() const -> int { return m_Sizes[_t]; }
-    [[nodiscard]] auto getNx() const -> int { return m_Sizes[_x]; }
-    [[nodiscard]] auto getNy() const -> int { return m_Sizes[_y]; }
-    [[nodiscard]] auto getNz() const -> int { return m_Sizes[_z]; }
-    [[nodiscard]] auto getNi(int Dir) const -> int { return m_Sizes[Dir]; }
-    [[nodiscard]] auto getDim() const -> int { return m_Dims; }
-    [[nodiscard]] auto getNsites() const -> int { return m_NSites; }
-    [[nodiscard]] auto getVolume() const -> int { return m_NSites; }
-    [[nodiscard]] auto getSubVols() const -> std::vector<int> { return m_SubVols; }
-    [[nodiscard]] auto getSizes() const -> std::vector<int> { return m_Sizes; }
+    [[nodiscard]] auto getNt() const -> SizeType { return Idx->Sizes[_t]; }
+    [[nodiscard]] auto getNx() const -> SizeType { return Idx->Sizes[_x]; }
+    [[nodiscard]] auto getNy() const -> SizeType { return Idx->Sizes[_y]; }
+    [[nodiscard]] auto getNz() const -> SizeType { return Idx->Sizes[_z]; }
+    [[nodiscard]] auto getNi(SizeType Dir) const -> SizeType { return Idx->Sizes[Dir]; }
+    [[nodiscard]] auto getDim() const -> SizeType { return Idx->Dims; }
+    [[nodiscard]] auto getNsites() const -> SizeType { return Idx->NSites; }
+    [[nodiscard]] auto getSubVols() const -> std::vector<SizeType> { return Idx->SubVols; }
+    [[nodiscard]] auto getSizes() const -> std::vector<SizeType> { return Idx->Sizes; }
 
     /* Access next and previous sites */
-    [[nodiscard]] auto next(int site, int dir) -> TField& { return m_Field[m_Next[site][dir]]; }
-    [[nodiscard]] auto next(int site, int dir) const -> const TField& { return m_Field[m_Next[site][dir]]; }
-    [[nodiscard]] auto nextId(int site, int dir) -> int& { return m_Next[site][dir]; }
-    [[nodiscard]] auto nextId(int site, int dir) const -> const int& { return m_Next[site][dir]; }
-    [[nodiscard]] auto prev(int site, int dir) -> TField& { return m_Field[m_Prev[site][dir]]; }
-    [[nodiscard]] auto prev(int site, int dir) const -> const TField& { return m_Field[m_Prev[site][dir]]; }
-    [[nodiscard]] auto prevId(int site, int dir) -> int& { return m_Prev[site][dir]; }
-    [[nodiscard]] auto prevId(int site, int dir) const -> const int& { return m_Prev[site][dir]; }
-
-    /* Save current field configuration */
-    inline auto save_Configuration(const std::string& FilePath) -> hsize_t {
-        hsize_t FileSize;
-        return FileSize;
+    [[nodiscard]] auto n(const SizeType site, const SizeType dir) -> TField& { return (*this)[Idx->nextId(site, dir)]; }
+    [[nodiscard]] auto n(const SizeType site, const SizeType dir) const -> const TField& {
+        return (*this)[Idx->nextId(site, dir)];
+    }
+    [[nodiscard]] auto nn(SizeType site, const std::vector<SizeType>& dirs) -> TField& {
+        for (const auto& Dir : dirs) {
+            site = Idx->nextId(site, Dir);
+        }
+        return (*this)[site];
+    }
+    [[nodiscard]] auto nn(SizeType site, const std::vector<SizeType>& dirs) const -> const TField& {
+        for (const auto& Dir : dirs) {
+            site = Idx->nextId(site, Dir);
+        }
+        return (*this)[site];
     }
 
-    /* Read configuration from disk */
-    inline auto read_Configuration(const std::string& FilePath) -> hsize_t {
-        hsize_t DataSize;
-        return DataSize;
+    [[nodiscard]] auto p(const SizeType site, const SizeType dir) -> TField& { return (*this)[Idx->prevId(site, dir)]; }
+    [[nodiscard]] auto p(const SizeType site, const SizeType dir) const -> const TField& {
+        return (*this)[Idx->prevId(site, dir)];
+    }
+    [[nodiscard]] auto pp(SizeType site, const std::vector<SizeType>& dirs) -> TField& {
+        for (const auto& Dir : dirs) {
+            site = Idx->prevId(site, Dir);
+        }
+        return (*this)[site];
+    }
+    [[nodiscard]] auto pp(SizeType site, const std::vector<SizeType>& dirs) const -> const TField& {
+        for (const auto& Dir : dirs) {
+            site = Idx->prevId(site, Dir);
+        }
+        return (*this)[site];
+    }
+
+    /* Lattice methods */
+    void resetField() {
+        for (auto& Site : (*this)) {
+            reset(Site);
+        }
     }
 };
 

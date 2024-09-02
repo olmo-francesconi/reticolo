@@ -10,68 +10,69 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <numeric>
 #include <vector>
 
-#include "reticolo/tools/io_utils.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/types/core.hpp"
 #include "reticolo/types/core_math.hpp"
 
 namespace reticolo {
 
 class Indexing {
-  protected:
+  public:
+    using SizeType = unsigned int;
+
     /* Lattice info */
-    std::vector<int> m_Sizes;    // Lattice size in each dimension
-    std::vector<int> m_SubVols;  // Subvolumes
-    int              m_NSites;   // Total number of lattice sites
-    int              m_Dims;     // Number of dimensions of the lattice
+    std::vector<SizeType> Sizes;    // Lattice size in each dimension
+    std::vector<SizeType> SubVols;  // Subvolumes
+    SizeType              NSites;   // Total number of lattice sites
+    SizeType              Dims;     // Number of dimensions of the lattice
 
     /* Lattices of neighbour */
-    std::vector<std::vector<int>> m_Next;
-    std::vector<std::vector<int>> m_Prev;
+    std::vector<SizeType> Next;
+    std::vector<SizeType> Prev;
 
-  public:
     /* Constructor */
-    Indexing(const std::vector<int>& sizes)
-        : m_Sizes(sizes),
-          m_SubVols(sizes.size()),
-          m_NSites(std::accumulate(m_Sizes.begin(), m_Sizes.end(), 1, std::multiplies<>())),
-          m_Dims(sizes.size()) {
+    Indexing(const std::vector<SizeType>& shape)
+        : Sizes(shape),
+          SubVols(shape.size()),
+          NSites(std::accumulate(Sizes.begin(), Sizes.end(), 1, std::multiplies<>())),
+          Dims(shape.size()) {
+        std::cout << "Indexing constructor called!\n";
+
         /* Fil the sub-volume vector */
-        for (uint SubDim = 0; SubDim < m_Dims - 1; SubDim++) {
-            m_SubVols[SubDim] = std::accumulate(m_Sizes.begin() + SubDim + 1, m_Sizes.end(), 1, std::multiplies<>());
+        for (SizeType SubDim = 0; SubDim < Dims - 1; SubDim++) {
+            SubVols[SubDim] = std::accumulate(Sizes.begin() + SubDim + 1, Sizes.end(), 1, std::multiplies<>());
         }
-        m_SubVols.back() = 1;
+        SubVols.back() = 1;
 
         /* support variables to keep track of position in the lattice */
-        std::vector<int> Coord(m_Dims, 0);
-        std::vector<int> PrevCoord(m_Dims);
-        std::vector<int> NextCoord(m_Dims);
+        std::vector<SizeType> Coord(Dims, 0);
+        std::vector<SizeType> PrevCoord(Dims);
+        std::vector<SizeType> NextCoord(Dims);
 
         /* Resize the vectors of neighbours */
-        m_Next.resize(m_NSites, std::vector<int>(m_Dims, 0));
-        m_Prev.resize(m_NSites, std::vector<int>(m_Dims, 0));
+        Next.resize(NSites * Dims, 0);
+        Prev.resize(NSites * Dims, 0);
 
         /* Loop throught the lattice to generate all the closest neighbours */
-
-        for (int Site = 0; Site < m_NSites; Site++) {
-            for (uint Dir = 0; Dir < m_Dims; Dir++) {
+        for (SizeType Site = 0; Site < NSites; Site++) {
+            for (SizeType Dir = 0; Dir < Dims; Dir++) {
                 NextCoord = Coord;
-                NextCoord[Dir] = (Coord[Dir] + 1) % m_Sizes[Dir];
-                m_Next[Site][Dir] = dot(NextCoord, m_SubVols);
+                NextCoord[Dir] = (Coord[Dir] + 1) % Sizes[Dir];
+                Next[Site * Dims + Dir] = dot(NextCoord, SubVols);
                 PrevCoord = Coord;
-                PrevCoord[Dir] = (Coord[Dir] + (m_Sizes[Dir] - 1)) % m_Sizes[Dir];
-                m_Prev[Site][Dir] = dot(PrevCoord, m_SubVols);
+                PrevCoord[Dir] = (Coord[Dir] + (Sizes[Dir] - 1)) % Sizes[Dir];
+                Prev[Site * Dims + Dir] = dot(PrevCoord, SubVols);
             }
-            advance_coord(m_Sizes, Coord);
+            advance_coord(Sizes, Coord);
         }
     };
+
+    auto nextId(SizeType site, SizeType dir) -> SizeType { return Next[site + Dims + dir]; }
+    auto prevId(SizeType site, SizeType dir) -> SizeType { return Prev[site + Dims + dir]; }
 };
 
 }  // namespace reticolo
