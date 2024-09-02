@@ -1,3 +1,7 @@
+### RETICOLO RUN ###
+add_executable(reticolo_run reticolo_run.cpp)
+target_link_libraries(reticolo_run PRIVATE reticolo)
+
 ### BOSE GAS MONTECARLO ###
 
 add_executable(bose_met BoseGas_MetropolisMonteCarlo.cpp)
@@ -18,5 +22,5 @@ target_link_libraries(LLRBoseGas PRIVATE reticolo)
 add_executable(WeakFieldEuclideanGR_MCMC WeakFieldEuclideanGR_MCMC.cpp)
 target_link_libraries(WeakFieldEuclideanGR_MCMC PRIVATE reticolo)
 
-add_executable(WeakFieldEuclideanGR_HMC WeakFieldEuclideanGR_HMC.cpp)
-target_link_libraries(WeakFieldEuclideanGR_HMC PRIVATE reticolo)
+# add_executable(WeakFieldEuclideanGR_HMC WeakFieldEuclideanGR_HMC.cpp)
+# target_link_libraries(WeakFieldEuclideanGR_HMC PRIVATE reticolo)

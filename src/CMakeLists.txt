@@ -4,8 +4,8 @@ add_library(reticolo INTERFACE)
 # target HDF5
 target_link_libraries(reticolo INTERFACE hdf5::hdf5)
 
-# include 
-target_include_directories(reticolo INTERFACE ".")
+# include
+target_include_directories(reticolo INTERFACE "${PROJECT_SOURCE_DIR}/src")
 
 # All users of this library will need at least C++20
 target_compile_features(reticolo INTERFACE cxx_std_20)

@@ -8,9 +8,10 @@ set(CMAKE_INSTALL_PREFIX "/opt/reticolo")
 # Compiler
 set(CMAKE_C_COMPILER "/opt/homebrew/opt/llvm/bin/clang")
 set(CMAKE_CXX_COMPILER "/opt/homebrew/opt/llvm/bin/clang++")
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-L/opt/homebrew/opt/llvm/lib/c++ -L/opt/homebrew/opt/llvm/lib -lunwind")
 
-# set(CMAKE_C_COMPILER "gcc-13")
-# set(CMAKE_CXX_COMPILER "g++-13")
+# set(CMAKE_C_COMPILER "gcc-14")
+# set(CMAKE_CXX_COMPILER "g++-14")
 # set(CMAKE_CXX_FLAGS "-Wall -Wl,-ld_classic")
 
 # Export compilation commands
@@ -23,6 +24,7 @@ endif()
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -Ofast -Wno-nan-infinity-disabled")
+
 
 # IF(CMAKE_BUILD_TYPE EQUAL Debug)
 #   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -lprofiler -ltcmalloc")
@@ -86,13 +88,12 @@ FIND_PACKAGE(OpenMP)
 FetchContent_Declare(
   yaml-cpp
   GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
-  GIT_TAG 0.8.0 # Can be a tag (yaml-cpp-x.x.x), a commit hash, or a branch name (master)
+  GIT_TAG HEAD # Can be a tag (yaml-cpp-x.x.x), a commit hash, or a branch name (master)
 )
 FetchContent_GetProperties(yaml-cpp)
 if(NOT yaml-cpp_POPULATED)
   message(STATUS "Fetching yaml-cpp...")
   FetchContent_MakeAvailable(yaml-cpp)
-  # add_subdirectory(${yaml-cpp_SOURCE_DIR} ${yaml-cpp_BINARY_DIR})
 endif()
 link_libraries(yaml-cpp::yaml-cpp)
 
@@ -106,7 +107,6 @@ FetchContent_GetProperties(cxxopts)
 if(NOT cxxopts_POPULATED)
   message(STATUS "Fetching cxxopts...")
   FetchContent_MakeAvailable(cxxopts)
-  # add_subdirectory(${cxxopts_SOURCE_DIR} ${cxxopts_BINARY_DIR})
 endif()
 link_libraries(cxxopts::cxxopts)
 
