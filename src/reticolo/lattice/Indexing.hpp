@@ -40,8 +40,6 @@ class Indexing {
           SubVols(shape.size()),
           NSites(std::accumulate(Sizes.begin(), Sizes.end(), 1, std::multiplies<>())),
           Dims(shape.size()) {
-        std::cout << "Indexing constructor called!\n";
-
         /* Fil the sub-volume vector */
         for (SizeType SubDim = 0; SubDim < Dims - 1; SubDim++) {
             SubVols[SubDim] = std::accumulate(Sizes.begin() + SubDim + 1, Sizes.end(), 1, std::multiplies<>());
