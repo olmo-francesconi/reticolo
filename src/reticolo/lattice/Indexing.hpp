@@ -68,8 +68,9 @@ class Indexing {
         }
     };
 
-    auto nextId(SizeType site, SizeType dir) -> SizeType { return Next[site + Dims + dir]; }
-    auto prevId(SizeType site, SizeType dir) -> SizeType { return Prev[site + Dims + dir]; }
+    /* Get  */
+    auto nextId(SizeType site, SizeType dir) -> SizeType { return Next[site * Dims + dir]; }
+    auto prevId(SizeType site, SizeType dir) -> SizeType { return Prev[site * Dims + dir]; }
 };
 
 }  // namespace reticolo
