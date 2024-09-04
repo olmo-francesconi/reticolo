@@ -1,5 +1,3 @@
-#include <cstdlib>
-
 #include "reticolo/Reticolo.hpp"
 
 using namespace reticolo;
