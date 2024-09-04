@@ -19,7 +19,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # setup build type
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE Release)
 endif()
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g")
@@ -44,45 +44,45 @@ project(
 # Only do these if this is the main project, and not if it is included through add_subdirectory
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 
-  # Optionally set things like CMAKE_CXX_STANDARD, CMAKE_POSITION_INDEPENDENT_CODE here
-  set(CMAKE_CXX_STANDARD 20)
+    # Optionally set things like CMAKE_CXX_STANDARD, CMAKE_POSITION_INDEPENDENT_CODE here
+    set(CMAKE_CXX_STANDARD 20)
 
-  # Let's ensure -std=c++xx instead of -std=g++xx
-  set(CMAKE_CXX_EXTENSIONS OFF)
+    # Let's ensure -std=c++xx instead of -std=g++xx
+    set(CMAKE_CXX_EXTENSIONS OFF)
 
-  # Let's nicely support folders in IDEs
-  set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+    # Let's nicely support folders in IDEs
+    set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-  # Testing only available if this is the main app
-  # Note this needs to be done in the main CMakeLists
-  # since it calls enable_testing, which must be in the
-  # main CMakeLists.
-  include(CTest)
+    # Testing only available if this is the main app
+    # Note this needs to be done in the main CMakeLists
+    # since it calls enable_testing, which must be in the
+    # main CMakeLists.
+    include(CTest)
 
-  # Docs only available if this is the main app
-  find_package(Doxygen)
-  if(Doxygen_FOUND)
-    add_subdirectory(docs)
-  else()
-    message(STATUS "Doxygen not found, not building docs")
-  endif()
+    # Docs only available if this is the main app
+    find_package(Doxygen)
+    if(Doxygen_FOUND)
+        add_subdirectory(docs)
+    else()
+        message(STATUS "Doxygen not found, not building docs")
+    endif()
 endif()
 
 # HDF5
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  set(HDF5_ROOT /opt/hdf5/llvm/c-threadsafe)
+    set(HDF5_ROOT /opt/hdf5/llvm/c-threadsafe)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set(HDF5_ROOT /opt/hdf5/gnu/c-threadsafe)
+    set(HDF5_ROOT /opt/hdf5/gnu/c-threadsafe)
 endif()
 set(HDF5_NO_FIND_PACKAGE_CONFIG_FILE true)
 find_package(HDF5 REQUIRED C)
 
 # OpenMP
 FIND_PACKAGE(OpenMP)
-  IF(OPENMP_FOUND)
+IF(OPENMP_FOUND)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-  ENDIF()
+ENDIF()
 
 # yaml-cpp
 FetchContent_Declare(
@@ -92,8 +92,8 @@ FetchContent_Declare(
 )
 FetchContent_GetProperties(yaml-cpp)
 if(NOT yaml-cpp_POPULATED)
-  message(STATUS "Fetching yaml-cpp...")
-  FetchContent_MakeAvailable(yaml-cpp)
+    message(STATUS "Fetching yaml-cpp...")
+    FetchContent_MakeAvailable(yaml-cpp)
 endif()
 link_libraries(yaml-cpp::yaml-cpp)
 
@@ -105,8 +105,8 @@ FetchContent_Declare(
 )
 FetchContent_GetProperties(cxxopts)
 if(NOT cxxopts_POPULATED)
-  message(STATUS "Fetching cxxopts...")
-  FetchContent_MakeAvailable(cxxopts)
+    message(STATUS "Fetching cxxopts...")
+    FetchContent_MakeAvailable(cxxopts)
 endif()
 link_libraries(cxxopts::cxxopts)
 
@@ -120,5 +120,5 @@ add_subdirectory(apps)
 # Emergency override MODERN_CMAKE_BUILD_TESTING provided as well
 if((CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME OR MODERN_CMAKE_BUILD_TESTING)
    AND BUILD_TESTING)
-  add_subdirectory(tests)
+    add_subdirectory(tests)
 endif()
