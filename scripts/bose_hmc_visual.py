@@ -8,7 +8,7 @@ import pandas as pd
 
 for l in [4, 6, 8, 10, 12]:
     info = {
-        "path": "/Volumes/Extreme SSD/Physics/bose_hmc/{}^4".format(l),
+        "path": "/Volumes/WD BLACK/Physics/bose_hmc/{}^4".format(l),
         "FileName": "HMC",
         "Dataset": "hmc",
         "Steps": [1, 2, 5, 10, 20, 50],
