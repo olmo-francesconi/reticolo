@@ -1,12 +1,10 @@
 /******************************************************************************
 
- - reticolo
- (www.github.com/olmo-francesconi/reticolo.git)
+ - reticolo (www.github.com/olmo-francesconi/reticolo.git)
 
  - SourceFile: action/RelativisticBoseGas.hpp
 
- - Author: Olmo Francesconi
- <olmo.francesconi@glasgow.ac.uk>
+ - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
  ******************************************************************************/
 
@@ -15,43 +13,41 @@
 #include <H5Ipublic.h>
 #include <H5Tpublic.h>
 
-#include <cassert>
 #include <cmath>
 #include <format>
 #include <sstream>
 #include <string>
 
-#include "reticolo/action/action_base.hpp"
+#include "reticolo/action/actionBase.hpp"
 #include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
 #include "reticolo/types/core_math.hpp"
+#include "yaml-cpp/node/node.h"
 
 namespace reticolo::action {
 
 /*--------------------------------------------------------------------------------------------------
   RelativisticBoseGas Class Declaration
 --------------------------------------------------------------------------------------------------*/
-class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
+class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD> {
   public:
     /* Types and public action metadata */
-    using FieldType = ComplexD;    // Type of the field variables
-    using ActionType = ComplexD;   // Return type fo the action
-    const static int Dims = 4;     // Dimensions of the action
-    const static int Stencil = 2;  // Minimum step size for multi-thread safety
+    static constexpr int Dims = 4;     // Dimensions of the action
+    static constexpr int Stencil = 2;  // Minimum step size for multi-thread safety
 
     /* Algorithm capabilities */
-    const static bool IsMetropolisCapable = true;
-    const static bool IsHmcCapable = true;
-    const static bool IsLLRCapable = true;
+    static constexpr bool IsMetropolisCapable = true;
+    static constexpr bool IsHmcCapable = true;
+    static constexpr bool IsLLRCapable = true;
 
     /* Action parameters */
     struct Params {
         double lambda;
         double eta;
         double mu;
-        Params() : lambda(1.0), eta(9.0), mu(0) {};
-        Params(double lambda, double eta, double chem_mu) : lambda(lambda), eta(eta), mu(chem_mu) {};
+        Params() : lambda(1.0), eta(9.0), mu(0){};
+        Params(double lambda, double eta, double chem_mu) : lambda(lambda), eta(eta), mu(chem_mu){};
     } p;
 
     /* Observables */
@@ -73,33 +69,36 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
     };
 
     /* Constructors */
-    RelativisticBoseGas(Lattice<FieldType>& field, double lambda, double eta, double chem_mu)
-        : p(lambda, eta, chem_mu) {
-        lattice_sync(field);
-    };
-    RelativisticBoseGas(Lattice<FieldType>& field, Params par) : p(par) { lattice_sync(field); };
+    RelativisticBoseGas() = default;
+    // RelativisticBoseGas(double lambda, double eta, double chem_mu) : p(lambda, eta, chem_mu){};
+    // RelativisticBoseGas(Lattice<FieldType>& field, double lambda, double eta, double chem_mu)
+    //     : p(lambda, eta, chem_mu) {
+    //     lattice_sync(field);
+    // };
+    // RelativisticBoseGas(Lattice<FieldType>& field, Params par) : p(par) { lattice_sync(field); };
+
+    /* setup */
+    void setup(const YAML::Node& ActionParamsDict) override;
 
     /* Sync with lattice */
-    void lattice_sync(const Lattice<FieldType>& field) override;
+    void lattice_sync(Lattice<FieldType>& field) override;
 
     /* Gloabal and local action computations */
-    auto compute_S(const Lattice<FieldType>& field) -> ActionType override;
-    auto compute_S_loc(const Lattice<FieldType>& field, int site) -> ActionType override;
-    auto compute_dS_loc(const Lattice<FieldType>& field, const FieldType& dphi, int site) -> ActionType override;
+    auto compute_S(Lattice<FieldType>& field) -> ActionType override;
+    auto compute_S_loc(Lattice<FieldType>& field, int site) -> ActionType override;
+    auto compute_dS_loc(Lattice<FieldType>& field, const FieldType& dphi, int site) -> ActionType override;
 
     /* HMC methods */
-    void compute_Forces(const Lattice<FieldType>& field, Lattice<FieldType>& forces) override;
-    void compute_LLRForces(const Lattice<FieldType>& field, Lattice<FieldType>& forces, double Sk, double width,
-                           double ak) const;
+    void compute_Forces(Lattice<FieldType>& field, Lattice<FieldType>& forces) override;
+    void compute_LLRForces(Lattice<FieldType>& field, Lattice<FieldType>& forces, double Sk, double width,
+                           double ak) override;
 
     /* Perform the measurements or returns updated Observable values*/
-    static auto Measure(const Lattice<FieldType>& field) -> Observables;
+    static auto Measure(Lattice<FieldType>& field) -> Observables;
 
     /* Log stuff */
-    auto name() -> std::string override { return "Relativistic Bose Gas"; };
-    auto name_short() -> std::string override { return "Phi^4"; };
-
-    auto parameters() -> std::string override {
+    auto GetName() -> std::string override { return "Relativistic Bose Gas"; };
+    auto GetParameters() -> std::string override {
         std::stringstream Res;
         Res << "[ lambda : " << std::format("{:4.1f}", p.lambda) << ", eta : " << std::format("{:4.1f}", p.eta)
             << ", mu : " << std::format("{:4.1f}", p.mu) << " ]";
@@ -111,11 +110,17 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD, 4> {
   Public methods Implementatin
 --------------------------------------------------------------------------------------------------*/
 
-inline void RelativisticBoseGas::lattice_sync(const Lattice<FieldType>& field) {
+inline void RelativisticBoseGas::setup(const YAML::Node& ActionParamsDict) {
+    p.lambda = ActionParamsDict["lambda"].as<double>();
+    p.eta = ActionParamsDict["eta"].as<double>();
+    p.mu = ActionParamsDict["mu"].as<double>();
+}
+
+inline void RelativisticBoseGas::lattice_sync(Lattice<FieldType>& field) {
     // Maybe do some checks here
 }
 
-inline auto RelativisticBoseGas::compute_S(const Lattice<FieldType>& field) -> ActionType {
+inline auto RelativisticBoseGas::compute_S(Lattice<FieldType>& field) -> ActionType {
     RealD    Real = 0.0;
     RealD    Imag = 0.0;
     ComplexD Phi;
@@ -127,32 +132,32 @@ inline auto RelativisticBoseGas::compute_S(const Lattice<FieldType>& field) -> A
         Phi2 = dot(Phi);
 
         Real += 0.5 * p.eta * Phi2 + 0.25 * p.lambda * Phi2 * Phi2 -
-                (Phi.real() * field.next(Site, _x).real() + Phi.imag() * field.next(Site, _x).imag()) -
-                (Phi.real() * field.next(Site, _y).real() + Phi.imag() * field.next(Site, _y).imag()) -
-                (Phi.real() * field.next(Site, _z).real() + Phi.imag() * field.next(Site, _z).imag()) -
-                cosh(p.mu) * (Phi.real() * field.next(Site, _t).real() + Phi.imag() * field.next(Site, _t).imag());
+                (Phi.real() * field.n(Site, _x).real() + Phi.imag() * field.n(Site, _x).imag()) -
+                (Phi.real() * field.n(Site, _y).real() + Phi.imag() * field.n(Site, _y).imag()) -
+                (Phi.real() * field.n(Site, _z).real() + Phi.imag() * field.n(Site, _z).imag()) -
+                cosh(p.mu) * (Phi.real() * field.n(Site, _t).real() + Phi.imag() * field.n(Site, _t).imag());
 
-        Imag += Phi.real() * field.next(Site, _t).imag() - Phi.imag() * field.next(Site, _t).real();
+        Imag += Phi.real() * field.n(Site, _t).imag() - Phi.imag() * field.n(Site, _t).real();
     }
 
     return {Real, Imag};
 }
 
-inline auto RelativisticBoseGas::compute_S_loc(const Lattice<FieldType>& field, int site) -> ActionType {
+inline auto RelativisticBoseGas::compute_S_loc(Lattice<FieldType>& field, int site) -> ActionType {
     ComplexD Phi = field[site];
-    ComplexD PhiNt = field.next(site, _t);
-    ComplexD PhiPt = field.prev(site, _t);
+    ComplexD PhiNt = field.n(site, _t);
+    ComplexD PhiPt = field.p(site, _t);
 
     RealD Phi2 = Phi.real() * Phi.real() + Phi.imag() * Phi.imag();
 
     RealD Real = 0.5 * p.eta * Phi2 + 0.25 * p.lambda * Phi2 * Phi2 -
-                 Phi.real() * (field.next(site, _x).real() + field.prev(site, _x).real() +  //
-                               field.next(site, _y).real() + field.prev(site, _y).real() +  //
-                               field.next(site, _z).real() + field.prev(site, _z).real() +  //
+                 Phi.real() * (field.n(site, _x).real() + field.p(site, _x).real() +  //
+                               field.n(site, _y).real() + field.p(site, _y).real() +  //
+                               field.n(site, _z).real() + field.p(site, _z).real() +  //
                                cosh(p.mu) * PhiNt.real() + cosh(p.mu) * PhiPt.real()) -
-                 Phi.imag() * (field.next(site, _x).imag() + field.prev(site, _x).imag() +  //
-                               field.next(site, _y).imag() + field.prev(site, _y).imag() +  //
-                               field.next(site, _z).imag() + field.prev(site, _z).imag() +  //
+                 Phi.imag() * (field.n(site, _x).imag() + field.p(site, _x).imag() +  //
+                               field.n(site, _y).imag() + field.p(site, _y).imag() +  //
+                               field.n(site, _z).imag() + field.p(site, _z).imag() +  //
                                cosh(p.mu) * PhiNt.imag() + cosh(p.mu) * PhiPt.imag());
 
     RealD Imag =
@@ -161,21 +166,21 @@ inline auto RelativisticBoseGas::compute_S_loc(const Lattice<FieldType>& field, 
     return {Real, Imag};
 }
 
-inline auto RelativisticBoseGas::compute_dS_loc(const Lattice<FieldType>& field, const FieldType& dphi,
+inline auto RelativisticBoseGas::compute_dS_loc(Lattice<FieldType>& field, const FieldType& dphi,
                                                 int site) -> ActionType {
     FieldType PhiOld = field[site];
     FieldType PhiNew = PhiOld + dphi;
-    FieldType PhiNt = field.next(site, _t);
-    FieldType PhiPt = field.prev(site, _t);
+    FieldType PhiNt = field.n(site, _t);
+    FieldType PhiPt = field.p(site, _t);
 
     RealD Phi2Old = dot(PhiOld);
     RealD Phi2New = dot(PhiNew);
     RealD Phi2Var = Phi2New - Phi2Old;
     RealD Phi4Var = Phi2New * Phi2New - Phi2Old * Phi2Old;
 
-    FieldType NeighborsSum = field.next(site, _x) + field.prev(site, _x) +  //
-                             field.next(site, _y) + field.prev(site, _y) +  //
-                             field.next(site, _z) + field.prev(site, _z) +  //
+    FieldType NeighborsSum = field.n(site, _x) + field.p(site, _x) +  //
+                             field.n(site, _y) + field.p(site, _y) +  //
+                             field.n(site, _z) + field.p(site, _z) +  //
                              cosh(p.mu) * (PhiNt + PhiPt);
 
     RealD Real = 0.5 * p.eta * Phi2Var + 0.25 * p.lambda * Phi4Var - dphi.real() * NeighborsSum.real() -
@@ -187,16 +192,16 @@ inline auto RelativisticBoseGas::compute_dS_loc(const Lattice<FieldType>& field,
     return {Real, Imag};
 }
 
-inline void RelativisticBoseGas::compute_Forces(const Lattice<FieldType>& field, Lattice<FieldType>& forces) {
+inline void RelativisticBoseGas::compute_Forces(Lattice<FieldType>& field, Lattice<FieldType>& forces) {
     for (int Site = 0; Site < field.getNsites(); Site++) {
         FieldType Phi = field[Site];
         FieldType Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
         FieldType Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
 
-        ComplexD NeighborsSum = field.next(Site, _x) + field.prev(Site, _x) +                //
-                                field.next(Site, _y) + field.prev(Site, _y) +                //
-                                field.next(Site, _z) + field.prev(Site, _z) +                //
-                                cosh(p.mu) * (field.next(Site, _t) + field.prev(Site, _t));  //
+        ComplexD NeighborsSum = field.n(Site, _x) + field.p(Site, _x) +                //
+                                field.n(Site, _y) + field.p(Site, _y) +                //
+                                field.n(Site, _z) + field.p(Site, _z) +                //
+                                cosh(p.mu) * (field.n(Site, _t) + field.p(Site, _t));  //
 
         RealD Real = p.eta * Phi.real() + p.lambda * (Phi3.real() + Phi.real() * Phi2.imag()) - NeighborsSum.real();
         RealD Imag = p.eta * Phi.imag() + p.lambda * (Phi3.imag() + Phi.imag() * Phi2.real()) - NeighborsSum.imag();
@@ -204,12 +209,12 @@ inline void RelativisticBoseGas::compute_Forces(const Lattice<FieldType>& field,
     }
 }
 
-inline void RelativisticBoseGas::compute_LLRForces(const Lattice<FieldType>& field, Lattice<FieldType>& forces,
-                                                   double Sk, double width, double ak) const {
+inline void RelativisticBoseGas::compute_LLRForces(Lattice<FieldType>& field, Lattice<FieldType>& forces, double Sk,
+                                                   double width, double ak) {
     FieldType Phi;
     FieldType Phi2;
     FieldType Phi3;
-    ComplexD  NeighborsSum;
+    FieldType NeighborsSum;
     RealD     ForcePhiRe;
     RealD     ForceLLRPhiRe;
     RealD     ForcePhiIm;
@@ -219,7 +224,7 @@ inline void RelativisticBoseGas::compute_LLRForces(const Lattice<FieldType>& fie
     RealD SIm = 0.0;
     for (int Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
-        SIm += Phi.real() * field.next(Site, _t).imag() - Phi.imag() * field.next(Site, _t).real();
+        SIm += Phi.real() * field.n(Site, _t).imag() - Phi.imag() * field.n(Site, _t).real();
     }
     RealD LLRForcePref = ((SIm - Sk) / (width * width) + ak);
 
@@ -227,22 +232,22 @@ inline void RelativisticBoseGas::compute_LLRForces(const Lattice<FieldType>& fie
         Phi = field[Site];
         Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
         Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
-        NeighborsSum = field.next(Site, _x) + field.prev(Site, _x) +                //
-                       field.next(Site, _y) + field.prev(Site, _y) +                //
-                       field.next(Site, _z) + field.prev(Site, _z) +                //
-                       cosh(p.mu) * (field.next(Site, _t) + field.prev(Site, _t));  //
+        NeighborsSum = field.n(Site, _x) + field.p(Site, _x) +                //
+                       field.n(Site, _y) + field.p(Site, _y) +                //
+                       field.n(Site, _z) + field.p(Site, _z) +                //
+                       cosh(p.mu) * (field.n(Site, _t) + field.p(Site, _t));  //
         // Standard forces
         ForcePhiRe = p.eta * Phi.real() + p.lambda * (Phi3.real() + Phi.real() * Phi2.imag()) - NeighborsSum.real();
         ForcePhiIm = p.eta * Phi.imag() + p.lambda * (Phi3.imag() + Phi.imag() * Phi2.real()) - NeighborsSum.imag();
         // LLR Forces
-        ForceLLRPhiRe = LLRForcePref * (field.next(Site, _t).imag() - field.prev(Site, _t).imag());
-        ForceLLRPhiIm = LLRForcePref * (field.prev(Site, _t).real() - field.next(Site, _t).real());
+        ForceLLRPhiRe = LLRForcePref * (field.n(Site, _t).imag() - field.p(Site, _t).imag());
+        ForceLLRPhiIm = LLRForcePref * (field.p(Site, _t).real() - field.n(Site, _t).real());
 
         forces[Site] = {ForcePhiRe + ForceLLRPhiRe, ForcePhiIm + ForceLLRPhiIm};
     }
 }
 
-inline auto RelativisticBoseGas::Measure(const Lattice<FieldType>& field) -> RelativisticBoseGas::Observables {
+inline auto RelativisticBoseGas::Measure(Lattice<FieldType>& field) -> RelativisticBoseGas::Observables {
     FieldType Phi;
     RealD     Phi2 = 0.0;
     auto      Norm = static_cast<RealD>(field.getNsites());
