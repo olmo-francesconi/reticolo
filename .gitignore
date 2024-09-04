@@ -42,3 +42,6 @@ build
 
 # chace directory
 .cache
+
+# compdb generated compile_commands.json
+compile_commands.json
