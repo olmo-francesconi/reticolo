@@ -32,7 +32,6 @@
 
 #include "reticolo/action/RelativisticBoseGas.hpp"
 #include "reticolo/llr/LLRController.hpp"
-#include "reticolo/types/core.hpp"
 
 using namespace reticolo;
 
