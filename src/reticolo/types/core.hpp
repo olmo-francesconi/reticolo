@@ -51,25 +51,25 @@ using ComplexD = std::complex<double>;
 --------------------------------------------------------------------------------------------------*/
 
 template <typename T>
-auto make_H5_Type();
+inline auto make_H5_Type();
 
 template <>
-auto make_H5_Type<uint>() {
+inline auto make_H5_Type<uint>() {
     return H5T_NATIVE_UINT;
 }
 
 template <>
-auto make_H5_Type<RealF>() {
+inline auto make_H5_Type<RealF>() {
     return H5T_NATIVE_FLOAT;
 }
 
 template <>
-auto make_H5_Type<RealD>() {
+inline auto make_H5_Type<RealD>() {
     return H5T_NATIVE_DOUBLE;
 }
 
 template <>
-auto make_H5_Type<ComplexF>() {
+inline auto make_H5_Type<ComplexF>() {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(ComplexF));
     H5Tinsert(DataTypeHid, "re", 0, H5T_NATIVE_FLOAT);
     H5Tinsert(DataTypeHid, "im", sizeof(ComplexF) / 2, H5T_NATIVE_FLOAT);
@@ -77,7 +77,7 @@ auto make_H5_Type<ComplexF>() {
 }
 
 template <>
-auto make_H5_Type<ComplexD>() {
+inline auto make_H5_Type<ComplexD>() {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(ComplexD));
     H5Tinsert(DataTypeHid, "re", 0, H5T_NATIVE_DOUBLE);
     H5Tinsert(DataTypeHid, "im", sizeof(ComplexD) / 2, H5T_NATIVE_DOUBLE);

@@ -118,16 +118,18 @@ auto print(T val) -> std::string {
 /* Print Complex numbers in standard format (dual signed 8 digits scientific) */
 template <ComplexValue T>
 auto print(T val) -> std::string {
-    return std::format("{:+8e}{:+8e}I", val.real(), val.imag());
+    return std::format("{:+8e} {:+8e}I", val.real(), val.imag());
 }
+
+auto print(uint val) -> std::string { return std::format("{:}", val); }
 
 /* Print Vectors in standard format */
 template <typename T>
 inline auto print(const std::vector<T>& Vect) -> std::string {
     std::stringstream Res;
-    Res << "[" << Vect[0];
+    Res << "[" << print(Vect[0]);
     for (uint Comp = 1; Comp < Vect.size(); Comp++) {
-        Res << " x " << Vect[Comp];
+        Res << ", " << print(Vect[Comp]);
     }
     Res << "]";
     return Res.str();
@@ -141,11 +143,11 @@ namespace fs = std::filesystem;
 
 class HDF5Handler {
   private:
-    omp_lock_t m_IoLock;
+    omp_lock_t _IoLock;
 
   public:
-    HDF5Handler() { omp_init_lock(&m_IoLock); };
-    ~HDF5Handler() { omp_destroy_lock(&m_IoLock); }
+    HDF5Handler() { omp_init_lock(&_IoLock); };
+    ~HDF5Handler() { omp_destroy_lock(&_IoLock); }
 
     /* File creation */
     void initFile(const fs::path& FileName);
@@ -170,36 +172,36 @@ class HDF5Handler {
 };
 
 void HDF5Handler::initFile(const fs::path& FileName) {
-    omp_set_lock(&m_IoLock);
+    omp_set_lock(&_IoLock);
     hid_t FileId = H5Fcreate(FileName.c_str(), H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT);
     H5Fclose(FileId);
-    omp_unset_lock(&m_IoLock);
+    omp_unset_lock(&_IoLock);
 }
 
 auto HDF5Handler::checkFile(const fs::path& FileName) -> bool {
-    omp_set_lock(&m_IoLock);
+    omp_set_lock(&_IoLock);
     hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     if (FileId == H5I_INVALID_HID) {
-        omp_unset_lock(&m_IoLock);
+        omp_unset_lock(&_IoLock);
         return false;
     }
     H5Fclose(FileId);
-    omp_unset_lock(&m_IoLock);
+    omp_unset_lock(&_IoLock);
     return true;
 }
 
 void HDF5Handler::createGroup(const fs::path& FileName, const std::string& GroupName) {
-    omp_set_lock(&m_IoLock);
+    omp_set_lock(&_IoLock);
     hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
     hid_t GroupId = H5Gcreate(FileId, GroupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5Gclose(GroupId);
     H5Fclose(FileId);
-    omp_unset_lock(&m_IoLock);
+    omp_unset_lock(&_IoLock);
 }
 
 template <typename T>
 void HDF5Handler::writeDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data) {
-    omp_set_lock(&m_IoLock);
+    omp_set_lock(&_IoLock);
     std::array<hsize_t, 1> Entries = {data.size()};
 
     hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
@@ -209,13 +211,13 @@ void HDF5Handler::writeDataset(const fs::path& FileName, const std::string& Data
         H5Dcreate(FileId, DataSetName.c_str(), DataTypeId, DataSpaceId, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5Dwrite(DataSetId, DataTypeId, H5S_ALL, H5S_ALL, H5P_DEFAULT, data.data());
     H5close();
-    omp_unset_lock(&m_IoLock);
+    omp_unset_lock(&_IoLock);
 }
 
 template <typename T>
 void HDF5Handler::setupExpandableDataset(const fs::path& FileName, const std::string& DataSetName, hsize_t ChunkSize,
                                          bool Compressed) {
-    omp_set_lock(&m_IoLock);
+    omp_set_lock(&_IoLock);
     hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
 
     hid_t DataSpaceId =
@@ -229,12 +231,12 @@ void HDF5Handler::setupExpandableDataset(const fs::path& FileName, const std::st
     hid_t DataSetId =
         H5Dcreate(FileId, DataSetName.c_str(), DataTypeId, DataSpaceId, H5P_DEFAULT, DsCreationPropId, H5P_DEFAULT);
     H5close();
-    omp_unset_lock(&m_IoLock);
+    omp_unset_lock(&_IoLock);
 }
 
 template <typename T>
 void HDF5Handler::appendDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data) {
-    omp_set_lock(&m_IoLock);
+    omp_set_lock(&_IoLock);
     std::array<hsize_t, 1> OldSize;
     std::array<hsize_t, 1> NewSize;
     std::array<hsize_t, 1> ExtendSize = {data.size()};
@@ -252,7 +254,7 @@ void HDF5Handler::appendDataset(const fs::path& FileName, const std::string& Dat
     hid_t BufferDataSpaceID = H5Screate_simple(1, ExtendSize.data(), ExtendSize.data());
     H5Dwrite(DataSetId, DataTypeId, BufferDataSpaceID, DataSpaceID, H5P_DEFAULT, data.data());
     H5close();
-    omp_unset_lock(&m_IoLock);
+    omp_unset_lock(&_IoLock);
 }
 
 inline HDF5Handler GlobalHdf5Handler;

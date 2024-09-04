@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <filesystem>
 #include <format>
@@ -102,9 +103,6 @@ inline void Logger::init(const std::filesystem::path& OutPath, const std::string
                                  std::string(")"));
     }
     _State = 1;
-    if (_SdtOut) {
-        std::cout << pretty_welcome() << '\n';
-    }
     _File << pretty_welcome() << '\n' << std::flush;
 }
 

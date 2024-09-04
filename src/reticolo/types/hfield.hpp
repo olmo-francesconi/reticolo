@@ -54,12 +54,7 @@ struct HField {
     std::array<T, NumComp> _Mat;
 
     HField() = default;
-    // HField(const HField&) = delete;
-    // HField(HField&&) = delete;
-    // HField& operator=(HField&&) = delete;
     HField(T val) { std::fill(_Mat.begin(), _Mat.end(), val); }
-    // HField(HField& other) = default;
-    // HField(HField&& other) = default;
 
     ~HField() = default;
 
@@ -151,6 +146,11 @@ inline void HField<T>::print() {
         std::cout << '\n';
     }
     std::cout << '\n';
+}
+
+template <RealValue T>
+inline void reset(HField<T>& val) {
+    std::fill(val._Mat.begin(), val._Mat.end(), 0.0);
 }
 
 /*--------------------------------------------------------------------------------------------------
