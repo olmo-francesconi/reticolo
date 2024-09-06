@@ -16,6 +16,7 @@
 
 #include <complex>
 #include <cstddef>
+#include <random>
 
 namespace reticolo {
 
@@ -45,6 +46,9 @@ using RealF = float;
 using RealD = double;
 using ComplexF = std::complex<float>;
 using ComplexD = std::complex<double>;
+
+// RNG
+using RNGType = std::mt19937_64;
 
 /*--------------------------------------------------------------------------------------------------
     Hdf5 Types for core DataTypes
