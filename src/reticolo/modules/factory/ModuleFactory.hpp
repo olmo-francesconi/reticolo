@@ -18,13 +18,14 @@
 #include "reticolo/action/RelativisticBoseGas.hpp"
 #include "reticolo/modules/factory/ModuleBase.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloHandler.hpp"
+#include "reticolo/types/core.hpp"
 
 namespace reticolo {
 
 enum class Modules {
-    Montecarlo,
+    MonteCarlo,
 };
-std::map<std::string, Modules> ModMap{{"MonteCarlo", Modules::Montecarlo}};
+std::map<std::string, Modules> ModMap{{"MonteCarlo", Modules::MonteCarlo}};
 
 enum class Actions {
     RelativisticBoseGas,
@@ -40,10 +41,10 @@ class ModuleFactory {
         auto Act = ActMap.find(action);
 
         switch (Mod->second) {
-            case Modules::Montecarlo:
+            case Modules::MonteCarlo:
                 switch (Act->second) {
                     case Actions::RelativisticBoseGas:
-                        return std::make_unique<montecarlo::MonteCarloHandler<action::RelativisticBoseGas>>();
+                        return std::make_unique<MMonteCarlo::MonteCarloHandler<action::RelativisticBoseGas>>();
                     default:
                         return nullptr;
                 }
