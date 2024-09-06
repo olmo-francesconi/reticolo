@@ -24,10 +24,10 @@
 #include <vector>
 
 #include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/modules/factory/MCAlgorithmBase.hpp"
+#include "reticolo/modules/factory/MCAlgorithmFactory.hpp"
 #include "reticolo/modules/factory/ModuleBase.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloData.hpp"
-#include "reticolo/modules/montecarlo/algorithms/AlgorithmBase.hpp"
-#include "reticolo/modules/montecarlo/algorithms/AlgorithmFactory.hpp"
 #include "reticolo/tools/io_utils.hpp"
 #include "reticolo/tools/logger.hpp"
 #include "reticolo/tools/timer.hpp"
@@ -37,7 +37,7 @@
 
 namespace fs = std::filesystem;
 
-namespace reticolo::montecarlo {
+namespace reticolo::MMonteCarlo {
 
 /*--------------------------------------------------------------------------------------------------
   MonteCarloHandler Class Declaration
@@ -50,7 +50,7 @@ class MonteCarloHandler : public ModuleBase {
     using action_type = Action::ActionType;
     using field_type = typename Action::FieldType;
     using observables_type = typename Action::Observables;
-    using monte_carlo_data_type = montecarlo::data<typename Action::ActionType>;
+    using monte_carlo_data_type = MMonteCarlo::data<typename Action::ActionType>;
 
     /* Metadata and output */
     std::string _HandlerName;                // Handler Id
@@ -67,7 +67,7 @@ class MonteCarloHandler : public ModuleBase {
     std::unique_ptr<Lattice<field_type>> _Field;   // reference to the Lattice
 
     /* Algorithm object */
-    std::unique_ptr<AlgorithmBase<Action>> _Updater;
+    std::unique_ptr<MCAlgorithmBase<Action>> _Updater;
 
     /* montecarlo data storage */
     monte_carlo_data_type              _McStats;        // current MonteCarlo status
@@ -77,10 +77,10 @@ class MonteCarloHandler : public ModuleBase {
     unsigned long                      _NMeasurements;  // Total numebr of measurements
 
     /* RNG */
-    std::mt19937_64                        _Rng;    // Random Number Generator
-    std::uniform_real_distribution<double> _Unif;   // Uniform distribution [0.0, 1.0]
-    std::uniform_real_distribution<double> _UnifC;  // Uniform distribution [-1.0, 1.0]
-    std::normal_distribution<double>       _Norm;   // Normal distibution (mean: 0.0, stddev: 1.0 )
+    RNGType _Rng;  // Random Number Generator
+    // std::uniform_real_distribution<double> _Unif;   // Uniform distribution [0.0, 1.0]
+    // std::uniform_real_distribution<double> _UnifC;  // Uniform distribution [-1.0, 1.0]
+    // std::normal_distribution<double>       _Norm;   // Normal distibution (mean: 0.0, stddev: 1.0 )
 
     /* Timing and logging */
     Timer      _Timer;   // Private Timer
@@ -90,7 +90,7 @@ class MonteCarloHandler : public ModuleBase {
     void saveConfiguration(uint Iter);  // Save current configuration stored in _Lattice
 
     /* Performs measure stuff, update AVGs and STDs and write if bufffer */
-    void measure_utility(const std::string& RunName, unsigned long Iteration) {};
+    void measure_utility(const std::string& RunName, unsigned long Iteration);
 
   public:
     MonteCarloHandler() = default;
@@ -182,18 +182,9 @@ inline void MonteCarloHandler<Action>::setup(const YAML::Node& Config) {
 
     /* RNGs stuff */
     _Rng.seed(Config["main_seed"].as<unsigned long long>());
-    _Unif = std::uniform_real_distribution<double>(0.0, 1.0);
-    _UnifC = std::uniform_real_distribution<double>(-1.0, 1.0);
-    _Norm = std::normal_distribution<double>(0.0, 1.0);
 
-    // /* Allocate Algorithm object */
-    // if (Config["algorithm"]["name"].as<std::string>() == "HMC") {
-    //     _Updater = std::make_unique<HMC<Action>>();
-    // } else if (Config["algorithm"].as<std::string>() == "Metropolis") {
-    //     _Updater = nullptr;
-    // }
-
-    _Updater = AlgorithmFactory<Action>::MakeUpdater(Config["algorithm"]["name"].as<std::string>());
+    /* Create updater with Factory */
+    _Updater = MCAlgorithmFactory<Action>::MakeUpdater(Config["algorithm"]["name"].as<std::string>());
 
     /* Run the Updater setup */
     _Updater->setup(Config["algorithm"]["parameters"], *_Field);
@@ -205,21 +196,22 @@ inline void MonteCarloHandler<Action>::setup(const YAML::Node& Config) {
 
 template <class Action>
 inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
+    /* Parse configuration from YAML::Node */
     auto   RunName = RunConfig["name"].as<std::string>();
     auto   NMeasures = RunConfig["measures"].as<uint>();
-    auto   MeasureStep = RunConfig["measurte_step"].as<uint>();
+    auto   MeasureStep = RunConfig["measure_step"].as<uint>();
     auto   NTherm = RunConfig["therm_steps"].as<uint>();
     auto   InitializeField = RunConfig["field_init"].as<bool>();
     bool   HotStart = false;
     double HotStartScale = 1.0;
     if (InitializeField) {
-        HotStart = RunConfig["HotStart"].as<bool>();
+        HotStart = RunConfig["hot_start"].as<bool>();
         if (HotStart) {
-            HotStartScale = RunConfig["HotStart"].as<double>();
+            HotStartScale = RunConfig["hot_start_scale"].as<double>();
         }
     }
 
-    // set reasonable hdf5 dataset chunk size
+    /* Setup HDF5 output */
     uint ChunkSize = 10000;
     uint TotMeasure = NMeasures / MeasureStep;
     if (TotMeasure < ChunkSize) {
@@ -236,48 +228,42 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
             _Hdf5OutputFile, RunName + "/MonteCarlo", ChunkSize, true);
     }
 
-    // Log Run parameters
+    /* Log Run parameters */
     _Logger << IO::LI_time() + "[" + RunName + "] - Starting Monte Carlo updates..\n";
 
-    // Initialize the field
+    /* Initialize the field */
     if (InitializeField) {
         if (HotStart) {
             _Logger << IO::LI_void() + std::format("    initial conditions : hot start [scale : {}]\n", HotStartScale);
-            // _Field->randomizesFiled(HotStartScale, _Rng, _Norm);
+            _Field->randomizeField(HotStartScale, _Rng);
         } else {
             _Logger << IO::LI_void() + "    initial conditions : cold start\n";
-            // _Field->reset();
+            _Field->resetField();
         }
     }
 
-    // Initialize the starting value of the Action
+    /* Initialize the starting value of the Action */
     action_type SInit = _Action->compute_S(*_Field);
     _McStats.setS(SInit);
 
-    // Thermalize the field
+    /* Thermalize the field */
     if (NTherm > 0) {
-        // Log that the folder and logging stuff has bee initialized properly
         _Logger << IO::LI_time() + "[" + RunName + "] - Thermalization started...\n";
         _Logger << IO::LI_void() + std::format("  thermalizatoin steps : {}\n", NTherm);
-        // Reset the timer
         _Timer.reset();
-        // Perform the thermalization sweeps
         for (uint Iter = 0; Iter < NTherm; Iter++) {
-            _Updater->updateField(*_Field, *_Action, _McStats);
+            _Updater->updateField(*_Field, *_Action, _McStats, _Rng);
         }
-        // Log timing information
         _Logger << IO::LI_time() +
                        std::format("[{}] - Thermalization finished in {:.2f} ms\n", RunName, _Timer.elapsed_ms());
     }
-    // do checks on nMC and MeasureStep -> sanitize nMC from unnecessary
-    // iterations
+
     _Logger << IO::LI_void() + "[" + RunName + "] - Starting Measurements..\n";
 
+    /* Initialize measurements buffers */
     if (_SaveData) {
-        // Initialize std::vector of Monte Carlo stats
         _McStatsBuffer.clear();
         _McStatsBuffer.reserve(TotMeasure);
-        // Initialize std::vector of observable measurements
         _ObsBuffer.clear();
         _ObsBuffer.reserve(TotMeasure);
     }
@@ -289,7 +275,7 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
 
     for (uint Iteration = 1; Iteration <= NMeasures; Iteration++) {
         // perform a sweep
-        _Updater->updateField(*_Field, *_Action, _McStats);
+        _Updater->updateField(*_Field, *_Action, _McStats, _Rng);
 
         // measure if this is a MeasureStep-th iteration
         if (Iteration % MeasureStep == 0) {
@@ -319,44 +305,39 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
 //     _Field.save_Configuration(FileName);
 // }
 
-// template <class Action>
-// inline void MonteCarloHandler<Action>::measure_utility(const std::string&
-// RunName, unsigned long Iteration) {
-//     // Measure observables
-//     _Obs = _Action.Measure(_Field);
-//
-//     _NMeasurements++;
-//     // Save the configuration
-//     if (_SaveConfig) {
-//         saveConfiguration(Iteration);
-//     }
-//     // Save Monte Carlo data and Observables
-//     if (_SaveData) {
-//         // Update Buffers
-//         _McStatsBuffer.emplace_back(_McStats);
-//         _ObsBuffer.emplace_back(_Obs);
-//         // Save to file and flush if:
-//         //   - The buffers are full (_MaxBufferSize)
-//         //   - Too much time has passed since last save
-//         (_MaxBufferWriteDelay) double Elapsed = _Timer.elapsed_s(); if
-//         (_ObsBuffer.size() == _MaxBufferSize || Elapsed >
-//         _MaxBufferWriteDelay) {
-//             // save data
-//             IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName +
-//             "/Observables", _ObsBuffer);
-//             IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName +
-//             "/MonteCarlo", _McStatsBuffer);
-//             // Log save state
-//             double IterPerSec = (_ObsBuffer.size()) / (Elapsed);
-//             _Logger << IO::LI_time() + std::format("conf {:>12} : data
-//             saved [{:.2f} conf/s]\n", Iteration, IterPerSec);
-//             // clear the vectors
-//             _McStatsBuffer.clear();
-//             _ObsBuffer.clear();
-//             // reset the timer
-//             _Timer.reset();
-//         }
-//     }
-// }
+template <class Action>
+inline void MonteCarloHandler<Action>::measure_utility(const std::string& RunName, unsigned long Iteration) {
+    // Measure observables
+    _Obs = _Action->Measure(*_Field);
 
-}  // namespace reticolo::montecarlo
+    _NMeasurements++;
+    // Save the configuration
+    // if (_SaveConfig) {
+    // saveConfiguration(Iteration);
+    // }s
+    // Save Monte Carlo data and Observables
+    if (_SaveData) {
+        // Update Buffers
+        _McStatsBuffer.emplace_back(_McStats);
+        _ObsBuffer.emplace_back(_Obs);
+        // Save to file and flush if:
+        //   - The buffers are full (_MaxBufferSize)
+        //   - Too much time has passed since last save(_MaxBufferWriteDelay)
+        double Elapsed = _Timer.elapsed_s();
+        if (_ObsBuffer.size() == _MaxBufferSize || Elapsed > _MaxBufferWriteDelay) {
+            // save data
+            IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/Observables", _ObsBuffer);
+            IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/MonteCarlo", _McStatsBuffer);
+            // Log save state
+            double IterPerSec = (_ObsBuffer.size()) / (Elapsed);
+            _Logger << IO::LI_time() + std::format("conf {:>12} : datasaved [{:.2f} conf/s]\n", Iteration, IterPerSec);
+            // clear the vectors
+            _McStatsBuffer.clear();
+            _ObsBuffer.clear();
+            // reset the timer
+            _Timer.reset();
+        }
+    }
+}
+
+}  // namespace reticolo::MMonteCarlo
