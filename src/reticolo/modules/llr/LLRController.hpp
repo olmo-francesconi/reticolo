@@ -27,10 +27,10 @@
 #include <utility>
 #include <vector>
 
-#include "reticolo/factory/ModuleBase.hpp"
 #include "reticolo/lattice/Lattice.hpp"
-#include "reticolo/llr/LLRHMCWorker.hpp"
-#include "reticolo/montecarlo/MonteCarloData.hpp"
+#include "reticolo/modules/factory/ModuleBase.hpp"
+#include "reticolo/modules/llr/LLRHMCWorker.hpp"
+#include "reticolo/modules/montecarlo/MonteCarloData.hpp"
 #include "reticolo/tools/io_utils.hpp"
 #include "reticolo/tools/logger.hpp"
 #include "reticolo/tools/timer.hpp"
@@ -39,7 +39,7 @@
 
 namespace fs = std::filesystem;
 
-namespace reticolo::LLR {
+namespace reticolo::MLLR {
 
 /*--------------------------------------------------------------------------------------------------
     LLRController Class declaration
@@ -51,7 +51,7 @@ class LLRController : ModuleBase {
     using ActionType = typename Action::ActionType;
     using FieldType = typename Action::FieldType;
     using LatticeType = Lattice<typename Action::FieldType>;
-    using McDataType = montecarlo::data<typename Action::ActionType>;
+    using McDataType = MMonteCarlo::data<typename Action::ActionType>;
     using ObsType = typename Action::Observables;
 
     /* Main Workspace folder */
@@ -333,4 +333,4 @@ void LLRController<Action>::ReplicaExcange() {
     }
 }
 
-}  // namespace reticolo::LLR
+}  // namespace reticolo::MLLR

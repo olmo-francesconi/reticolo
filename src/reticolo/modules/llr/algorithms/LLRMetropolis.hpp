@@ -1,0 +1,99 @@
+/******************************************************************************
+
+ - reticolo (www.github.com/olmo-francesconi/reticolo.git)
+
+ - SourceFile: mc/hmc.hpp
+
+ - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
+
+ ******************************************************************************/
+
+#pragma once
+
+#include <omp.h>
+
+#include <memory>
+#include <random>
+
+#include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/modules/montecarlo/MonteCarloData.hpp"
+#include "reticolo/modules/montecarlo/algorithms/AlgorithmBase.hpp"
+#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
+#include "reticolo/types/core.hpp"
+#include "reticolo/types/core_math.hpp"
+#include "reticolo/types/random.hpp"
+#include "yaml-cpp/node/node.h"
+
+namespace reticolo::MMonteCarlo {
+
+template <class Action>
+class LLRMetropolis : public MCAlgorithmBase<Action> {
+  private:
+    /* Types definitions */
+    using ActionType = typename Action::ActionType;
+    using FieldType = typename Action::FieldType;
+    using LatticeType = Lattice<typename Action::FieldType>;
+    using monte_carlo_data_type = MMonteCarlo::data<typename Action::ActionType>;
+
+    /* Metropolis parameters */
+    double _ProposalWidth;
+
+    /* LLR parameters */
+    double _Sk;
+    double _Ak;
+    double _Width;
+
+    /* Distributions */
+    std::normal_distribution<double>       _Norm;   // Normal distibution (mean: 0.0, stddev: 1.0)
+    std::uniform_real_distribution<double> _Unif;   // Uniform distribution [0.0, 1.0]
+    std::uniform_real_distribution<double> _UnifC;  // Uniform distribution [-1.0, 1.0]
+
+  public:
+    LLRMetropolis() = default;
+
+    /* setup */
+    void setup(const YAML::Node& Params, const Lattice<FieldType>& Field) override {
+        _ProposalWidth = Params["prop_width"].as<double>();
+
+        _Sk = Params["Sk"].as<double>();
+        _Ak = Params["ak"].as<double>();
+        _Width = Params["width"].as<double>();
+    }
+
+    /* execution */
+    void updateField(Lattice<FieldType>& field, Action& action, monte_carlo_data_type& state, RNGType& rng) override {
+        //     uint Acc = 0;  // acceptance
+
+        //     double WindowWeight;  // weight of the windowing function   [normal distribution]
+        //     double LlrWeight;     // weight of the llr reweighting      [exp(-ak(S-Sk)]
+
+        //     ActionType SVar;               // local action variation
+        //     ActionType SVarTot(0.0, 0.0);  // cumulative action variation
+
+        //     FieldType FieldVar;  // local field variation
+
+        //     for (uint Site = 0; Site < field.getNsites(); Site++) {
+        //         // randomize(FieldVar, _ProposalWidth, _UnifC, _Rng);
+
+        //         SVar = action.compute_dS_loc(field, FieldVar, Site);
+
+        //         WindowWeight = (SVar.imag() * (SVar.imag() + 2.0 * state._SIm - 2.0 * _Sk)) / (2.0 * _Width *
+        //         _Width);
+
+        //         LlrWeight = _Ak * SVar.imag();
+
+        //         // if (exp(-(SVar.real() + WindowWeight + LlrWeight)) > _Unif(_Rng)) {
+        //         //     Acc++;
+        //         //     field[Site] += FieldVar;
+        //         //     SVarTot += SVar;
+        //         //     state._SRe += SVar.real();
+        //         //     state._SIm += SVar.imag();
+        //         // }
+        //     }
+
+        //     state._Acceptance = static_cast<double>(Acc) / field.getNsites();
+        //     state._DSRe = SVarTot.real();
+        //     state._DSIm = SVarTot.imag();
+    };
+};
+}  // namespace reticolo::MMonteCarlo
