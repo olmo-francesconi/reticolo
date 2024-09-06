@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,8 @@
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
 #include "reticolo/types/core_math.hpp"
+#include "reticolo/types/hfield.hpp"
+#include "reticolo/types/random.hpp"
 
 namespace reticolo {
 
@@ -124,11 +127,30 @@ class Lattice : public std::vector<TField> {
     }
 
     /* Lattice methods */
+    template <RNGGen T>
+    void randomizeField(RealD scale, T& rng) {
+        auto Norm = std::normal_distribution<double>(0.0, 1.0);
+        for (auto& Site : (*this)) {
+            randomize(Site, scale, Norm, rng);
+        }
+    }
+
     void resetField() {
         for (auto& Site : (*this)) {
             reset(Site);
         }
     }
 };
+
+/*--------------------------------------------------------------------------------------------------
+  Lattice types definitions
+--------------------------------------------------------------------------------------------------*/
+
+using RealLatticeF = Lattice<RealF>;
+using RealLatticeD = Lattice<RealD>;
+using ComplexLatticeF = Lattice<ComplexF>;
+using ComplexLatticeD = Lattice<ComplexD>;
+using GRLatticeF = Lattice<HField<RealF>>;
+using GRLatticeD = Lattice<HField<RealD>>;
 
 }  // namespace reticolo
