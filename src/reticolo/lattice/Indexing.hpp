@@ -14,7 +14,6 @@
 #include <numeric>
 #include <vector>
 
-#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core_math.hpp"
 
 namespace reticolo {
@@ -68,9 +67,9 @@ class Indexing {
         }
     };
 
-    /* Get  */
-    auto nextId(SizeType site, SizeType dir) -> SizeType { return Next[site * Dims + dir]; }
-    auto prevId(SizeType site, SizeType dir) -> SizeType { return Prev[site * Dims + dir]; }
+    /* Get */
+    inline auto nextId(SizeType site, SizeType dir) -> SizeType { return Next[site * Dims + dir]; }
+    inline auto prevId(SizeType site, SizeType dir) -> SizeType { return Prev[site * Dims + dir]; }
 };
 
 }  // namespace reticolo
