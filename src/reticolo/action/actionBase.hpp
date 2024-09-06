@@ -17,6 +17,7 @@
 
 #include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
+#include "reticolo/types/core.hpp"
 #include "yaml-cpp/node/node.h"
 
 namespace reticolo::action {
@@ -37,8 +38,8 @@ class ActionBase {
 
     /* Gloabal and local action computations */
     virtual auto compute_S(Lattice<FieldType>& field) -> ActionType = 0;
-    virtual auto compute_S_loc(Lattice<FieldType>& field, int site) -> ActionType = 0;
-    virtual auto compute_dS_loc(Lattice<FieldType>& field, const FieldType& dphi, int site) -> ActionType = 0;
+    virtual auto compute_S_loc(Lattice<FieldType>& field, uint site) -> ActionType = 0;
+    virtual auto compute_dS_loc(Lattice<FieldType>& field, const FieldType& dphi, uint site) -> ActionType = 0;
 
     /* HMC methods */
     virtual void compute_Forces(Lattice<FieldType>& field, Lattice<FieldType>& forces) = 0;
