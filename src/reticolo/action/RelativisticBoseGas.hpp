@@ -14,11 +14,12 @@
 #include <H5Tpublic.h>
 
 #include <cmath>
+#include <complex>
 #include <format>
 #include <sstream>
 #include <string>
 
-#include "reticolo/action/actionBase.hpp"
+// #include "reticolo/action/actionBase.hpp"
 #include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
@@ -30,9 +31,11 @@ namespace reticolo::action {
 /*--------------------------------------------------------------------------------------------------
   RelativisticBoseGas Class Declaration
 --------------------------------------------------------------------------------------------------*/
-class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD> {
+class RelativisticBoseGas {  //: public ActionBase<T, T> {
   public:
     /* Types and public action metadata */
+    using ActionType = ComplexD;
+    using FieldType = ComplexD;
     static constexpr int Dims = 4;     // Dimensions of the action
     static constexpr int Stencil = 2;  // Minimum step size for multi-thread safety
 
@@ -43,18 +46,18 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD> {
 
     /* Action parameters */
     struct Params {
-        double lambda;
-        double eta;
-        double mu;
-        Params() : lambda(1.0), eta(9.0), mu(0){};
-        Params(double lambda, double eta, double chem_mu) : lambda(lambda), eta(eta), mu(chem_mu){};
+        RealD lambda;
+        RealD eta;
+        RealD mu;
+        Params() : lambda(1.0), eta(9.0), mu(0) {};
+        Params(RealD lambda, RealD eta, RealD chem_mu) : lambda(lambda), eta(eta), mu(chem_mu) {};
     } p;
 
     /* Observables */
     struct Observables {
-        double phi2;
-        double density;
-        void   reset() { phi2 = 0.0, density = 0.0; };
+        RealD phi2;
+        RealD density;
+        void  reset() { phi2 = 0.0, density = 0.0; };
 
         auto operator+=(const Observables& rhs) -> Observables {
             phi2 += rhs.phi2;
@@ -70,35 +73,29 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD> {
 
     /* Constructors */
     RelativisticBoseGas() = default;
-    // RelativisticBoseGas(double lambda, double eta, double chem_mu) : p(lambda, eta, chem_mu){};
-    // RelativisticBoseGas(Lattice<FieldType>& field, double lambda, double eta, double chem_mu)
-    //     : p(lambda, eta, chem_mu) {
-    //     lattice_sync(field);
-    // };
-    // RelativisticBoseGas(Lattice<FieldType>& field, Params par) : p(par) { lattice_sync(field); };
 
     /* setup */
-    void setup(const YAML::Node& ActionParamsDict) override;
+    void setup(const YAML::Node& ActionParamsDict);  // override;
 
     /* Sync with lattice */
-    void lattice_sync(Lattice<FieldType>& field) override;
+    void lattice_sync(Lattice<FieldType>& field);  // override;
 
     /* Gloabal and local action computations */
-    auto compute_S(Lattice<FieldType>& field) -> ActionType override;
-    auto compute_S_loc(Lattice<FieldType>& field, int site) -> ActionType override;
-    auto compute_dS_loc(Lattice<FieldType>& field, const FieldType& dphi, int site) -> ActionType override;
+    auto compute_S(Lattice<FieldType>& field) const -> ActionType;                                         // override;
+    auto compute_S_loc(Lattice<FieldType>& field, uint site) const -> ActionType;                          // override;
+    auto compute_dS_loc(Lattice<FieldType>& field, const FieldType& dphi, uint site) const -> ActionType;  // override;
 
     /* HMC methods */
-    void compute_Forces(Lattice<FieldType>& field, Lattice<FieldType>& forces) override;
-    void compute_LLRForces(Lattice<FieldType>& field, Lattice<FieldType>& forces, double Sk, double width,
-                           double ak) override;
+    void compute_Forces(Lattice<FieldType>& field, Lattice<FieldType>& forces) const;  // override;
+    void compute_LLRForces(Lattice<FieldType>& field, Lattice<FieldType>& forces, RealD Sk, RealD width,
+                           RealD ak) const;  // override;
 
     /* Perform the measurements or returns updated Observable values*/
     static auto Measure(Lattice<FieldType>& field) -> Observables;
 
     /* Log stuff */
-    auto GetName() -> std::string override { return "Relativistic Bose Gas"; };
-    auto GetParameters() -> std::string override {
+    static auto GetName() -> std::string { return "Relativistic Bose Gas"; };
+    auto        GetParameters() -> std::string {
         std::stringstream Res;
         Res << "[ lambda : " << std::format("{:4.1f}", p.lambda) << ", eta : " << std::format("{:4.1f}", p.eta)
             << ", mu : " << std::format("{:4.1f}", p.mu) << " ]";
@@ -107,26 +104,26 @@ class RelativisticBoseGas : public ActionBase<ComplexD, ComplexD> {
 };
 
 /*--------------------------------------------------------------------------------------------------
-  Public methods Implementatin
+  Public methods RealDementatin
 --------------------------------------------------------------------------------------------------*/
 
 inline void RelativisticBoseGas::setup(const YAML::Node& ActionParamsDict) {
-    p.lambda = ActionParamsDict["lambda"].as<double>();
-    p.eta = ActionParamsDict["eta"].as<double>();
-    p.mu = ActionParamsDict["mu"].as<double>();
+    p.lambda = ActionParamsDict["lambda"].as<RealD>();
+    p.eta = ActionParamsDict["eta"].as<RealD>();
+    p.mu = ActionParamsDict["mu"].as<RealD>();
 }
 
 inline void RelativisticBoseGas::lattice_sync(Lattice<FieldType>& field) {
     // Maybe do some checks here
 }
 
-inline auto RelativisticBoseGas::compute_S(Lattice<FieldType>& field) -> ActionType {
-    RealD    Real = 0.0;
-    RealD    Imag = 0.0;
-    ComplexD Phi;
-    RealD    Phi2;
+inline auto RelativisticBoseGas::compute_S(Lattice<FieldType>& field) const -> ActionType {
+    RealD     Real = 0.0;
+    RealD     Imag = 0.0;
+    FieldType Phi;
+    RealD     Phi2;
 
-    for (int Site = 0; Site < field.getNsites(); Site++) {
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
 
         Phi2 = dot(Phi);
@@ -143,10 +140,10 @@ inline auto RelativisticBoseGas::compute_S(Lattice<FieldType>& field) -> ActionT
     return {Real, Imag};
 }
 
-inline auto RelativisticBoseGas::compute_S_loc(Lattice<FieldType>& field, int site) -> ActionType {
-    ComplexD Phi = field[site];
-    ComplexD PhiNt = field.n(site, _t);
-    ComplexD PhiPt = field.p(site, _t);
+inline auto RelativisticBoseGas::compute_S_loc(Lattice<FieldType>& field, uint site) const -> ActionType {
+    FieldType Phi = field[site];
+    FieldType PhiNt = field.n(site, _t);
+    FieldType PhiPt = field.p(site, _t);
 
     RealD Phi2 = Phi.real() * Phi.real() + Phi.imag() * Phi.imag();
 
@@ -167,7 +164,7 @@ inline auto RelativisticBoseGas::compute_S_loc(Lattice<FieldType>& field, int si
 }
 
 inline auto RelativisticBoseGas::compute_dS_loc(Lattice<FieldType>& field, const FieldType& dphi,
-                                                int site) -> ActionType {
+                                                uint site) const -> ActionType {
     FieldType PhiOld = field[site];
     FieldType PhiNew = PhiOld + dphi;
     FieldType PhiNt = field.n(site, _t);
@@ -192,16 +189,16 @@ inline auto RelativisticBoseGas::compute_dS_loc(Lattice<FieldType>& field, const
     return {Real, Imag};
 }
 
-inline void RelativisticBoseGas::compute_Forces(Lattice<FieldType>& field, Lattice<FieldType>& forces) {
+inline void RelativisticBoseGas::compute_Forces(Lattice<FieldType>& field, Lattice<FieldType>& forces) const {
     for (int Site = 0; Site < field.getNsites(); Site++) {
         FieldType Phi = field[Site];
         FieldType Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
         FieldType Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
 
-        ComplexD NeighborsSum = field.n(Site, _x) + field.p(Site, _x) +                //
-                                field.n(Site, _y) + field.p(Site, _y) +                //
-                                field.n(Site, _z) + field.p(Site, _z) +                //
-                                cosh(p.mu) * (field.n(Site, _t) + field.p(Site, _t));  //
+        FieldType NeighborsSum = field.n(Site, _x) + field.p(Site, _x) +                //
+                                 field.n(Site, _y) + field.p(Site, _y) +                //
+                                 field.n(Site, _z) + field.p(Site, _z) +                //
+                                 cosh(p.mu) * (field.n(Site, _t) + field.p(Site, _t));  //
 
         RealD Real = p.eta * Phi.real() + p.lambda * (Phi3.real() + Phi.real() * Phi2.imag()) - NeighborsSum.real();
         RealD Imag = p.eta * Phi.imag() + p.lambda * (Phi3.imag() + Phi.imag() * Phi2.real()) - NeighborsSum.imag();
@@ -209,8 +206,8 @@ inline void RelativisticBoseGas::compute_Forces(Lattice<FieldType>& field, Latti
     }
 }
 
-inline void RelativisticBoseGas::compute_LLRForces(Lattice<FieldType>& field, Lattice<FieldType>& forces, double Sk,
-                                                   double width, double ak) {
+inline void RelativisticBoseGas::compute_LLRForces(Lattice<FieldType>& field, Lattice<FieldType>& forces, RealD Sk,
+                                                   RealD width, RealD ak) const {
     FieldType Phi;
     FieldType Phi2;
     FieldType Phi3;
@@ -263,10 +260,11 @@ inline auto RelativisticBoseGas::Measure(Lattice<FieldType>& field) -> Relativis
 }  // namespace reticolo::action
 
 /*--------------------------------------------------------------------------------------------------
-  HDF5 helper method Implementatin
+  HDF5 helper method RealDementatin
 --------------------------------------------------------------------------------------------------*/
 
 namespace reticolo {
+
 template <>
 auto make_H5_Type<action::RelativisticBoseGas::Observables>() {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGas::Observables));
@@ -274,4 +272,5 @@ auto make_H5_Type<action::RelativisticBoseGas::Observables>() {
     H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGas::Observables, density), H5T_NATIVE_DOUBLE);
     return DataTypeHid;
 }
+
 }  // namespace reticolo
