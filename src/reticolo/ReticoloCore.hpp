@@ -1,4 +1,4 @@
-/******************************************************************************
+/*******************************************************************************
 
  - reticolo (www.github.com/olmo-francesconi/reticolo.git)
 
@@ -6,7 +6,7 @@
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
- ******************************************************************************/
+*******************************************************************************/
 
 #pragma once
 
@@ -26,14 +26,12 @@ class ReticoloCore {
   protected:
     ReticoloCore() = default;
     static ReticoloCore* Instance;
-    // std::string          _Id;
-    static YAML::Node Setup;
+    static YAML::Node    Setup;
 
   public:
     /* Singletons should not be cloneable and assignable */
     ReticoloCore(ReticoloCore& other) = delete;
     void operator=(const ReticoloCore&) = delete;
-    ~ReticoloCore() { std::cout << "ReticoloCore Singleton destructed\n"; }
 
     /* Create and get access to the singleton */
     static auto Init() -> ReticoloCore*;
