@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstdlib>
 #include <memory>
 #include <random>
@@ -26,25 +27,27 @@ namespace reticolo::MMonteCarlo {
 
 template <class Action>
 class HMC : public MCAlgorithmBase<Action> {
-  private:
+  public:
     /* Types definitions */
-    using action_type = typename Action::ActionType;
-    using field_type = typename Action::FieldType;
+    using action_type = Action::action_type;
+    using field_type = Action::field_type;
+    using impl_type = Action::impl_type;
     using lattice_type = Lattice<field_type>;
     using monte_carlo_data_type = MMonteCarlo::data<action_type>;
 
+  private:
     /* HMC support fields */
     std::unique_ptr<lattice_type> _Mom;
     std::unique_ptr<lattice_type> _Forces;
     std::unique_ptr<lattice_type> _OldField;
 
     /* HMC settings */
-    RealD _Stepsize;
-    uint  _Steps;
+    impl_type _Stepsize;
+    uint      _Steps;
 
     /* Distributions */
-    std::uniform_real_distribution<RealD> _Unif;  // Uniform distribution [0.0, 1.0]
-    std::normal_distribution<RealD>       _Norm;  // Normal distibution (mean: 0.0, stddev: 1.0)
+    std::uniform_real_distribution<impl_type> _Unif;  // Uniform distribution [0.0, 1.0]
+    std::normal_distribution<impl_type>       _Norm;  // Normal distibution (mean: 0.0, stddev: 1.0)
 
   public:
     HMC() = default;
@@ -52,7 +55,7 @@ class HMC : public MCAlgorithmBase<Action> {
     /* setup */
     void setup(const YAML::Node& Params, const Lattice<field_type>& Field) override {
         /* Parse Parameters */
-        _Stepsize = Params["stepsize"].as<RealD>();
+        _Stepsize = Params["stepsize"].as<impl_type>();
         _Steps = Params["steps"].as<uint>();
 
         /* Allocate auxiliary fields */
@@ -61,17 +64,20 @@ class HMC : public MCAlgorithmBase<Action> {
         _OldField = std::make_unique<Lattice<field_type>>(Field);
 
         /* Initialize distributions */
-        _Unif = std::uniform_real_distribution<RealD>(0.0, 1.0);
-        _Norm = std::normal_distribution<RealD>(0.0, 1.0);
+        _Unif = std::uniform_real_distribution<impl_type>(0.0, 1.0);
+        _Norm = std::normal_distribution<impl_type>(0.0, 1.0);
+        static_assert(std::same_as<typename std::uniform_real_distribution<impl_type>::result_type, impl_type>,
+                      "type error");
     }
 
     /* execution */
     void updateField(Lattice<field_type>& field, Action& action, monte_carlo_data_type& state, RNGType& rng) override {
-        int NSites = field.getNsites();
+        int       NSites = field.getNsites();
+        impl_type Half = 0.5;
         // save the old field configuration;
         *_OldField = field;
         // Generate random momenta and compute initial kinetic term
-        RealD OldK = 0.0;
+        impl_type OldK = 0.0;
         for (int Site = 0; Site < NSites; Site++) {
             randomize((*_Mom)[Site], 1.0, _Norm, rng);
             OldK += dot((*_Mom)[Site]);
@@ -81,7 +87,7 @@ class HMC : public MCAlgorithmBase<Action> {
         action.compute_Forces(field, (*_Forces));
         // Momenta half step
         for (int Site = 0; Site < NSites; Site++) {
-            (*_Mom)[Site] -= 0.5 * _Stepsize * (*_Forces)[Site];
+            (*_Mom)[Site] -= Half * _Stepsize * (*_Forces)[Site];
         }
         // Leapfrog algorithm
         for (uint Step = 0; Step < _Steps; Step++) {
@@ -98,13 +104,13 @@ class HMC : public MCAlgorithmBase<Action> {
         }
         // Momenta half step roll-back
         for (int Site = 0; Site < NSites; Site++) {
-            (*_Mom)[Site] += 0.5 * _Stepsize * (*_Forces)[Site];
+            (*_Mom)[Site] += Half * _Stepsize * (*_Forces)[Site];
         }
         // Compute final action
         action_type OldS = state.getS();
         action_type NewS = action.compute_S(field);
         // Compute end kinetic term
-        RealD NewK = 0.0;
+        impl_type NewK = 0.0;
         for (int Site = 0; Site < NSites; Site++) {
             NewK += dot((*_Mom)[Site]);
         }

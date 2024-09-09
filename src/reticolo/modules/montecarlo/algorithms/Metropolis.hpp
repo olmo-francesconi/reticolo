@@ -39,17 +39,18 @@ template <class Action>
 class Metropolis : public MCAlgorithmBase<Action> {
   private:
     /* Types definitions */
-    using action_type = typename Action::ActionType;
-    using field_type = typename Action::FieldType;
+    using action_type = Action::action_type;
+    using field_type = Action::field_type;
+    using impl_type = Action::impl_type;
     using lattice_type = Lattice<field_type>;
     using monte_carlo_data_type = MMonteCarlo::data<action_type>;
 
     /* HMC settings */
-    RealD _ProposalWidth;
+    impl_type _ProposalWidth;
 
     /* Distributions */
-    std::uniform_real_distribution<RealD> _Unif;  // Uniform distribution [0.0, 1.0]
-    std::normal_distribution<RealD>       _Norm;  // Normal distibution (mean: 0.0, stddev: 1.0)
+    std::uniform_real_distribution<impl_type> _Unif;  // Uniform distribution [0.0, 1.0]
+    std::normal_distribution<impl_type>       _Norm;  // Normal distibution (mean: 0.0, stddev: 1.0)
 
   public:
     Metropolis() = default;
@@ -57,11 +58,11 @@ class Metropolis : public MCAlgorithmBase<Action> {
     /* setup */
     void setup(const YAML::Node& Params, const Lattice<field_type>& Field) override {
         /* Parse parameters */
-        _ProposalWidth = Params["prop_width"].as<RealD>();
+        _ProposalWidth = Params["prop_width"].as<impl_type>();
 
         /* Initialize distributions */
-        _Unif = std::uniform_real_distribution<RealD>(0.0, 1.0);
-        _Norm = std::normal_distribution<RealD>(0.0, 1.0);
+        _Unif = std::uniform_real_distribution<impl_type>(0.0, 1.0);
+        _Norm = std::normal_distribution<impl_type>(0.0, 1.0);
     }
 
     /* execution */
@@ -86,7 +87,7 @@ class Metropolis : public MCAlgorithmBase<Action> {
                 SVarTot += SVar;
             }
         }
-        state.update(((RealD)Acc) / field.getNsites(), SVarTot);
+        state.update(((impl_type)Acc) / field.getNsites(), SVarTot);
     }
 };
 
