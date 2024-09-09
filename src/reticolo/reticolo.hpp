@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstdlib>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -30,7 +31,6 @@ namespace reticolo {
   reticolo_init()
 --------------------------------------------------------------------------------------------------*/
 void reticolo_init(int argc, char* argv[]) {
-    std::cout << "DEBUG: reticolo_init()\n";
     /* Setup cxxopts arguments parser */
     cxxopts::Options Options("reticolo_run", "A thing that does stuff");
     Options.add_options()                                                       //
@@ -71,16 +71,16 @@ void reticolo_init(int argc, char* argv[]) {
   reticolo_run()
 --------------------------------------------------------------------------------------------------*/
 void reticolo_run() {
-    std::cout << "DEBUG: reticolo_run()\n";
-
-    auto ToDo = (ReticoloCore::getSetup())["workflows"];
     /* For each key in Setup["workflows"] setup and run the simulation */
+    auto ToDo = (ReticoloCore::getSetup())["workflows"];
+
     std::string ModuleName;
     YAML::Node  ModuleConfig;
     for (const auto& Wrkflw : ToDo) {
         try {
-            ModuleName = Wrkflw.first.as<std::string>();
-            ModuleConfig = Wrkflw.second;
+            /* Check that there is only one top-level key */
+            ModuleName = Wrkflw.begin()->first.as<std::string>();
+            ModuleConfig = Wrkflw.begin()->second;
 
             auto Module = ModuleFactory::MakeModule(ModuleName, ModuleConfig["action"]["name"].as<std::string>());
 
@@ -95,6 +95,10 @@ void reticolo_run() {
             IO::GlobalLogger << IO::LI_erro() + "Failed to parse configuration of module: " + ModuleName + " [" +
                                     ModuleConfig["name"].as<std::string>() + "]\n";
             IO::GlobalLogger << IO::LI_erro() + e.what() + "\n";
+            exit(EXIT_FAILURE);
+        } catch (const std::exception& e) {
+            IO::GlobalLogger << IO::LI_erro() + e.what() + "\n";
+            exit(EXIT_FAILURE);
         }
     }
 };
@@ -103,7 +107,6 @@ void reticolo_run() {
   reticolo_end()
 --------------------------------------------------------------------------------------------------*/
 void reticolo_end() {
-    std::cout << "DEBUG: reticolo_end()\n";
     /* General clean-up */
 };
 }  // namespace reticolo
