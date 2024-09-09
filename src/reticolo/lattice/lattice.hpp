@@ -125,21 +125,6 @@ class Lattice : public std::vector<TField> {
         }
         return (*this)[site];
     }
-
-    /* Lattice methods */
-    template <RNGGen T>
-    void randomizeField(RealD scale, T& rng) {
-        auto Norm = std::normal_distribution<double>(0.0, 1.0);
-        for (auto& Site : (*this)) {
-            randomize(Site, scale, Norm, rng);
-        }
-    }
-
-    void resetField() {
-        for (auto& Site : (*this)) {
-            reset(Site);
-        }
-    }
 };
 
 /*--------------------------------------------------------------------------------------------------
