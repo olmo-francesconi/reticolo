@@ -1,44 +1,76 @@
 workflows:
-  MonteCarlo:
-    # General config
-    name: test
-    main_seed: 0
+  - MonteCarlo:
+      name: testF
+      main_seed: 0
 
-    # Lattice config
-    lattice:
-      size: [8, 8, 8, 8]
+      # Lattice config
+      lattice:
+        size: [8, 8, 8, 8]
 
-    # Action Config
-    action:
-      name: RelativisticBoseGas
-      parameters:
-        lambda: 1.0
-        eta: 9.0
-        mu: 0.8
+      # Action Config
+      action:
+        name: RelativisticBoseGasF
+        parameters:
+          lambda: 1.0
+          eta: 9.0
+          mu: 0.8
 
-    # Update Algorithm Config
-    algorithm:
-      name: Metropolis
-      parameters:
-        prop_width: 0.1
+      # Update Algorithm Config
+      algorithm:
+        name: HMC
+        parameters:
+          steps: 5
+          stepsize: 0.01
 
-    # Output settings
-    output_dir: ./test
-    save_config: false
-    save_data: true
-    console_output: true
+      # Output settings
+      output_dir: ./testF
+      save_config: false
+      save_data: true
+      console_output: true
 
-    # Run parameters
-    runs:
-      - name: test
-        measures: 100000
-        measure_step: 1
-        therm_steps: 0
-        field_init: true
-        hot_start: false
-      - name: test2
-        measures: 100000
-        measure_step: 1
-        therm_steps: 0
-        field_init: true
-        hot_start: false
+      # Run parameters
+      runs:
+        - name: testF
+          measures: 100000
+          measure_step: 1
+          therm_steps: 0
+          field_init: true
+          hot_start: false
+
+  - MonteCarlo:
+      name: testD
+      main_seed: 0
+
+      # Lattice config
+      lattice:
+        size: [8, 8, 8, 8]
+
+      # Action Config
+      action:
+        name: RelativisticBoseGasD
+        parameters:
+          lambda: 1.0
+          eta: 9.0
+          mu: 0.8
+
+      # Update Algorithm Config
+      algorithm:
+        name: HMC
+        parameters:
+          steps: 5
+          stepsize: 0.01
+
+      # Output settings
+      output_dir: ./testD
+      save_config: false
+      save_data: true
+      console_output: true
+
+      # Run parameters
+      runs:
+        - name: testD
+          measures: 100000
+          measure_step: 1
+          therm_steps: 0
+          field_init: true
+          hot_start: false
