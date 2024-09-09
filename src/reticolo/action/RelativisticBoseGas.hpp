@@ -15,11 +15,12 @@
 
 #include <cmath>
 #include <complex>
+#include <concepts>
 #include <format>
 #include <sstream>
 #include <string>
 
-// #include "reticolo/action/actionBase.hpp"
+#include "reticolo/action/actionBase.hpp"
 #include "reticolo/lattice/Lattice.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
@@ -31,11 +32,14 @@ namespace reticolo::action {
 /*--------------------------------------------------------------------------------------------------
   RelativisticBoseGas Class Declaration
 --------------------------------------------------------------------------------------------------*/
-class RelativisticBoseGas {  //: public ActionBase<T, T> {
+template <RealValue TImpl>
+class RelativisticBoseGas : public ActionBase<std::complex<TImpl>, std::complex<TImpl>, TImpl> {
   public:
     /* Types and public action metadata */
-    using ActionType = ComplexD;
-    using FieldType = ComplexD;
+    using base_type = ActionBase<std::complex<TImpl>, std::complex<TImpl>, TImpl>;
+    using action_type = base_type::action_type;
+    using field_type = base_type::field_type;
+    using impl_type = TImpl;
     static constexpr int Dims = 4;     // Dimensions of the action
     static constexpr int Stencil = 2;  // Minimum step size for multi-thread safety
 
@@ -46,17 +50,17 @@ class RelativisticBoseGas {  //: public ActionBase<T, T> {
 
     /* Action parameters */
     struct Params {
-        RealD lambda;
-        RealD eta;
-        RealD mu;
+        TImpl lambda;
+        TImpl eta;
+        TImpl mu;
         Params() : lambda(1.0), eta(9.0), mu(0) {};
-        Params(RealD lambda, RealD eta, RealD chem_mu) : lambda(lambda), eta(eta), mu(chem_mu) {};
+        Params(TImpl lambda, TImpl eta, TImpl chem_mu) : lambda(lambda), eta(eta), mu(chem_mu) {};
     } p;
 
     /* Observables */
     struct Observables {
-        RealD phi2;
-        RealD density;
+        TImpl phi2;
+        TImpl density;
         void  reset() { phi2 = 0.0, density = 0.0; };
 
         auto operator+=(const Observables& rhs) -> Observables {
@@ -75,27 +79,32 @@ class RelativisticBoseGas {  //: public ActionBase<T, T> {
     RelativisticBoseGas() = default;
 
     /* setup */
-    void setup(const YAML::Node& ActionParamsDict);  // override;
+    void setup(const YAML::Node& ActionParams) override;
 
     /* Sync with lattice */
-    void lattice_sync(Lattice<FieldType>& field);  // override;
+    void lattice_sync(Lattice<field_type>& field) override;
 
     /* Gloabal and local action computations */
-    auto compute_S(Lattice<FieldType>& field) const -> ActionType;                                         // override;
-    auto compute_S_loc(Lattice<FieldType>& field, uint site) const -> ActionType;                          // override;
-    auto compute_dS_loc(Lattice<FieldType>& field, const FieldType& dphi, uint site) const -> ActionType;  // override;
+
+    auto compute_S(Lattice<field_type>& field) -> action_type override;
+    auto compute_S_loc(Lattice<field_type>& field, uint site) -> action_type override;
+    auto compute_dS_loc(Lattice<field_type>& field, const field_type& dphi, uint site) -> action_type override;
 
     /* HMC methods */
-    void compute_Forces(Lattice<FieldType>& field, Lattice<FieldType>& forces) const;  // override;
-    void compute_LLRForces(Lattice<FieldType>& field, Lattice<FieldType>& forces, RealD Sk, RealD width,
-                           RealD ak) const;  // override;
+    void compute_Forces(Lattice<field_type>& field, Lattice<field_type>& forces) override;
+    void compute_LLRForces(Lattice<field_type>& field, Lattice<field_type>& forces, TImpl Sk, TImpl width,
+                           TImpl ak) override;
 
     /* Perform the measurements or returns updated Observable values*/
-    static auto Measure(Lattice<FieldType>& field) -> Observables;
+    static auto Measure(Lattice<field_type>& field) -> Observables;
 
     /* Log stuff */
-    static auto GetName() -> std::string { return "Relativistic Bose Gas"; };
-    auto        GetParameters() -> std::string {
+    auto GetName() -> std::string override {
+        std::string Res = "Relativistic Bose Gas";
+        Res += std::same_as<impl_type, RealF> ? " [float]" : " [double]";
+        return Res;
+    };
+    auto GetParameters() -> std::string override {
         std::stringstream Res;
         Res << "[ lambda : " << std::format("{:4.1f}", p.lambda) << ", eta : " << std::format("{:4.1f}", p.eta)
             << ", mu : " << std::format("{:4.1f}", p.mu) << " ]";
@@ -104,24 +113,26 @@ class RelativisticBoseGas {  //: public ActionBase<T, T> {
 };
 
 /*--------------------------------------------------------------------------------------------------
-  Public methods RealDementatin
+  Public methods TImplementatin
 --------------------------------------------------------------------------------------------------*/
-
-inline void RelativisticBoseGas::setup(const YAML::Node& ActionParamsDict) {
-    p.lambda = ActionParamsDict["lambda"].as<RealD>();
-    p.eta = ActionParamsDict["eta"].as<RealD>();
-    p.mu = ActionParamsDict["mu"].as<RealD>();
+template <RealValue TImpl>
+inline void RelativisticBoseGas<TImpl>::setup(const YAML::Node& ActionParamsDict) {
+    p.lambda = ActionParamsDict["lambda"].as<TImpl>();
+    p.eta = ActionParamsDict["eta"].as<TImpl>();
+    p.mu = ActionParamsDict["mu"].as<TImpl>();
 }
 
-inline void RelativisticBoseGas::lattice_sync(Lattice<FieldType>& field) {
+template <RealValue TImpl>
+inline void RelativisticBoseGas<TImpl>::lattice_sync(Lattice<field_type>& field) {
     // Maybe do some checks here
 }
 
-inline auto RelativisticBoseGas::compute_S(Lattice<FieldType>& field) const -> ActionType {
-    RealD     Real = 0.0;
-    RealD     Imag = 0.0;
-    FieldType Phi;
-    RealD     Phi2;
+template <RealValue TImpl>
+inline auto RelativisticBoseGas<TImpl>::compute_S(Lattice<field_type>& field) -> action_type {
+    TImpl      Real = 0.0;
+    TImpl      Imag = 0.0;
+    field_type Phi;
+    TImpl      Phi2;
 
     for (uint Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
@@ -140,14 +151,15 @@ inline auto RelativisticBoseGas::compute_S(Lattice<FieldType>& field) const -> A
     return {Real, Imag};
 }
 
-inline auto RelativisticBoseGas::compute_S_loc(Lattice<FieldType>& field, uint site) const -> ActionType {
-    FieldType Phi = field[site];
-    FieldType PhiNt = field.n(site, _t);
-    FieldType PhiPt = field.p(site, _t);
+template <RealValue TImpl>
+inline auto RelativisticBoseGas<TImpl>::compute_S_loc(Lattice<field_type>& field, uint site) -> action_type {
+    field_type Phi = field[site];
+    field_type PhiNt = field.n(site, _t);
+    field_type PhiPt = field.p(site, _t);
 
-    RealD Phi2 = Phi.real() * Phi.real() + Phi.imag() * Phi.imag();
+    TImpl Phi2 = Phi.real() * Phi.real() + Phi.imag() * Phi.imag();
 
-    RealD Real = 0.5 * p.eta * Phi2 + 0.25 * p.lambda * Phi2 * Phi2 -
+    TImpl Real = 0.5 * p.eta * Phi2 + 0.25 * p.lambda * Phi2 * Phi2 -
                  Phi.real() * (field.n(site, _x).real() + field.p(site, _x).real() +  //
                                field.n(site, _y).real() + field.p(site, _y).real() +  //
                                field.n(site, _z).real() + field.p(site, _z).real() +  //
@@ -157,73 +169,76 @@ inline auto RelativisticBoseGas::compute_S_loc(Lattice<FieldType>& field, uint s
                                field.n(site, _z).imag() + field.p(site, _z).imag() +  //
                                cosh(p.mu) * PhiNt.imag() + cosh(p.mu) * PhiPt.imag());
 
-    RealD Imag =
+    TImpl Imag =
         Phi.real() * PhiNt.imag() - Phi.imag() * PhiNt.real() + PhiPt.real() * Phi.imag() - PhiPt.imag() * Phi.real();
 
     return {Real, Imag};
 }
 
-inline auto RelativisticBoseGas::compute_dS_loc(Lattice<FieldType>& field, const FieldType& dphi,
-                                                uint site) const -> ActionType {
-    FieldType PhiOld = field[site];
-    FieldType PhiNew = PhiOld + dphi;
-    FieldType PhiNt = field.n(site, _t);
-    FieldType PhiPt = field.p(site, _t);
+template <RealValue TImpl>
+inline auto RelativisticBoseGas<TImpl>::compute_dS_loc(Lattice<field_type>& field, const field_type& dphi,
+                                                       uint site) -> action_type {
+    field_type PhiOld = field[site];
+    field_type PhiNew = PhiOld + dphi;
+    field_type PhiNt = field.n(site, _t);
+    field_type PhiPt = field.p(site, _t);
 
-    RealD Phi2Old = dot(PhiOld);
-    RealD Phi2New = dot(PhiNew);
-    RealD Phi2Var = Phi2New - Phi2Old;
-    RealD Phi4Var = Phi2New * Phi2New - Phi2Old * Phi2Old;
+    TImpl Phi2Old = dot(PhiOld);
+    TImpl Phi2New = dot(PhiNew);
+    TImpl Phi2Var = Phi2New - Phi2Old;
+    TImpl Phi4Var = Phi2New * Phi2New - Phi2Old * Phi2Old;
 
-    FieldType NeighborsSum = field.n(site, _x) + field.p(site, _x) +  //
-                             field.n(site, _y) + field.p(site, _y) +  //
-                             field.n(site, _z) + field.p(site, _z) +  //
-                             cosh(p.mu) * (PhiNt + PhiPt);
+    field_type NeighborsSum = field.n(site, _x) + field.p(site, _x) +  //
+                              field.n(site, _y) + field.p(site, _y) +  //
+                              field.n(site, _z) + field.p(site, _z) +  //
+                              cosh(p.mu) * (PhiNt + PhiPt);
 
-    RealD Real = 0.5 * p.eta * Phi2Var + 0.25 * p.lambda * Phi4Var - dphi.real() * NeighborsSum.real() -
+    TImpl Real = 0.5 * p.eta * Phi2Var + 0.25 * p.lambda * Phi4Var - dphi.real() * NeighborsSum.real() -
                  dphi.imag() * NeighborsSum.imag();
 
-    RealD Imag = (dphi.real() * PhiNt.imag() - dphi.imag() * PhiNt.real()) +
+    TImpl Imag = (dphi.real() * PhiNt.imag() - dphi.imag() * PhiNt.real()) +
                  (PhiPt.real() * dphi.imag() - PhiPt.imag() * dphi.real());
 
     return {Real, Imag};
 }
 
-inline void RelativisticBoseGas::compute_Forces(Lattice<FieldType>& field, Lattice<FieldType>& forces) const {
+template <RealValue TImpl>
+inline void RelativisticBoseGas<TImpl>::compute_Forces(Lattice<field_type>& field, Lattice<field_type>& forces) {
     for (int Site = 0; Site < field.getNsites(); Site++) {
-        FieldType Phi = field[Site];
-        FieldType Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
-        FieldType Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
+        field_type Phi = field[Site];
+        field_type Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
+        field_type Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
 
-        FieldType NeighborsSum = field.n(Site, _x) + field.p(Site, _x) +                //
-                                 field.n(Site, _y) + field.p(Site, _y) +                //
-                                 field.n(Site, _z) + field.p(Site, _z) +                //
-                                 cosh(p.mu) * (field.n(Site, _t) + field.p(Site, _t));  //
+        field_type NeighborsSum = field.n(Site, _x) + field.p(Site, _x) +                //
+                                  field.n(Site, _y) + field.p(Site, _y) +                //
+                                  field.n(Site, _z) + field.p(Site, _z) +                //
+                                  cosh(p.mu) * (field.n(Site, _t) + field.p(Site, _t));  //
 
-        RealD Real = p.eta * Phi.real() + p.lambda * (Phi3.real() + Phi.real() * Phi2.imag()) - NeighborsSum.real();
-        RealD Imag = p.eta * Phi.imag() + p.lambda * (Phi3.imag() + Phi.imag() * Phi2.real()) - NeighborsSum.imag();
+        TImpl Real = p.eta * Phi.real() + p.lambda * (Phi3.real() + Phi.real() * Phi2.imag()) - NeighborsSum.real();
+        TImpl Imag = p.eta * Phi.imag() + p.lambda * (Phi3.imag() + Phi.imag() * Phi2.real()) - NeighborsSum.imag();
         forces[Site] = {Real, Imag};
     }
 }
 
-inline void RelativisticBoseGas::compute_LLRForces(Lattice<FieldType>& field, Lattice<FieldType>& forces, RealD Sk,
-                                                   RealD width, RealD ak) const {
-    FieldType Phi;
-    FieldType Phi2;
-    FieldType Phi3;
-    FieldType NeighborsSum;
-    RealD     ForcePhiRe;
-    RealD     ForceLLRPhiRe;
-    RealD     ForcePhiIm;
-    RealD     ForceLLRPhiIm;
+template <RealValue TImpl>
+inline void RelativisticBoseGas<TImpl>::compute_LLRForces(Lattice<field_type>& field, Lattice<field_type>& forces,
+                                                          TImpl Sk, TImpl width, TImpl ak) {
+    field_type Phi;
+    field_type Phi2;
+    field_type Phi3;
+    field_type NeighborsSum;
+    TImpl      ForcePhiRe;
+    TImpl      ForceLLRPhiRe;
+    TImpl      ForcePhiIm;
+    TImpl      ForceLLRPhiIm;
 
     // compute current value of the imaginary action
-    RealD SIm = 0.0;
+    TImpl SIm = 0.0;
     for (int Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
         SIm += Phi.real() * field.n(Site, _t).imag() - Phi.imag() * field.n(Site, _t).real();
     }
-    RealD LLRForcePref = ((SIm - Sk) / (width * width) + ak);
+    TImpl LLRForcePref = ((SIm - Sk) / (width * width) + ak);
 
     for (int Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
@@ -244,32 +259,44 @@ inline void RelativisticBoseGas::compute_LLRForces(Lattice<FieldType>& field, La
     }
 }
 
-inline auto RelativisticBoseGas::Measure(Lattice<FieldType>& field) -> RelativisticBoseGas::Observables {
-    FieldType Phi;
-    RealD     Phi2 = 0.0;
-    auto      Norm = static_cast<RealD>(field.getNsites());
+template <RealValue TImpl>
+inline auto RelativisticBoseGas<TImpl>::Measure(Lattice<field_type>& field) -> RelativisticBoseGas::Observables {
+    field_type Phi;
+    TImpl      Phi2 = 0.0;
+    auto       Norm = static_cast<TImpl>(field.getNsites());
 
     for (int Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
-        Phi2 += static_cast<RealD>(dot(Phi));
+        Phi2 += static_cast<TImpl>(dot(Phi));
     }
 
-    return {0.5 * Phi2 / Norm, 0.0};
+    return {static_cast<impl_type>(0.5 * Phi2 / Norm), static_cast<impl_type>(0.0)};
 }
+
+using RelativisticBoseGasF = reticolo::action::RelativisticBoseGas<RealF>;
+using RelativisticBoseGasD = reticolo::action::RelativisticBoseGas<RealD>;
 
 }  // namespace reticolo::action
 
 /*--------------------------------------------------------------------------------------------------
-  HDF5 helper method RealDementatin
+  HDF5 helper method TImplementatin
 --------------------------------------------------------------------------------------------------*/
 
 namespace reticolo {
 
 template <>
-auto make_H5_Type<action::RelativisticBoseGas::Observables>() {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGas::Observables));
-    H5Tinsert(DataTypeHid, "phi2", HOFFSET(action::RelativisticBoseGas::Observables, phi2), H5T_NATIVE_DOUBLE);
-    H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGas::Observables, density), H5T_NATIVE_DOUBLE);
+auto make_H5_Type<action::RelativisticBoseGasF::Observables>() {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGasF::Observables));
+    H5Tinsert(DataTypeHid, "phi2", HOFFSET(action::RelativisticBoseGasF::Observables, phi2), H5T_NATIVE_FLOAT);
+    H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGasF::Observables, density), H5T_NATIVE_FLOAT);
+    return DataTypeHid;
+}
+
+template <>
+auto make_H5_Type<action::RelativisticBoseGasD::Observables>() {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGasD::Observables));
+    H5Tinsert(DataTypeHid, "phi2", HOFFSET(action::RelativisticBoseGasD::Observables, phi2), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGasD::Observables, density), H5T_NATIVE_DOUBLE);
     return DataTypeHid;
 }
 
