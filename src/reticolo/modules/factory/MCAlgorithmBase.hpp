@@ -1,4 +1,4 @@
-/******************************************************************************
+/*******************************************************************************
 
  - reticolo (www.github.com/olmo-francesconi/reticolo.git)
 
@@ -6,7 +6,7 @@
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
- ******************************************************************************/
+*******************************************************************************/
 
 #pragma once
 
@@ -19,12 +19,10 @@ namespace reticolo::MMonteCarlo {
 
 template <class Action>
 class MCAlgorithmBase {
-    // using action_type = typename Action::ActionType;
-    using field_type = typename Action::FieldType;
-    // using val_type = typename Action::ValType;
-    using monte_carlo_data_type = MMonteCarlo::data<typename Action::ActionType>;
-
   public:
+    using field_type = Action::field_type;
+    using monte_carlo_data_type = MMonteCarlo::data<typename Action::action_type>;
+
     /* virtual destructor */
     virtual ~MCAlgorithmBase() = default;
 
