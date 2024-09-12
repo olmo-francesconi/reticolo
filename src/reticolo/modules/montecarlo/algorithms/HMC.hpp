@@ -71,7 +71,8 @@ class HMC : public MCAlgorithmBase<Action> {
     }
 
     /* execution */
-    void updateField(Lattice<field_type>& field, Action& action, monte_carlo_data_type& state, RNGType& rng) override {
+    __attribute__((always_inline)) void updateField(Lattice<field_type>& field, Action& action,
+                                                    monte_carlo_data_type& state, RNGType& rng) override {
         int       NSites = field.getNsites();
         impl_type Half = 0.5;
         // save the old field configuration;

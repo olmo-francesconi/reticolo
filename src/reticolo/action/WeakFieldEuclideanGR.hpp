@@ -16,8 +16,11 @@
 
 #include <array>
 #include <cmath>
+#include <concepts>
 #include <format>
+#include <memory>
 #include <numeric>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -37,12 +40,14 @@ namespace reticolo::action {
 /*--------------------------------------------------------------------------------------------------
   WeakFieldEuclideanGR Class Declaration
 --------------------------------------------------------------------------------------------------*/
-
-class WeakFieldEuclideanGR {  //: public ActionBase<HField<RealD>, RealD> {
+template <RealValue TImpl>
+class WeakFieldEuclideanGR : public ActionBase<HField<TImpl>, TImpl, TImpl> {
   public:
     /* Types and public action metadata */
-    using ActionType = RealD;
-    using FieldType = HField<RealD>;
+    using base_type = ActionBase<HField<TImpl>, TImpl, TImpl>;
+    using action_type = base_type::action_type;
+    using field_type = base_type::field_type;
+    using impl_type = TImpl;
     static constexpr int Dims = 4;     // Dimensions of the action
     static constexpr int Stencil = 2;  // Minimum step size for multi-thread safety
 
@@ -53,47 +58,54 @@ class WeakFieldEuclideanGR {  //: public ActionBase<HField<RealD>, RealD> {
 
     /* Action parameters */
     struct Params {
-        RealD beta;
-        Params() : beta(5.7) {};
-        Params(RealD beta) : beta(beta) {};
+        impl_type beta;
+        Params() : beta(5.7){};
+        Params(impl_type beta) : beta(beta){};
     } p;
 
     /* Observables */
     struct Observables {
-        RealD R;
-        auto  operator+=(const Observables& rhs) -> Observables {
+        impl_type R;
+        auto      operator+=(const Observables& rhs) -> Observables {
             R += rhs.R;
             return *this;
         };
-        auto operator/=(const RealD& rhs) -> Observables {
+        auto operator/=(const impl_type& rhs) -> Observables {
             R /= rhs;
             return *this;
         };
     };
 
     /* Constructors */
-    WeakFieldEuclideanGR();
+    WeakFieldEuclideanGR() = default;
 
     /* setup */
-    void setup(const YAML::Node& ActionParamsDict);  // override;
+    void setup(const YAML::Node& ActionParams) override;
 
     /* Sync with lattice */
-    void lattice_sync(const Lattice<FieldType>& field);  // override;
+    void lattice_sync(Lattice<field_type>& field) override;
 
     /* Gloabal and local action computations */
-    auto compute_S(const Lattice<FieldType>& field) -> ActionType;                                        // override;
-    auto compute_S_loc(const Lattice<FieldType>& field, int site) -> ActionType;                          // override;
-    auto compute_dS_loc(const Lattice<FieldType>& field, const FieldType& dphi, int site) -> ActionType;  // override;
+    auto compute_S(Lattice<field_type>& field) -> action_type override;
+    auto compute_S_loc(Lattice<field_type>& field, uint site) -> action_type override;
+    auto compute_dS_loc(Lattice<field_type>& field, const field_type& dphi, uint site) -> action_type override;
 
     /* HMC methods */
-    void compute_Forces(const Lattice<FieldType>& field, Lattice<FieldType>& Forces);  // override;
+    void compute_Forces(Lattice<field_type>& field, Lattice<field_type>& Forces) override {};
+
+    void compute_LLRForces(Lattice<field_type>& /*unused*/, Lattice<field_type>& /*unused*/, TImpl /*unused*/,
+                           TImpl /*unused*/, TImpl /*unused*/) override {};
 
     /* Perform the measurements or returns updated Observable values*/
-    auto Measure(const Lattice<FieldType>& field) -> Observables;
+    auto Measure(const Lattice<field_type>& field) -> Observables;
 
     /* Log stuff*/
-    auto GetName() -> std::string { return "Weak Field Euclidean General Relativity"; };
-    auto GetParameters() -> std::string {
+    auto GetName() -> std::string override {
+        std::string Res = "Weak Field Euclidean General Relativity";
+        Res += std::same_as<impl_type, RealF> ? " [float]" : " [double]";
+        return Res;
+    };
+    auto GetParameters() -> std::string override {
         std::string ParamStr = std::format("[ beta : {:4.1f} ]", p.beta);
         return ParamStr;
     }
@@ -103,41 +115,47 @@ class WeakFieldEuclideanGR {  //: public ActionBase<HField<RealD>, RealD> {
     --------------------------------------------------------------------------*/
 
     /* Physical parameters */
-    const RealD hbarc_GeVfm = pc::hbar * pc::c / pc::e * 1e15 * 1e-9;       // ~0.197 GeV fm
-    const RealD GN_fm2 = 6.70883e-39 * pow(hbarc_GeVfm, 2);                 // ~2.6e-40 fm^2
-    const RealD lP_fm = sqrt(GN_fm2);                                       // ~1.6e-20 fm
-    const RealD kappa_GeV2 = pow(hbarc_GeVfm, 2) / (16.0 * M_PI * GN_fm2);  // ~3e-36 GeV^2
+    const impl_type hbarc_GeVfm = static_cast<impl_type>(pc::hbar * pc::c / pc::e * 1e15 * 1e-9);       // ~0.197 GeV fm
+    const impl_type GN_fm2 = static_cast<impl_type>(6.70883e-39 * pow(hbarc_GeVfm, 2));                 // ~2.6e-40 fm^2
+    const impl_type lP_fm = static_cast<impl_type>(sqrt(GN_fm2));                                       // ~1.6e-20 fm
+    const impl_type kappa_GeV2 = static_cast<impl_type>(pow(hbarc_GeVfm, 2) / (16.0 * M_PI * GN_fm2));  // ~3e-36 GeV^2
 
-    RealD aa;
-    RealD a_invGeV;
-    RealD kappa;
+    impl_type aa;
+    impl_type a_invGeV;
+    impl_type kappa;
 
     /* Vector storing the current values of the curvature for each lattice point */
-    std::vector<ActionType>          _LGR;
+    std::vector<action_type>         _LGR;
     std::vector<std::array<uint, 5>> _Checks;
 
     /* compute the check indexes */
-    void make_checks(const Lattice<FieldType>& field);
+    void make_checks(const Lattice<field_type>& field);
 
     /* Compute the curvature at a specific lattice point */
-    void               update_LGR(const Lattice<FieldType>& field);
-    [[nodiscard]] auto compute_LGR_loc(const Lattice<FieldType>& field, int site) const -> ActionType;
-    [[nodiscard]] auto check_pos_R(int site, std::vector<ActionType> RPost, ActionType DR = 0.0) -> bool;
-    // static void        compute_Force_loc(const Lattice<FieldType>& field, FieldType& force, int site);
+    void               update_LGR(const Lattice<field_type>& field);
+    [[nodiscard]] auto compute_LGR_loc(const Lattice<field_type>& field, int site) const -> action_type;
+    [[nodiscard]] auto check_pos_R(int site, std::vector<action_type> RPost, action_type DR = 0.0) -> bool;
+    // static void        compute_Force_loc(const Lattice<field_type>& field, field_type& force, int site);
 
 };  // namespace reticolo::action
 
 /*--------------------------------------------------------------------------------------------------
   Public methods Implementatin
 --------------------------------------------------------------------------------------------------*/
-inline void WeakFieldEuclideanGR::lattice_sync(const Lattice<FieldType>& field) {
+template <RealValue TImpl>
+inline void WeakFieldEuclideanGR<TImpl>::setup(const YAML::Node& ActionParams) {
+    p.beta = ActionParams["beta"].as<TImpl>();
+}
+
+template <RealValue TImpl>
+inline void WeakFieldEuclideanGR<TImpl>::lattice_sync(Lattice<field_type>& field) {
     // Initialize parameters values here
     aa = 0.5 * exp(-1.6804 - 1.7331 * (p.beta - 6.0) + 0.7849 * pow(p.beta - 6.0, 2) - 0.4428 * pow(p.beta - 6.0, 3));
     a_invGeV = aa / hbarc_GeVfm;
     kappa = kappa_GeV2 * a_invGeV * a_invGeV;
 
-    // Resize and clears the curvature latice to match the lattice sizes
-    _LGR.resize(field.getNsites(), 0.0);
+    // Resize and clears the curvature lattice to match the lattice sizes
+    _LGR.resize(field.getNsites());
 
     // Build the check indexing vector
     make_checks(field);
@@ -146,29 +164,32 @@ inline void WeakFieldEuclideanGR::lattice_sync(const Lattice<FieldType>& field) 
     update_LGR(field);
 }
 
-inline auto WeakFieldEuclideanGR::compute_S(const Lattice<FieldType>& field) -> ActionType {
+template <RealValue TImpl>
+inline auto WeakFieldEuclideanGR<TImpl>::compute_S(Lattice<field_type>& field) -> action_type {
     // Update the lattice
     update_LGR(field);
     // Accumulate the Lagrangian
-    ActionType STot = std::reduce(_LGR.begin(), _LGR.end());
+    action_type STot = std::reduce(_LGR.begin(), _LGR.end());
 
     return STot;
 }
 
-inline auto WeakFieldEuclideanGR::compute_S_loc(const Lattice<FieldType>& field, int site) -> ActionType {
+template <RealValue TImpl>
+inline auto WeakFieldEuclideanGR<TImpl>::compute_S_loc(Lattice<field_type>& field, uint site) -> action_type {
     return 0.0;
 };
 
-inline auto WeakFieldEuclideanGR::compute_dS_loc(const Lattice<FieldType>& field, const FieldType& dphi,
-                                                 int site) -> ActionType {
+template <RealValue TImpl>
+inline auto WeakFieldEuclideanGR<TImpl>::compute_dS_loc(Lattice<field_type>& field, const field_type& dphi,
+                                                        uint site) -> action_type {
     return 0.0;
 };
 
-// inline void WeakFieldEuclideanGR::compute_Forces(const Lattice<FieldType>& field, Lattice<FieldType>& forces) {
-//     std::array<FieldType, 4>                Dhc;  // Central derivatives
-//     std::array<std::array<FieldType, 4>, 4> Dhd;  // Diagonal derivatives
-//     std::array<FieldType, 4>                Jhc;  // Central sum
-//     std::array<std::array<FieldType, 4>, 4> Jhd;  // Diagonal Sum
+// inline void WeakFieldEuclideanGR::compute_Forces(const Lattice<field_type>& field, Lattice<field_type>& forces) {
+//     std::array<field_type, 4>                Dhc;  // Central derivatives
+//     std::array<std::array<field_type, 4>, 4> Dhd;  // Diagonal derivatives
+//     std::array<field_type, 4>                Jhc;  // Central sum
+//     std::array<std::array<field_type, 4>, 4> Jhd;  // Diagonal Sum
 
 //     for (int Site = 0; Site < field.getNsites(); Site++) {
 //         // clang-format off
@@ -349,16 +370,17 @@ inline auto WeakFieldEuclideanGR::compute_dS_loc(const Lattice<FieldType>& field
 //     }
 // }
 
-inline auto WeakFieldEuclideanGR::Measure(const Lattice<FieldType>& field) -> Observables {
+template <RealValue TImpl>
+inline auto WeakFieldEuclideanGR<TImpl>::Measure(const Lattice<field_type>& field) -> Observables {
     return {std::reduce(_LGR.begin(), _LGR.end())};
 }
 /*--------------------------------------------------------------------------------------------------
       Custom variables and methods for WeakFieldEuclideanGR Class implementation
 --------------------------------------------------------------------------------------------------*/
-
-inline void WeakFieldEuclideanGR::make_checks(const Lattice<FieldType>& field) {
+template <RealValue TImpl>
+inline void WeakFieldEuclideanGR<TImpl>::make_checks(const Lattice<field_type>& field) {
     _Checks.clear();
-    for (int Site = 0; Site < field.getNsites(); Site++) {
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
         _Checks.push_back({
             Site,                         //
             field.Idx->prevId(Site, _t),  //
@@ -369,29 +391,32 @@ inline void WeakFieldEuclideanGR::make_checks(const Lattice<FieldType>& field) {
     }
 }
 
-inline void WeakFieldEuclideanGR::update_LGR(const Lattice<FieldType>& field) {
-    for (uint Site = 0; Site < _LGR.size(); Site++) {
+template <RealValue TImpl>
+inline void WeakFieldEuclideanGR<TImpl>::update_LGR(const Lattice<field_type>& field) {
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
         _LGR[Site] = compute_LGR_loc(field, Site);
     }
 }
 
-inline auto WeakFieldEuclideanGR::compute_LGR_loc(const Lattice<FieldType>& field, int site) const -> ActionType {
+template <RealValue TImpl>
+inline auto WeakFieldEuclideanGR<TImpl>::compute_LGR_loc(const Lattice<field_type>& field,
+                                                         int                        site) const -> action_type {
     // Compute local derivatives
-    std::array<FieldType, 4> Dhmn;
+    std::array<field_type, 4> Dhmn;
     HField_math::diff(Dhmn[_t], field.n(site, _t), field[site]);
     HField_math::diff(Dhmn[_x], field.n(site, _x), field[site]);
     HField_math::diff(Dhmn[_y], field.n(site, _y), field[site]);
     HField_math::diff(Dhmn[_z], field.n(site, _z), field[site]);
 
-    std::array<RealD, 4> DTrh;
+    std::array<impl_type, 4> DTrh;
     for (int Rho = 0; Rho < 4; Rho++) {
         DTrh[Rho] = Dhmn[Rho][MUNU_00] + Dhmn[Rho][MUNU_11] + Dhmn[Rho][MUNU_22] + Dhmn[Rho][MUNU_33];
     }
 
-    RealD Ans1 = 0.0;
-    RealD Ans2 = 0.0;
-    RealD Ans3 = 0.0;
-    RealD Ans4 = 0.0;
+    impl_type Ans1 = 0.0;
+    impl_type Ans2 = 0.0;
+    impl_type Ans3 = 0.0;
+    impl_type Ans4 = 0.0;
 
     // -1/4 (d_rho h_mu,nu * d_rho h_mu,nu)
     for (int Rho = 0; Rho < 4; Rho++) {
@@ -459,11 +484,11 @@ inline auto WeakFieldEuclideanGR::compute_LGR_loc(const Lattice<FieldType>& fiel
     return kappa * (Ans1 + Ans2 + Ans3 + Ans4);
 }
 
-// inline void WeakFieldEuclideanGR::compute_Force_loc(const Lattice<FieldType>& field, FieldType& force, int Site) {
-//     std::array<FieldType, 4>                Dhc;  // Central derivatives
-//     std::array<std::array<FieldType, 4>, 4> Dhd;  // Diagonal derivatives
-//     std::array<FieldType, 4>                Jhc;  // Central sum
-//     std::array<std::array<FieldType, 4>, 4> Jhd;  // Diagonal Sum
+// inline void WeakFieldEuclideanGR::compute_Force_loc(const Lattice<field_type>& field, field_type& force, int Site) {
+//     std::array<field_type, 4>                Dhc;  // Central derivatives
+//     std::array<std::array<field_type, 4>, 4> Dhd;  // Diagonal derivatives
+//     std::array<field_type, 4>                Jhc;  // Central sum
+//     std::array<std::array<field_type, 4>, 4> Jhd;  // Diagonal Sum
 
 //     // clang-format off
 //     // Compute central derivatives
@@ -641,17 +666,26 @@ inline auto WeakFieldEuclideanGR::compute_LGR_loc(const Lattice<FieldType>& fiel
 
 //     // force *= kappa;
 // }
+
+using WeakFieldEuclideanGRF = WeakFieldEuclideanGR<RealF>;
+using WeakFieldEuclideanGRD = WeakFieldEuclideanGR<RealD>;
+
 }  // namespace reticolo::action
 
 /*--------------------------------------------------------------------------------------------------
   HDF5 helper method Implementatin
 --------------------------------------------------------------------------------------------------*/
-
 namespace reticolo {
 template <>
-auto make_H5_Type<action::WeakFieldEuclideanGR::Observables>() {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::WeakFieldEuclideanGR::Observables));
-    H5Tinsert(DataTypeHid, "R", HOFFSET(action::WeakFieldEuclideanGR::Observables, R), H5T_NATIVE_DOUBLE);
+auto make_H5_Type<action::WeakFieldEuclideanGRF::Observables>() {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::WeakFieldEuclideanGRF::Observables));
+    H5Tinsert(DataTypeHid, "R", HOFFSET(action::WeakFieldEuclideanGRF::Observables, R), H5T_NATIVE_FLOAT);
+    return DataTypeHid;
+}
+template <>
+auto make_H5_Type<action::WeakFieldEuclideanGRD::Observables>() {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::WeakFieldEuclideanGRD::Observables));
+    H5Tinsert(DataTypeHid, "R", HOFFSET(action::WeakFieldEuclideanGRD::Observables, R), H5T_NATIVE_DOUBLE);
     return DataTypeHid;
 }
 }  // namespace reticolo
@@ -661,29 +695,32 @@ auto make_H5_Type<action::WeakFieldEuclideanGR::Observables>() {
 --------------------------------------------------------------------------------------------------*/
 #include "reticolo/modules/montecarlo/algorithms/Metropolis.hpp"
 
+namespace reticolo {
+
 template <>
-void reticolo::MMonteCarlo::Metropolis<reticolo::action::WeakFieldEuclideanGR>::updateField(
-    Lattice<field_type>& field, reticolo::action::WeakFieldEuclideanGR& action, monte_carlo_data_type& state,
-    RNGType& rng) {
-    uint                                     Acc = 0;       // acceptance
-    action::WeakFieldEuclideanGR::ActionType SVarTot(0.0);  // cumulative action variation
+void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGRF>::updateField(Lattice<field_type>&           field,   //
+                                                                         action::WeakFieldEuclideanGRF& action,  //
+                                                                         monte_carlo_data_type&         state,   //
+                                                                         RNGType&                       rng)                           //
+{
+    uint        Acc = 0;       // acceptance
+    action_type SVarTot(0.0);  // cumulative action variation
 
     for (int Site = 0; Site < field.getNsites(); Site++) {
         // Generate a randomized local field variation
-        action::WeakFieldEuclideanGR::FieldType FieldVar;  // local field variation
-        action::WeakFieldEuclideanGR::FieldType FieldOld = field[Site];
-        RealD                                   Scale = _ProposalWidth * action.lP_fm / action.aa;
+        field_type FieldVar;  // local field variation
+        field_type FieldOld = field[Site];
+        impl_type  Scale = _ProposalWidth * action.lP_fm / action.aa;
 
         randomize(FieldVar, Scale, _Norm, rng);
 
         HField_math::sum(field[Site], field[Site], FieldVar);
 
         // Compute the updated Lagrangian in the surrounding sites
-        std::vector<action::WeakFieldEuclideanGR::ActionType>
-                                                 LGRPost;  // Vector storing the new curvature values in the check sites
-        action::WeakFieldEuclideanGR::ActionType ActionChange = 0.0;  // Cumulative curvature variation
-        for (int& CheckSite : action._Checks[Site]) {
-            RealD Tmp = action.compute_LGR_loc(field, CheckSite);
+        std::vector<action_type> LGRPost;             // Vector storing the new curvature values in the check sites
+        action_type              ActionChange = 0.0;  // Cumulative curvature variation
+        for (uint& CheckSite : action._Checks[Site]) {
+            impl_type Tmp = action.compute_LGR_loc(field, CheckSite);
             if (Tmp > 0.0) {
                 LGRPost.push_back(Tmp);
                 ActionChange += Tmp - action._LGR[CheckSite];
@@ -702,8 +739,72 @@ void reticolo::MMonteCarlo::Metropolis<reticolo::action::WeakFieldEuclideanGR>::
             field[Site] = FieldOld;
         }
     }
-    state.update(static_cast<RealD>(Acc) / field.getNsites(), SVarTot);
+    state.update(static_cast<impl_type>(Acc) / field.getNsites(), SVarTot);
 }
+
+template <>
+void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGRD>::updateField(Lattice<field_type>&           field,   //
+                                                                         action::WeakFieldEuclideanGRD& action,  //
+                                                                         monte_carlo_data_type&         state,   //
+                                                                         RNGType&                       rng)                           //
+{
+    impl_type u;   // Marsaglia polar method support variables
+    impl_type v;   //
+    impl_type s;   //
+    impl_type fp;  //
+    impl_type Scale = _ProposalWidth * action.lP_fm / action.aa;
+
+    uint        Acc = 0;       // acceptance
+    action_type SVarTot(0.0);  // cumulative action variation
+
+    field_type FieldOld;
+
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
+        // store old value of the field
+        FieldOld = field[Site];
+
+        // wiggle h
+        for (uint i = 0; i < 10; i++) {
+            do {
+                u = _Unif(rng);
+                v = _Unif(rng);
+                s = u * u + v * v;
+            } while (s > 1 || s == 0);
+            fp = std::sqrt(-2 * std::log(s) / s);
+            field[Site]._Mat[i] += v * fp * Scale;
+            field[Site]._Mat[++i] += u * fp * Scale;
+        }
+
+        // randomize(FieldVar, Scale, _Norm, rng);
+        // HField_math::sum(field[Site], field[Site], FieldVar);
+
+        // Compute the updated Lagrangian in the surrounding sites
+        std::vector<action_type> LGRPost;             // Vector storing the new curvature values in the check sites
+        action_type              ActionChange = 0.0;  // Cumulative curvature variation
+        for (uint& CheckSite : action._Checks[Site]) {
+            impl_type Tmp = action.compute_LGR_loc(field, CheckSite);
+            if (Tmp > 0.0) {
+                LGRPost.push_back(Tmp);
+                ActionChange += Tmp - action._LGR[CheckSite];
+            } else {
+                break;
+            }
+        }
+        // Metropolis acceptance + positive action
+        if (LGRPost.size() == 5 && exp(-ActionChange) > _Unif(rng)) {
+            Acc++;
+            SVarTot += ActionChange;
+            for (uint CheckSite = 0; CheckSite < 5; CheckSite++) {
+                action._LGR[action._Checks[Site][CheckSite]] = LGRPost[CheckSite];
+            }
+        } else {
+            field[Site] = FieldOld;
+        }
+    }
+    state.update(static_cast<impl_type>(Acc) / field.getNsites(), SVarTot);
+}
+
+}  // namespace reticolo
 
 // /*--------------------------------------------------------------------------------------------------
 //   montecarlo::HMC::updateField() Specialization
@@ -714,17 +815,17 @@ void reticolo::MMonteCarlo::Metropolis<reticolo::action::WeakFieldEuclideanGR>::
 // void reticolo::montecarlo::HMC<reticolo::action::WeakFieldEuclideanGR>::updateField() {
 //     int        NSites = _Field.getNsites();
 //     int        Acc = 0;
-//     ActionType SvarTot(0.0);
-//     FieldType  OldField;
-//     FieldType  Mom;
-//     FieldType  Force;
+//     action_type SvarTot(0.0);
+//     field_type  OldField;
+//     field_type  Mom;
+//     field_type  Force;
 
 //     for (int Site = 0; Site < NSites; Site++) {
 //         // save the old field configuration;
 //         OldField = _Field[Site];
 //         // Compute start Hamiltonian
 //         randomize(Mom, 1.0, _Norm, _Rng);
-//         RealD OldK = 0.5 * Mom.dot();
+//         impl_type OldK = 0.5 * Mom.dot();
 //         // Compute Forces
 //         _Action.compute_Force_loc(_Field, Force, Site);
 //         // Momenta half step
@@ -741,12 +842,12 @@ void reticolo::MMonteCarlo::Metropolis<reticolo::action::WeakFieldEuclideanGR>::
 //         // Half step momenta roll-back
 //         Mom += 0.5 * _Stepsize * Force;
 //         // Compute end Hamiltonian
-//         RealD NewK = 0.5 * Mom.dot();
+//         impl_type NewK = 0.5 * Mom.dot();
 //         // Compute the updated Lagrangian in the surrounding sites
-//         std::vector<ActionType> LGRPost;             // Vector storing the new curvature values in the check sites
-//         ActionType              ActionChange = 0.0;  // Cumulative curvature variation
+//         std::vector<action_type> LGRPost;             // Vector storing the new curvature values in the check sites
+//         action_type              ActionChange = 0.0;  // Cumulative curvature variation
 //         for (int& CheckSite : _Action._Checks[Site]) {
-//             RealD Tmp = _Action.compute_LGR_loc(_Field, CheckSite) / _Action.kappa;
+//             impl_type Tmp = _Action.compute_LGR_loc(_Field, CheckSite) / _Action.kappa;
 //             if (Tmp > 0.0) {
 //                 LGRPost.push_back(Tmp);
 //                 ActionChange += Tmp - _Action._LGR[CheckSite];
@@ -765,5 +866,5 @@ void reticolo::MMonteCarlo::Metropolis<reticolo::action::WeakFieldEuclideanGR>::
 //             _Field[Site] = OldField;
 //         }
 //     }
-//     _McStats.update(static_cast<RealD>(Acc) / NSites, SvarTot);
+//     _McStats.update(static_cast<impl_type>(Acc) / NSites, SvarTot);
 // }

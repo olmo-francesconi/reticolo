@@ -25,6 +25,7 @@
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
 #include "reticolo/types/core_math.hpp"
+#include "reticolo/types/random.hpp"
 #include "yaml-cpp/node/node.h"
 
 namespace reticolo::action {
@@ -53,8 +54,8 @@ class RelativisticBoseGas : public ActionBase<std::complex<TImpl>, std::complex<
         TImpl lambda;
         TImpl eta;
         TImpl mu;
-        Params() : lambda(1.0), eta(9.0), mu(0) {};
-        Params(TImpl lambda, TImpl eta, TImpl chem_mu) : lambda(lambda), eta(eta), mu(chem_mu) {};
+        Params() : lambda(1.0), eta(9.0), mu(0){};
+        Params(TImpl lambda, TImpl eta, TImpl chem_mu) : lambda(lambda), eta(eta), mu(chem_mu){};
     } p;
 
     /* Observables */
@@ -116,10 +117,10 @@ class RelativisticBoseGas : public ActionBase<std::complex<TImpl>, std::complex<
   Public methods TImplementatin
 --------------------------------------------------------------------------------------------------*/
 template <RealValue TImpl>
-inline void RelativisticBoseGas<TImpl>::setup(const YAML::Node& ActionParamsDict) {
-    p.lambda = ActionParamsDict["lambda"].as<TImpl>();
-    p.eta = ActionParamsDict["eta"].as<TImpl>();
-    p.mu = ActionParamsDict["mu"].as<TImpl>();
+inline void RelativisticBoseGas<TImpl>::setup(const YAML::Node& ActionParams) {
+    p.lambda = ActionParams["lambda"].as<TImpl>();
+    p.eta = ActionParams["eta"].as<TImpl>();
+    p.mu = ActionParams["mu"].as<TImpl>();
 }
 
 template <RealValue TImpl>
@@ -273,17 +274,15 @@ inline auto RelativisticBoseGas<TImpl>::Measure(Lattice<field_type>& field) -> R
     return {static_cast<impl_type>(0.5 * Phi2 / Norm), static_cast<impl_type>(0.0)};
 }
 
-using RelativisticBoseGasF = reticolo::action::RelativisticBoseGas<RealF>;
-using RelativisticBoseGasD = reticolo::action::RelativisticBoseGas<RealD>;
+using RelativisticBoseGasF = RelativisticBoseGas<RealF>;
+using RelativisticBoseGasD = RelativisticBoseGas<RealD>;
 
 }  // namespace reticolo::action
 
 /*--------------------------------------------------------------------------------------------------
   HDF5 helper method TImplementatin
 --------------------------------------------------------------------------------------------------*/
-
 namespace reticolo {
-
 template <>
 auto make_H5_Type<action::RelativisticBoseGasF::Observables>() {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGasF::Observables));
@@ -299,5 +298,4 @@ auto make_H5_Type<action::RelativisticBoseGasD::Observables>() {
     H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGasD::Observables, density), H5T_NATIVE_DOUBLE);
     return DataTypeHid;
 }
-
 }  // namespace reticolo

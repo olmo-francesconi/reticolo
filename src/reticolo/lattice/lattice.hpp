@@ -28,6 +28,7 @@
 #include "reticolo/types/core_math.hpp"
 #include "reticolo/types/hfield.hpp"
 #include "reticolo/types/random.hpp"
+#include "yaml-cpp/node/node.h"
 
 namespace reticolo {
 
@@ -37,7 +38,8 @@ class Lattice : public std::vector<TField> {
     std::shared_ptr<Indexing> Idx;
 
     using SizeType = Indexing::SizeType;
-
+    /* Default constructor*/
+    Lattice() = default;
     /* Constructor */
     Lattice(const std::vector<SizeType>& shape) {
         Idx = std::make_shared<Indexing>(shape);
@@ -59,7 +61,6 @@ class Lattice : public std::vector<TField> {
     Lattice(const Lattice<T>& obj) {
         Idx = obj.Idx;
         this->resize(Idx->NSites);
-        std::cout << this->size() << "\n";
     };
     /* Destructor */
     ~Lattice() = default;

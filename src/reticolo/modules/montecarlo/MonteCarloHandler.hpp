@@ -268,7 +268,9 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
     _Logger << IO::LI_void() + "         Total updates : " + std::to_string(NMeasures) + '\n';
     _Logger << IO::LI_void() + "           Mesure step : " + std::to_string(MeasureStep) + '\n';
     _Logger << IO::LI_void() + "    Total measurements : " + std::to_string(TotMeasure) + '\n';
-    _Timer.reset();
+
+    // _Timer.reset();
+    // double elapsed;
 
     for (uint Iteration = 1; Iteration <= NMeasures; Iteration++) {
         // perform a sweep
@@ -278,6 +280,10 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
         if (Iteration % MeasureStep == 0) {
             measure_utility(RunName, Iteration);
         }
+
+        // elapsed = _Timer.elapsed_us();
+        // std::cout << ", out " << elapsed << "\n";
+        // _Timer.reset();
     }
 
     // save the last measurements in the buffer and flush

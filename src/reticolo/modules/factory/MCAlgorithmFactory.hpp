@@ -20,39 +20,29 @@
 #include "reticolo/modules/montecarlo/algorithms/HMC.hpp"
 #include "reticolo/modules/montecarlo/algorithms/Metropolis.hpp"
 
-namespace reticolo::MMonteCarlo {
+namespace reticolo::MMonteCarlo::AlgorithmFactory {
 
-// template <class Action>
-// class MCAlgorithmFactory {
-//   public:
-//     static auto MakeUpdater(const std::string& name) -> std::unique_ptr<MCAlgorithmBase<Action>> {
-//         if (name == "Metropolis") {
-//             return std::make_unique<Metropolis<Action>>();
-//         }
-
-//         if (name == "HMC") {
-//             return std::make_unique<HMC<Action>>();
-//         }
-
-//         throw std::runtime_error(std::format("Requested MonteCarlo update algorithm ({}) not implemented", name));
-//         return nullptr;
-//     }
-// };
-
-namespace AlgorithmFactory {
 template <class Action>
 static auto MakeUpdater(const std::string& name) -> std::unique_ptr<MCAlgorithmBase<Action>> {
-    if (name == "Metropolis") {
-        return std::make_unique<Metropolis<Action>>();
+    if constexpr (Action::IsMetropolisCapable) {
+        if ((name == "Metropolis")) {
+            return std::make_unique<Metropolis<Action>>();
+        }
     }
 
-    if (name == "HMC") {
-        return std::make_unique<HMC<Action>>();
+    if constexpr (Action::IsHmcCapable) {
+        if ((name == "HMC")) {
+            return std::make_unique<HMC<Action>>();
+        }
+    }
+
+    if constexpr (Action::IsLLRCapable) {
+        if ((name == "LLRMetropolis")) {
+            return std::make_unique<HMC<Action>>();
+        }
     }
 
     throw std::runtime_error(std::format("Requested MonteCarlo update algorithm ({}) not implemented", name));
     return nullptr;
 }
-}  // namespace AlgorithmFactory
-
-}  // namespace reticolo::MMonteCarlo
+}  // namespace reticolo::MMonteCarlo::AlgorithmFactory

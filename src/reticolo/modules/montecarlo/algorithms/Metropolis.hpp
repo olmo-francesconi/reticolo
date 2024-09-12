@@ -49,8 +49,10 @@ class Metropolis : public MCAlgorithmBase<Action> {
     impl_type _ProposalWidth;
 
     /* Distributions */
-    std::uniform_real_distribution<impl_type> _Unif;  // Uniform distribution [0.0, 1.0]
-    std::normal_distribution<impl_type>       _Norm;  // Normal distibution (mean: 0.0, stddev: 1.0)
+    std::uniform_real_distribution<impl_type> _Unif;   // Uniform distribution [0.0, 1.0]
+    std::uniform_real_distribution<impl_type> _Unifc;  // Uniform distribution [-1.0, 1.0]
+
+    std::normal_distribution<impl_type> _Norm;  // Normal distibution (mean: 0.0, stddev: 1.0)
 
   public:
     Metropolis() = default;
@@ -62,11 +64,13 @@ class Metropolis : public MCAlgorithmBase<Action> {
 
         /* Initialize distributions */
         _Unif = std::uniform_real_distribution<impl_type>(0.0, 1.0);
+        _Unifc = std::uniform_real_distribution<impl_type>(-1.0, 1.0);
         _Norm = std::normal_distribution<impl_type>(0.0, 1.0);
     }
 
     /* execution */
-    void updateField(Lattice<field_type>& field, Action& action, monte_carlo_data_type& state, RNGType& rng) override {
+    __attribute__((always_inline)) void updateField(Lattice<field_type>& field, Action& action,
+                                                    monte_carlo_data_type& state, RNGType& rng) override {
         uint        Acc = 0;       // acceptance
         action_type SVarTot(0.0);  // cumulative action variation
 

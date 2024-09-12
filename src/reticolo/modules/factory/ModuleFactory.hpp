@@ -18,6 +18,7 @@
 #include <string>
 
 #include "reticolo/action/RelativisticBoseGas.hpp"
+#include "reticolo/action/WeakFieldEuclideanGR.hpp"
 #include "reticolo/modules/factory/ModuleBase.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloHandler.hpp"
 
@@ -31,11 +32,15 @@ std::map<std::string, Modules> ModMap{{"MonteCarlo", Modules::MonteCarlo}};
 enum class Actions {
     RelativisticBoseGasF,
     RelativisticBoseGasD,
-    WeakFieldEuclideanGR,
+    WeakFieldEuclideanGRF,
+    WeakFieldEuclideanGRD,
 };
-std::map<std::string, Actions> ActMap{{"RelativisticBoseGasF", Actions::RelativisticBoseGasF},
-                                      {"RelativisticBoseGasD", Actions::RelativisticBoseGasD},
-                                      {"WeakFieldEuclideanGR", Actions::WeakFieldEuclideanGR}};
+std::map<std::string, Actions> ActMap{{"RelativisticBoseGas", Actions::RelativisticBoseGasD},      //
+                                      {"RelativisticBoseGas_F", Actions::RelativisticBoseGasF},    //
+                                      {"RelativisticBoseGas_D", Actions::RelativisticBoseGasD},    //
+                                      {"WeakFieldEuclideanGR", Actions::WeakFieldEuclideanGRD},    //
+                                      {"WeakFieldEuclideanGR_F", Actions::WeakFieldEuclideanGRF},  //
+                                      {"WeakFieldEuclideanGR_D", Actions::WeakFieldEuclideanGRD}};
 
 class ModuleFactory {
   public:
@@ -60,10 +65,16 @@ class ModuleFactory {
                         return std::make_unique<MMonteCarlo::MonteCarloHandler<action::RelativisticBoseGasF>>();
                     case Actions::RelativisticBoseGasD:
                         return std::make_unique<MMonteCarlo::MonteCarloHandler<action::RelativisticBoseGasD>>();
+                    case Actions::WeakFieldEuclideanGRF:
+                        return std::make_unique<MMonteCarlo::MonteCarloHandler<action::WeakFieldEuclideanGRF>>();
+                    case Actions::WeakFieldEuclideanGRD:
+                        return std::make_unique<MMonteCarlo::MonteCarloHandler<action::WeakFieldEuclideanGRD>>();
                     default:
+                        throw std::runtime_error("Action not valid for selected module");
                         return nullptr;
                 }
             default:
+                throw std::runtime_error("Module not found");
                 return nullptr;
         }
     }
