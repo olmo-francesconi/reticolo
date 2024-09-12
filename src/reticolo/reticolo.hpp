@@ -87,6 +87,7 @@ void reticolo_run() {
             /* Configure the module */
             Module->setup(ModuleConfig);
 
+            /* Run the simulations */
             for (const auto& RunConfig : ModuleConfig["runs"]) {
                 Module->execute(RunConfig);
             }
