@@ -1,6 +1,6 @@
 # Works with 3.14 and tested through 3.28
 cmake_minimum_required(VERSION 3.14...3.28)
-include(FetchContent)
+
 
 # Set install folder
 set(CMAKE_INSTALL_PREFIX "/opt/reticolo")
@@ -23,7 +23,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -Ofast -Wno-nan-infinity-disabled")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -flto -Ofast -Wno-nan-infinity-disabled")
 
 
 # IF(CMAKE_BUILD_TYPE EQUAL Debug)
@@ -40,6 +40,10 @@ project(
   VERSION 0.1
   DESCRIPTION "C++ library for lattice QFT calculations"
   LANGUAGES CXX)
+
+# include modules
+include(FetchContent)
+include(GNUInstallDirs)
 
 # Only do these if this is the main project, and not if it is included through add_subdirectory
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
@@ -95,7 +99,7 @@ if(NOT yaml-cpp_POPULATED)
     message(STATUS "Fetching yaml-cpp...")
     FetchContent_MakeAvailable(yaml-cpp)
 endif()
-link_libraries(yaml-cpp::yaml-cpp)
+# link_libraries(yaml-cpp::yaml-cpp)
 
 # cxxopts
 FetchContent_Declare(
@@ -108,7 +112,7 @@ if(NOT cxxopts_POPULATED)
     message(STATUS "Fetching cxxopts...")
     FetchContent_MakeAvailable(cxxopts)
 endif()
-link_libraries(cxxopts::cxxopts)
+# link_libraries(cxxopts::cxxopts)
 
 # The compiled library code is here
 add_subdirectory(src)
