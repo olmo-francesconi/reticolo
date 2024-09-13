@@ -5,36 +5,38 @@ workflows:
 
       # Lattice config
       lattice:
-        size: [6, 6, 6, 6]
+        size: [8, 8, 8, 8]
 
       # Action Config
-      # action:
-      #   name: RelativisticBoseGas
-      #   parameters:
-      #     lambda: 1.0
-      #     eta: 9.0
-      #     mu: 0.8
-
       action:
-        name: WeakFieldEuclideanGR
+        name: RelativisticBoseGas
         parameters:
-          beta: 5.7
+          lambda: 1.0
+          eta: 9.0
+          mu: 0.8
 
       # Update Algorithm Config
       algorithm:
+        #Metropolis
         name: Metropolis
         parameters:
           prop_width: 0.1
 
+        # HMC
+        # name: HMC
+        # parameters:
+        #   steps: 5
+        #   stepsize: 0.01
+
       # Output settings
-      output_dir: ./test_b
+      output_dir: ./BoseGas_MonteCarlo
       save_config: false
       save_data: true
       console_output: true
 
       # Run parameters
       runs:
-        - name: testF
+        - name: test_run
           measures: 10000
           measure_step: 1
           therm_steps: 0

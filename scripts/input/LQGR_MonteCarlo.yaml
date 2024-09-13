@@ -1,0 +1,35 @@
+workflows:
+  - MonteCarlo:
+      name: testF
+      main_seed: 0
+
+      # Lattice config
+      lattice:
+        size: [6, 6, 6, 6]
+
+      # Action Config
+      action:
+        name: WeakFieldEuclideanGR
+        parameters:
+          beta: 5.7
+
+      # Update Algorithm Config
+      algorithm:
+        name: Metropolis
+        parameters:
+          prop_width: 0.1
+
+      # Output settings
+      output_dir: ./LQGR_MonteCarlo
+      save_config: false
+      save_data: true
+      console_output: true
+
+      # Run parameters
+      runs:
+        - name: test_run
+          measures: 10000
+          measure_step: 1
+          therm_steps: 0
+          field_init: true
+          hot_start: false
