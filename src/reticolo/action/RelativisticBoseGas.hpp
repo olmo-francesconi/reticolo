@@ -13,22 +13,21 @@
 #include <H5Ipublic.h>
 #include <H5Tpublic.h>
 
-#include <cmath>
+// #include <cmath>
 #include <complex>
 #include <concepts>
-#include <format>
 #include <sstream>
 #include <string>
 
 #include "reticolo/action/actionBase.hpp"
-#include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/lattice/lattice.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
 #include "reticolo/types/core_math.hpp"
-#include "reticolo/types/random.hpp"
 #include "yaml-cpp/node/node.h"
 
-namespace reticolo::action {
+namespace reticolo {
+namespace action {
 
 /*--------------------------------------------------------------------------------------------------
   RelativisticBoseGas Class Declaration
@@ -54,8 +53,8 @@ class RelativisticBoseGas : public ActionBase<std::complex<TImpl>, std::complex<
         TImpl lambda;
         TImpl eta;
         TImpl mu;
-        Params() : lambda(1.0), eta(9.0), mu(0){};
-        Params(TImpl lambda, TImpl eta, TImpl chem_mu) : lambda(lambda), eta(eta), mu(chem_mu){};
+        Params() : lambda(1.0), eta(9.0), mu(0) {};
+        Params(TImpl lambda, TImpl eta, TImpl chem_mu) : lambda(lambda), eta(eta), mu(chem_mu) {};
     } p;
 
     /* Observables */
@@ -100,21 +99,30 @@ class RelativisticBoseGas : public ActionBase<std::complex<TImpl>, std::complex<
     static auto Measure(Lattice<field_type>& field) -> Observables;
 
     /* Log stuff */
-    auto GetName() -> std::string override {
-        std::string Res = "Relativistic Bose Gas";
-        Res += std::same_as<impl_type, RealF> ? " [float]" : " [double]";
-        return Res;
-    };
-    auto GetParameters() -> std::string override {
-        std::stringstream Res;
-        Res << "[ lambda : " << std::format("{:4.1f}", p.lambda) << ", eta : " << std::format("{:4.1f}", p.eta)
-            << ", mu : " << std::format("{:4.1f}", p.mu) << " ]";
-        return Res.str();
-    }
+    auto GetName() -> std::string override;
+    auto GetParameters() -> std::string override;
 };
 
 /*--------------------------------------------------------------------------------------------------
-  Public methods TImplementatin
+  Private methods Implementation
+--------------------------------------------------------------------------------------------------*/
+template <RealValue TImpl>
+inline auto RelativisticBoseGas<TImpl>::GetName() -> std::string {
+    std::string Res = "Relativistic Bose Gas";
+    Res += std::same_as<impl_type, RealF> ? " [float]" : " [double]";
+    return Res;
+};
+
+template <RealValue TImpl>
+inline auto RelativisticBoseGas<TImpl>::GetParameters() -> std::string {
+    std::stringstream Res;
+    Res << "[ lambda : " << std::format("{:4.1f}", p.lambda) << ", eta : " << std::format("{:4.1f}", p.eta)
+        << ", mu : " << std::format("{:4.1f}", p.mu) << " ]";
+    return Res.str();
+};
+
+/*--------------------------------------------------------------------------------------------------
+  Public methods Implementation
 --------------------------------------------------------------------------------------------------*/
 template <RealValue TImpl>
 inline void RelativisticBoseGas<TImpl>::setup(const YAML::Node& ActionParams) {
@@ -205,7 +213,7 @@ inline auto RelativisticBoseGas<TImpl>::compute_dS_loc(Lattice<field_type>& fiel
 
 template <RealValue TImpl>
 inline void RelativisticBoseGas<TImpl>::compute_Forces(Lattice<field_type>& field, Lattice<field_type>& forces) {
-    for (int Site = 0; Site < field.getNsites(); Site++) {
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
         field_type Phi = field[Site];
         field_type Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
         field_type Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
@@ -235,13 +243,13 @@ inline void RelativisticBoseGas<TImpl>::compute_LLRForces(Lattice<field_type>& f
 
     // compute current value of the imaginary action
     TImpl SIm = 0.0;
-    for (int Site = 0; Site < field.getNsites(); Site++) {
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
         SIm += Phi.real() * field.n(Site, _t).imag() - Phi.imag() * field.n(Site, _t).real();
     }
     TImpl LLRForcePref = ((SIm - Sk) / (width * width) + ak);
 
-    for (int Site = 0; Site < field.getNsites(); Site++) {
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
         Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
         Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
@@ -266,7 +274,7 @@ inline auto RelativisticBoseGas<TImpl>::Measure(Lattice<field_type>& field) -> R
     TImpl      Phi2 = 0.0;
     auto       Norm = static_cast<TImpl>(field.getNsites());
 
-    for (int Site = 0; Site < field.getNsites(); Site++) {
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
         Phi2 += static_cast<TImpl>(dot(Phi));
     }
@@ -274,28 +282,26 @@ inline auto RelativisticBoseGas<TImpl>::Measure(Lattice<field_type>& field) -> R
     return {static_cast<impl_type>(0.5 * Phi2 / Norm), static_cast<impl_type>(0.0)};
 }
 
-using RelativisticBoseGasF = RelativisticBoseGas<RealF>;
-using RelativisticBoseGasD = RelativisticBoseGas<RealD>;
-
-}  // namespace reticolo::action
+}  // namespace action
 
 /*--------------------------------------------------------------------------------------------------
-  HDF5 helper method TImplementatin
+  HDF5 helper method instantiations
 --------------------------------------------------------------------------------------------------*/
-namespace reticolo {
 template <>
-auto make_H5_Type<action::RelativisticBoseGasF::Observables>() {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGasF::Observables));
-    H5Tinsert(DataTypeHid, "phi2", HOFFSET(action::RelativisticBoseGasF::Observables, phi2), H5T_NATIVE_FLOAT);
-    H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGasF::Observables, density), H5T_NATIVE_FLOAT);
+auto make_H5_Type<action::RelativisticBoseGas<RealF>::Observables>() -> hid_t {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGas<RealF>::Observables));
+    H5Tinsert(DataTypeHid, "phi2", HOFFSET(action::RelativisticBoseGas<RealF>::Observables, phi2), H5T_NATIVE_FLOAT);
+    H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGas<RealF>::Observables, density),
+              H5T_NATIVE_FLOAT);
+    return DataTypeHid;
+}
+template <>
+auto make_H5_Type<action::RelativisticBoseGas<RealD>::Observables>() -> hid_t {
+    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGas<RealD>::Observables));
+    H5Tinsert(DataTypeHid, "phi2", HOFFSET(action::RelativisticBoseGas<RealD>::Observables, phi2), H5T_NATIVE_DOUBLE);
+    H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGas<RealD>::Observables, density),
+              H5T_NATIVE_DOUBLE);
     return DataTypeHid;
 }
 
-template <>
-auto make_H5_Type<action::RelativisticBoseGasD::Observables>() {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGasD::Observables));
-    H5Tinsert(DataTypeHid, "phi2", HOFFSET(action::RelativisticBoseGasD::Observables, phi2), H5T_NATIVE_DOUBLE);
-    H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGasD::Observables, density), H5T_NATIVE_DOUBLE);
-    return DataTypeHid;
-}
 }  // namespace reticolo

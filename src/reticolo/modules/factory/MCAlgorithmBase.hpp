@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/lattice/lattice.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloData.hpp"
 #include "reticolo/types/core.hpp"
 #include "yaml-cpp/node/node.h"

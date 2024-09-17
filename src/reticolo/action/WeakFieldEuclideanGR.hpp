@@ -25,7 +25,7 @@
 #include <vector>
 
 #include "reticolo/action/actionBase.hpp"
-#include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/lattice/lattice.hpp"
 #include "reticolo/physics/constants.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 #include "reticolo/types/core.hpp"
@@ -677,13 +677,13 @@ using WeakFieldEuclideanGRD = WeakFieldEuclideanGR<RealD>;
 --------------------------------------------------------------------------------------------------*/
 namespace reticolo {
 template <>
-auto make_H5_Type<action::WeakFieldEuclideanGRF::Observables>() {
+auto make_H5_Type<action::WeakFieldEuclideanGRF::Observables>() -> hid_t {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::WeakFieldEuclideanGRF::Observables));
     H5Tinsert(DataTypeHid, "R", HOFFSET(action::WeakFieldEuclideanGRF::Observables, R), H5T_NATIVE_FLOAT);
     return DataTypeHid;
 }
 template <>
-auto make_H5_Type<action::WeakFieldEuclideanGRD::Observables>() {
+auto make_H5_Type<action::WeakFieldEuclideanGRD::Observables>() -> hid_t {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::WeakFieldEuclideanGRD::Observables));
     H5Tinsert(DataTypeHid, "R", HOFFSET(action::WeakFieldEuclideanGRD::Observables, R), H5T_NATIVE_DOUBLE);
     return DataTypeHid;
@@ -706,7 +706,7 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGRF>::updateField(Lattice
     uint        Acc = 0;       // acceptance
     action_type SVarTot(0.0);  // cumulative action variation
 
-    for (int Site = 0; Site < field.getNsites(); Site++) {
+    for (uint Site = 0; Site < field.getNsites(); Site++) {
         // Generate a randomized local field variation
         field_type FieldVar;  // local field variation
         field_type FieldOld = field[Site];

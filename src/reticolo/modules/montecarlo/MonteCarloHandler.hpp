@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <H5Dpublic.h>
 #include <omp.h>
 
 #include <cstddef>
@@ -19,10 +20,11 @@
 #include <format>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <string>
 #include <vector>
 
-#include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/lattice/lattice.hpp"
 #include "reticolo/modules/factory/MCAlgorithmBase.hpp"
 #include "reticolo/modules/factory/MCAlgorithmFactory.hpp"
 #include "reticolo/modules/factory/ModuleBase.hpp"
@@ -48,6 +50,8 @@ class MonteCarloHandler : public ModuleBase {
   public:
     using action_type = Action::action_type;
     using field_type = Action::field_type;
+    using impl_type = Action::impl_type;
+    using size_type = Lattice<field_type>::size_type;
     using observables_type = Action::Observables;
     using monte_carlo_data_type = MMonteCarlo::data<action_type>;
 
@@ -90,7 +94,8 @@ class MonteCarloHandler : public ModuleBase {
     unsigned long                      _NMeasurements;  // Total numebr of measurements
 
     /* RNG */
-    RNGType _Rng;
+    RNGType                             _Rng;
+    std::normal_distribution<impl_type> _Norm;
 
     /* Timing and logging */
     Timer      _Timer;
@@ -161,8 +166,7 @@ inline void MonteCarloHandler<Action>::setup(const YAML::Node& Config) {
     _Action = std::make_unique<Action>();
     _Action->setup(Config["action"]["parameters"]);
 
-    _Field = std::make_unique<Lattice<field_type>>(
-        Config["lattice"]["size"].as<std::vector<typename Lattice<field_type>::SizeType>>());
+    _Field = std::make_unique<Lattice<field_type>>(Config["lattice"]["size"].as<std::vector<size_type>>());
 
     _Action->lattice_sync(*_Field);
 
@@ -179,9 +183,9 @@ inline void MonteCarloHandler<Action>::setup(const YAML::Node& Config) {
 
     /* RNGs stuff */
     _Rng.seed(Config["main_seed"].as<unsigned long long>());
+    _Norm = std::normal_distribution<impl_type>(0.0, 1.0);
 
     /* Create updater with Factory */
-    // _Updater = MCAlgorithmFactory<Action>::MakeUpdater(Config["algorithm"]["name"].as<std::string>());
     _Updater = AlgorithmFactory::MakeUpdater<Action>(Config["algorithm"]["name"].as<std::string>());
     /* Run the Updater setup */
     _Updater->setup(Config["algorithm"]["parameters"], *_Field);
@@ -194,17 +198,17 @@ inline void MonteCarloHandler<Action>::setup(const YAML::Node& Config) {
 template <class Action>
 inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
     /* Parse configuration from YAML::Node */
-    auto   RunName = RunConfig["name"].as<std::string>();
-    auto   NMeasures = RunConfig["measures"].as<uint>();
-    auto   MeasureStep = RunConfig["measure_step"].as<uint>();
-    auto   NTherm = RunConfig["therm_steps"].as<uint>();
-    auto   InitializeField = RunConfig["field_init"].as<bool>();
-    bool   HotStart = false;
-    double HotStartScale = 1.0;
+    auto      RunName = RunConfig["name"].as<std::string>();
+    auto      NMeasures = RunConfig["measures"].as<uint>();
+    auto      MeasureStep = RunConfig["measure_step"].as<uint>();
+    auto      NTherm = RunConfig["therm_steps"].as<uint>();
+    auto      InitializeField = RunConfig["field_init"].as<bool>();
+    bool      HotStart = false;
+    impl_type HotStartScale = 1.0;
     if (InitializeField) {
         HotStart = RunConfig["hot_start"].as<bool>();
         if (HotStart) {
-            HotStartScale = RunConfig["hot_start_scale"].as<double>();
+            HotStartScale = RunConfig["hot_start_scale"].as<impl_type>();
         }
     }
 
@@ -232,7 +236,7 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
     if (InitializeField) {
         if (HotStart) {
             _Logger << IO::LI_void() + std::format("    initial conditions : hot start [scale : {}]\n", HotStartScale);
-            // _Field->randomizeField(HotStartScale, _Rng);
+            // _Field->randomizeField(HotStartScale, _Norm, _Rng);
         } else {
             _Logger << IO::LI_void() + "    initial conditions : cold start\n";
             // _Field->resetField();
@@ -269,9 +273,6 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
     _Logger << IO::LI_void() + "           Mesure step : " + std::to_string(MeasureStep) + '\n';
     _Logger << IO::LI_void() + "    Total measurements : " + std::to_string(TotMeasure) + '\n';
 
-    // _Timer.reset();
-    // double elapsed;
-
     for (uint Iteration = 1; Iteration <= NMeasures; Iteration++) {
         // perform a sweep
         _Updater->updateField(*_Field, *_Action, _McStats, _Rng);
@@ -280,10 +281,6 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
         if (Iteration % MeasureStep == 0) {
             measure_utility(RunName, Iteration);
         }
-
-        // elapsed = _Timer.elapsed_us();
-        // std::cout << ", out " << elapsed << "\n";
-        // _Timer.reset();
     }
 
     // save the last measurements in the buffer and flush
@@ -317,7 +314,7 @@ inline void MonteCarloHandler<Action>::measure_utility(const std::string& RunNam
     // Save the configuration
     // if (_SaveConfig) {
     // saveConfiguration(Iteration);
-    // }s
+    // }
     // Save Monte Carlo data and Observables
     if (_SaveData) {
         // Update Buffers

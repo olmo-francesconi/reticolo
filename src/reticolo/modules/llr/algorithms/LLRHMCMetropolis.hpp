@@ -15,7 +15,7 @@
 #include <memory>
 #include <random>
 
-#include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/lattice/lattice.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloData.hpp"
 #include "reticolo/modules/montecarlo/algorithms/AlgorithmBase.hpp"
 #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep

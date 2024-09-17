@@ -14,7 +14,7 @@
 #include <format>
 #include <string>
 
-#include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/lattice/lattice.hpp"
 #include "reticolo/montecarlo/MonteCarloData.hpp"
 #include "reticolo/montecarlo/MonteCarloHandler.hpp"
 #include "reticolo/tools/io_utils.hpp"

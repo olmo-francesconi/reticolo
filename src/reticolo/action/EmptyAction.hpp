@@ -20,7 +20,7 @@
 // #include <string>
 
 // #include "reticolo/action/action_base.hpp"
-// #include "reticolo/lattice/Lattice.hpp"
+// #include "reticolo/lattice/lattice.hpp"
 // #include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
 // #include "reticolo/types/core.hpp"
 

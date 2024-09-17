@@ -27,7 +27,7 @@
 #include <utility>
 #include <vector>
 
-#include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/lattice/lattice.hpp"
 #include "reticolo/modules/factory/ModuleBase.hpp"
 #include "reticolo/modules/llr/LLRHMCWorker.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloData.hpp"

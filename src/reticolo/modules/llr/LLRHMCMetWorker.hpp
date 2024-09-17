@@ -14,7 +14,7 @@
 #include <format>
 #include <string>
 
-#include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/lattice/lattice.hpp"
 #include "reticolo/montecarlo/MonteCarloData.hpp"
 #include "reticolo/montecarlo/MonteCarloHandler.hpp"
 #include "reticolo/tools/io_utils.hpp"
@@ -212,7 +212,7 @@ void LLRHMCMetWorker<Action>::updateField() {
 
 /* Argument deduction guide */
 template <LLRCapable Action>
-LLRHMCMetWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&)
-    -> LLRHMCMetWorker<Action>;
+LLRHMCMetWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint,
+                std::string&) -> LLRHMCMetWorker<Action>;
 
 }  // namespace reticolo::LLR

@@ -31,7 +31,7 @@ struct data<ActionType> {
     /* Constructors*/
     data() = default;  // Default
     data(double acceptance, ActionType action, ActionType action_change)
-        : _Acceptance(acceptance), _S(double(action)) {};  // Parameter
+        : _Acceptance(acceptance), _S(double(action)){};  // Parameter
 
     /* Update values */
     void setS(ActionType SReal) { _S = SReal; }
@@ -114,7 +114,7 @@ struct data<ActionType> {
     /* Constructors*/
     data() = default;  // Default
     data(double acceptance, ActionType action, ActionType action_change)
-        : _Acceptance(acceptance), _SRe(double(action.real())), _SIm(double(action.imag())) {};  // Parameter
+        : _Acceptance(acceptance), _SRe(double(action.real())), _SIm(double(action.imag())){};  // Parameter
 
     /* Update values */
     void setS(ActionType SCmplx) {
@@ -203,7 +203,7 @@ struct data<ActionType> {
 namespace reticolo {
 
 template <>
-auto make_H5_Type<MMonteCarlo::data<RealF>>() {
+auto make_H5_Type<MMonteCarlo::data<RealF>>() -> hid_t {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(MMonteCarlo::data<RealD>));
     H5Tinsert(DataTypeHid, "acceptance", HOFFSET(MMonteCarlo::data<RealD>, _Acceptance), H5T_NATIVE_DOUBLE);
     H5Tinsert(DataTypeHid, "S", HOFFSET(MMonteCarlo::data<RealD>, _S), H5T_NATIVE_DOUBLE);
@@ -211,7 +211,7 @@ auto make_H5_Type<MMonteCarlo::data<RealF>>() {
 };
 
 template <>
-auto make_H5_Type<MMonteCarlo::data<RealD>>() {
+auto make_H5_Type<MMonteCarlo::data<RealD>>() -> hid_t {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(MMonteCarlo::data<RealD>));
     H5Tinsert(DataTypeHid, "acceptance", HOFFSET(MMonteCarlo::data<RealD>, _Acceptance), H5T_NATIVE_DOUBLE);
     H5Tinsert(DataTypeHid, "S", HOFFSET(MMonteCarlo::data<RealD>, _S), H5T_NATIVE_DOUBLE);
@@ -219,7 +219,7 @@ auto make_H5_Type<MMonteCarlo::data<RealD>>() {
 };
 
 template <>
-auto make_H5_Type<MMonteCarlo::data<ComplexF>>() {
+auto make_H5_Type<MMonteCarlo::data<ComplexF>>() -> hid_t {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(MMonteCarlo::data<ComplexD>));
     H5Tinsert(DataTypeHid, "acceptance", HOFFSET(MMonteCarlo::data<ComplexD>, _Acceptance), H5T_NATIVE_DOUBLE);
     H5Tinsert(DataTypeHid, "S_re", HOFFSET(MMonteCarlo::data<ComplexD>, _SRe), H5T_NATIVE_DOUBLE);
@@ -228,7 +228,7 @@ auto make_H5_Type<MMonteCarlo::data<ComplexF>>() {
 };
 
 template <>
-auto make_H5_Type<MMonteCarlo::data<ComplexD>>() {
+auto make_H5_Type<MMonteCarlo::data<ComplexD>>() -> hid_t {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(MMonteCarlo::data<ComplexD>));
     H5Tinsert(DataTypeHid, "acceptance", HOFFSET(MMonteCarlo::data<ComplexD>, _Acceptance), H5T_NATIVE_DOUBLE);
     H5Tinsert(DataTypeHid, "S_re", HOFFSET(MMonteCarlo::data<ComplexD>, _SRe), H5T_NATIVE_DOUBLE);

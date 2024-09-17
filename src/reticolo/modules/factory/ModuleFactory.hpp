@@ -21,6 +21,7 @@
 #include "reticolo/action/WeakFieldEuclideanGR.hpp"
 #include "reticolo/modules/factory/ModuleBase.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloHandler.hpp"
+#include "reticolo/types/core.hpp"
 
 namespace reticolo {
 
@@ -62,9 +63,9 @@ class ModuleFactory {
             case Modules::MonteCarlo:
                 switch (Act->second) {
                     case Actions::RelativisticBoseGasF:
-                        return std::make_unique<MMonteCarlo::MonteCarloHandler<action::RelativisticBoseGasF>>();
+                        return std::make_unique<MMonteCarlo::MonteCarloHandler<action::RelativisticBoseGas<RealF>>>();
                     case Actions::RelativisticBoseGasD:
-                        return std::make_unique<MMonteCarlo::MonteCarloHandler<action::RelativisticBoseGasD>>();
+                        return std::make_unique<MMonteCarlo::MonteCarloHandler<action::RelativisticBoseGas<RealD>>>();
                     case Actions::WeakFieldEuclideanGRF:
                         return std::make_unique<MMonteCarlo::MonteCarloHandler<action::WeakFieldEuclideanGRF>>();
                     case Actions::WeakFieldEuclideanGRD:
