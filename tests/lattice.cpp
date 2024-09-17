@@ -8,7 +8,7 @@
 
 ******************************************************************************/
 
-#include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/lattice/lattice.hpp"
 
 #include <sys/types.h>
 
@@ -91,45 +91,6 @@ auto main(int argc, char* argv[]) -> int {
     std::normal_distribution<double>       Norm;   // Normal distibution (mean: 0.0, stddev: 1.0 )
     Rng.seed(0);
 
-    // Lattice<RealD> LatB(LatA);
-    // Lattice<RealD> LatC(LatA);
-
-    // RealD Tot;
-    // for (auto& Site : LatB) {
-    //     Site = 1.0;
-    // }
-
-    // Tot = 0.0;
-    // for (auto& Site : LatB) {
-    //     Tot += Site;
-    // }
-    // std::cout << "LatB " << Tot / LatB.getNsites() << "\n";
-
-    // for (auto& Site : LatC) {
-    //     Site = 2.0;
-    // }
-
-    // Tot = 0.0;
-    // for (auto& Site : LatC) {
-    //     Tot += Site;
-    // }
-    // std::cout << "LatC " << Tot / LatB.getNsites() << "\n";
-
-    // std::cout << "Copy C into B\n";
-    // LatB = LatC;
-
-    // Tot = 0.0;
-    // for (auto& Site : LatB) {
-    //     Tot += Site;
-    // }
-    // std::cout << "LatB " << Tot / LatB.getNsites() << "\n";
-
-    // Tot = 0.0;
-    // for (auto& Site : LatC) {
-    //     Tot += Site;
-    // }
-    // std::cout << "LatC " << Tot / LatB.getNsites() << "\n";
-
     /* support variables */
     std::vector<double> Times;
     Times.resize(Rep);
@@ -166,7 +127,7 @@ auto main(int argc, char* argv[]) -> int {
     std::cout << "\n### sum over all next neighbours ###\n";
     for (uint Idx = 0; Idx < Rep; Idx++) {
         Tot = 0.0;
-        std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
+        // std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
         Time.reset();
         for (uint Site = 0; Site < LatA.getNsites(); Site++) {
             for (uint Dir = 0; Dir < LatA.getDim(); Dir++) {
@@ -182,7 +143,7 @@ auto main(int argc, char* argv[]) -> int {
     std::cout << "\n### sum over all prev neighbours ###\n";
     for (uint Idx = 0; Idx < Rep; Idx++) {
         Tot = 0.0;
-        std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
+        // std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
         Time.reset();
         for (uint Site = 0; Site < LatA.getNsites(); Site++) {
             for (uint Dir = 0; Dir < LatA.getDim(); Dir++) {
@@ -198,7 +159,7 @@ auto main(int argc, char* argv[]) -> int {
     std::cout << "\n### sum over all next-to-next neighbours ###\n";
     for (uint Idx = 0; Idx < Rep; Idx++) {
         Tot = 0.0;
-        std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
+        // std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
         Time.reset();
         for (uint Site = 0; Site < LatA.getNsites(); Site++) {
             for (uint Dir1 = 0; Dir1 < LatA.getDim(); Dir1++) {
@@ -216,7 +177,7 @@ auto main(int argc, char* argv[]) -> int {
     std::cout << "\n### sum over all prev-to-prev neighbours ###\n";
     for (uint Idx = 0; Idx < Rep; Idx++) {
         Tot = 0.0;
-        std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
+        // std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
         Time.reset();
         for (uint Site = 0; Site < LatA.getNsites(); Site++) {
             for (uint Dir1 = 0; Dir1 < LatA.getDim(); Dir1++) {

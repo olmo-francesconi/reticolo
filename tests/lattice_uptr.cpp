@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "reticolo/lattice/Lattice.hpp"
+#include "reticolo/lattice/lattice.hpp"
 #include "reticolo/tools/timer.hpp"
 #include "reticolo/types/core.hpp"
 
@@ -90,45 +90,6 @@ auto main(int argc, char* argv[]) -> int {
     std::uniform_real_distribution<double> UnifC;  // Uniform distribution [-1.0, 1.0]
     std::normal_distribution<double>       Norm;   // Normal distibution (mean: 0.0, stddev: 1.0 )
     Rng.seed(0);
-
-    // Lattice<RealD> LatB(LatA);
-    // Lattice<RealD> LatC(LatA);
-
-    // RealD Tot;
-    // for (auto& Site : LatB) {
-    //     Site = 1.0;
-    // }
-
-    // Tot = 0.0;
-    // for (auto& Site : LatB) {
-    //     Tot += Site;
-    // }
-    // std::cout << "LatB " << Tot / LatB.getNsites() << "\n";
-
-    // for (auto& Site : LatC) {
-    //     Site = 2.0;
-    // }
-
-    // Tot = 0.0;
-    // for (auto& Site : LatC) {
-    //     Tot += Site;
-    // }
-    // std::cout << "LatC " << Tot / LatB.getNsites() << "\n";
-
-    // std::cout << "Copy C into B\n";
-    // LatB = LatC;
-
-    // Tot = 0.0;
-    // for (auto& Site : LatB) {
-    //     Tot += Site;
-    // }
-    // std::cout << "LatB " << Tot / LatB.getNsites() << "\n";
-
-    // Tot = 0.0;
-    // for (auto& Site : LatC) {
-    //     Tot += Site;
-    // }
-    // std::cout << "LatC " << Tot / LatB.getNsites() << "\n";
 
     /* support variables */
     std::vector<double> Times;
