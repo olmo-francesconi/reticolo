@@ -1,18 +1,27 @@
 # Works with 3.14 and tested through 3.28
 cmake_minimum_required(VERSION 3.14...3.28)
 
+# Project name and a few useful settings. Other commands can pick up the results
+project(
+  reticolo
+  VERSION 0.1
+  DESCRIPTION "C++ library for lattice QFT calculations"
+  LANGUAGES CXX)
 
-# Set install folder
-set(CMAKE_INSTALL_PREFIX "/opt/reticolo")
+# include modules
+include(FetchContent)
+include(GNUInstallDirs)
 
-# Compiler
-set(CMAKE_C_COMPILER "/opt/homebrew/opt/llvm/bin/clang")
-set(CMAKE_CXX_COMPILER "/opt/homebrew/opt/llvm/bin/clang++")
-set(CMAKE_EXE_LINKER_FLAGS_INIT "-L/opt/homebrew/opt/llvm/lib/c++ -L/opt/homebrew/opt/llvm/lib -lunwind")
-
-# set(CMAKE_C_COMPILER "gcc-14")
-# set(CMAKE_CXX_COMPILER "g++-14")
-# set(CMAKE_CXX_FLAGS "-Wall -Wl,-ld_classic")
+# Compiler flags depending on compiler
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(CMAKE_EXE_LINKER_FLAGS "-L/opt/homebrew/opt/llvm/lib/c++ -L/opt/homebrew/opt/llvm/lib -lunwind")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(CMAKE_CXX_FLAGS "-Wall -Wl,-ld_classic")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
+    MESSAGE(FATAL_ERROR "Compiler not supported")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    MESSAGE(FATAL_ERROR "Compiler not supported")
+endif()
 
 # Export compilation commands
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -25,25 +34,6 @@ endif()
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -flto -Ofast -Wno-nan-infinity-disabled")
 
-
-# IF(CMAKE_BUILD_TYPE EQUAL Debug)
-#   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -lprofiler -ltcmalloc")
-#   include_directories(/opt/homebrew/Cellar/gperftools/2.15/include)
-#   link_directories(/opt/homebrew/Cellar/gperftools/2.15/lib)
-#   link_libraries(profiler)
-#   link_libraries(tcmalloc)
-# endif()
-
-# Project name and a few useful settings. Other commands can pick up the results
-project(
-  reticolo
-  VERSION 0.1
-  DESCRIPTION "C++ library for lattice QFT calculations"
-  LANGUAGES CXX)
-
-# include modules
-include(FetchContent)
-include(GNUInstallDirs)
 
 # Only do these if this is the main project, and not if it is included through add_subdirectory
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
@@ -64,27 +54,21 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     include(CTest)
 
     # Docs only available if this is the main app
-    find_package(Doxygen)
-    if(Doxygen_FOUND)
-        add_subdirectory(docs)
-    else()
-        message(STATUS "Doxygen not found, not building docs")
-    endif()
+    # find_package(Doxygen)
+    # if(Doxygen_FOUND)
+    #     add_subdirectory(docs)
+    # else()
+    #     message(STATUS "Doxygen not found, not building docs")
+    # endif()
 endif()
 
 # HDF5
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    set(HDF5_ROOT /opt/hdf5/llvm/c-threadsafe)
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    set(HDF5_ROOT /opt/hdf5/gnu/c-threadsafe)
-endif()
 set(HDF5_NO_FIND_PACKAGE_CONFIG_FILE true)
 find_package(HDF5 REQUIRED C)
 
 # OpenMP
 FIND_PACKAGE(OpenMP)
 IF(OPENMP_FOUND)
-    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 ENDIF()
 
@@ -99,7 +83,6 @@ if(NOT yaml-cpp_POPULATED)
     message(STATUS "Fetching yaml-cpp...")
     FetchContent_MakeAvailable(yaml-cpp)
 endif()
-# link_libraries(yaml-cpp::yaml-cpp)
 
 # cxxopts
 FetchContent_Declare(
@@ -112,7 +95,6 @@ if(NOT cxxopts_POPULATED)
     message(STATUS "Fetching cxxopts...")
     FetchContent_MakeAvailable(cxxopts)
 endif()
-# link_libraries(cxxopts::cxxopts)
 
 # The compiled library code is here
 add_subdirectory(src)
@@ -126,3 +108,4 @@ if((CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME OR MODERN_CMAKE_BUILD_TESTING)
    AND BUILD_TESTING)
     add_subdirectory(tests)
 endif()
+
