@@ -10,10 +10,8 @@
 
 #pragma once
 
-#include <concepts>
 #include <cstddef>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -46,8 +44,8 @@ class Logger {
 
   public:
     /* Constructors */
-    Logger() : _LoggerName("unnamed"), _State(0), _SdtOut(true){};
-    Logger(std::string name) : _LoggerName(std::move(name)), _State(0), _SdtOut(true){};
+    Logger() : _LoggerName("unnamed"), _State(0), _SdtOut(true) {};
+    Logger(std::string name) : _LoggerName(std::move(name)), _State(0), _SdtOut(true) {};
     Logger(const std::filesystem::path& OutPath, const std::string& FileName, const std::string& LogName = "",
            bool StdOut = true) {
         init(OutPath, FileName, LogName, StdOut);
@@ -62,19 +60,19 @@ class Logger {
     }
 
     /* Initializer (This actually initialize the fstream and checks paths) */
-    inline void init(const std::filesystem::path& OutPath, const std::string& FileName, const std::string& LogName = "",
-                     bool StdOut = true);
+    void init(const std::filesystem::path& OutPath, const std::string& FileName, const std::string& LogName = "",
+              bool StdOut = true);
 
     /* Log single liners for common stuff */
-    inline void log_string(const std::string& who, const std::string& what);
-    inline void log_timing(const std::string& who, const std::string& what, double time);
-    inline void log_memory(const std::string& who, const std::string& what, size_t memory);
-    inline void log_threadig(const std::string& who, size_t nThreads);
+    void log_string(const std::string& who, const std::string& what);
+    void log_timing(const std::string& who, const std::string& what, double time);
+    void log_memory(const std::string& who, const std::string& what, size_t memory);
+    void log_threadig(const std::string& who, size_t nThreads);
 
     /* Log from a stringstream, */
-    inline void log(std::stringstream& message);
-    inline void operator<<(std::stringstream& message);
-    inline void operator<<(const std::string& message);
+    void log(std::stringstream& message);
+    void operator<<(std::stringstream& message);
+    void operator<<(const std::string& message);
 };
 
 /*--------------------------------------------------------------------------------------------------
