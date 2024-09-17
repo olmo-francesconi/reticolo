@@ -18,25 +18,25 @@
 
 namespace reticolo {
 /* Randomize real-valued variable */
-template <RealValue ValType, RNGDist DistType, RNGGen GenType>
-inline void randomize(ValType& Val, const ValType Scale, DistType& Dist, GenType& Gen)
-    requires std::same_as<ValType, typename DistType::result_type>
+template <RealValue T, RNGDist TDist, RNGGen TGen>
+inline void randomize(T& Val, const T& Scale, TDist& Dist, TGen& Gen)
+    requires std::same_as<T, typename TDist::result_type>
 {
     Val = Scale * Dist(Gen);
 }
 
 /* Randomize complex-valued variable */
-template <ComplexValue ValType, RNGDist DistType, RNGGen GenType>
-inline void randomize(ValType& Val, const typename ValType::value_type Scale, DistType& Dist, GenType& Gen)
-    requires std::same_as<typename ValType::value_type, typename DistType::result_type>
+template <ComplexValue T, RNGDist TDist, RNGGen TGen>
+inline void randomize(T& Val, const typename T::value_type& Scale, TDist& Dist, TGen& Gen)
+    requires std::same_as<typename T::value_type, typename TDist::result_type>
 {
-    Val = Scale * ValType(Dist(Gen), Dist(Gen));
+    Val = Scale * T(Dist(Gen), Dist(Gen));
 }
 
 /* Randomize Hfield variable (GR metric perturbation) */
-template <RealValue T, RNGDist DistType, RNGGen GenType>
-inline void randomize(HField<T>& Val, T Scale, DistType& Dist, GenType& Gen)
-    requires std::same_as<T, typename DistType::result_type>
+template <RealValue T, RNGDist TDist, RNGGen TGen>
+inline void randomize(HField<T>& Val, T Scale, TDist& Dist, TGen& Gen)
+    requires std::same_as<T, typename TDist::result_type>
 {
     for (uint Comp = 0; Comp < HField<T>::NumComp; Comp++) {
         Val[Comp] = Scale * Dist(Gen);
