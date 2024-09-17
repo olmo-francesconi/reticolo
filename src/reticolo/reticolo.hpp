@@ -30,7 +30,7 @@ namespace reticolo {
 /*--------------------------------------------------------------------------------------------------
   reticolo_init()
 --------------------------------------------------------------------------------------------------*/
-void reticolo_init(int argc, char* argv[]) {
+inline void reticolo_init(int argc, char* argv[]) {
     /* Setup cxxopts arguments parser */
     cxxopts::Options Options("reticolo_run", "A thing that does stuff");
     Options.add_options()                                                       //
@@ -70,7 +70,7 @@ void reticolo_init(int argc, char* argv[]) {
 /*--------------------------------------------------------------------------------------------------
   reticolo_run()
 --------------------------------------------------------------------------------------------------*/
-void reticolo_run() {
+inline void reticolo_run() {
     /* For each key in Setup["workflows"] setup and run the simulation */
     auto ToDo = (ReticoloCore::getSetup())["workflows"];
 
@@ -107,7 +107,8 @@ void reticolo_run() {
 /*--------------------------------------------------------------------------------------------------
   reticolo_end()
 --------------------------------------------------------------------------------------------------*/
-void reticolo_end() {
+inline void reticolo_end() {
     /* General clean-up */
 };
+
 }  // namespace reticolo
