@@ -158,14 +158,14 @@ inline void reset(HField<T>& val) {
 --------------------------------------------------------------------------------------------------*/
 
 template <>
-auto make_H5_Type<HField<RealF>>() {
+inline auto make_H5_Type<HField<RealF>>() -> hid_t {
     std::array<hsize_t, 1> Dims = {HField<RealF>::NumComp};
     hid_t                  DataTypeHid = H5Tarray_create(H5T_NATIVE_FLOAT, 1, Dims.data());
     return DataTypeHid;
 }
 
 template <>
-auto make_H5_Type<HField<RealD>>() {
+inline auto make_H5_Type<HField<RealD>>() -> hid_t {
     std::array<hsize_t, 1> Dims = {HField<RealF>::NumComp};
     hid_t                  DataTypeHid = H5Tarray_create(H5T_NATIVE_DOUBLE, 1, Dims.data());
     return DataTypeHid;

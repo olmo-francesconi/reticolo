@@ -55,25 +55,25 @@ using RNGType = std::mt19937_64;
 --------------------------------------------------------------------------------------------------*/
 
 template <typename T>
-inline auto make_H5_Type();
+inline auto make_H5_Type() -> hid_t;
 
 template <>
-inline auto make_H5_Type<uint>() {
+inline auto make_H5_Type<uint>() -> hid_t {
     return H5T_NATIVE_UINT;
 }
 
 template <>
-inline auto make_H5_Type<RealF>() {
+inline auto make_H5_Type<RealF>() -> hid_t {
     return H5T_NATIVE_FLOAT;
 }
 
 template <>
-inline auto make_H5_Type<RealD>() {
+inline auto make_H5_Type<RealD>() -> hid_t {
     return H5T_NATIVE_DOUBLE;
 }
 
 template <>
-inline auto make_H5_Type<ComplexF>() {
+inline auto make_H5_Type<ComplexF>() -> hid_t {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(ComplexF));
     H5Tinsert(DataTypeHid, "re", 0, H5T_NATIVE_FLOAT);
     H5Tinsert(DataTypeHid, "im", sizeof(ComplexF) / 2, H5T_NATIVE_FLOAT);
@@ -81,7 +81,7 @@ inline auto make_H5_Type<ComplexF>() {
 }
 
 template <>
-inline auto make_H5_Type<ComplexD>() {
+inline auto make_H5_Type<ComplexD>() -> hid_t {
     hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(ComplexD));
     H5Tinsert(DataTypeHid, "re", 0, H5T_NATIVE_DOUBLE);
     H5Tinsert(DataTypeHid, "im", sizeof(ComplexD) / 2, H5T_NATIVE_DOUBLE);
