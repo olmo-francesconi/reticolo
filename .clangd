@@ -9,7 +9,7 @@ Diagnostics:
       [readability-magic-numbers, readability-function-cognitive-complexity]
     CheckOptions:
       readability-identifier-naming.VariableCase: CamelCase
-      readability-identifier-naming.VariableIgnoredRegexp: ^[_e]$
+      readability-identifier-naming.VariableIgnoredRegexp: ^[_ei]$
       readability-identifier-naming.ClassCase: CamelCase
       readability-identifier-naming.ClassMemberCase: CamelCase
       readability-identifier-naming.PrivateMemberCase: CamelCase
