@@ -13,8 +13,9 @@
 #include <H5Ipublic.h>
 #include <H5Tpublic.h>
 
-#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/types/core.hpp"
+#include "reticolo/core/tools/hdf5_helpers.hpp"  // IWYU pragma: keep
+#include "reticolo/core/types/complex.hpp"
+#include "reticolo/core/types/real.hpp"
 
 namespace reticolo::MMonteCarlo {
 /* Generic template declaration - requires the action type to be either real or complex */

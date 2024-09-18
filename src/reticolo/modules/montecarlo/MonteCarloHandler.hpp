@@ -24,16 +24,15 @@
 #include <string>
 #include <vector>
 
+#include "reticolo/core/tools/io_utils.hpp"
+#include "reticolo/core/tools/logger.hpp"
+#include "reticolo/core/tools/timer.hpp"
+#include "reticolo/core/types/real.hpp"
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/modules/factory/MCAlgorithmBase.hpp"
 #include "reticolo/modules/factory/MCAlgorithmFactory.hpp"
 #include "reticolo/modules/factory/ModuleBase.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloData.hpp"
-#include "reticolo/tools/io_utils.hpp"
-#include "reticolo/tools/logger.hpp"
-#include "reticolo/tools/timer.hpp"
-#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/types/core.hpp"
 #include "yaml-cpp/node/node.h"
 
 namespace fs = std::filesystem;
@@ -44,7 +43,7 @@ namespace reticolo::MMonteCarlo {
   MonteCarloHandler Class Declaration
 --------------------------------------------------------------------------------------------------*/
 
-template <class Action>
+template <class Action, class TGen = std::mt19937_64>
 class MonteCarloHandler : public ModuleBase {
     /* Define types and interface */
   public:
@@ -91,10 +90,10 @@ class MonteCarloHandler : public ModuleBase {
     std::vector<monte_carlo_data_type> _McStatsBuffer;  // MonteCarlo status buffer
     observables_type                   _Obs;            // latest measurements values
     std::vector<observables_type>      _ObsBuffer;      // Observables measurements buffer
-    unsigned long                      _NMeasurements;  // Total numebr of measurements
+    size_type                          _NMeasurements;  // Total numebr of measurements
 
     /* RNG */
-    RNGType                             _Rng;
+    TGen                                _Rng;
     std::normal_distribution<impl_type> _Norm;
 
     /* Timing and logging */
@@ -102,7 +101,7 @@ class MonteCarloHandler : public ModuleBase {
     IO::Logger _Logger;
 
     /* File output utilities */
-    void saveConfiguration(uint Iter);  // Save current configuration stored in _Lattice
+    void saveConfiguration(size_type Iter);  // Save current configuration stored in _Lattice
 
     /* Performs measure stuff, update AVGs and STDs and write if bufffer */
     void measure_utility(const std::string& RunName, unsigned long Iteration);
@@ -111,8 +110,8 @@ class MonteCarloHandler : public ModuleBase {
 /*--------------------------------------------------------------------------------------------------
     Public Methods Implmentations
 --------------------------------------------------------------------------------------------------*/
-template <class Action>
-inline void MonteCarloHandler<Action>::setup(const YAML::Node& Config) {
+template <class Action, class TGen>
+inline void MonteCarloHandler<Action, TGen>::setup(const YAML::Node& Config) {
     /* Begin initialization */
     _Timer.reset();
 
@@ -195,13 +194,13 @@ inline void MonteCarloHandler<Action>::setup(const YAML::Node& Config) {
                    std::format("Monte Carlo Handler - Initialization completed in {:.3f} ms\n", _Timer.elapsed_ms());
 }
 
-template <class Action>
-inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
+template <class Action, class TGen>
+inline void MonteCarloHandler<Action, TGen>::execute(const YAML::Node& RunConfig) {
     /* Parse configuration from YAML::Node */
     auto      RunName = RunConfig["name"].as<std::string>();
-    auto      NMeasures = RunConfig["measures"].as<uint>();
-    auto      MeasureStep = RunConfig["measure_step"].as<uint>();
-    auto      NTherm = RunConfig["therm_steps"].as<uint>();
+    auto      NMeasures = RunConfig["measures"].as<size_type>();
+    auto      MeasureStep = RunConfig["measure_step"].as<size_type>();
+    auto      NTherm = RunConfig["therm_steps"].as<size_type>();
     auto      InitializeField = RunConfig["field_init"].as<bool>();
     bool      HotStart = false;
     impl_type HotStartScale = 1.0;
@@ -213,8 +212,8 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
     }
 
     /* Setup HDF5 output */
-    uint ChunkSize = 10000;
-    uint TotMeasure = NMeasures / MeasureStep;
+    size_type ChunkSize = 10000;
+    size_type TotMeasure = NMeasures / MeasureStep;
     if (TotMeasure < ChunkSize) {
         ChunkSize = TotMeasure;
     }
@@ -252,7 +251,7 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
         _Logger << IO::LI_time() + "[" + RunName + "] - Thermalization started...\n";
         _Logger << IO::LI_void() + std::format("  thermalizatoin steps : {}\n", NTherm);
         _Timer.reset();
-        for (uint Iter = 0; Iter < NTherm; Iter++) {
+        for (size_type Iter = 0; Iter < NTherm; Iter++) {
             _Updater->updateField(*_Field, *_Action, _McStats, _Rng);
         }
         _Logger << IO::LI_time() +
@@ -273,7 +272,7 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
     _Logger << IO::LI_void() + "           Mesure step : " + std::to_string(MeasureStep) + '\n';
     _Logger << IO::LI_void() + "    Total measurements : " + std::to_string(TotMeasure) + '\n';
 
-    for (uint Iteration = 1; Iteration <= NMeasures; Iteration++) {
+    for (size_type Iteration = 1; Iteration <= NMeasures; Iteration++) {
         // perform a sweep
         _Updater->updateField(*_Field, *_Action, _McStats, _Rng);
 
@@ -305,8 +304,8 @@ inline void MonteCarloHandler<Action>::execute(const YAML::Node& RunConfig) {
 //     _Field.save_Configuration(FileName);
 // }
 
-template <class Action>
-inline void MonteCarloHandler<Action>::measure_utility(const std::string& RunName, unsigned long Iteration) {
+template <class Action, class TGen>
+inline void MonteCarloHandler<Action, TGen>::measure_utility(const std::string& RunName, unsigned long Iteration) {
     // Measure observables
     _Obs = _Action->Measure(*_Field);
 
