@@ -21,6 +21,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,7 @@
 #include "reticolo/core/tools/logger.hpp"
 #include "reticolo/core/tools/timer.hpp"
 #include "reticolo/core/types/real.hpp"
+#include "reticolo/lattice/indexing.hpp"
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/modules/factory/MCAlgorithmBase.hpp"
 #include "reticolo/modules/factory/MCAlgorithmFactory.hpp"
@@ -165,15 +167,40 @@ inline void MonteCarloHandler<Action, TGen>::setup(const YAML::Node& Config) {
     _Action = std::make_unique<Action>();
     _Action->setup(Config["action"]["parameters"]);
 
-    _Field = std::make_unique<Lattice<field_type>>(Config["lattice"]["size"].as<std::vector<size_type>>());
+    /* check reasonable sizes for the lattice */
+    auto                TmpSizes = Config["lattice"]["size"].as<std::vector<size_type>>();
+    Indexing::size_type TmpVol = 1;
+    Indexing::size_type NewVol = 1;
+    for (const auto& Size : TmpSizes) {
+        NewVol *= Size;
+        if (NewVol < TmpVol) {
+            throw std::runtime_error("Error allocationg the Lattice: maximun size exceeded");
+        }
+        TmpVol = NewVol;
+    }
+
+    if (TmpVol > Indexing::max_size / TmpSizes.size()) {
+        throw std::runtime_error(
+            std::format("Error allocationg the Lattice: maximun index size exceeded [Max Volume = {} (~{}^{})]",
+                        Indexing::max_size / TmpSizes.size() + 1,                                        //
+                        (int)std::pow(Indexing::max_size / TmpSizes.size() + 1, 1.0 / TmpSizes.size()),  //
+                        TmpSizes.size()));
+    }
+
+    _Field = std::make_unique<Lattice<field_type>>(TmpSizes);
+    if (_Field->size() == 0) {
+        throw std::runtime_error("Error allocationg the Lattice: possible cause is maximum memeory size exceeded");
+    }
 
     _Action->lattice_sync(*_Field);
-
     /* Log Action and Lattice parameters */
+    auto FieldRamSize = _Field->getNsites() * sizeof(field_type);
+    auto IndexRamSize = _Field->getDim() * _Field->getNsites() * sizeof(size_type) * 2;
     _Logger << IO::LI_void() + "[" + _HandlerName + "] - Action-info\n";
     _Logger << IO::LI_void() + "                  name : " + _Action->GetName() + "\n";
     _Logger << IO::LI_void() + "            parameters : " + _Action->GetParameters() + "\n";
-    _Logger << IO::LI_void() + "               lattice : " + IO::print(_Field->getSizes()) + "\n";
+    _Logger << IO::LI_void() + "               lattice : " + IO::print(_Field->getSizes()) +  //
+                   +" - field: " + IO::pretty_bytes(FieldRamSize) + ", index: " + IO::pretty_bytes(IndexRamSize) + "\n";
 
     /* Phase quenching warning */
     if (!RealValue<action_type>) {
