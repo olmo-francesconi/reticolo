@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <array>
+#include <concepts>
 #include <cstddef>
 #include <format>
 #include <iostream>
@@ -155,6 +156,20 @@ inline void reset(HField<T>& val) {
 }
 
 /*--------------------------------------------------------------------------------------------------
+    randomize
+--------------------------------------------------------------------------------------------------*/
+template <RealValue T, typename TDist, typename TGen>
+inline void randomize(HField<T>& Val, T Scale, TDist& Dist, TGen& Gen)
+    requires std::same_as<T, typename TDist::result_type>
+{
+    {
+        for (size_t Comp = 0; Comp < 10; Comp++) {
+            Val[Comp] = Scale * Dist(Gen);
+        }
+    }
+}
+
+/*--------------------------------------------------------------------------------------------------
     Hdf5 Types for core DataTypes
 --------------------------------------------------------------------------------------------------*/
 
@@ -181,7 +196,7 @@ namespace HField_math {
 // compute res = c * (A - B) element wise
 template <RealValue T>
 inline void diff(HField<T>& res, const HField<T>& lhs, const HField<T>& rhs, const double Offset = 1.0) {
-    for (size_t Comp = 0; Comp < HField<T>::NumComp; Comp++) {
+    for (size_t Comp = 0; Comp < 10; Comp++) {
         res[Comp] = Offset * (lhs[Comp] - rhs[Comp]);
     }
 }
@@ -189,7 +204,7 @@ inline void diff(HField<T>& res, const HField<T>& lhs, const HField<T>& rhs, con
 // compute res = c * (A + B) element wise
 template <RealValue T>
 inline void sum(HField<T>& res, const HField<T>& lhs, const HField<T>& rhs, const double Offset = 1.0) {
-    for (size_t Comp = 0; Comp < HField<T>::NumComp; Comp++) {
+    for (size_t Comp = 0; Comp < 10; Comp++) {
         res[Comp] = Offset * (lhs[Comp] + rhs[Comp]);
     }
 }
@@ -197,7 +212,7 @@ inline void sum(HField<T>& res, const HField<T>& lhs, const HField<T>& rhs, cons
 // compute res = a * B element-wise
 template <RealValue T>
 inline void prod(HField<T>& res, const T lhs, const HField<T>& rhs) {
-    for (size_t Comp = 0; Comp < HField<T>::NumComp; Comp++) {
+    for (size_t Comp = 0; Comp < 10; Comp++) {
         res[Comp] = lhs * rhs[Comp];
     }
 }
