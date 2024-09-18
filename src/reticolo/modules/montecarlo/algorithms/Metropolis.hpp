@@ -27,10 +27,6 @@
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/modules/factory/MCAlgorithmBase.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloData.hpp"
-#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/types/core.hpp"
-#include "reticolo/types/core_math.hpp"
-#include "reticolo/types/random.hpp"
 #include "yaml-cpp/node/node.h"
 
 namespace reticolo::MMonteCarlo {
@@ -38,24 +34,25 @@ namespace reticolo::MMonteCarlo {
 /*--------------------------------------------------------------------------------------------------
   Metropolis algorithm class declaration
 --------------------------------------------------------------------------------------------------*/
-template <class Action>
-class Metropolis : public MCAlgorithmBase<Action> {
+template <class Action, class TGen = std::mt19937_64>
+class Metropolis : public MCAlgorithmBase<Action, TGen> {
   public:
     /* Types */
     using action_type = Action::action_type;
     using field_type = Action::field_type;
     using impl_type = Action::impl_type;
     using lattice_type = Lattice<field_type>;
+    using size_type = Lattice<field_type>::size_type;
     using monte_carlo_data_type = MMonteCarlo::data<action_type>;
 
     /* Constructor */
     Metropolis() = default;
 
     /* setup */
-    void setup(const YAML::Node& Params, const Lattice<field_type>& Field) override;
+    void setup(const YAML::Node& Params, const lattice_type& Field) override;
 
     /* execution */
-    void updateField(Lattice<field_type>& field, Action& action, monte_carlo_data_type& state, RNGType& rng) override;
+    void updateField(lattice_type& field, Action& action, monte_carlo_data_type& state, TGen& rng) override;
 
   private:
     /* Metropolis settings */
@@ -70,8 +67,8 @@ class Metropolis : public MCAlgorithmBase<Action> {
 /*--------------------------------------------------------------------------------------------------
   Metropolis<Action>::setup(...) implementation
 --------------------------------------------------------------------------------------------------*/
-template <class Action>
-inline void Metropolis<Action>::setup(const YAML::Node& Params, const Lattice<field_type>& Field) {
+template <class Action, class TGen>
+inline void Metropolis<Action, TGen>::setup(const YAML::Node& Params, const lattice_type& Field) {
     /* Parse parameters */
     _ProposalWidth = Params["prop_width"].as<impl_type>();
 
@@ -84,13 +81,13 @@ inline void Metropolis<Action>::setup(const YAML::Node& Params, const Lattice<fi
 /*--------------------------------------------------------------------------------------------------
   Metropolis<Action>::updateField(...) implementation
 --------------------------------------------------------------------------------------------------*/
-template <class Action>
-inline void Metropolis<Action>::updateField(Lattice<field_type>& field, Action& action, monte_carlo_data_type& state,
-                                            RNGType& rng) {
-    uint        Acc = 0;       // acceptance
+template <class Action, class TGen>
+inline void Metropolis<Action, TGen>::updateField(lattice_type& field, Action& action, monte_carlo_data_type& state,
+                                                  TGen& rng) {
+    size_type   Acc = 0;       // acceptance
     action_type SVarTot(0.0);  // cumulative action variation
     // Loop over the entire lattice
-    for (uint Site = 0; Site < field.getNsites(); Site++) {
+    for (size_type Site = 0; Site < field.getNsites(); Site++) {
         // Generate a randomized local field variation
         field_type FieldVar;  // local field variation
         randomize(FieldVar, _ProposalWidth, _Norm, rng);
