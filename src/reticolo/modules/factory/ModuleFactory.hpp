@@ -19,9 +19,9 @@
 
 #include "reticolo/action/RelativisticBoseGas.hpp"
 #include "reticolo/action/WeakFieldEuclideanGR.hpp"
+#include "reticolo/core/types/real.hpp"
 #include "reticolo/modules/factory/ModuleBase.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloHandler.hpp"
-#include "reticolo/types/core.hpp"
 
 namespace reticolo {
 
@@ -67,9 +67,9 @@ class ModuleFactory {
                     case Actions::RelativisticBoseGasD:
                         return std::make_unique<MMonteCarlo::MonteCarloHandler<action::RelativisticBoseGas<RealD>>>();
                     case Actions::WeakFieldEuclideanGRF:
-                        return std::make_unique<MMonteCarlo::MonteCarloHandler<action::WeakFieldEuclideanGRF>>();
+                        return std::make_unique<MMonteCarlo::MonteCarloHandler<action::WeakFieldEuclideanGR<RealF>>>();
                     case Actions::WeakFieldEuclideanGRD:
-                        return std::make_unique<MMonteCarlo::MonteCarloHandler<action::WeakFieldEuclideanGRD>>();
+                        return std::make_unique<MMonteCarlo::MonteCarloHandler<action::WeakFieldEuclideanGR<RealD>>>();
                     default:
                         throw std::runtime_error("Action not valid for selected module");
                         return nullptr;
