@@ -12,7 +12,12 @@ target_include_directories(${PROJECT_NAME} INTERFACE .)
 # All users of this library will need at least C++20
 target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_20)
 
-
+# Set the lattice size variable
+if (DEFINED SMALL_LATTICE)
+    if (SMALL_LATTICE)
+        target_compile_definitions(${PROJECT_NAME} INTERFACE SMALL_LATTICE)
+    endif()
+endif()
 
 
 # # Library
