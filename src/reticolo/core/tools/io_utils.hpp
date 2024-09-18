@@ -28,12 +28,14 @@
 #include <format>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "reticolo/core/tools/hdf5_helpers.hpp"
 #include "reticolo/core/tools/timer.hpp"
 #include "reticolo/core/types/complex.hpp"
 #include "reticolo/core/types/real.hpp"
+
 namespace reticolo::IO {
 
 /*--------------------------------------------------------------------------------------------------
@@ -122,7 +124,11 @@ inline auto print(T val) -> std::string {
 }
 
 inline auto print(std::size_t val) -> std::string { return std::format("{:}", val); }
-inline auto print(uint val) -> std::string { return std::format("{:}", val); }
+template <typename T>
+    requires std::is_integral_v<T>
+inline auto print(T val) -> std::string {
+    return std::format("{:}", val);
+}
 
 /* Print Vectors in standard format */
 template <typename T>
