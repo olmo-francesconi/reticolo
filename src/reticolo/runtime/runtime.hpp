@@ -17,11 +17,11 @@
 #include <string>
 
 #include "cxxopts.hpp"
+#include "reticolo/core/tools/io_utils.hpp"
+#include "reticolo/core/tools/logger.hpp"
 #include "reticolo/modules/factory/ModuleBase.hpp"
 #include "reticolo/modules/factory/ModuleFactory.hpp"
 #include "reticolo/runtime/ReticoloCore.hpp"
-#include "reticolo/tools/io_utils.hpp"
-#include "reticolo/tools/logger.hpp"
 #include "yaml-cpp/exceptions.h"
 #include "yaml-cpp/node/node.h"
 
