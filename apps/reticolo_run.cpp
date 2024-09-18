@@ -1,4 +1,4 @@
-#include "reticolo/Reticolo.hpp"
+#include "reticolo/reticolo.hpp"
 
 using namespace reticolo;
 
