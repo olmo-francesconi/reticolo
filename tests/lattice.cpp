@@ -78,12 +78,14 @@ void printHistogram(const std::vector<double>& data, int binCount = 10, int maxB
     }
 }
 
-auto main(int argc, char* argv[]) -> int {
-    Timer               Time;
-    Indexing::size_type Len = std::stoul(argv[1]);
-    Indexing::size_type Rep = std::stoul(argv[2]);
+using i_t = Indexing::size_type;
 
-    const std::vector<Indexing::size_type> Size({Len, Len, Len, Len});
+auto main(int argc, char* argv[]) -> int {
+    Timer Time;
+    i_t   Len = std::stoul(argv[1]);
+    i_t   Rep = std::stoul(argv[2]);
+
+    const std::vector<i_t> Size({Len, Len, Len, Len});
     Time.reset();
     Lattice<ComplexD> LatA(Size);
     std::cout << "Lattice object initialized in " << Time.elapsed_ms() << " ms\n";
@@ -100,7 +102,7 @@ auto main(int argc, char* argv[]) -> int {
     ComplexD Tot = 0.0;
 
     std::cout << "\n### fill lattice with value (for loop) ###\n";
-    for (uint Idx = 0; Idx < Rep; Idx++) {
+    for (i_t Idx = 0; Idx < Rep; Idx++) {
         Tot = 0.0;
         std::cout << std::format("\r[{:>4d}/{:<4d}]", Idx, Rep) << std::flush;
         Time.reset();
@@ -113,7 +115,7 @@ auto main(int argc, char* argv[]) -> int {
     printHistogram(Times);
 
     std::cout << "\n### accumulate lattice ###\n";
-    for (uint Idx = 0; Idx < Rep; Idx++) {
+    for (i_t Idx = 0; Idx < Rep; Idx++) {
         Tot = 0.0;
         std::cout << std::format("\r[{:>4d}/{:<4d}]", Idx, Rep) << std::flush;
 
@@ -128,12 +130,12 @@ auto main(int argc, char* argv[]) -> int {
     std::cout << "garbage -> " << Tot << "\n";
 
     std::cout << "\n### sum over all next neighbours ###\n";
-    for (uint Idx = 0; Idx < Rep; Idx++) {
+    for (i_t Idx = 0; Idx < Rep; Idx++) {
         Tot = 0.0;
         // std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
         Time.reset();
-        for (uint Site = 0; Site < LatA.getNsites(); Site++) {
-            for (uint Dir = 0; Dir < LatA.getDim(); Dir++) {
+        for (i_t Site = 0; Site < LatA.getNsites(); Site++) {
+            for (i_t Dir = 0; Dir < LatA.getDim(); Dir++) {
                 Tot += LatA.n(Site, Dir);
             }
         }
@@ -144,12 +146,12 @@ auto main(int argc, char* argv[]) -> int {
     std::cout << "garbage -> " << Tot << "\n";
 
     std::cout << "\n### sum over all prev neighbours ###\n";
-    for (uint Idx = 0; Idx < Rep; Idx++) {
+    for (i_t Idx = 0; Idx < Rep; Idx++) {
         Tot = 0.0;
         // std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
         Time.reset();
-        for (uint Site = 0; Site < LatA.getNsites(); Site++) {
-            for (uint Dir = 0; Dir < LatA.getDim(); Dir++) {
+        for (i_t Site = 0; Site < LatA.getNsites(); Site++) {
+            for (i_t Dir = 0; Dir < LatA.getDim(); Dir++) {
                 Tot += LatA.p(Site, Dir);
             }
         }
@@ -160,13 +162,13 @@ auto main(int argc, char* argv[]) -> int {
     std::cout << "garbage -> " << Tot << "\n";
 
     std::cout << "\n### sum over all next-to-next neighbours ###\n";
-    for (uint Idx = 0; Idx < Rep; Idx++) {
+    for (i_t Idx = 0; Idx < Rep; Idx++) {
         Tot = 0.0;
         // std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
         Time.reset();
-        for (uint Site = 0; Site < LatA.getNsites(); Site++) {
-            for (uint Dir1 = 0; Dir1 < LatA.getDim(); Dir1++) {
-                for (uint Dir2 = 0; Dir2 < LatA.getDim(); Dir2++) {
+        for (i_t Site = 0; Site < LatA.getNsites(); Site++) {
+            for (i_t Dir1 = 0; Dir1 < LatA.getDim(); Dir1++) {
+                for (i_t Dir2 = 0; Dir2 < LatA.getDim(); Dir2++) {
                     Tot += LatA.nn(Site, {Dir1, Dir2});
                 }
             }
@@ -178,13 +180,13 @@ auto main(int argc, char* argv[]) -> int {
     std::cout << "garbage -> " << Tot << "\n";
 
     std::cout << "\n### sum over all prev-to-prev neighbours ###\n";
-    for (uint Idx = 0; Idx < Rep; Idx++) {
+    for (i_t Idx = 0; Idx < Rep; Idx++) {
         Tot = 0.0;
         // std::cout << std::format("\r[{:>4d} / {:<4d}]", Idx, Rep) << std::flush;
         Time.reset();
-        for (uint Site = 0; Site < LatA.getNsites(); Site++) {
-            for (uint Dir1 = 0; Dir1 < LatA.getDim(); Dir1++) {
-                for (uint Dir2 = 0; Dir2 < LatA.getDim(); Dir2++) {
+        for (i_t Site = 0; Site < LatA.getNsites(); Site++) {
+            for (i_t Dir1 = 0; Dir1 < LatA.getDim(); Dir1++) {
+                for (i_t Dir2 = 0; Dir2 < LatA.getDim(); Dir2++) {
                     Tot += LatA.pp(Site, {Dir1, Dir2});
                 }
             }
