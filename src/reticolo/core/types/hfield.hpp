@@ -22,8 +22,8 @@
 #include <iostream>
 #include <utility>
 
-#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/types/core.hpp"
+#include "reticolo/core/tools/hdf5_helpers.hpp"  // IWYU pragma: keep
+#include "reticolo/core/types/real.hpp"
 
 // look-up table for the symmetric h_\mu\nu components
 // These speed-up data access by referencing directly the data in the linearized
@@ -46,57 +46,58 @@
 #define MUNU_33 9
 
 namespace reticolo {
-// Basic matrix class to store h fields
-template <RealValue T>
-struct HField {
-    static const size_t NumComp = 10;
 
-    std::array<T, NumComp> _Mat;
+/*--------------------------------------------------------------------------------------------------
+    Type definition
+--------------------------------------------------------------------------------------------------*/
+template <RealValue T>
+struct HField : public std::array<T, 10> {
+    // static const size_t NumComp = 10;
 
     HField() = default;
-    HField(T val) { std::fill(_Mat.begin(), _Mat.end(), val); }
+    HField(T val) { std::fill((*this).begin(), (*this).end(), val); }
 
     ~HField() = default;
 
     // Array-like access operators
-    auto operator[](size_t index) -> T& { return _Mat[index]; };
-    auto operator[](size_t index) const -> const T& { return _Mat[index]; };
+    // auto operator[](size_t index) -> T& { return _Mat[index]; };
+    // auto operator[](size_t index) const -> const T& { return _Mat[index]; };
     auto operator()(size_t mu, size_t nu) -> T& {
         if (nu < mu) {
             std::swap(mu, nu);
         }
-        return _Mat[4 * mu + nu - (mu * (mu + 1)) / 2];
+        return (*this)[4 * mu + nu - (mu * (mu + 1)) / 2];
     }
 
     auto operator()(size_t mu, size_t nu) const -> const T& {
         if (nu < mu) {
             std::swap(mu, nu);
         }
-        return _Mat[4 * mu + nu - (mu * (mu + 1)) / 2];
+        return (*this)[4 * mu + nu - (mu * (mu + 1)) / 2];
     }
 
     auto operator=(const HField& other) -> HField& {
-        std::copy(other._Mat.begin(), other._Mat.end(), _Mat.begin());
+        std::copy(other.begin(), other.end(), (*this).begin());
         return *this;
     }
 
     auto operator+=(const HField& other) -> HField& {
-        for (size_t Comp = 0; Comp < NumComp; Comp++) {
-            this->_Mat[Comp] += other._Mat[Comp];
+        for (size_t i = 0; i < 10; i++) {
+            (*this)[i] += other[i];
         }
         return *this;
     }
 
     auto operator-=(const HField& other) -> HField& {
-        for (size_t Comp = 0; Comp < NumComp; Comp++) {
-            this->_Mat[Comp] -= other._Mat[Comp];
+        for (size_t i = 0; i < 10; i++) {
+            (*this)[i] -= other[i];
         }
         return *this;
     }
 
-    auto operator*=(const double& other) -> HField& {
-        for (size_t Comp = 0; Comp < NumComp; Comp++) {
-            this->_Mat[Comp] *= other;
+    auto operator*=(const T& val) -> HField& {
+        for (size_t i = 0; i < 10; i++) {
+            (*this)[i] *= val;
         }
         return *this;
     }
@@ -124,17 +125,17 @@ struct HField {
 
 template <RealValue T>
 inline auto HField<T>::trace() const -> T {
-    return _Mat[0] + _Mat[4] + _Mat[7] + _Mat[9];
+    return (*this)[0] + (*this)[4] + (*this)[7] + (*this)[9];
 }
 
-template <RealValue T>
-inline auto HField<T>::dot() const -> T {
-    T Res = 0.0;
-    for (const auto& Elem : _Mat) {
-        Res += Elem * Elem;
-    }
-    return Res;
-}
+// template <RealValue T>
+// inline auto HField<T>::dot() const -> T {
+//     T Res = 0.0;
+//     for (const auto& Elem : (*this)) {
+//         Res += Elem * Elem;
+//     }
+//     return Res;
+// }
 
 template <RealValue T>
 inline void HField<T>::print() {
@@ -159,14 +160,14 @@ inline void reset(HField<T>& val) {
 
 template <>
 inline auto make_H5_Type<HField<RealF>>() -> hid_t {
-    std::array<hsize_t, 1> Dims = {HField<RealF>::NumComp};
+    std::array<hsize_t, 1> Dims = {10};
     hid_t                  DataTypeHid = H5Tarray_create(H5T_NATIVE_FLOAT, 1, Dims.data());
     return DataTypeHid;
 }
 
 template <>
 inline auto make_H5_Type<HField<RealD>>() -> hid_t {
-    std::array<hsize_t, 1> Dims = {HField<RealF>::NumComp};
+    std::array<hsize_t, 1> Dims = {10};
     hid_t                  DataTypeHid = H5Tarray_create(H5T_NATIVE_DOUBLE, 1, Dims.data());
     return DataTypeHid;
 }

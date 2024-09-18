@@ -14,8 +14,9 @@
 #include <numeric>
 #include <vector>
 
-#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/types/core.hpp"
+#include "reticolo/core/concepts.hpp"  // IWYU pragma: keep
+#include "reticolo/core/core.hpp"
+#include "reticolo/core/types/real.hpp"
 
 namespace reticolo {
 
@@ -25,37 +26,37 @@ namespace reticolo {
 
 /* Reset/Initialization methods */
 
-template <RealValue T>
-inline void reset(T& val) {
-    val = 0.0;
-}
+// template <RealValue T>
+// inline void reset(T& val) {
+//     val = 0.0;
+// }
 
-template <ComplexValue T>
-inline void reset(T& val) {
-    val = {0.0, 0.0};
-}
+// template <ComplexValue T>
+// inline void reset(T& val) {
+//     val = {0.0, 0.0};
+// }
 
 /* Dot and other Multiplication */
 
-template <RealValue T>
-inline auto dot(const T& val) -> T {
-    return val * val;
-}
+// template <RealValue T>
+// inline auto dot(const T& val) -> T {
+//     return val * val;
+// }
 
-template <RealValue T>
-inline auto dot(const T& lhs, const T& rhs) -> T {
-    return lhs * rhs;
-}
+// template <RealValue T>
+// inline auto dot(const T& lhs, const T& rhs) -> T {
+//     return lhs * rhs;
+// }
 
-template <ComplexValue T>
-inline auto dot(const T& val) -> T::value_type {
-    return val.real() * val.real() + val.imag() * val.imag();
-}
+// template <ComplexValue T>
+// inline auto dot(const T& val) -> T::value_type {
+//     return val.real() * val.real() + val.imag() * val.imag();
+// }
 
-template <ComplexValue T>
-inline auto dot(const T& lhs, const T& rhs) -> T::value_type {
-    return lhs.real() * rhs.real() + lhs.imag() * rhs.imag();
-}
+// template <ComplexValue T>
+// inline auto dot(const T& lhs, const T& rhs) -> T::value_type {
+//     return lhs.real() * rhs.real() + lhs.imag() * rhs.imag();
+// }
 
 template <typename T>
 inline auto dot(const std::vector<T>& vect) -> T {
@@ -84,14 +85,14 @@ inline void advance_coord(const std::vector<T>& sizes, std::vector<T>& coord) {
     }
 }
 
-/* Complex -> Real casting/projecting/quenching */
-template <RealValue T>
-inline auto make_real(const T& Var) -> T {
-    return Var;
-}
+// /* Complex -> Real casting/projecting/quenching */
+// template <RealValue T>
+// inline auto make_real(const T& Var) -> T {
+//     return Var;
+// }
 
-template <ComplexValue T>
-inline auto make_real(const T& Var) -> T::value_type {
-    return Var.real();
-}
+// template <ComplexValue T>
+// inline auto make_real(const T& Var) -> T::value_type {
+//     return Var.real();
+// }
 }  // namespace reticolo

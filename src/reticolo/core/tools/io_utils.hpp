@@ -30,9 +30,9 @@
 #include <string>
 #include <vector>
 
-#include "reticolo/tools/timer.hpp"
-#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/types/core.hpp"
+#include "reticolo/core/tools/timer.hpp"
+#include "reticolo/core/types/complex.hpp"
+#include "reticolo/core/types/real.hpp"
 
 namespace reticolo::IO {
 
@@ -61,7 +61,7 @@ inline auto pretty_welcome() -> std::string {
 inline auto pretty_bytes(size_t bytes) -> std::string {
     std::array<std::string, 7> Suffixes({" B", "KB", "MB", "GB", "TB", "PB", "EB"});
 
-    uint   SuffixIndex = 0;  // Pretty suffix index
+    int    SuffixIndex = 0;  // Pretty suffix index
     double Count = bytes;    // Pretty value
     while (Count >= 1024 && SuffixIndex < Suffixes.size()) {
         SuffixIndex++;
@@ -121,6 +121,7 @@ inline auto print(T val) -> std::string {
     return std::format("{:+8e} {:+8e}I", val.real(), val.imag());
 }
 
+inline auto print(std::size_t val) -> std::string { return std::format("{:}", val); }
 inline auto print(uint val) -> std::string { return std::format("{:}", val); }
 
 /* Print Vectors in standard format */
@@ -128,7 +129,7 @@ template <typename T>
 inline auto print(const std::vector<T>& Vect) -> std::string {
     std::stringstream Res;
     Res << "[" << print(Vect[0]);
-    for (uint Comp = 1; Comp < Vect.size(); Comp++) {
+    for (std::size_t Comp = 1; Comp < Vect.size(); Comp++) {
         Res << ", " << print(Vect[Comp]);
     }
     Res << "]";
