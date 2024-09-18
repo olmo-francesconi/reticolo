@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <format>
 #include <memory>
+#include <random>
 #include <stdexcept>
 #include <string>
 
@@ -22,8 +23,8 @@
 
 namespace reticolo::MMonteCarlo::AlgorithmFactory {
 
-template <class Action>
-static auto MakeUpdater(const std::string& name) -> std::unique_ptr<MCAlgorithmBase<Action>> {
+template <class Action, class TGen = std::mt19937_64>
+static auto MakeUpdater(const std::string& name) -> std::unique_ptr<MCAlgorithmBase<Action, TGen>> {
     if constexpr (Action::IsMetropolisCapable) {
         if ((name == "Metropolis")) {
             return std::make_unique<Metropolis<Action>>();
