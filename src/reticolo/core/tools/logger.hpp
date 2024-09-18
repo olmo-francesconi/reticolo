@@ -19,7 +19,7 @@
 #include <string>
 #include <utility>
 
-#include "reticolo/tools/io_utils.hpp"
+#include "reticolo/core/tools/io_utils.hpp"
 
 namespace reticolo::IO {
 
@@ -44,8 +44,8 @@ class Logger {
 
   public:
     /* Constructors */
-    Logger() : _LoggerName("unnamed"), _State(0), _SdtOut(true) {};
-    Logger(std::string name) : _LoggerName(std::move(name)), _State(0), _SdtOut(true) {};
+    Logger() : _LoggerName("unnamed"), _State(0), _SdtOut(true){};
+    Logger(std::string name) : _LoggerName(std::move(name)), _State(0), _SdtOut(true){};
     Logger(const std::filesystem::path& OutPath, const std::string& FileName, const std::string& LogName = "",
            bool StdOut = true) {
         init(OutPath, FileName, LogName, StdOut);
