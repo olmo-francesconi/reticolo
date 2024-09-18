@@ -35,7 +35,6 @@ inline auto dot(const std::vector<T>& vec1, const std::vector<T>& vec2) -> T {
 
 template <typename T>
 inline void advance_coord(const std::vector<T>& sizes, std::vector<T>& coord) {
-    assert(sizes.size() == coord.size());
     coord.back()++;
     for (std::size_t Dir = sizes.size() - 1; Dir > 0; Dir--) {
         if (coord[Dir] == sizes[Dir]) {
