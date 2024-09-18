@@ -30,10 +30,10 @@
 #include <string>
 #include <vector>
 
+#include "reticolo/core/tools/hdf5_helpers.hpp"
 #include "reticolo/core/tools/timer.hpp"
 #include "reticolo/core/types/complex.hpp"
 #include "reticolo/core/types/real.hpp"
-
 namespace reticolo::IO {
 
 /*--------------------------------------------------------------------------------------------------
