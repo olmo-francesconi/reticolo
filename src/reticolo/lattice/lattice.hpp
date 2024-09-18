@@ -20,10 +20,9 @@
 #include <string>
 #include <vector>
 
+#include "reticolo/core/tools/io_utils.hpp"
+#include "reticolo/core/types/coord.hpp"
 #include "reticolo/lattice/indexing.hpp"
-#include "reticolo/tools/io_utils.hpp"
-#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/types/core.hpp"
 
 namespace reticolo {
 

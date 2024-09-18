@@ -20,10 +20,10 @@
 #include <string>
 
 #include "reticolo/action/actionBase.hpp"
+#include "reticolo/core/tools/hdf5_helpers.hpp"  // IWYU pragma: keep
+#include "reticolo/core/types/coord.hpp"
+#include "reticolo/core/types/real.hpp"
 #include "reticolo/lattice/lattice.hpp"
-#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/types/core.hpp"
-#include "reticolo/types/core_math.hpp"
 #include "yaml-cpp/node/node.h"
 
 namespace reticolo {
@@ -39,6 +39,7 @@ class RelativisticBoseGas : public ActionBase<std::complex<TImpl>, std::complex<
     using base_type = ActionBase<std::complex<TImpl>, std::complex<TImpl>, TImpl>;
     using action_type = base_type::action_type;
     using field_type = base_type::field_type;
+    using size_type = base_type::size_type;
     using impl_type = TImpl;
     static constexpr int Dims = 4;     // Dimensions of the action
     static constexpr int Stencil = 2;  // Minimum step size for multi-thread safety
@@ -53,8 +54,8 @@ class RelativisticBoseGas : public ActionBase<std::complex<TImpl>, std::complex<
         TImpl lambda;
         TImpl eta;
         TImpl mu;
-        Params() : lambda(1.0), eta(9.0), mu(0) {};
-        Params(TImpl lambda, TImpl eta, TImpl chem_mu) : lambda(lambda), eta(eta), mu(chem_mu) {};
+        Params() : lambda(1.0), eta(9.0), mu(0){};
+        Params(TImpl lambda, TImpl eta, TImpl chem_mu) : lambda(lambda), eta(eta), mu(chem_mu){};
     } p;
 
     /* Observables */
@@ -87,8 +88,8 @@ class RelativisticBoseGas : public ActionBase<std::complex<TImpl>, std::complex<
     /* Gloabal and local action computations */
 
     auto compute_S(Lattice<field_type>& field) -> action_type override;
-    auto compute_S_loc(Lattice<field_type>& field, uint site) -> action_type override;
-    auto compute_dS_loc(Lattice<field_type>& field, const field_type& dphi, uint site) -> action_type override;
+    auto compute_S_loc(Lattice<field_type>& field, size_type site) -> action_type override;
+    auto compute_dS_loc(Lattice<field_type>& field, const field_type& dphi, size_type site) -> action_type override;
 
     /* HMC methods */
     void compute_Forces(Lattice<field_type>& field, Lattice<field_type>& forces) override;
@@ -143,7 +144,7 @@ inline auto RelativisticBoseGas<TImpl>::compute_S(Lattice<field_type>& field) ->
     field_type Phi;
     TImpl      Phi2;
 
-    for (uint Site = 0; Site < field.getNsites(); Site++) {
+    for (size_type Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
 
         Phi2 = dot(Phi);
@@ -161,7 +162,7 @@ inline auto RelativisticBoseGas<TImpl>::compute_S(Lattice<field_type>& field) ->
 }
 
 template <RealValue TImpl>
-inline auto RelativisticBoseGas<TImpl>::compute_S_loc(Lattice<field_type>& field, uint site) -> action_type {
+inline auto RelativisticBoseGas<TImpl>::compute_S_loc(Lattice<field_type>& field, size_type site) -> action_type {
     field_type Phi = field[site];
     field_type PhiNt = field.n(site, _t);
     field_type PhiPt = field.p(site, _t);
@@ -186,7 +187,7 @@ inline auto RelativisticBoseGas<TImpl>::compute_S_loc(Lattice<field_type>& field
 
 template <RealValue TImpl>
 inline auto RelativisticBoseGas<TImpl>::compute_dS_loc(Lattice<field_type>& field, const field_type& dphi,
-                                                       uint site) -> action_type {
+                                                       size_type site) -> action_type {
     field_type PhiOld = field[site];
     field_type PhiNew = PhiOld + dphi;
     field_type PhiNt = field.n(site, _t);
@@ -213,7 +214,7 @@ inline auto RelativisticBoseGas<TImpl>::compute_dS_loc(Lattice<field_type>& fiel
 
 template <RealValue TImpl>
 inline void RelativisticBoseGas<TImpl>::compute_Forces(Lattice<field_type>& field, Lattice<field_type>& forces) {
-    for (uint Site = 0; Site < field.getNsites(); Site++) {
+    for (size_type Site = 0; Site < field.getNsites(); Site++) {
         field_type Phi = field[Site];
         field_type Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
         field_type Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
@@ -243,13 +244,13 @@ inline void RelativisticBoseGas<TImpl>::compute_LLRForces(Lattice<field_type>& f
 
     // compute current value of the imaginary action
     TImpl SIm = 0.0;
-    for (uint Site = 0; Site < field.getNsites(); Site++) {
+    for (size_type Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
         SIm += Phi.real() * field.n(Site, _t).imag() - Phi.imag() * field.n(Site, _t).real();
     }
     TImpl LLRForcePref = ((SIm - Sk) / (width * width) + ak);
 
-    for (uint Site = 0; Site < field.getNsites(); Site++) {
+    for (size_type Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
         Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
         Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
@@ -274,7 +275,7 @@ inline auto RelativisticBoseGas<TImpl>::Measure(Lattice<field_type>& field) -> R
     TImpl      Phi2 = 0.0;
     auto       Norm = static_cast<TImpl>(field.getNsites());
 
-    for (uint Site = 0; Site < field.getNsites(); Site++) {
+    for (size_type Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];
         Phi2 += static_cast<TImpl>(dot(Phi));
     }

@@ -10,18 +10,19 @@
 
 #pragma once
 
+#include <cstddef>
 #include <functional>
 #include <numeric>
 #include <vector>
 
-#include "reticolo/types/core_math.hpp"
+#include "reticolo/core/types/coord.hpp"
 
 namespace reticolo {
 
 class Indexing {
   public:
     /* Types */
-    using size_type = unsigned int;
+    using size_type = std::size_t;
 
     /* Lattice info */
     std::vector<size_type> Sizes;    // Lattice size in each dimension

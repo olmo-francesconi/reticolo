@@ -15,9 +15,8 @@
 #include <cstddef>
 #include <string>
 
+#include "reticolo/core/types/real.hpp"
 #include "reticolo/lattice/lattice.hpp"
-#include "reticolo/types/concepts.hpp"  // IWYU pragma: keep
-#include "reticolo/types/core.hpp"
 #include "yaml-cpp/node/node.h"
 
 namespace reticolo::action {
@@ -27,6 +26,7 @@ class ActionBase {
   public:
     using field_type = TField;
     using action_type = TAction;
+    using size_type = Lattice<field_type>::size_type;
 
     /* Virtual destructor */
     virtual ~ActionBase() = default;
@@ -38,8 +38,8 @@ class ActionBase {
 
     /* Gloabal and local action computations */
     virtual auto compute_S(Lattice<field_type>&) -> action_type = 0;
-    virtual auto compute_S_loc(Lattice<field_type>&, uint) -> action_type = 0;
-    virtual auto compute_dS_loc(Lattice<field_type>&, const field_type&, uint) -> action_type = 0;
+    virtual auto compute_S_loc(Lattice<field_type>&, size_type) -> action_type = 0;
+    virtual auto compute_dS_loc(Lattice<field_type>&, const field_type&, size_type) -> action_type = 0;
 
     /* HMC methods */
     virtual void compute_Forces(Lattice<field_type>&, Lattice<field_type>&) = 0;
