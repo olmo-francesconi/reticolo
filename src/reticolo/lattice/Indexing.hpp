@@ -10,6 +10,9 @@
 
 #pragma once
 
+#include <machine/limits.h>
+
+#include <climits>  // IWYU pragma: keep
 #include <cstddef>
 #include <functional>
 #include <numeric>
@@ -22,7 +25,13 @@ namespace reticolo {
 class Indexing {
   public:
     /* Types */
-    using size_type = std::size_t;
+#if defined(SMALL_LATTICE)
+    using size_type = unsigned short;
+    constexpr static unsigned short max_size = USHRT_MAX;
+#else
+    using size_type = size_t;
+    constexpr static unsigned long max_size = SIZE_T_MAX;
+#endif
 
     /* Lattice info */
     std::vector<size_type> Sizes;    // Lattice size in each dimension
@@ -53,16 +62,13 @@ Indexing::Indexing(const std::vector<size_type>& shape)
         SubVols[SubDim] = std::accumulate(Sizes.begin() + SubDim + 1, Sizes.end(), 1, std::multiplies<>());
     }
     SubVols.back() = 1;
-
     /* support variables to keep track of position in the lattice */
     std::vector<size_type> Coord(Dims, 0);
     std::vector<size_type> PrevCoord(Dims);
     std::vector<size_type> NextCoord(Dims);
-
     /* Resize the vectors of neighbours */
     Next.resize(NSites * Dims, 0);
     Prev.resize(NSites * Dims, 0);
-
     /* Loop throught the lattice to generate all the closest neighbours */
     for (size_type Site = 0; Site < NSites; Site++) {
         for (size_type Dir = 0; Dir < Dims; Dir++) {
