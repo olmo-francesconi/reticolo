@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <format>
 #include <iomanip>
 #include <iostream>
@@ -24,8 +25,10 @@
 #include <string>
 #include <vector>
 
-#include "reticolo/tools/timer.hpp"
-#include "reticolo/types/core.hpp"
+#include "reticolo/core/tools/timer.hpp"
+#include "reticolo/core/types/complex.hpp"
+#include "reticolo/core/types/real.hpp"
+#include "reticolo/lattice/indexing.hpp"
 
 using namespace reticolo;
 
@@ -76,11 +79,11 @@ void printHistogram(const std::vector<double>& data, int binCount = 10, int maxB
 }
 
 auto main(int argc, char* argv[]) -> int {
-    Timer Time;
-    uint  Len = std::stoul(argv[1]);
-    uint  Rep = std::stoul(argv[2]);
+    Timer               Time;
+    Indexing::size_type Len = std::stoul(argv[1]);
+    Indexing::size_type Rep = std::stoul(argv[2]);
 
-    const std::vector<uint> Size({Len, Len, Len, Len});
+    const std::vector<Indexing::size_type> Size({Len, Len, Len, Len});
     Time.reset();
     Lattice<ComplexD> LatA(Size);
     std::cout << "Lattice object initialized in " << Time.elapsed_ms() << " ms\n";
