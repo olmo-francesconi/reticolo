@@ -1,15 +1,15 @@
 workflows:
   - MonteCarlo:
-      name: testF
+      name: test
       main_seed: 0
 
       # Lattice config
       lattice:
-        size: [8, 8, 8, 8]
+        size: [16, 16, 16, 16]
 
       # Action Config
       action:
-        name: RelativisticBoseGas
+        name: RelativisticBoseGas_F
         parameters:
           lambda: 1.0
           eta: 9.0

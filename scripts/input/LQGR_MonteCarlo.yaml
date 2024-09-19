@@ -1,17 +1,18 @@
 workflows:
   - MonteCarlo:
-      name: testF
+      name: test
       main_seed: 0
 
       # Lattice config
       lattice:
-        size: [6, 6, 6, 6]
+        size: [8, 8, 8, 8]
 
       # Action Config
       action:
         name: WeakFieldEuclideanGR
         parameters:
           beta: 5.7
+          bc: open
 
       # Update Algorithm Config
       algorithm:
