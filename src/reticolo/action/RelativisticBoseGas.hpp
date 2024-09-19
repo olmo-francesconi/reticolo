@@ -54,8 +54,8 @@ class RelativisticBoseGas : public ActionBase<std::complex<TImpl>, std::complex<
         TImpl lambda;
         TImpl eta;
         TImpl mu;
-        Params() : lambda(1.0), eta(9.0), mu(0){};
-        Params(TImpl lambda, TImpl eta, TImpl chem_mu) : lambda(lambda), eta(eta), mu(chem_mu){};
+        Params() : lambda(1.0), eta(9.0), mu(0) {};
+        Params(TImpl lambda, TImpl eta, TImpl chem_mu) : lambda(lambda), eta(eta), mu(chem_mu) {};
     } p;
 
     /* Observables */
