@@ -19,6 +19,7 @@
 #include <concepts>
 #include <format>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -58,8 +59,8 @@ class WeakFieldEuclideanGR : public ActionBase<HField<TImpl>, TImpl, TImpl> {
     /* Action parameters */
     struct Params {
         impl_type beta;
-        Params() : beta(5.7){};
-        Params(impl_type beta) : beta(beta){};
+        Params() : beta(5.7) {};
+        Params(impl_type beta) : beta(beta) {};
     } p;
 
     /* Observables */
@@ -110,22 +111,27 @@ class WeakFieldEuclideanGR : public ActionBase<HField<TImpl>, TImpl, TImpl> {
     }
 
     /*--------------------------------------------------------------------------
-      Custom variables and methods for WeakFieldEuclideanGR Class
+        Custom variables and methods for WeakFieldEuclideanGR Class
     --------------------------------------------------------------------------*/
 
     /* Physical parameters */
-    const impl_type hbarc_GeVfm = static_cast<impl_type>(pc::hbar * pc::c / pc::e * 1e15 * 1e-9);       // ~0.197 GeV fm
-    const impl_type GN_fm2 = static_cast<impl_type>(6.70883e-39 * pow(hbarc_GeVfm, 2));                 // ~2.6e-40 fm^2
-    const impl_type lP_fm = static_cast<impl_type>(sqrt(GN_fm2));                                       // ~1.6e-20 fm
-    const impl_type kappa_GeV2 = static_cast<impl_type>(pow(hbarc_GeVfm, 2) / (16.0 * M_PI * GN_fm2));  // ~3e-36 GeV^2
+    const impl_type _HbarcGeVfm = static_cast<impl_type>(pc::hbar * pc::c / pc::e * 1e15 * 1e-9);       // ~0.197 GeV fm
+    const impl_type _GnFm2 = static_cast<impl_type>(6.70883e-39 * pow(_HbarcGeVfm, 2));                 // ~2.6e-40 fm^2
+    const impl_type _LPFm = static_cast<impl_type>(sqrt(_GnFm2));                                       // ~1.6e-20 fm
+    const impl_type _KappaGeV2 = static_cast<impl_type>(pow(_HbarcGeVfm, 2) / (16.0 * M_PI * _GnFm2));  // ~3e-36 GeV^2
+    impl_type       _AA;
+    impl_type       _AInvGeV;
+    impl_type       _Kappa;
 
-    impl_type aa;
-    impl_type a_invGeV;
-    impl_type kappa;
+    /* Boundary conditions */
+    std::string _BC;
+    field_type  _BVal;
+    void        make_updatelist(Lattice<field_type>& field);
 
     /* Vector storing the current values of the curvature for each lattice point */
     std::vector<action_type>              _LGR;
     std::vector<std::array<size_type, 5>> _Checks;
+    std::vector<size_type>                _ToUpdate;
 
     /* compute the check indexes */
     void make_checks(const Lattice<field_type>& field);
@@ -144,22 +150,31 @@ class WeakFieldEuclideanGR : public ActionBase<HField<TImpl>, TImpl, TImpl> {
 template <RealValue TImpl>
 inline void WeakFieldEuclideanGR<TImpl>::setup(const YAML::Node& ActionParams) {
     p.beta = ActionParams["beta"].as<TImpl>();
+
+    if (ActionParams["bc"]) {
+        _BC = ActionParams["bc"].as<std::string>();
+    } else {
+        _BC = "periodic";
+    }
 }
 
 template <RealValue TImpl>
 inline void WeakFieldEuclideanGR<TImpl>::lattice_sync(Lattice<field_type>& field) {
-    // Initialize parameters values here
-    aa = 0.5 * exp(-1.6804 - 1.7331 * (p.beta - 6.0) + 0.7849 * pow(p.beta - 6.0, 2) - 0.4428 * pow(p.beta - 6.0, 3));
-    a_invGeV = aa / hbarc_GeVfm;
-    kappa = kappa_GeV2 * a_invGeV * a_invGeV;
+    /* Initialize parameters values here */
+    _AA = 0.5 * exp(-1.6804 - 1.7331 * (p.beta - 6.0) + 0.7849 * pow(p.beta - 6.0, 2) - 0.4428 * pow(p.beta - 6.0, 3));
+    _AInvGeV = _AA / _HbarcGeVfm;
+    _Kappa = _KappaGeV2 * _AInvGeV * _AInvGeV;
 
-    // Resize and clears the curvature lattice to match the lattice sizes
+    /* Resize and clears the curvature lattice to match the lattice sizes */
     _LGR.resize(field.getNsites());
 
-    // Build the check indexing vector
+    /* Build the check indexing vector */
     make_checks(field);
 
-    // Updates the curvature values
+    /* Build the update list*/
+    make_updatelist(field);
+
+    /* Updates the curvature values */
     update_LGR(field);
 }
 
@@ -237,9 +252,12 @@ inline auto WeakFieldEuclideanGR<TImpl>::compute_dS_loc(Lattice<field_type>& fie
 //                                 - Dhc[_t][MUNU_01] + Dhc[_x][MUNU_01] + Dhd[_t][_x][MUNU_01] //
 //                                 - Dhc[_t][MUNU_02] + Dhc[_y][MUNU_02] + Dhd[_t][_y][MUNU_02] //
 //                                 - Dhc[_t][MUNU_03] + Dhc[_z][MUNU_03] + Dhd[_t][_z][MUNU_03] //
-//                                 - field[Site][MUNU_12] + Jhc[_x][MUNU_12] + Jhc[_y][MUNU_12] - Jhd[_x][_y][MUNU_12]
-//                                 - field[Site][MUNU_13] + Jhc[_x][MUNU_13] + Jhc[_z][MUNU_13] - Jhd[_x][_z][MUNU_13]
-//                                 - field[Site][MUNU_23] + Jhc[_y][MUNU_23] + Jhc[_z][MUNU_23] - Jhd[_y][_z][MUNU_23];
+//                                 - field[Site][MUNU_12] + Jhc[_x][MUNU_12] + Jhc[_y][MUNU_12] -
+//                                 Jhd[_x][_y][MUNU_12]
+//                                 - field[Site][MUNU_13] + Jhc[_x][MUNU_13] + Jhc[_z][MUNU_13] -
+//                                 Jhd[_x][_z][MUNU_13]
+//                                 - field[Site][MUNU_23] + Jhc[_y][MUNU_23] + Jhc[_z][MUNU_23] -
+//                                 Jhd[_y][_z][MUNU_23];
 
 //         forces[Site][MUNU_11] = 2.0 * field[Site][MUNU_00] - Jhc[_y][MUNU_00] - Jhc[_z][MUNU_00] //
 //                                 + 2.0 * field[Site][MUNU_22] - Jhc[_t][MUNU_22] - Jhc[_z][MUNU_22] //
@@ -247,9 +265,12 @@ inline auto WeakFieldEuclideanGR<TImpl>::compute_dS_loc(Lattice<field_type>& fie
 //                                 + Dhc[_t][MUNU_01] - Dhc[_x][MUNU_01] - Dhd[_t][_x][MUNU_01] //
 //                                 - Dhc[_x][MUNU_12] + Dhc[_y][MUNU_12] + Dhd[_x][_y][MUNU_12] //
 //                                 - Dhc[_x][MUNU_13] + Dhc[_z][MUNU_13] + Dhd[_x][_z][MUNU_13] //
-//                                 - field[Site][MUNU_02] + Jhc[_t][MUNU_02] + Jhc[_y][MUNU_02] - Jhd[_t][_y][MUNU_02]
-//                                 - field[Site][MUNU_03] + Jhc[_t][MUNU_03] + Jhc[_z][MUNU_03] - Jhd[_t][_z][MUNU_03]
-//                                 - field[Site][MUNU_23] + Jhc[_y][MUNU_23] + Jhc[_z][MUNU_23] - Jhd[_y][_z][MUNU_23];
+//                                 - field[Site][MUNU_02] + Jhc[_t][MUNU_02] + Jhc[_y][MUNU_02] -
+//                                 Jhd[_t][_y][MUNU_02]
+//                                 - field[Site][MUNU_03] + Jhc[_t][MUNU_03] + Jhc[_z][MUNU_03] -
+//                                 Jhd[_t][_z][MUNU_03]
+//                                 - field[Site][MUNU_23] + Jhc[_y][MUNU_23] + Jhc[_z][MUNU_23] -
+//                                 Jhd[_y][_z][MUNU_23];
 
 //         forces[Site][MUNU_22] = 2.0 * field[Site][MUNU_00] - Jhc[_x][MUNU_00] - Jhc[_z][MUNU_00] //
 //                                 + 2.0 * field[Site][MUNU_11] - Jhc[_t][MUNU_11] - Jhc[_z][MUNU_11] //
@@ -257,9 +278,12 @@ inline auto WeakFieldEuclideanGR<TImpl>::compute_dS_loc(Lattice<field_type>& fie
 //                                 + Dhc[_t][MUNU_02] - Dhc[_y][MUNU_02] - Dhd[_t][_y][MUNU_02] //
 //                                 + Dhc[_x][MUNU_12] - Dhc[_y][MUNU_12] - Dhd[_x][_y][MUNU_12] //
 //                                 - Dhc[_y][MUNU_23] + Dhc[_z][MUNU_23] + Dhd[_y][_z][MUNU_23] //
-//                                 - field[Site][MUNU_01] + Jhc[_t][MUNU_01] + Jhc[_x][MUNU_01] - Jhd[_t][_x][MUNU_01]
-//                                 - field[Site][MUNU_03] + Jhc[_t][MUNU_03] + Jhc[_z][MUNU_03] - Jhd[_t][_z][MUNU_03]
-//                                 - field[Site][MUNU_13] + Jhc[_x][MUNU_13] + Jhc[_z][MUNU_13] - Jhd[_x][_z][MUNU_13];
+//                                 - field[Site][MUNU_01] + Jhc[_t][MUNU_01] + Jhc[_x][MUNU_01] -
+//                                 Jhd[_t][_x][MUNU_01]
+//                                 - field[Site][MUNU_03] + Jhc[_t][MUNU_03] + Jhc[_z][MUNU_03] -
+//                                 Jhd[_t][_z][MUNU_03]
+//                                 - field[Site][MUNU_13] + Jhc[_x][MUNU_13] + Jhc[_z][MUNU_13] -
+//                                 Jhd[_x][_z][MUNU_13];
 
 //         forces[Site][MUNU_33] = 2.0 * field[Site][MUNU_00] - Jhc[_x][MUNU_00] - Jhc[_y][MUNU_00] //
 //                                 + 2.0 * field[Site][MUNU_11] - Jhc[_t][MUNU_11] - Jhc[_y][MUNU_11] //
@@ -267,9 +291,12 @@ inline auto WeakFieldEuclideanGR<TImpl>::compute_dS_loc(Lattice<field_type>& fie
 //                                 + Dhc[_t][MUNU_03] - Dhc[_z][MUNU_03] - Dhd[_t][_z][MUNU_03] //
 //                                 + Dhc[_x][MUNU_13] - Dhc[_z][MUNU_13] - Dhd[_x][_z][MUNU_13] //
 //                                 + Dhc[_y][MUNU_23] - Dhc[_z][MUNU_23] - Dhd[_y][_z][MUNU_23] //
-//                                 - field[Site][MUNU_01] + Jhc[_t][MUNU_01] + Jhc[_x][MUNU_01] - Jhd[_t][_x][MUNU_01]
-//                                 - field[Site][MUNU_02] + Jhc[_t][MUNU_02] + Jhc[_y][MUNU_02] - Jhd[_t][_y][MUNU_02]
-//                                 - field[Site][MUNU_12] + Jhc[_x][MUNU_12] + Jhc[_z][MUNU_12] - Jhd[_x][_y][MUNU_12];
+//                                 - field[Site][MUNU_01] + Jhc[_t][MUNU_01] + Jhc[_x][MUNU_01] -
+//                                 Jhd[_t][_x][MUNU_01]
+//                                 - field[Site][MUNU_02] + Jhc[_t][MUNU_02] + Jhc[_y][MUNU_02] -
+//                                 Jhd[_t][_y][MUNU_02]
+//                                 - field[Site][MUNU_12] + Jhc[_x][MUNU_12] + Jhc[_z][MUNU_12] -
+//                                 Jhd[_x][_y][MUNU_12];
 
 //         // Time-Space Components
 //         // clang-format off
@@ -373,6 +400,7 @@ template <RealValue TImpl>
 inline auto WeakFieldEuclideanGR<TImpl>::Measure(const Lattice<field_type>& field) -> Observables {
     return {std::reduce(_LGR.begin(), _LGR.end())};
 }
+
 /*--------------------------------------------------------------------------------------------------
       Custom variables and methods for WeakFieldEuclideanGR Class implementation
 --------------------------------------------------------------------------------------------------*/
@@ -387,6 +415,36 @@ inline void WeakFieldEuclideanGR<TImpl>::make_checks(const Lattice<field_type>& 
             field.Idx->prevId(Site, _y),  //
             field.Idx->prevId(Site, _z),  //
         });
+    }
+}
+
+template <RealValue TImpl>
+inline void WeakFieldEuclideanGR<TImpl>::make_updatelist(Lattice<field_type>& field) {
+    _ToUpdate.clear();
+    _ToUpdate.reserve(field.getNsites());
+
+    /* Loop throught the lattice to generate all the closest neighbours */
+    if (_BC == "periodic") {
+        for (size_type Site = 0; Site < field.getNsites(); Site++) {
+            _ToUpdate.push_back(Site);
+        }
+    } else if (_BC == "open") {
+        auto                   Sizes = field.getSizes();
+        std::vector<size_type> Coord(Sizes.size(), 0);
+        for (size_type Site = 0; Site < field.getNsites(); Site++) {
+            for (size_type i = 1; i < Sizes.size(); i++) {
+                if (Coord[i] < 2 || Coord[i] > Sizes[i] - 3) {
+                    reset(field[Site]);
+                    goto skip;
+                }
+            }
+            _ToUpdate.push_back(Site);
+        skip:;
+            advance_coord(Sizes, Coord);
+        }
+    } else {
+        throw std::runtime_error(
+            std::format("ACTION [{}]: Unsupported boundary conditions ({}), check input script", GetName(), _BC));
     }
 }
 
@@ -480,10 +538,11 @@ inline auto WeakFieldEuclideanGR<TImpl>::compute_LGR_loc(const Lattice<field_typ
             Dhmn[3][MUNU_32] * Dhmn[2][MUNU_33] + Dhmn[3][MUNU_33] * Dhmn[3][MUNU_33];
     Ans4 *= 0.5;
 
-    return kappa * (Ans1 + Ans2 + Ans3 + Ans4);
+    return _Kappa * (Ans1 + Ans2 + Ans3 + Ans4);
 }
 
-// inline void WeakFieldEuclideanGR::compute_Force_loc(const Lattice<field_type>& field, field_type& force, int Site) {
+// inline void WeakFieldEuclideanGR::compute_Force_loc(const Lattice<field_type>& field, field_type& force, int
+// Site) {
 //     std::array<field_type, 4>                Dhc;  // Central derivatives
 //     std::array<std::array<field_type, 4>, 4> Dhd;  // Diagonal derivatives
 //     std::array<field_type, 4>                Jhc;  // Central sum
@@ -700,18 +759,36 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealF>>::updateField(
     monte_carlo_data_type&               state,   //
     std::mt19937_64&                     rng)                         //
 {
+    impl_type u;   // Marsaglia polar method support variables
+    impl_type v;   //
+    impl_type s;   //
+    impl_type fp;  //
+    impl_type Scale = _ProposalWidth * action._LPFm / action._AA;
+
     size_type   Acc = 0;       // acceptance
     action_type SVarTot(0.0);  // cumulative action variation
 
-    for (size_type Site = 0; Site < field.getNsites(); Site++) {
+    // for (size_type Site = 0; Site < field.getNsites(); Site++) {
+    for (const auto& Site : action._ToUpdate) {
         // Generate a randomized local field variation
-        field_type FieldVar;  // local field variation
+        // field_type FieldVar;  // local field variation
         field_type FieldOld = field[Site];
-        impl_type  Scale = _ProposalWidth * action.lP_fm / action.aa;
+        impl_type  Scale = _ProposalWidth * action._LPFm / action._AA;
 
-        randomize(FieldVar, Scale, _Norm, rng);
+        // wiggle h
+        for (int i = 0; i < 10; i++) {
+            do {
+                u = _Unif(rng);
+                v = _Unif(rng);
+                s = u * u + v * v;
+            } while (s > 1 || s == 0);
+            fp = std::sqrt(-2 * std::log(s) / s);
+            field[Site][i] += v * fp * Scale;
+            field[Site][++i] += u * fp * Scale;
+        }
 
-        HField_math::sum(field[Site], field[Site], FieldVar);
+        // randomize(FieldVar, Scale, _Norm, rng);
+        // HField_math::sum(field[Site], field[Site], FieldVar);
 
         // Compute the updated Lagrangian in the surrounding sites
         std::vector<action_type> LGRPost;             // Vector storing the new curvature values in the check sites
@@ -750,14 +827,15 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealD>, std::mt19937_6
     impl_type v;   //
     impl_type s;   //
     impl_type fp;  //
-    impl_type Scale = _ProposalWidth * action.lP_fm / action.aa;
+    impl_type Scale = _ProposalWidth * action._LPFm / action._AA;
 
     size_type   Acc = 0;       // acceptance
     action_type SVarTot(0.0);  // cumulative action variation
 
     field_type FieldOld;
 
-    for (size_type Site = 0; Site < field.getNsites(); Site++) {
+    // for (size_type Site = 0; Site < field.getNsites(); Site++) {
+    for (const auto& Site : action._ToUpdate) {
         // store old value of the field
         FieldOld = field[Site];
 
