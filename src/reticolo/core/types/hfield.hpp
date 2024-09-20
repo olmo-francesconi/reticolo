@@ -152,7 +152,7 @@ inline void HField<T>::print() {
 
 template <RealValue T>
 inline void reset(HField<T>& val) {
-    std::fill(val._Mat.begin(), val._Mat.end(), 0.0);
+    std::fill(val.begin(), val.end(), 0.0);
 }
 
 /*--------------------------------------------------------------------------------------------------
@@ -170,7 +170,7 @@ inline void randomize(HField<T>& Val, T Scale, TDist& Dist, TGen& Gen)
 }
 
 /*--------------------------------------------------------------------------------------------------
-    Hdf5 Types for core DataTypes
+    Hdf5 Types
 --------------------------------------------------------------------------------------------------*/
 
 template <>
