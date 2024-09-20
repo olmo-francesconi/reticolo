@@ -30,7 +30,7 @@ class Indexing {
     constexpr static unsigned short max_size = USHRT_MAX;
 #else
     using size_type = size_t;
-    constexpr static unsigned long max_size = SIZE_T_MAX;
+    constexpr static unsigned long MaxSize = SIZE_T_MAX;
 #endif
 
     /* Lattice info */
