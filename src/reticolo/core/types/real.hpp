@@ -1,6 +1,11 @@
 #pragma once
+#include <H5Ipublic.h>
+#include <H5Tpublic.h>
 
 #include <concepts>
+
+#include "reticolo/core/tools/hdf5_helpers.hpp"  // IWYU pragma: keep
+
 namespace reticolo {
 /*--------------------------------------------------------------------------------------------------
     Type definition
@@ -65,6 +70,19 @@ inline void randomize(T& val, const T& scale, TDist& dist, TGen& rng)
 template <RealValue T>
 inline auto make_real(const T& Var) -> T {
     return Var;
+}
+
+/*--------------------------------------------------------------------------------------------------
+    Hdf5 Types
+--------------------------------------------------------------------------------------------------*/
+template <>
+inline auto make_H5_Type<RealF>() -> hid_t {
+    return H5T_NATIVE_FLOAT;
+}
+
+template <>
+inline auto make_H5_Type<RealD>() -> hid_t {
+    return H5T_NATIVE_DOUBLE;
 }
 
 }  // namespace reticolo
