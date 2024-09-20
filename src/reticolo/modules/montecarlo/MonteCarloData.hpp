@@ -32,7 +32,7 @@ struct data<ActionType> {
     /* Constructors*/
     data() = default;  // Default
     data(double acceptance, ActionType action, ActionType action_change)
-        : _Acceptance(acceptance), _S(double(action)){};  // Parameter
+        : _Acceptance(acceptance), _S(double(action)) {};  // Parameter
 
     /* Update values */
     void setS(ActionType SReal) { _S = SReal; }
@@ -115,7 +115,7 @@ struct data<ActionType> {
     /* Constructors*/
     data() = default;  // Default
     data(double acceptance, ActionType action, ActionType action_change)
-        : _Acceptance(acceptance), _SRe(double(action.real())), _SIm(double(action.imag())){};  // Parameter
+        : _Acceptance(acceptance), _SRe(double(action.real())), _SIm(double(action.imag())) {};  // Parameter
 
     /* Update values */
     void setS(ActionType SCmplx) {
