@@ -22,8 +22,8 @@ workflows:
 
       # Output settings
       output_dir: ./LQGR_MonteCarlo
-      save_config: false
-      save_data: true
+      save_config: true
+      save_data: false
       console_output: true
 
       # Run parameters

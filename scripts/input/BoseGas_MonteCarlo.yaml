@@ -5,7 +5,7 @@ workflows:
 
       # Lattice config
       lattice:
-        size: [16, 16, 16, 16]
+        size: [4, 4, 4, 4]
 
       # Action Config
       action:
@@ -30,15 +30,15 @@ workflows:
 
       # Output settings
       output_dir: ./BoseGas_MonteCarlo
-      save_config: false
-      save_data: true
+      save_config: true
+      save_data: false
       console_output: true
 
       # Run parameters
       runs:
         - name: test_run
           measures: 10000
-          measure_step: 1
+          measure_step: 10
           therm_steps: 0
           field_init: true
           hot_start: false
