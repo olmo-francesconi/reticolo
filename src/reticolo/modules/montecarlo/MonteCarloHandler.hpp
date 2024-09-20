@@ -1,4 +1,4 @@
-/******************************************************************************
+/*******************************************************************************
 
  - reticolo (www.github.com/olmo-francesconi/reticolo.git)
 
@@ -6,7 +6,7 @@
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
- ******************************************************************************/
+*******************************************************************************/
 
 #pragma once
 
@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 
+#include "reticolo/core/tools/Hdf5Handler.hpp"
 #include "reticolo/core/tools/io_utils.hpp"
 #include "reticolo/core/tools/logger.hpp"
 #include "reticolo/core/tools/timer.hpp"
@@ -156,7 +157,7 @@ inline void MonteCarloHandler<Action, TGen>::setup(const YAML::Node& Config) {
 
     /* Initialize the output file */
     if (_SaveData) {
-        IO::GlobalHdf5Handler.initFile(_Hdf5OutputFile);
+        GlobalHdf5Handler.initFile(_Hdf5OutputFile);
         // Buffers
         _McStatsBuffer.reserve(_MaxBufferSize);
         _ObsBuffer.reserve(_MaxBufferSize);
@@ -179,11 +180,11 @@ inline void MonteCarloHandler<Action, TGen>::setup(const YAML::Node& Config) {
         TmpVol = NewVol;
     }
 
-    if (TmpVol > Indexing::max_size / TmpSizes.size()) {
+    if (TmpVol > Indexing::MaxSize / TmpSizes.size()) {
         throw std::runtime_error(
             std::format("Error allocationg the Lattice: maximun index size exceeded [Max Volume = {} (~{}^{})]",
-                        Indexing::max_size / TmpSizes.size() + 1,                                        //
-                        (int)std::pow(Indexing::max_size / TmpSizes.size() + 1, 1.0 / TmpSizes.size()),  //
+                        Indexing::MaxSize / TmpSizes.size() + 1,                                        //
+                        (int)std::pow(Indexing::MaxSize / TmpSizes.size() + 1, 1.0 / TmpSizes.size()),  //
                         TmpSizes.size()));
     }
 
@@ -248,10 +249,10 @@ inline void MonteCarloHandler<Action, TGen>::execute(const YAML::Node& RunConfig
         ChunkSize = 1;
     }
     if (_SaveData && MeasureStep > 0) {
-        IO::GlobalHdf5Handler.createGroup(_Hdf5OutputFile, RunName);
-        IO::GlobalHdf5Handler.setupExpandableDataset<observables_type>(  //
+        GlobalHdf5Handler.createGroup(_Hdf5OutputFile, RunName);
+        GlobalHdf5Handler.setupExpandableDataset<observables_type>(  //
             _Hdf5OutputFile, RunName + "/Observables", ChunkSize, true);
-        IO::GlobalHdf5Handler.setupExpandableDataset<monte_carlo_data_type>(  //
+        GlobalHdf5Handler.setupExpandableDataset<monte_carlo_data_type>(  //
             _Hdf5OutputFile, RunName + "/MonteCarlo", ChunkSize, true);
     }
 
@@ -311,8 +312,8 @@ inline void MonteCarloHandler<Action, TGen>::execute(const YAML::Node& RunConfig
 
     // save the last measurements in the buffer and flush
     if (_SaveData && _McStatsBuffer.size() != 0 && _ObsBuffer.size() != 0) {
-        IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/Observables", _ObsBuffer);
-        IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/MonteCarlo", _McStatsBuffer);
+        GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/Observables", _ObsBuffer);
+        GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/MonteCarlo", _McStatsBuffer);
         _McStatsBuffer.clear();
         _ObsBuffer.clear();
         _Logger << IO::LI_void() + "Final data saved\n";
@@ -325,11 +326,11 @@ inline void MonteCarloHandler<Action, TGen>::execute(const YAML::Node& RunConfig
     Private Methods Implmentations
 --------------------------------------------------------------------------------------------------*/
 
-// template <class Action>
-// inline void MonteCarloHandler<Action>::saveConfiguration(uint Iter) {
-//     fs::path FileName = _WorkspacePath / "cnfg" / (std::to_string(Iter) + ".h5");
-//     _Field.save_Configuration(FileName);
-// }
+template <class Action, class TGen>
+inline void MonteCarloHandler<Action, TGen>::saveConfiguration(size_type Iter) {
+    fs::path FileName = _WorkspacePath / "configurations" / (std::to_string(Iter) + ".h5");
+    GlobalHdf5Handler.saveLattice(FileName, "field", *_Field);
+}
 
 template <class Action, class TGen>
 inline void MonteCarloHandler<Action, TGen>::measure_utility(const std::string& RunName, unsigned long Iteration) {
@@ -338,9 +339,9 @@ inline void MonteCarloHandler<Action, TGen>::measure_utility(const std::string& 
 
     _NMeasurements++;
     // Save the configuration
-    // if (_SaveConfig) {
-    // saveConfiguration(Iteration);
-    // }
+    if (_SaveConfig) {
+        saveConfiguration(Iteration);
+    }
     // Save Monte Carlo data and Observables
     if (_SaveData) {
         // Update Buffers
@@ -352,8 +353,8 @@ inline void MonteCarloHandler<Action, TGen>::measure_utility(const std::string& 
         double Elapsed = _Timer.elapsed_s();
         if (_ObsBuffer.size() == _MaxBufferSize || Elapsed > _MaxBufferWriteDelay) {
             // save data
-            IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/Observables", _ObsBuffer);
-            IO::GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/MonteCarlo", _McStatsBuffer);
+            GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/Observables", _ObsBuffer);
+            GlobalHdf5Handler.appendDataset(_Hdf5OutputFile, RunName + "/MonteCarlo", _McStatsBuffer);
             // Log save state
             double IterPerSec = (_ObsBuffer.size()) / (Elapsed);
             _Logger << IO::LI_time() +
