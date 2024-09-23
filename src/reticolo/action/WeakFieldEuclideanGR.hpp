@@ -24,12 +24,12 @@
 #include <vector>
 
 #include "reticolo/action/actionBase.hpp"
+#include "reticolo/core/physics/constants.hpp"
 #include "reticolo/core/tools/hdf5_helpers.hpp"  // IWYU pragma: keep
 #include "reticolo/core/types/coord.hpp"
 #include "reticolo/core/types/hfield.hpp"
 #include "reticolo/core/types/real.hpp"
 #include "reticolo/lattice/lattice.hpp"
-#include "reticolo/physics/constants.hpp"
 #include "yaml-cpp/node/node.h"
 
 namespace pc = reticolo::PhysicalConstants;
