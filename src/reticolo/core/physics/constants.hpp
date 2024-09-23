@@ -8,7 +8,9 @@
 
  ******************************************************************************/
 
-#include <cmath>
+#pragma once
+
+#include <cmath>  // IWYU pragma: keep
 
 namespace reticolo::PhysicalConstants {
 
