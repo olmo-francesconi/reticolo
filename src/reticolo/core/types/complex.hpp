@@ -6,7 +6,7 @@
 #include <complex>
 #include <concepts>
 
-#include "reticolo/core/tools/hdf5_helpers.hpp"
+#include "reticolo/core/tools/hdf5_helpers.hpp"  // IWYU pragma: keep
 #include "reticolo/core/types/real.hpp"
 
 namespace reticolo {
