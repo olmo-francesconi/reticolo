@@ -5,11 +5,11 @@ workflows:
 
       # Lattice config
       lattice:
-        size: [4, 4, 4, 4]
+        size: [8, 8, 8, 8]
 
       # Action Config
       action:
-        name: RelativisticBoseGas_F
+        name: RelativisticBoseGas
         parameters:
           lambda: 1.0
           eta: 9.0
@@ -18,26 +18,26 @@ workflows:
       # Update Algorithm Config
       algorithm:
         #Metropolis
-        name: Metropolis
-        parameters:
-          prop_width: 0.1
+        # name: Metropolis
+        # parameters:
+        #   prop_width: 0.1
 
         # HMC
-        # name: HMC
-        # parameters:
-        #   steps: 5
-        #   stepsize: 0.01
+        name: HMC
+        parameters:
+          steps: 5
+          stepsize: 0.01
 
       # Output settings
       output_dir: ./BoseGas_MonteCarlo
       save_config: true
-      save_data: false
+      save_data: true
       console_output: true
 
       # Run parameters
       runs:
         - name: test_run
-          measures: 10000
+          measures: 100
           measure_step: 10
           therm_steps: 0
           field_init: true

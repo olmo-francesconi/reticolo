@@ -5,7 +5,7 @@ workflows:
 
       # Lattice config
       lattice:
-        size: [8, 8, 8, 8]
+        size: [6, 12, 12, 12]
 
       # Action Config
       action:
@@ -30,7 +30,7 @@ workflows:
       runs:
         - name: test_run
           measures: 10000
-          measure_step: 1
+          measure_step: 10
           therm_steps: 0
-          field_init: true
+          field_init:
           hot_start: false
