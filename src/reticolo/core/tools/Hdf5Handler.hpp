@@ -14,6 +14,7 @@
 
 #include <array>
 #include <filesystem>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -53,7 +54,12 @@ class HDF5Handler {
     void appendDataset(const fs::path& FileName, const std::string& DataSetName, const std::vector<T>& data);
 
     template <typename T>
-    void saveLattice(const fs::path& FileName, const std::string& LatticeID, const Lattice<T>& field);
+    void saveLattice(const fs::path& FileName, const std::string& LatticeID, const Lattice<T>& field,
+                     const std::stringstream& rngState);
+
+    template <typename T>
+    void readLattice(const fs::path& FileName, const std::string& LatticeID, Lattice<T>& field,
+                     std::stringstream& RngState);
 };
 
 inline void HDF5Handler::initFile(const fs::path& FileName) {
@@ -144,23 +150,60 @@ inline void HDF5Handler::appendDataset(const fs::path& FileName, const std::stri
 }
 
 template <typename T>
-inline void HDF5Handler::saveLattice(const fs::path& FileName, const std::string& LatticeID, const Lattice<T>& field) {
+inline void HDF5Handler::saveLattice(const fs::path& FileName, const std::string& LatticeID, const Lattice<T>& field,
+                                     const std::stringstream& RngState) {
+    /* Get a omp_lock */
     omp_set_lock(&_IoLock);
-    std::array<hsize_t, 1> Entries = {field.size()};
-
+    /* create HDF5 file*/
     hid_t FileId = H5Fcreate(FileName.c_str(), H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT);
     /* write field as dataset */
-    hid_t DataSpaceId = H5Screate_simple(1, Entries.data(), H5P_DEFAULT);
-    hid_t DataTypeId = make_H5_Type<T>();
-    hid_t DataSetId =
-        H5Dcreate(FileId, LatticeID.c_str(), DataTypeId, DataSpaceId, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    std::array<hsize_t, 1> Entries = {field.size()};
+    hid_t                  DataSpaceId = H5Screate_simple(1, Entries.data(), H5P_DEFAULT);
+    hid_t                  DataTypeId = make_H5_Type<T>();
+    hid_t                  DataSetId =
+        H5Dcreate2(FileId, LatticeID.c_str(), DataTypeId, DataSpaceId, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5Dwrite(DataSetId, DataTypeId, H5S_ALL, H5S_ALL, H5P_DEFAULT, field.data());
     /* write lattice sizes as attribute */
-    std::array<hsize_t, 1> Dimension = {(hsize_t)field.getDim()};
-    hid_t                  AttrSpaceId = H5Screate_simple(1, Dimension.data(), H5P_DEFAULT);
-    hid_t                  AttrTypeId = make_H5_Type<typename Lattice<T>::size_type>();
-    hid_t                  AttrId = H5Acreate(DataSetId, "sizes", AttrTypeId, AttrSpaceId, H5P_DEFAULT, H5P_DEFAULT);
-    H5Awrite(AttrId, AttrTypeId, field.getSizes().data());
+    std::array<hsize_t, 1> SizeAttrDim = {(hsize_t)field.getDim()};
+    hid_t                  SizeAttrSpaceId = H5Screate_simple(1, SizeAttrDim.data(), H5P_DEFAULT);
+    hid_t                  SizeAttrTypeId = make_H5_Type<typename Lattice<T>::size_type>();
+    hid_t SizeAttrId = H5Acreate(DataSetId, "sizes", SizeAttrTypeId, SizeAttrSpaceId, H5P_DEFAULT, H5P_DEFAULT);
+    H5Awrite(SizeAttrId, SizeAttrTypeId, field.getSizes().data());
+    /* write RngState as attribute */
+    std::string State = RngState.str();
+    hid_t       RngAttrSpaceId = H5Screate(H5S_SCALAR);
+    hid_t       RngAttrTypeId = H5Tcopy(H5T_C_S1);
+    H5Tset_size(RngAttrTypeId, State.size() + 1);
+    H5Tset_strpad(RngAttrTypeId, H5T_STR_NULLTERM);
+    hid_t RngAttrId = H5Acreate(DataSetId, "RngState", RngAttrTypeId, RngAttrSpaceId, H5P_DEFAULT, H5P_DEFAULT);
+    H5Awrite(RngAttrId, RngAttrTypeId, State.c_str());
+    /* Deallocate all HDF5 resources*/
+    H5close();
+    /* Release the omp_lock */
+    omp_unset_lock(&_IoLock);
+}
+
+template <typename T>
+inline void HDF5Handler::readLattice(const fs::path& FileName, const std::string& LatticeID, Lattice<T>& field,
+                                     std::stringstream& RngState) {
+    /* Get a omp_lock */
+    omp_set_lock(&_IoLock);
+    /* Open HDF5 file*/
+    hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    /* Read field dataset */
+    std::array<hsize_t, 1> Entries = {field.size()};
+    hid_t                  DataSpaceId = H5Screate_simple(1, Entries.data(), H5P_DEFAULT);
+    hid_t                  DataTypeId = make_H5_Type<T>();
+    hid_t                  DataSetId = H5Dopen(FileId, LatticeID.c_str(), H5P_DEFAULT);
+    hid_t                  status = H5Dread(DataSetId, DataTypeId, DataSpaceId, DataSpaceId, H5P_DEFAULT, field.data());
+    //     H5Dcreate(FileId, LatticeID.c_str(), DataTypeId, DataSpaceId, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    // H5Dwrite(DataSetId, DataTypeId, H5S_ALL, H5S_ALL, H5P_DEFAULT, field.data());
+    /* write lattice sizes as attribute */
+    // std::array<hsize_t, 1> Dimension = {(hsize_t)field.getDim()};
+    // hid_t                  AttrSpaceId = H5Screate_simple(1, Dimension.data(), H5P_DEFAULT);
+    // hid_t                  AttrTypeId = make_H5_Type<typename Lattice<T>::size_type>();
+    // hid_t                  AttrId = H5Acreate(DataSetId, "sizes", AttrTypeId, AttrSpaceId, H5P_DEFAULT, H5P_DEFAULT);
+    // H5Awrite(AttrId, AttrTypeId, field.getSizes().data());
 
     H5close();
     omp_unset_lock(&_IoLock);
