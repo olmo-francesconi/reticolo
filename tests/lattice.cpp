@@ -16,12 +16,12 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <format>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
 #include <ostream>
-#include <random>
 #include <string>
 #include <vector>
 
@@ -66,7 +66,7 @@ void printHistogram(const std::vector<double>& data, int binCount = 10, int maxB
     // Print the histogram
 
     for (int i = 0; i < binCount; ++i) {
-        double BinStart = MinValue + i * BinSize;
+        double BinStart = MinValue + (i * BinSize);
         double BinEnd = BinStart + BinSize;
         std::cout << std::fixed << std::setprecision(4) << "[" << BinStart << ", " << BinEnd << "): ";
 
@@ -89,12 +89,6 @@ auto main(int argc, char* argv[]) -> int {
     Time.reset();
     Lattice<ComplexD> LatA(Size);
     std::cout << "Lattice object initialized in " << Time.elapsed_ms() << " ms\n";
-
-    std::mt19937_64                        Rng;    // Random Number Generator
-    std::uniform_real_distribution<double> Unif;   // Uniform distribution [0.0, 1.0]
-    std::uniform_real_distribution<double> UnifC;  // Uniform distribution [-1.0, 1.0]
-    std::normal_distribution<double>       Norm;   // Normal distibution (mean: 0.0, stddev: 1.0 )
-    Rng.seed(0);
 
     /* support variables */
     std::vector<double> Times;
