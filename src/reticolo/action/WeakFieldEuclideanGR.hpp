@@ -18,6 +18,7 @@
 #include <cmath>
 #include <concepts>
 #include <format>
+#include <numbers>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -115,13 +116,14 @@ class WeakFieldEuclideanGR : public ActionBase<HField<TImpl>, TImpl, TImpl> {
     --------------------------------------------------------------------------*/
 
     /* Physical parameters */
-    const impl_type _HbarcGeVfm = static_cast<impl_type>(pc::hbar * pc::c / pc::e * 1e15 * 1e-9);       // ~0.197 GeV fm
-    const impl_type _GnFm2 = static_cast<impl_type>(6.70883e-39 * pow(_HbarcGeVfm, 2));                 // ~2.6e-40 fm^2
-    const impl_type _LPFm = static_cast<impl_type>(sqrt(_GnFm2));                                       // ~1.6e-20 fm
-    const impl_type _KappaGeV2 = static_cast<impl_type>(pow(_HbarcGeVfm, 2) / (16.0 * M_PI * _GnFm2));  // ~3e-36 GeV^2
-    impl_type       _AA;
-    impl_type       _AInvGeV;
-    impl_type       _Kappa;
+    const impl_type _HbarcGeVfm = static_cast<impl_type>(pc::hbar * pc::c / pc::e * 1e15 * 1e-9);  // ~0.197 GeV fm
+    const impl_type _GnFm2 = static_cast<impl_type>(6.70883e-39 * pow(_HbarcGeVfm, 2));            // ~2.6e-40 fm^2
+    const impl_type _LPFm = static_cast<impl_type>(sqrt(_GnFm2));                                  // ~1.6e-20 fm
+    const impl_type _KappaGeV2 =
+        static_cast<impl_type>(pow(_HbarcGeVfm, 2) / (16.0 * std::numbers::pi * _GnFm2));  // ~3e-36 GeV^2
+    impl_type _AA;
+    impl_type _AInvGeV;
+    impl_type _Kappa;
 
     /* Boundary conditions */
     std::string _BC;
@@ -161,7 +163,8 @@ inline void WeakFieldEuclideanGR<TImpl>::setup(const YAML::Node& ActionParams) {
 template <RealValue TImpl>
 inline void WeakFieldEuclideanGR<TImpl>::lattice_sync(Lattice<field_type>& field) {
     /* Initialize parameters values here */
-    _AA = 0.5 * exp(-1.6804 - 1.7331 * (p.beta - 6.0) + 0.7849 * pow(p.beta - 6.0, 2) - 0.4428 * pow(p.beta - 6.0, 3));
+    _AA = 0.5 *
+          exp(-1.6804 - (1.7331 * (p.beta - 6.0)) + (0.7849 * pow(p.beta - 6.0, 2)) - (0.4428 * pow(p.beta - 6.0, 3)));
     _AInvGeV = _AA / _HbarcGeVfm;
     _Kappa = _KappaGeV2 * _AInvGeV * _AInvGeV;
 
@@ -456,8 +459,8 @@ inline void WeakFieldEuclideanGR<TImpl>::update_LGR(const Lattice<field_type>& f
 }
 
 template <RealValue TImpl>
-inline auto WeakFieldEuclideanGR<TImpl>::compute_LGR_loc(const Lattice<field_type>& field,
-                                                         size_type                  site) const -> action_type {
+inline auto WeakFieldEuclideanGR<TImpl>::compute_LGR_loc(const Lattice<field_type>& field, size_type site) const
+    -> action_type {
     // Compute local derivatives
     std::array<field_type, 4> Dhmn;
     HField_math::diff(Dhmn[_t], field.n(site, _t), field[site]);
@@ -778,8 +781,8 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealF>>::updateField(
         // wiggle h
         for (int i = 0; i < 10; i++) {
             do {
-                u = _Unif(rng);
-                v = _Unif(rng);
+                u = _Unifc(rng);
+                v = _Unifc(rng);
                 s = u * u + v * v;
             } while (s > 1 || s == 0);
             fp = std::sqrt(-2 * std::log(s) / s);
@@ -842,8 +845,8 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealD>, std::mt19937_6
         // wiggle h
         for (int i = 0; i < 10; i++) {
             do {
-                u = _Unif(rng);
-                v = _Unif(rng);
+                u = _Unifc(rng);
+                v = _Unifc(rng);
                 s = u * u + v * v;
             } while (s > 1 || s == 0);
             fp = std::sqrt(-2 * std::log(s) / s);
