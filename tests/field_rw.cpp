@@ -28,7 +28,7 @@ using namespace reticolo;
 using i_t = Indexing::size_type;
 
 auto main(int argc, char* argv[]) -> int {
-    const std::vector<i_t> Size({4, 4, 4, 4});
+    const std::vector<i_t> Size({64, 64, 64, 64});
     Lattice<RealD>         FieldOut(Size);
     Lattice<RealD>         FieldIn(FieldOut);
     std::cout << "Lattice object initialized\n\n";
@@ -45,18 +45,15 @@ auto main(int argc, char* argv[]) -> int {
     std::cout << "Saving the field to out.hdf5.. ";
     std::stringstream RngState;
     RngState << Rng;
-    std::cout << Rng;
     GlobalHdf5Handler.saveLattice("./out.hdf5", "rw_test", FieldOut, RngState);
-    std::cout << "done\n\n";
+    std::cout << "done\n";
+    std::cout << "Next randon munber: " << Rng() << "\n\n";
 
     std::cout << "Reading in the file.. ";
     GlobalHdf5Handler.readLattice("./out.hdf5", "rw_test", FieldIn, RngState);
-    std::cout << Rng;
-    std::cout << "done\n\n";
-
-    std::cout << "Saving the field to out2.hdf5.. ";
-    GlobalHdf5Handler.saveLattice("./out2.hdf5", "rw_test", FieldOut, RngState);
-    std::cout << Rng;
+    std::cout << "done\n";
+    RngState >> Rng;
+    std::cout << "Next randon munber: " << Rng() << "\n\n";
 
     std::cout << "done\n\n";
 }
