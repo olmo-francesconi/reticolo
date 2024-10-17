@@ -3,6 +3,7 @@ add_library(${PROJECT_NAME} INTERFACE)
 
 # link external libraries
 target_link_libraries(${PROJECT_NAME} INTERFACE hdf5::hdf5)
+target_link_libraries(${PROJECT_NAME} INTERFACE OpenMP::OpenMP_CXX)
 target_link_libraries(${PROJECT_NAME} INTERFACE yaml-cpp::yaml-cpp)
 target_link_libraries(${PROJECT_NAME} INTERFACE cxxopts::cxxopts)
 
