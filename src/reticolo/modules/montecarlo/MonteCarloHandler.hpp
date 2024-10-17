@@ -21,6 +21,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -183,8 +184,8 @@ inline void MonteCarloHandler<Action, TGen>::setup(const YAML::Node& Config) {
     if (TmpVol > Indexing::MaxSize / TmpSizes.size()) {
         throw std::runtime_error(
             std::format("Error allocationg the Lattice: maximun index size exceeded [Max Volume = {} (~{}^{})]",
-                        Indexing::MaxSize / TmpSizes.size() + 1,                                        //
-                        (int)std::pow(Indexing::MaxSize / TmpSizes.size() + 1, 1.0 / TmpSizes.size()),  //
+                        (Indexing::MaxSize / TmpSizes.size()) + 1,                                        //
+                        (int)std::pow((Indexing::MaxSize / TmpSizes.size()) + 1, 1.0 / TmpSizes.size()),  //
                         TmpSizes.size()));
     }
 
@@ -229,10 +230,12 @@ inline void MonteCarloHandler<Action, TGen>::execute(const YAML::Node& RunConfig
     auto      NMeasures = RunConfig["measures"].as<size_type>();
     auto      MeasureStep = RunConfig["measure_step"].as<size_type>();
     auto      NTherm = RunConfig["therm_steps"].as<size_type>();
-    auto      InitializeField = RunConfig["field_init"].as<bool>();
+    auto      InitializeField = RunConfig["field_init"];
     bool      HotStart = false;
     impl_type HotStartScale = 1.0;
-    if (InitializeField) {
+
+    /* <-- ################## HERE ################## --> */
+    if (InitializeField.IsDefined()) {
         HotStart = RunConfig["hot_start"].as<bool>();
         if (HotStart) {
             HotStartScale = RunConfig["hot_start_scale"].as<impl_type>();
@@ -259,6 +262,7 @@ inline void MonteCarloHandler<Action, TGen>::execute(const YAML::Node& RunConfig
     /* Log Run parameters */
     _Logger << IO::LI_time() + "[" + RunName + "] - Starting Monte Carlo updates..\n";
 
+    /* <-- ################## HERE ################## --> */
     /* Initialize the field */
     if (InitializeField) {
         if (HotStart) {
@@ -328,8 +332,10 @@ inline void MonteCarloHandler<Action, TGen>::execute(const YAML::Node& RunConfig
 
 template <class Action, class TGen>
 inline void MonteCarloHandler<Action, TGen>::saveConfiguration(size_type Iter) {
-    fs::path FileName = _WorkspacePath / "configurations" / (std::to_string(Iter) + ".h5");
-    GlobalHdf5Handler.saveLattice(FileName, "field", *_Field);
+    fs::path          FileName = _WorkspacePath / "configurations" / (std::to_string(Iter) + ".h5");
+    std::stringstream RngState;
+    RngState << _Rng;
+    GlobalHdf5Handler.saveLattice(FileName, "field", *_Field, RngState);
 }
 
 template <class Action, class TGen>
