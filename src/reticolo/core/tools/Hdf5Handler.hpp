@@ -191,21 +191,23 @@ inline void HDF5Handler::readLattice(const fs::path& FileName, const std::string
     /* Open HDF5 file*/
     hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     /* Read field dataset */
+    // This works but it's not the way
     std::array<hsize_t, 1> Entries = {field.size()};
     hid_t                  DataSpaceId = H5Screate_simple(1, Entries.data(), H5P_DEFAULT);
     hid_t                  DataTypeId = make_H5_Type<T>();
     hid_t                  DataSetId = H5Dopen(FileId, LatticeID.c_str(), H5P_DEFAULT);
-    hid_t                  status = H5Dread(DataSetId, DataTypeId, DataSpaceId, DataSpaceId, H5P_DEFAULT, field.data());
-    //     H5Dcreate(FileId, LatticeID.c_str(), DataTypeId, DataSpaceId, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    // H5Dwrite(DataSetId, DataTypeId, H5S_ALL, H5S_ALL, H5P_DEFAULT, field.data());
-    /* write lattice sizes as attribute */
-    // std::array<hsize_t, 1> Dimension = {(hsize_t)field.getDim()};
-    // hid_t                  AttrSpaceId = H5Screate_simple(1, Dimension.data(), H5P_DEFAULT);
-    // hid_t                  AttrTypeId = make_H5_Type<typename Lattice<T>::size_type>();
-    // hid_t                  AttrId = H5Acreate(DataSetId, "sizes", AttrTypeId, AttrSpaceId, H5P_DEFAULT, H5P_DEFAULT);
-    // H5Awrite(AttrId, AttrTypeId, field.getSizes().data());
+    H5Dread(DataSetId, DataTypeId, DataSpaceId, DataSpaceId, H5P_DEFAULT, field.data());
+    // The right way to do it
+    // Open the dataset
+    // get the type and compare with the expected type -> throw if not same
+    // get the data size and compare with the lattice -> throw if not same
+    // ^^ this only means they have the same number of lattice sites ^^
+    // get the sizes attribute to confirm the correct lattice layout -> throw if not same
+    // read the lattice dataset
 
+    /* Deallocate all HDF5 resources*/
     H5close();
+    /* Release the omp_lock */
     omp_unset_lock(&_IoLock);
 }
 
