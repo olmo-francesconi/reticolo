@@ -20,8 +20,6 @@
 
 #pragma once
 
-#include <omp.h>
-
 #include <random>
 
 #include "reticolo/lattice/lattice.hpp"
