@@ -10,7 +10,6 @@
 
 #pragma once
 
-#include <concepts>
 #include <cstdlib>
 #include <memory>
 #include <random>
