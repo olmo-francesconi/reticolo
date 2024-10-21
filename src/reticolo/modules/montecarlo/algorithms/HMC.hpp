@@ -87,6 +87,9 @@ inline void HMC<Action, TGen>::setup(const YAML::Node& Params, const Lattice<fie
 template <class Action, class TGen>
 inline void HMC<Action, TGen>::updateField(Lattice<field_type>& field, Action& action, monte_carlo_data_type& state,
                                            TGen& rng) {
+    // Reset distributions
+    _Norm.reset();
+    _Unif.reset();
     size_type NSites = field.getNsites();
     impl_type Half = 0.5;
     // save the old field configuration;

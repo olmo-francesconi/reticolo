@@ -84,6 +84,9 @@ inline void Metropolis<Action, TGen>::updateField(lattice_type& field, Action& a
                                                   TGen& rng) {
     size_type   Acc = 0;       // acceptance
     action_type SVarTot(0.0);  // cumulative action variation
+    // Reset distributions
+    _Norm.reset();
+    _Unif.reset();
     // Loop over the entire lattice
     for (size_type Site = 0; Site < field.getNsites(); Site++) {
         // Generate a randomized local field variation
