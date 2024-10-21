@@ -77,8 +77,6 @@ inline void HMC<Action, TGen>::setup(const YAML::Node& Params, const Lattice<fie
     /* Initialize distributions */
     _Unif = std::uniform_real_distribution<impl_type>(0.0, 1.0);
     _Norm = std::normal_distribution<impl_type>(0.0, 1.0);
-    static_assert(std::same_as<typename std::uniform_real_distribution<impl_type>::result_type, impl_type>,
-                  "type error");
 }
 
 /*--------------------------------------------------------------------------------------------------
