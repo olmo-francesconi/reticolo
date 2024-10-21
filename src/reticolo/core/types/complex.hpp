@@ -49,12 +49,12 @@ inline void reset(T& val) {
 --------------------------------------------------------------------------------------------------*/
 template <ComplexValue T>
 inline auto dot(const T& val) -> T::value_type {
-    return val.real() * val.real() + val.imag() * val.imag();
+    return (val.real() * val.real()) + (val.imag() * val.imag());
 }
 
 template <ComplexValue T>
 inline auto dot(const T& lhs, const T& rhs) -> T::value_type {
-    return lhs.real() * rhs.real() + lhs.imag() * rhs.imag();
+    return (lhs.real() * rhs.real()) + (lhs.imag() * rhs.imag());
 }
 
 /*--------------------------------------------------------------------------------------------------

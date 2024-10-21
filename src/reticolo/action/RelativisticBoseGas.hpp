@@ -167,20 +167,20 @@ inline auto RelativisticBoseGas<TImpl>::compute_S_loc(Lattice<field_type>& field
     field_type PhiNt = field.n(site, _t);
     field_type PhiPt = field.p(site, _t);
 
-    TImpl Phi2 = Phi.real() * Phi.real() + Phi.imag() * Phi.imag();
+    TImpl Phi2 = (Phi.real() * Phi.real()) + (Phi.imag() * Phi.imag());
 
-    TImpl Real = 0.5 * p.eta * Phi2 + 0.25 * p.lambda * Phi2 * Phi2 -
-                 Phi.real() * (field.n(site, _x).real() + field.p(site, _x).real() +  //
-                               field.n(site, _y).real() + field.p(site, _y).real() +  //
-                               field.n(site, _z).real() + field.p(site, _z).real() +  //
-                               cosh(p.mu) * PhiNt.real() + cosh(p.mu) * PhiPt.real()) -
-                 Phi.imag() * (field.n(site, _x).imag() + field.p(site, _x).imag() +  //
-                               field.n(site, _y).imag() + field.p(site, _y).imag() +  //
-                               field.n(site, _z).imag() + field.p(site, _z).imag() +  //
-                               cosh(p.mu) * PhiNt.imag() + cosh(p.mu) * PhiPt.imag());
+    TImpl Real = (0.5 * p.eta * Phi2) + (0.25 * p.lambda * Phi2 * Phi2) -
+                 (Phi.real() * (field.n(site, _x).real() + field.p(site, _x).real() +  //
+                                field.n(site, _y).real() + field.p(site, _y).real() +  //
+                                field.n(site, _z).real() + field.p(site, _z).real() +  //
+                                cosh(p.mu) * PhiNt.real() + cosh(p.mu) * PhiPt.real())) -
+                 (Phi.imag() * (field.n(site, _x).imag() + field.p(site, _x).imag() +  //
+                                field.n(site, _y).imag() + field.p(site, _y).imag() +  //
+                                field.n(site, _z).imag() + field.p(site, _z).imag() +  //
+                                cosh(p.mu) * PhiNt.imag() + cosh(p.mu) * PhiPt.imag()));
 
-    TImpl Imag =
-        Phi.real() * PhiNt.imag() - Phi.imag() * PhiNt.real() + PhiPt.real() * Phi.imag() - PhiPt.imag() * Phi.real();
+    TImpl Imag = (Phi.real() * PhiNt.imag()) - (Phi.imag() * PhiNt.real()) +  //
+                 (PhiPt.real() * Phi.imag()) - (PhiPt.imag() * Phi.real());
 
     return {Real, Imag};
 }
@@ -196,15 +196,15 @@ inline auto RelativisticBoseGas<TImpl>::compute_dS_loc(Lattice<field_type>& fiel
     TImpl Phi2Old = dot(PhiOld);
     TImpl Phi2New = dot(PhiNew);
     TImpl Phi2Var = Phi2New - Phi2Old;
-    TImpl Phi4Var = Phi2New * Phi2New - Phi2Old * Phi2Old;
+    TImpl Phi4Var = (Phi2New * Phi2New) - (Phi2Old * Phi2Old);
 
     field_type NeighborsSum = field.n(site, _x) + field.p(site, _x) +  //
                               field.n(site, _y) + field.p(site, _y) +  //
                               field.n(site, _z) + field.p(site, _z) +  //
-                              cosh(p.mu) * (PhiNt + PhiPt);
+                              (cosh(p.mu) * (PhiNt + PhiPt));
 
-    TImpl Real = 0.5 * p.eta * Phi2Var + 0.25 * p.lambda * Phi4Var - dphi.real() * NeighborsSum.real() -
-                 dphi.imag() * NeighborsSum.imag();
+    TImpl Real = (0.5 * p.eta * Phi2Var) + (0.25 * p.lambda * Phi4Var) -  //
+                 (dphi.real() * NeighborsSum.real()) - (dphi.imag() * NeighborsSum.imag());
 
     TImpl Imag = (dphi.real() * PhiNt.imag() - dphi.imag() * PhiNt.real()) +
                  (PhiPt.real() * dphi.imag() - PhiPt.imag() * dphi.real());
@@ -219,13 +219,13 @@ inline void RelativisticBoseGas<TImpl>::compute_Forces(Lattice<field_type>& fiel
         field_type Phi2 = {Phi.real() * Phi.real(), Phi.imag() * Phi.imag()};
         field_type Phi3 = {Phi2.real() * Phi.real(), Phi2.imag() * Phi.imag()};
 
-        field_type NeighborsSum = field.n(Site, _x) + field.p(Site, _x) +                //
-                                  field.n(Site, _y) + field.p(Site, _y) +                //
-                                  field.n(Site, _z) + field.p(Site, _z) +                //
-                                  cosh(p.mu) * (field.n(Site, _t) + field.p(Site, _t));  //
+        field_type NeighborsSum = field.n(Site, _x) + field.p(Site, _x) +                  //
+                                  field.n(Site, _y) + field.p(Site, _y) +                  //
+                                  field.n(Site, _z) + field.p(Site, _z) +                  //
+                                  (cosh(p.mu) * (field.n(Site, _t) + field.p(Site, _t)));  //
 
-        TImpl Real = p.eta * Phi.real() + p.lambda * (Phi3.real() + Phi.real() * Phi2.imag()) - NeighborsSum.real();
-        TImpl Imag = p.eta * Phi.imag() + p.lambda * (Phi3.imag() + Phi.imag() * Phi2.real()) - NeighborsSum.imag();
+        TImpl Real = (p.eta * Phi.real()) + (p.lambda * (Phi3.real() + Phi.real() * Phi2.imag())) - NeighborsSum.real();
+        TImpl Imag = (p.eta * Phi.imag()) + (p.lambda * (Phi3.imag() + Phi.imag() * Phi2.real())) - NeighborsSum.imag();
         forces[Site] = {Real, Imag};
     }
 }
@@ -248,7 +248,7 @@ inline void RelativisticBoseGas<TImpl>::compute_LLRForces(Lattice<field_type>& f
         Phi = field[Site];
         SIm += Phi.real() * field.n(Site, _t).imag() - Phi.imag() * field.n(Site, _t).real();
     }
-    TImpl LLRForcePref = ((SIm - Sk) / (width * width) + ak);
+    TImpl LLRForcePref = (((SIm - Sk) / (width * width)) + ak);
 
     for (size_type Site = 0; Site < field.getNsites(); Site++) {
         Phi = field[Site];

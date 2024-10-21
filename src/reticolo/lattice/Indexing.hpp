@@ -47,8 +47,8 @@ class Indexing {
     Indexing(const std::vector<size_type>& shape);
 
     /* Get next/prev indexes */
-    auto nextId(size_type site, size_type dir) -> size_type { return Next[site * Dims + dir]; }
-    auto prevId(size_type site, size_type dir) -> size_type { return Prev[site * Dims + dir]; }
+    auto nextId(size_type site, size_type dir) -> size_type { return Next[(site * Dims) + dir]; }
+    auto prevId(size_type site, size_type dir) -> size_type { return Prev[(site * Dims) + dir]; }
 };
 
 /* Constructor */
@@ -74,10 +74,10 @@ Indexing::Indexing(const std::vector<size_type>& shape)
         for (size_type Dir = 0; Dir < Dims; Dir++) {
             NextCoord = Coord;
             NextCoord[Dir] = (Coord[Dir] + 1) % Sizes[Dir];
-            Next[Site * Dims + Dir] = dot(NextCoord, SubVols);
+            Next[(Site * Dims) + Dir] = dot(NextCoord, SubVols);
             PrevCoord = Coord;
             PrevCoord[Dir] = (Coord[Dir] + (Sizes[Dir] - 1)) % Sizes[Dir];
-            Prev[Site * Dims + Dir] = dot(PrevCoord, SubVols);
+            Prev[(Site * Dims) + Dir] = dot(PrevCoord, SubVols);
         }
         advance_coord(Sizes, Coord);
     }

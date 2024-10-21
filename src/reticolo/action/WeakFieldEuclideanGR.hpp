@@ -776,7 +776,6 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealF>>::updateField(
         // Generate a randomized local field variation
         // field_type FieldVar;  // local field variation
         field_type FieldOld = field[Site];
-        impl_type  Scale = _ProposalWidth * action._LPFm / action._AA;
 
         // wiggle h
         for (int i = 0; i < 10; i++) {
@@ -789,9 +788,6 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealF>>::updateField(
             field[Site][i] += v * fp * Scale;
             field[Site][++i] += u * fp * Scale;
         }
-
-        // randomize(FieldVar, Scale, _Norm, rng);
-        // HField_math::sum(field[Site], field[Site], FieldVar);
 
         // Compute the updated Lagrangian in the surrounding sites
         std::vector<action_type> LGRPost;             // Vector storing the new curvature values in the check sites
@@ -853,9 +849,6 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealD>, std::mt19937_6
             field[Site][i] += v * fp * Scale;
             field[Site][++i] += u * fp * Scale;
         }
-
-        // randomize(FieldVar, Scale, _Norm, rng);
-        // HField_math::sum(field[Site], field[Site], FieldVar);
 
         // Compute the updated Lagrangian in the surrounding sites
         std::vector<action_type> LGRPost;             // Vector storing the new curvature values in the check sites

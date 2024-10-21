@@ -67,14 +67,14 @@ struct HField : public std::array<T, 10> {
         if (nu < mu) {
             std::swap(mu, nu);
         }
-        return (*this)[4 * mu + nu - (mu * (mu + 1)) / 2];
+        return (*this)[(4 * mu) + nu - ((mu * (mu + 1)) / 2)];
     }
 
     auto operator()(size_t mu, size_t nu) const -> const T& {
         if (nu < mu) {
             std::swap(mu, nu);
         }
-        return (*this)[4 * mu + nu - (mu * (mu + 1)) / 2];
+        return (*this)[(4 * mu) + nu - ((mu * (mu + 1)) / 2)];
     }
 
     auto operator=(const HField& other) -> HField& {

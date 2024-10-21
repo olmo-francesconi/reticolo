@@ -25,7 +25,7 @@ enum {
 
 template <typename T>
 inline auto dot(const std::vector<T>& vect) -> T {
-    return std::accumulate(vect.begin(), vect.end(), 0, [](int sum, int value) { return sum + value * value; });
+    return std::accumulate(vect.begin(), vect.end(), 0, [](int sum, int value) { return sum + (value * value); });
 }
 
 template <typename T>
