@@ -15,9 +15,11 @@
 #include <array>
 #include <filesystem>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "reticolo/lattice/indexing.hpp"
 #include "reticolo/lattice/lattice.hpp"
 
 namespace reticolo {
@@ -191,19 +193,56 @@ inline void HDF5Handler::readLattice(const fs::path& FileName, const std::string
     /* Open HDF5 file*/
     hid_t FileId = H5Fopen(FileName.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     /* Read field dataset */
-    // This works but it's not the way
-    std::array<hsize_t, 1> Entries = {field.size()};
-    hid_t                  DataSpaceId = H5Screate_simple(1, Entries.data(), H5P_DEFAULT);
-    hid_t                  DataTypeId = make_H5_Type<T>();
-    hid_t                  DataSetId = H5Dopen(FileId, LatticeID.c_str(), H5P_DEFAULT);
+    // open the dataset
+    hid_t DataSetId = H5Dopen(FileId, LatticeID.c_str(), H5P_DEFAULT);
+    // check the dataspace is one-dimensional
+    hid_t     DataSpaceId = H5Dget_space(DataSetId);
+    const int DataSpaceNDims = H5Sget_simple_extent_ndims(DataSpaceId);
+    if (DataSpaceNDims != 1) {
+        throw std::runtime_error("HDF5Handler - Error while reading configuration (dataspace mismatch)");
+    }
+    // check the size of the dataset
+    std::vector<hsize_t> Entries(DataSpaceNDims);
+    H5Sget_simple_extent_dims(DataSpaceId, Entries.data(), nullptr);
+    if (Entries[0] != field.size()) {
+        throw std::runtime_error("HDF5Handler - Error while reading configuration (dimension mismatch)");
+    }
+    // check the sizes attribute
+    hid_t                SizeAttrId = H5Aopen(DataSetId, "sizes", H5P_DEFAULT);
+    hid_t                SizeAttrSpaceId = H5Aget_space(SizeAttrId);
+    const int            SizeAttrNDims = H5Sget_simple_extent_ndims(SizeAttrSpaceId);
+    std::vector<hsize_t> SizeAttrDims(SizeAttrNDims, 0);
+    H5Sget_simple_extent_dims(SizeAttrSpaceId, SizeAttrDims.data(), nullptr);
+    if (SizeAttrDims[0] != field.getDim()) {
+        throw std::runtime_error("HDF5Handler - Error while reading configuration (dimension mismatch)");
+    }
+    std::vector<Indexing::size_type> Sizes(SizeAttrDims[0], 0);
+    hid_t                            SizeAttrTypeId = H5Aget_type(SizeAttrId);
+    hid_t                            SizeAttrTypeIdCheck = make_H5_Type<typename Lattice<T>::size_type>();
+    if (H5Tequal(SizeAttrTypeId, SizeAttrTypeIdCheck) != 1) {
+        throw std::runtime_error("HDF5Handler - Error while reading configuration (sizes attribute type mismatch)");
+    }
+    H5Aread(SizeAttrId, SizeAttrTypeId, Sizes.data());
+    if (Sizes != field.getSizes()) {
+        throw std::runtime_error("HDF5Handler - Error while reading configuration (dimension mismatch)");
+    }
+    // check the field types
+    hid_t DataTypeId = H5Dget_type(DataSetId);
+    hid_t DataTypeIdCheck = make_H5_Type<T>();
+    if (H5Tequal(DataTypeId, DataTypeIdCheck) != 1) {
+        throw std::runtime_error("HDF5Handler - Error while reading configuration (field type mismatch)");
+    }
+    // read the dataset
     H5Dread(DataSetId, DataTypeId, DataSpaceId, DataSpaceId, H5P_DEFAULT, field.data());
-    // The right way to do it
-    // Open the dataset
-    // get the type and compare with the expected type -> throw if not same
-    // get the data size and compare with the lattice -> throw if not same
-    // ^^ this only means they have the same number of lattice sites ^^
-    // get the sizes attribute to confirm the correct lattice layout -> throw if not same
-    // read the lattice dataset
+
+    /* Read RngState as attribute */
+    hid_t             RngAttrId = H5Aopen(DataSetId, "RngState", H5P_DEFAULT);
+    hsize_t           RngAttrSize = H5Aget_storage_size(RngAttrId);
+    std::vector<char> RngRaw(RngAttrSize + 1);
+    hid_t             RngAttrType = H5Aget_type(RngAttrId);
+    H5Aread(RngAttrId, RngAttrType, RngRaw.data());
+    RngState.str(std::string());
+    RngState << std::string(RngRaw.begin(), RngRaw.end());
 
     /* Deallocate all HDF5 resources*/
     H5close();
