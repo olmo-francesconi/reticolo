@@ -35,7 +35,7 @@ auto get_stats(std::vector<RealD> Vec) -> std::array<RealD, 2> {
     RealD Sum = std::accumulate(std::begin(Vec), std::end(Vec), 0.0);
     RealD Mean = Sum / Vec.size();
     RealD Accum = 0.0;
-    std::for_each(std::begin(Vec), std::end(Vec), [&](const double val) { Accum += (val - Mean) * (val - Mean); });
+    std::ranges::for_each(Vec, [&](const double val) { Accum += (val - Mean) * (val - Mean); });
     RealD Stdev = sqrt(Accum / (Vec.size() - 1));
     return {Mean, Stdev};
 }
@@ -46,8 +46,8 @@ void printHistogram(const std::vector<double>& data, int binCount = 10, int maxB
         return;
     }
 
-    double MinValue = *std::min_element(data.begin(), data.end());
-    double MaxValue = *std::max_element(data.begin(), data.end());
+    double MinValue = *std::ranges::min_element(data);
+    double MaxValue = *std::ranges::max_element(data);
     double Range = MaxValue - MinValue;
     double BinSize = Range / binCount;
 
@@ -60,12 +60,12 @@ void printHistogram(const std::vector<double>& data, int binCount = 10, int maxB
     }
 
     // Find the maximum bin count
-    int MaxBinCount = *std::max_element(Bins.begin(), Bins.end());
+    int MaxBinCount = *std::ranges::max_element(Bins);
 
     // Print the histogram
 
     for (int i = 0; i < binCount; ++i) {
-        double BinStart = MinValue + i * BinSize;
+        double BinStart = MinValue + (i * BinSize);
         double BinEnd = BinStart + BinSize;
         std::cout << std::fixed << std::setprecision(4) << "[" << BinStart << ", " << BinEnd << "): ";
 
