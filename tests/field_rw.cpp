@@ -33,8 +33,6 @@ using i_t = Indexing::size_type;
 auto main(int argc, char* argv[]) -> int {
     const std::vector<i_t> SizeOut({4, 4, 4, 4});
     Lattice<ComplexD>      FieldOut(SizeOut);
-    const std::vector<i_t> SizeIn({4, 4, 4, 4});
-    Lattice<ComplexD>      FieldIn(SizeIn);
     std::cout << "Lattice object initialized\n\n";
 
     std::cout << "Randomizing the lattice.. ";
@@ -54,6 +52,8 @@ auto main(int argc, char* argv[]) -> int {
     std::cout << "Field sum: " << std::reduce(FieldOut.begin(), FieldOut.end()) << "\n";
     std::cout << "Next randon munber: " << Rng() << "\n\n";
 
+    const std::vector<i_t> SizeIn({4, 4, 4, 4});
+    Lattice<ComplexD>      FieldIn(SizeIn);
     std::cout << "Reading in the file.. ";
     try {
         GlobalHdf5Handler.readLattice("./out.hdf5", "rw_test", FieldIn, RngState);
