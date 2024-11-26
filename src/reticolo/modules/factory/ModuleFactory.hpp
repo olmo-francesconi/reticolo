@@ -10,7 +10,10 @@
 
 #pragma once
 
+#include <sys/types.h>
+
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <map>
 #include <memory>
@@ -25,12 +28,12 @@
 
 namespace reticolo {
 
-enum class Modules {
+enum class Modules : std::uint8_t {
     MonteCarlo,
 };
 std::map<std::string, Modules> ModMap{{"MonteCarlo", Modules::MonteCarlo}};
 
-enum class Actions {
+enum class Actions : std::uint8_t {
     RelativisticBoseGasF,
     RelativisticBoseGasD,
     WeakFieldEuclideanGRF,
