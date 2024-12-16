@@ -1,7 +1,6 @@
 /*******************************************************************************
 
- - reticolo
- (www.github.com/olmo-francesconi/reticolo.git)
+ - reticolo (www.github.com/olmo-francesconi/reticolo.git)
 
  - SourceFile: action/RelativisticBoseGas.hpp
 
@@ -762,10 +761,10 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealF>>::updateField(
     monte_carlo_data_type&               state,   //
     std::mt19937_64&                     rng)                         //
 {
-    impl_type u;   // Marsaglia polar method support variables
-    impl_type v;   //
-    impl_type s;   //
-    impl_type fp;  //
+    impl_type MrsglU;   // Marsaglia polar method support variables
+    impl_type MrsglV;   //
+    impl_type MrsglS;   //
+    impl_type MrsglFP;  //
     impl_type Scale = _ProposalWidth * action._LPFm / action._AA;
 
     size_type   Acc = 0;       // acceptance
@@ -780,13 +779,13 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealF>>::updateField(
         // wiggle h
         for (int i = 0; i < 10; i++) {
             do {
-                u = _Unifc(rng);
-                v = _Unifc(rng);
-                s = u * u + v * v;
-            } while (s > 1 || s == 0);
-            fp = std::sqrt(-2 * std::log(s) / s);
-            field[Site][i] += v * fp * Scale;
-            field[Site][++i] += u * fp * Scale;
+                MrsglU = _Unifc(rng);
+                MrsglV = _Unifc(rng);
+                MrsglS = MrsglU * MrsglU + MrsglV * MrsglV;
+            } while (MrsglS > 1 || MrsglS == 0);
+            MrsglFP = std::sqrt(-2 * std::log(MrsglS) / MrsglS);
+            field[Site][i] += MrsglV * MrsglFP * Scale;
+            field[Site][++i] += MrsglU * MrsglFP * Scale;
         }
 
         // Compute the updated Lagrangian in the surrounding sites
@@ -822,10 +821,10 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealD>, std::mt19937_6
     monte_carlo_data_type&               state,   //
     std::mt19937_64&                     rng)                         //
 {
-    impl_type u;   // Marsaglia polar method support variables
-    impl_type v;   //
-    impl_type s;   //
-    impl_type fp;  //
+    impl_type MrsglU;   // Marsaglia polar method support variables
+    impl_type MrsglV;   //
+    impl_type MrsglS;   //
+    impl_type MrsglFP;  //
     impl_type Scale = _ProposalWidth * action._LPFm / action._AA;
 
     size_type   Acc = 0;       // acceptance
@@ -841,13 +840,13 @@ void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealD>, std::mt19937_6
         // wiggle h
         for (int i = 0; i < 10; i++) {
             do {
-                u = _Unifc(rng);
-                v = _Unifc(rng);
-                s = u * u + v * v;
-            } while (s > 1 || s == 0);
-            fp = std::sqrt(-2 * std::log(s) / s);
-            field[Site][i] += v * fp * Scale;
-            field[Site][++i] += u * fp * Scale;
+                MrsglU = _Unifc(rng);
+                MrsglV = _Unifc(rng);
+                MrsglS = MrsglU * MrsglU + MrsglV * MrsglV;
+            } while (MrsglS > 1 || MrsglS == 0);
+            MrsglFP = std::sqrt(-2 * std::log(MrsglS) / MrsglS);
+            field[Site][i] += MrsglV * MrsglFP * Scale;
+            field[Site][++i] += MrsglU * MrsglFP * Scale;
         }
 
         // Compute the updated Lagrangian in the surrounding sites
