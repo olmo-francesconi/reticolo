@@ -38,16 +38,16 @@ inline void reticolo_init(int argc, char* argv[]) {
         ("h,help", "Print usage");
     auto Result = Options.parse(argc, argv);
 
-    if (Result.count("help") != 0U) {
-        std::cout << Options.help() << std::endl;
+    if (Result.contains("help")) {
+        std::cout << Options.help() << '\n';
         exit(EXIT_SUCCESS);
     }
 
     std::string SetupFileName;
-    if (Result.count("config") != 0U) {
+    if (Result.contains("config")) {
         SetupFileName = Result["config"].as<std::string>();
     } else {
-        std::cout << Options.help() << std::endl;
+        std::cout << Options.help() << '\n';
         exit(EXIT_SUCCESS);
     }
 

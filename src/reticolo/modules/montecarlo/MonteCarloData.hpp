@@ -48,11 +48,7 @@ struct data<ActionType> {
     }
 
     /* Operators overloading */
-    auto operator=(const data<ActionType>& rhs) -> data<ActionType>& {
-        _Acceptance = rhs._Acceptance;
-        _S = rhs._S;
-        return *this;
-    }
+    auto operator=(const data<ActionType>& rhs) -> data<ActionType>& = default;
 
     auto operator+=(const data<ActionType>& rhs) -> data<ActionType>& {
         _Acceptance += rhs._Acceptance;
@@ -136,12 +132,7 @@ struct data<ActionType> {
     }
 
     /* Operators overloading */
-    auto operator=(const data<ActionType>& rhs) -> data<ActionType>& {
-        _Acceptance = rhs._Acceptance;
-        _SRe = rhs._SRe;
-        _SIm = rhs._SIm;
-        return *this;
-    }
+    auto operator=(const data<ActionType>& rhs) -> data<ActionType>& = default;
 
     auto operator+=(const data<ActionType>& rhs) -> data<ActionType>& {
         _Acceptance += rhs._Acceptance;

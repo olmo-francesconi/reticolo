@@ -6,6 +6,10 @@
 
  - Author: Olmo Francesconi <olmo.francesconi@glasgow.ac.uk>
 
+ - This file defines the ReticoloCore class, which implements the Singleton
+   design pattern. It provides mechanisms for initializing a single instance,
+   loading configurations from a YAML file, and accessing the setup data.
+
 *******************************************************************************/
 
 #pragma once
@@ -69,7 +73,7 @@ void ReticoloCore::readSetup(const std::string& filename) {
         auto ConfigFilePath = std::filesystem::canonical(filename);
         Setup = YAML::LoadFile(filename);
     } catch (const std::exception& e) {
-        std::cout << "parse config file failed:\n" << e.what() << std::endl;
+        std::cout << "parse config file failed:\n" << e.what() << '\n';
         exit(EXIT_FAILURE);
     }
 };
