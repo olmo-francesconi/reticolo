@@ -10,8 +10,6 @@
 
 #pragma once
 
-#include <omp.h>
-
 #include <memory>
 #include <random>
 

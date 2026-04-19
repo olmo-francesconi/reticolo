@@ -50,9 +50,9 @@ inline auto pretty_welcome() -> std::string {
 inline auto pretty_bytes(size_t bytes) -> std::string {
     std::array<std::string, 7> Suffixes({" B", "KB", "MB", "GB", "TB", "PB", "EB"});
 
-    int    SuffixIndex = 0;  // Pretty suffix index
-    double Count = bytes;    // Pretty value
-    while (Count >= 1024 && SuffixIndex < Suffixes.size()) {
+    std::size_t SuffixIndex = 0;  // Pretty suffix index
+    double      Count = bytes;    // Pretty value
+    while (Count >= 1024 && (SuffixIndex + 1) < Suffixes.size()) {
         SuffixIndex++;
         Count /= 1024;
     }

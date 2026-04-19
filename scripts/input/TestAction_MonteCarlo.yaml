@@ -1,0 +1,35 @@
+workflows:
+  - MonteCarlo:
+      name: test_action_job
+      main_seed: 0
+
+      lattice:
+        size: [8, 8, 8, 8]
+
+      action:
+        name: TestAction
+        parameters:
+          # IMPLEMENTATION REQUIRED:
+          # Replace these placeholders with the parameters parsed in TestAction::setup.
+          coupling: 1.0
+          mass: 1.0
+
+      algorithm:
+        name: Metropolis
+        parameters:
+          prop_width: 0.1
+
+      output_dir: ./TestAction_MonteCarlo
+      save_config: true
+      save_data: true
+      console_output: true
+
+      runs:
+        - name: test_run
+          measures: 100
+          measure_step: 10
+          therm_steps: 0
+          field_init: true
+          hot_start: false
+
+# Storage schema: test_action

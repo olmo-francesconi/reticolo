@@ -10,9 +10,6 @@
 
 #pragma once
 
-#include <H5Ipublic.h>
-#include <H5Tpublic.h>
-
 #include <array>
 #include <cmath>
 #include <concepts>
@@ -25,7 +22,6 @@
 
 #include "reticolo/action/actionBase.hpp"
 #include "reticolo/core/physics/constants.hpp"
-#include "reticolo/core/tools/hdf5_helpers.hpp"  // IWYU pragma: keep
 #include "reticolo/core/types/coord.hpp"
 #include "reticolo/core/types/hfield.hpp"
 #include "reticolo/core/types/real.hpp"
@@ -50,11 +46,6 @@ class WeakFieldEuclideanGR : public ActionBase<HField<TImpl>, TImpl, TImpl> {
     using impl_type = TImpl;
     static constexpr int Dims = 4;     // Dimensions of the action
     static constexpr int Stencil = 2;  // Minimum step size for multi-thread safety
-
-    /* Algorithm capabilities */
-    static constexpr bool IsMetropolisCapable = true;
-    static constexpr bool IsHmcCapable = false;
-    static constexpr bool IsLLRCapable = false;
 
     /* Action parameters */
     struct Params {
@@ -91,7 +82,7 @@ class WeakFieldEuclideanGR : public ActionBase<HField<TImpl>, TImpl, TImpl> {
     auto compute_dS_loc(Lattice<field_type>& field, const field_type& dphi, size_type site) -> action_type override;
 
     /* HMC methods */
-    void compute_Forces(Lattice<field_type>& field, Lattice<field_type>& Forces) override {};
+    void compute_Forces(Lattice<field_type>& /*unused*/, Lattice<field_type>& /*unused*/) override {};
 
     void compute_LLRForces(Lattice<field_type>& /*unused*/, Lattice<field_type>& /*unused*/, TImpl /*unused*/,
                            TImpl /*unused*/, TImpl /*unused*/) override {};
@@ -191,13 +182,14 @@ inline auto WeakFieldEuclideanGR<TImpl>::compute_S(Lattice<field_type>& field) -
 }
 
 template <RealValue TImpl>
-inline auto WeakFieldEuclideanGR<TImpl>::compute_S_loc(Lattice<field_type>& field, size_type site) -> action_type {
+inline auto WeakFieldEuclideanGR<TImpl>::compute_S_loc(Lattice<field_type>& /*unused*/, size_type /*unused*/)
+    -> action_type {
     return 0.0;
 };
 
 template <RealValue TImpl>
-inline auto WeakFieldEuclideanGR<TImpl>::compute_dS_loc(Lattice<field_type>& field, const field_type& dphi,
-                                                        size_type site) -> action_type {
+inline auto WeakFieldEuclideanGR<TImpl>::compute_dS_loc(Lattice<field_type>& /*unused*/, const field_type& /*unused*/,
+                                                        size_type /*unused*/) -> action_type {
     return 0.0;
 };
 
@@ -399,7 +391,7 @@ inline auto WeakFieldEuclideanGR<TImpl>::compute_dS_loc(Lattice<field_type>& fie
 // }
 
 template <RealValue TImpl>
-inline auto WeakFieldEuclideanGR<TImpl>::Measure(const Lattice<field_type>& field) -> Observables {
+inline auto WeakFieldEuclideanGR<TImpl>::Measure(const Lattice<field_type>& /*unused*/) -> Observables {
     return {std::reduce(_LGR.begin(), _LGR.end())};
 }
 
@@ -479,7 +471,7 @@ inline auto WeakFieldEuclideanGR<TImpl>::compute_LGR_loc(const Lattice<field_typ
 
     // -1/4 (d_rho h_mu,nu * d_rho h_mu,nu)
     for (int Rho = 0; Rho < 4; Rho++) {
-        Ans1 += Dhmn[Rho][MUNU_00] * Dhmn[Rho][MUNU_00] + Dhmn[Rho][MUNU_01] * Dhmn[Rho][MUNU_01] +
+        Ans1 += (Dhmn[Rho][MUNU_00] * Dhmn[Rho][MUNU_00]) + (Dhmn[Rho][MUNU_01] * Dhmn[Rho][MUNU_01]) +
                 Dhmn[Rho][MUNU_02] * Dhmn[Rho][MUNU_02] + Dhmn[Rho][MUNU_03] * Dhmn[Rho][MUNU_03] +
                 Dhmn[Rho][MUNU_10] * Dhmn[Rho][MUNU_10] + Dhmn[Rho][MUNU_11] * Dhmn[Rho][MUNU_11] +
                 Dhmn[Rho][MUNU_12] * Dhmn[Rho][MUNU_12] + Dhmn[Rho][MUNU_13] * Dhmn[Rho][MUNU_13] +
@@ -728,154 +720,6 @@ inline auto WeakFieldEuclideanGR<TImpl>::compute_LGR_loc(const Lattice<field_typ
 // }
 
 }  // namespace reticolo::action
-
-/*--------------------------------------------------------------------------------------------------
-  HDF5 helper method Implementatin
---------------------------------------------------------------------------------------------------*/
-namespace reticolo {
-template <>
-auto make_H5_Type<action::WeakFieldEuclideanGR<RealF>::Observables>() -> hid_t {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::WeakFieldEuclideanGR<RealF>::Observables));
-    H5Tinsert(DataTypeHid, "R", HOFFSET(action::WeakFieldEuclideanGR<RealF>::Observables, R), H5T_NATIVE_FLOAT);
-    return DataTypeHid;
-}
-template <>
-auto make_H5_Type<action::WeakFieldEuclideanGR<RealD>::Observables>() -> hid_t {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::WeakFieldEuclideanGR<RealD>::Observables));
-    H5Tinsert(DataTypeHid, "R", HOFFSET(action::WeakFieldEuclideanGR<RealD>::Observables, R), H5T_NATIVE_DOUBLE);
-    return DataTypeHid;
-}
-}  // namespace reticolo
-
-/*--------------------------------------------------------------------------------------------------
-  MMonteCarlo::Metropolis::updateField() Specialization
---------------------------------------------------------------------------------------------------*/
-#include "reticolo/modules/montecarlo/algorithms/Metropolis.hpp"  // IWYU pragma: keep
-
-namespace reticolo {
-
-template <>
-void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealF>>::updateField(
-    lattice_type&                        field,   //
-    action::WeakFieldEuclideanGR<RealF>& action,  //
-    monte_carlo_data_type&               state,   //
-    std::mt19937_64&                     rng)                         //
-{
-    impl_type MrsglU;   // Marsaglia polar method support variables
-    impl_type MrsglV;   //
-    impl_type MrsglS;   //
-    impl_type MrsglFP;  //
-    impl_type Scale = _ProposalWidth * action._LPFm / action._AA;
-
-    size_type   Acc = 0;       // acceptance
-    action_type SVarTot(0.0);  // cumulative action variation
-
-    // for (size_type Site = 0; Site < field.getNsites(); Site++) {
-    for (const auto& Site : action._ToUpdate) {
-        // Generate a randomized local field variation
-        // field_type FieldVar;  // local field variation
-        field_type FieldOld = field[Site];
-
-        // wiggle h
-        for (int i = 0; i < 10; i++) {
-            do {
-                MrsglU = _Unifc(rng);
-                MrsglV = _Unifc(rng);
-                MrsglS = MrsglU * MrsglU + MrsglV * MrsglV;
-            } while (MrsglS > 1 || MrsglS == 0);
-            MrsglFP = std::sqrt(-2 * std::log(MrsglS) / MrsglS);
-            field[Site][i] += MrsglV * MrsglFP * Scale;
-            field[Site][++i] += MrsglU * MrsglFP * Scale;
-        }
-
-        // Compute the updated Lagrangian in the surrounding sites
-        std::vector<action_type> LGRPost;             // Vector storing the new curvature values in the check sites
-        action_type              ActionChange = 0.0;  // Cumulative curvature variation
-        for (size_type& CheckSite : action._Checks[Site]) {
-            impl_type Tmp = action.compute_LGR_loc(field, CheckSite);
-            if (Tmp > 0.0) {
-                LGRPost.push_back(Tmp);
-                ActionChange += Tmp - action._LGR[CheckSite];
-            } else {
-                break;
-            }
-        }
-        // Metropolis acceptance + positive action
-        if (LGRPost.size() == 5 && exp(-ActionChange) > _Unif(rng)) {
-            Acc++;
-            SVarTot += ActionChange;
-            for (size_type CheckSite = 0; CheckSite < 5; CheckSite++) {
-                action._LGR[action._Checks[Site][CheckSite]] = LGRPost[CheckSite];
-            }
-        } else {
-            field[Site] = FieldOld;
-        }
-    }
-    state.update(static_cast<impl_type>(Acc) / field.getNsites(), SVarTot);
-}
-
-template <>
-void MMonteCarlo::Metropolis<action::WeakFieldEuclideanGR<RealD>, std::mt19937_64>::updateField(
-    lattice_type&                        field,   //
-    action::WeakFieldEuclideanGR<RealD>& action,  //
-    monte_carlo_data_type&               state,   //
-    std::mt19937_64&                     rng)                         //
-{
-    impl_type MrsglU;   // Marsaglia polar method support variables
-    impl_type MrsglV;   //
-    impl_type MrsglS;   //
-    impl_type MrsglFP;  //
-    impl_type Scale = _ProposalWidth * action._LPFm / action._AA;
-
-    size_type   Acc = 0;       // acceptance
-    action_type SVarTot(0.0);  // cumulative action variation
-
-    field_type FieldOld;
-
-    // for (size_type Site = 0; Site < field.getNsites(); Site++) {
-    for (const auto& Site : action._ToUpdate) {
-        // store old value of the field
-        FieldOld = field[Site];
-
-        // wiggle h
-        for (int i = 0; i < 10; i++) {
-            do {
-                MrsglU = _Unifc(rng);
-                MrsglV = _Unifc(rng);
-                MrsglS = MrsglU * MrsglU + MrsglV * MrsglV;
-            } while (MrsglS > 1 || MrsglS == 0);
-            MrsglFP = std::sqrt(-2 * std::log(MrsglS) / MrsglS);
-            field[Site][i] += MrsglV * MrsglFP * Scale;
-            field[Site][++i] += MrsglU * MrsglFP * Scale;
-        }
-
-        // Compute the updated Lagrangian in the surrounding sites
-        std::vector<action_type> LGRPost;             // Vector storing the new curvature values in the check sites
-        action_type              ActionChange = 0.0;  // Cumulative curvature variation
-        for (size_type& CheckSite : action._Checks[Site]) {
-            impl_type Tmp = action.compute_LGR_loc(field, CheckSite);
-            if (Tmp > 0.0) {
-                LGRPost.push_back(Tmp);
-                ActionChange += Tmp - action._LGR[CheckSite];
-            } else {
-                break;
-            }
-        }
-        // Metropolis acceptance + positive action
-        if (LGRPost.size() == 5 && exp(-ActionChange) > _Unif(rng)) {
-            Acc++;
-            SVarTot += ActionChange;
-            for (size_type CheckSite = 0; CheckSite < 5; CheckSite++) {
-                action._LGR[action._Checks[Site][CheckSite]] = LGRPost[CheckSite];
-            }
-        } else {
-            field[Site] = FieldOld;
-        }
-    }
-    state.update(static_cast<impl_type>(Acc) / field.getNsites(), SVarTot);
-}
-
-}  // namespace reticolo
 
 // /*--------------------------------------------------------------------------------------------------
 //   montecarlo::HMC::updateField() Specialization

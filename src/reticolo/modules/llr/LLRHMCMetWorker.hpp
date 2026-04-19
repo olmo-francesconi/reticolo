@@ -15,6 +15,7 @@
 #include <string>
 
 #include "reticolo/lattice/lattice.hpp"
+#include "reticolo/modules/llr/LegacyLLRSupport.hpp"
 #include "reticolo/montecarlo/MonteCarloData.hpp"
 #include "reticolo/montecarlo/MonteCarloHandler.hpp"
 #include "reticolo/tools/io_utils.hpp"
@@ -26,7 +27,7 @@ namespace fs = std::filesystem;
 namespace reticolo::LLR {
 
 template <class T>
-concept LLRCapable = T::IsLLRCapable;
+concept LLRCapable = ::reticolo::legacy::llr::llr_capable_action<T>;
 
 /*--------------------------------------------------------------------------------------------------
     LLRWorker Class Declaration
@@ -212,7 +213,7 @@ void LLRHMCMetWorker<Action>::updateField() {
 
 /* Argument deduction guide */
 template <LLRCapable Action>
-LLRHMCMetWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint,
-                std::string&) -> LLRHMCMetWorker<Action>;
+LLRHMCMetWorker(std::string, Action&, Lattice<typename Action::FieldType, Action::Dims>, uint, std::string&)
+    -> LLRHMCMetWorker<Action>;
 
 }  // namespace reticolo::LLR

@@ -10,20 +10,13 @@
 
 #pragma once
 
-#include <H5Ipublic.h>
-#include <H5Tpublic.h>
-#include <H5public.h>
-#include <H5version.h>
-
 #include <algorithm>
-#include <array>
 #include <concepts>
 #include <cstddef>
 #include <format>
 #include <iostream>
 #include <utility>
 
-#include "reticolo/core/tools/hdf5_helpers.hpp"  // IWYU pragma: keep
 #include "reticolo/core/types/real.hpp"
 
 // look-up table for the symmetric h_\mu\nu components
@@ -167,24 +160,6 @@ inline void randomize(HField<T>& Val, T Scale, TDist& Dist, TGen& Gen)
             Val[Comp] = Scale * Dist(Gen);
         }
     }
-}
-
-/*--------------------------------------------------------------------------------------------------
-    Hdf5 Types
---------------------------------------------------------------------------------------------------*/
-
-template <>
-inline auto make_H5_Type<HField<RealF>>() -> hid_t {
-    std::array<hsize_t, 1> Dims = {10};
-    hid_t                  DataTypeHid = H5Tarray_create(H5T_NATIVE_FLOAT, 1, Dims.data());
-    return DataTypeHid;
-}
-
-template <>
-inline auto make_H5_Type<HField<RealD>>() -> hid_t {
-    std::array<hsize_t, 1> Dims = {10};
-    hid_t                  DataTypeHid = H5Tarray_create(H5T_NATIVE_DOUBLE, 1, Dims.data());
-    return DataTypeHid;
 }
 
 /*--------------------------------------------------------------------------------------------------

@@ -16,6 +16,7 @@
 
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/modules/factory/MCAlgorithmBase.hpp"
+#include "reticolo/modules/factory/MCAlgorithmRegistry.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloData.hpp"
 #include "yaml-cpp/node/node.h"
 
@@ -93,7 +94,7 @@ inline void HMC<Action, TGen>::updateField(Lattice<field_type>& field, Action& a
     *_OldField = field;
     // Generate random momenta and compute initial kinetic term
     impl_type OldK = 0.0;
-    for (int Site = 0; Site < NSites; Site++) {
+    for (size_type Site = 0; Site < NSites; Site++) {
         randomize((*_Mom)[Site], 1.0, _Norm, rng);
         OldK += dot((*_Mom)[Site]);
     }
@@ -138,6 +139,24 @@ inline void HMC<Action, TGen>::updateField(Lattice<field_type>& field, Action& a
         field = *_OldField;
         state.update(0, 0.0);
     }
+}
+
+template <class Action, class TGen = std::mt19937_64>
+inline void register_hmc_algorithm() {
+    static const bool Registered = []() {
+        register_algorithm_type<Action, HMC<Action, TGen>, TGen>("HMC");
+        return true;
+    }();
+    (void)Registered;
+}
+
+template <class Action, class TGen = std::mt19937_64>
+inline void register_llr_metropolis_algorithm() {
+    static const bool Registered = []() {
+        register_algorithm_type<Action, HMC<Action, TGen>, TGen>("LLRMetropolis");
+        return true;
+    }();
+    (void)Registered;
 }
 
 }  // namespace reticolo::MMonteCarlo

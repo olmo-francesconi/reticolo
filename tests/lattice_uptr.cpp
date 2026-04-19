@@ -79,7 +79,7 @@ void printHistogram(const std::vector<double>& data, int binCount = 10, int maxB
 
 using i_t = Indexing::size_type;
 
-auto main(int argc, char* argv[]) -> int {
+auto main(int /*unused*/, char* argv[]) -> int {
     Timer Time;
     i_t   Len = std::stoul(argv[1]);
     i_t   Rep = std::stoul(argv[2]);

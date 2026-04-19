@@ -14,6 +14,7 @@
 #include <exception>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #include "cxxopts.hpp"
@@ -27,6 +28,16 @@
 
 namespace reticolo {
 
+class RuntimeExit : public std::runtime_error {
+  public:
+    RuntimeExit(int exit_code, std::string message) : std::runtime_error(std::move(message)), _ExitCode(exit_code) {}
+
+    [[nodiscard]] auto exit_code() const noexcept -> int { return _ExitCode; }
+
+  private:
+    int _ExitCode;
+};
+
 /*--------------------------------------------------------------------------------------------------
   reticolo_init()
 --------------------------------------------------------------------------------------------------*/
@@ -39,16 +50,14 @@ inline void reticolo_init(int argc, char* argv[]) {
     auto Result = Options.parse(argc, argv);
 
     if (Result.contains("help")) {
-        std::cout << Options.help() << '\n';
-        exit(EXIT_SUCCESS);
+        throw RuntimeExit(EXIT_SUCCESS, Options.help());
     }
 
     std::string SetupFileName;
     if (Result.contains("config")) {
         SetupFileName = Result["config"].as<std::string>();
     } else {
-        std::cout << Options.help() << '\n';
-        exit(EXIT_SUCCESS);
+        throw RuntimeExit(EXIT_SUCCESS, Options.help());
     }
 
     std::cout << IO::pretty_welcome() << "\n";
@@ -81,8 +90,11 @@ inline void reticolo_run() {
             /* Check that there is only one top-level key */
             ModuleName = Wrkflw.begin()->first.as<std::string>();
             ModuleConfig = Wrkflw.begin()->second;
+            const auto ActionName = ModuleConfig["action"]["name"].as<std::string>();
 
-            auto Module = ModuleFactory::MakeModule(ModuleName, ModuleConfig["action"]["name"].as<std::string>());
+            ModuleFactory::ValidateModuleAction(ModuleName, ActionName);
+
+            auto Module = ModuleFactory::MakeModule(ModuleName, ActionName);
 
             /* Configure the module */
             Module->setup(ModuleConfig);
@@ -93,13 +105,16 @@ inline void reticolo_run() {
             }
 
         } catch (const YAML::Exception& e) {
-            IO::GlobalLogger << IO::LI_erro() + "Failed to parse configuration of module: " + ModuleName + " [" +
-                                    ModuleConfig["name"].as<std::string>() + "]\n";
+            std::string Message = "Failed to parse configuration of module: " + ModuleName;
+            if (ModuleConfig.IsMap() && ModuleConfig["name"]) {
+                Message += " [" + ModuleConfig["name"].as<std::string>() + "]";
+            }
+            IO::GlobalLogger << IO::LI_erro() + Message + "\n";
             IO::GlobalLogger << IO::LI_erro() + e.what() + "\n";
-            exit(EXIT_FAILURE);
+            throw std::runtime_error(Message + ": " + e.what());
         } catch (const std::exception& e) {
             IO::GlobalLogger << IO::LI_erro() + e.what() + "\n";
-            exit(EXIT_FAILURE);
+            throw;
         }
     }
 };

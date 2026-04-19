@@ -10,11 +10,10 @@
 
 #pragma once
 
-#include <machine/limits.h>
-
 #include <climits>  // IWYU pragma: keep
 #include <cstddef>
 #include <functional>
+#include <limits>
 #include <numeric>
 #include <vector>
 
@@ -27,10 +26,10 @@ class Indexing {
     /* Types */
 #if defined(SMALL_LATTICE)
     using size_type = unsigned short;
-    constexpr static unsigned short max_size = USHRT_MAX;
+    constexpr static unsigned short MaxSize = USHRT_MAX;
 #else
     using size_type = size_t;
-    constexpr static unsigned long MaxSize = SIZE_T_MAX;
+    constexpr static size_t MaxSize = std::numeric_limits<size_type>::max();
 #endif
 
     /* Lattice info */

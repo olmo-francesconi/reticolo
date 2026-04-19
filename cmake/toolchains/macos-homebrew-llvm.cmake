@@ -1,0 +1,24 @@
+if(NOT APPLE)
+    message(FATAL_ERROR "macos-homebrew-llvm.cmake is only intended for macOS hosts.")
+endif()
+
+set(RETICOLO_HOMEBREW_LLVM_ROOT "/opt/homebrew/opt/llvm" CACHE PATH "Homebrew LLVM root")
+set(RETICOLO_HOMEBREW_LIBOMP_ROOT "/opt/homebrew/opt/libomp" CACHE PATH "Homebrew libomp root")
+
+set(CMAKE_C_COMPILER "${RETICOLO_HOMEBREW_LLVM_ROOT}/bin/clang" CACHE FILEPATH "C compiler" FORCE)
+set(CMAKE_CXX_COMPILER "${RETICOLO_HOMEBREW_LLVM_ROOT}/bin/clang++" CACHE FILEPATH "CXX compiler" FORCE)
+
+execute_process(
+    COMMAND xcrun --show-sdk-path
+    OUTPUT_VARIABLE RETICOLO_MACOS_SDK_PATH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+if(RETICOLO_MACOS_SDK_PATH)
+    set(CMAKE_OSX_SYSROOT "${RETICOLO_MACOS_SDK_PATH}" CACHE PATH "macOS SDK path" FORCE)
+    set(ENV{SDKROOT} "${RETICOLO_MACOS_SDK_PATH}")
+endif()
+
+list(APPEND CMAKE_PREFIX_PATH "${RETICOLO_HOMEBREW_LLVM_ROOT}" "${RETICOLO_HOMEBREW_LIBOMP_ROOT}")
+set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" CACHE STRING "Prefix path" FORCE)

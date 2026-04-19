@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <numeric>
 #include <random>
@@ -20,7 +21,8 @@
 #include <string>
 #include <vector>
 
-#include "reticolo/core/tools/Hdf5Handler.hpp"
+#include "reticolo/core/storage/StorageFacade.hpp"
+#include "reticolo/core/storage/StorageSchema.hpp"
 #include "reticolo/core/types/complex.hpp"
 #include "reticolo/core/types/real.hpp"
 #include "reticolo/lattice/indexing.hpp"
@@ -30,7 +32,15 @@ using namespace reticolo;
 
 using i_t = Indexing::size_type;
 
-auto main(int argc, char* argv[]) -> int {
+static auto make_tmp_h5_path() -> std::filesystem::path {
+    static unsigned long long counter = 0;
+    std::random_device        rd;
+    return std::filesystem::temp_directory_path() /
+           ("reticolo_field_rw_" + std::to_string(rd()) + "_" + std::to_string(counter++) + ".h5");
+}
+
+auto main(int /*unused*/, char* /*unused*/[]) -> int {
+    const auto             output_file = make_tmp_h5_path();
     const std::vector<i_t> SizeOut({4, 4, 4, 4});
     Lattice<ComplexD>      FieldOut(SizeOut);
     std::cout << "Lattice object initialized\n\n";
@@ -44,10 +54,10 @@ auto main(int argc, char* argv[]) -> int {
     }
     std::cout << "done\n\n";
 
-    std::cout << "Saving the field to out.hdf5.. ";
+    std::cout << "Saving the field to " << output_file << ".. ";
     std::stringstream RngState;
     RngState << Rng;
-    GlobalHdf5Handler.saveLattice("./out.hdf5", "rw_test", FieldOut, RngState);
+    storage::GlobalStorage.save_lattice(output_file, storage::schema::lattice::field("rw_test"), FieldOut, RngState);
     std::cout << "done\n";
     std::cout << "Field sum: " << std::reduce(FieldOut.begin(), FieldOut.end()) << "\n";
     std::cout << "Next randon munber: " << Rng() << "\n\n";
@@ -56,9 +66,10 @@ auto main(int argc, char* argv[]) -> int {
     Lattice<ComplexD>      FieldIn(SizeIn);
     std::cout << "Reading in the file.. ";
     try {
-        GlobalHdf5Handler.readLattice("./out.hdf5", "rw_test", FieldIn, RngState);
+        storage::GlobalStorage.load_lattice(output_file, storage::schema::lattice::field("rw_test"), FieldIn, RngState);
     } catch (std::exception& e) {
         std::cout << "\n" << e.what() << "\n";
+        std::filesystem::remove(output_file);
         return EXIT_FAILURE;
     }
     std::cout << "done\n";
@@ -67,6 +78,7 @@ auto main(int argc, char* argv[]) -> int {
     std::cout << "Next randon munber: " << Rng() << "\n\n";
 
     std::cout << "All done!\n";
+    std::filesystem::remove(output_file);
 
     return EXIT_SUCCESS;
 }

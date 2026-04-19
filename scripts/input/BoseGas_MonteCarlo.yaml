@@ -37,7 +37,7 @@ workflows:
       # Run parameters
       runs:
         - name: test_run
-          measures: 100
+          measures: 10000
           measure_step: 10
           therm_steps: 0
           field_init: true

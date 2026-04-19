@@ -14,10 +14,8 @@
 
 #pragma once
 
-#include <cstdlib>
-#include <exception>
 #include <filesystem>
-#include <iostream>
+#include <stdexcept>
 #include <string>
 
 #include "yaml-cpp/node/node.h"
@@ -29,8 +27,8 @@ namespace reticolo {
 class ReticoloCore {
   protected:
     ReticoloCore() = default;
-    static ReticoloCore* Instance;
-    static YAML::Node    Setup;
+    inline static ReticoloCore* Instance = nullptr;
+    inline static YAML::Node    Setup = YAML::Node("");
 
   public:
     /* Singletons should not be cloneable and assignable */
@@ -50,15 +48,6 @@ class ReticoloCore {
 };
 
 /*--------------------------------------------------------------------------------------------------
-  Initialize static memeber variables
---------------------------------------------------------------------------------------------------*/
-/* Instance initialized as null pointer */
-ReticoloCore* ReticoloCore::Instance = nullptr;
-
-/* Initialize the Setup file as an empty file */
-YAML::Node ReticoloCore::Setup = YAML::Node("");
-
-/*--------------------------------------------------------------------------------------------------
   Static methods definition
 --------------------------------------------------------------------------------------------------*/
 auto ReticoloCore::Init() -> ReticoloCore* {
@@ -70,11 +59,10 @@ auto ReticoloCore::Init() -> ReticoloCore* {
 
 void ReticoloCore::readSetup(const std::string& filename) {
     try {
-        auto ConfigFilePath = std::filesystem::canonical(filename);
+        (void)std::filesystem::canonical(filename);
         Setup = YAML::LoadFile(filename);
     } catch (const std::exception& e) {
-        std::cout << "parse config file failed:\n" << e.what() << '\n';
-        exit(EXIT_FAILURE);
+        throw std::runtime_error("Failed to load configuration '" + filename + "': " + e.what());
     }
 };
 

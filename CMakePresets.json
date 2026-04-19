@@ -1,0 +1,156 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Default",
+      "description": "Portable default configuration with tests enabled.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON",
+        "RETICOLO_BUILD_TESTS": "ON",
+        "RETICOLO_ENABLE_OPENMP": "ON",
+        "RETICOLO_FETCH_DEPS": "ON",
+        "RETICOLO_COMPILER_PROFILE": "AUTO"
+      }
+    },
+    {
+      "name": "macos-appleclang",
+      "displayName": "macOS Apple Clang",
+      "description": "Use the default Xcode Apple Clang toolchain without assuming OpenMP.",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/macos-appleclang",
+      "cacheVariables": {
+        "RETICOLO_COMPILER_PROFILE": "APPLE_CLANG",
+        "RETICOLO_ENABLE_OPENMP": "OFF"
+      }
+    },
+    {
+      "name": "macos-llvm",
+      "displayName": "macOS Homebrew LLVM",
+      "description": "Use Homebrew LLVM and libomp for OpenMP-capable builds on macOS.",
+      "inherits": "default",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/macos-homebrew-llvm.cmake",
+      "binaryDir": "${sourceDir}/build/macos-llvm-openmp",
+      "cacheVariables": {
+        "RETICOLO_COMPILER_PROFILE": "LLVM_CLANG",
+        "RETICOLO_ENABLE_OPENMP": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "linux-gcc",
+      "displayName": "Linux GCC",
+      "description": "Linux build with GCC.",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/linux-gcc",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_C_COMPILER": "gcc",
+        "RETICOLO_COMPILER_PROFILE": "GCC"
+      }
+    },
+    {
+      "name": "linux-clang",
+      "displayName": "Linux Clang",
+      "description": "Linux build with Clang.",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/linux-clang",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_C_COMPILER": "clang",
+        "RETICOLO_COMPILER_PROFILE": "LLVM_CLANG"
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "displayName": "Windows MSVC",
+      "description": "Windows build with the Visual Studio generator.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON",
+        "RETICOLO_BUILD_TESTS": "ON",
+        "RETICOLO_ENABLE_OPENMP": "ON",
+        "RETICOLO_FETCH_DEPS": "ON",
+        "RETICOLO_COMPILER_PROFILE": "MSVC"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default"
+    },
+    {
+      "name": "linux-gcc",
+      "configurePreset": "linux-gcc"
+    },
+    {
+      "name": "linux-clang",
+      "configurePreset": "linux-clang"
+    },
+    {
+      "name": "macos-appleclang",
+      "configurePreset": "macos-appleclang"
+    },
+    {
+      "name": "macos-llvm",
+      "configurePreset": "macos-llvm"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc",
+      "configurePreset": "linux-gcc",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang",
+      "configurePreset": "linux-clang",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "macos-appleclang",
+      "configurePreset": "macos-appleclang",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "macos-llvm",
+      "configurePreset": "macos-llvm",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

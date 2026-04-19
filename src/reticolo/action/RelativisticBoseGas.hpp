@@ -10,9 +10,6 @@
 
 #pragma once
 
-#include <H5Ipublic.h>
-#include <H5Tpublic.h>
-
 // #include <cmath>
 #include <complex>
 #include <concepts>
@@ -20,7 +17,6 @@
 #include <string>
 
 #include "reticolo/action/actionBase.hpp"
-#include "reticolo/core/tools/hdf5_helpers.hpp"  // IWYU pragma: keep
 #include "reticolo/core/types/coord.hpp"
 #include "reticolo/core/types/real.hpp"
 #include "reticolo/lattice/lattice.hpp"
@@ -43,11 +39,6 @@ class RelativisticBoseGas : public ActionBase<std::complex<TImpl>, std::complex<
     using impl_type = TImpl;
     static constexpr int Dims = 4;     // Dimensions of the action
     static constexpr int Stencil = 2;  // Minimum step size for multi-thread safety
-
-    /* Algorithm capabilities */
-    static constexpr bool IsMetropolisCapable = true;
-    static constexpr bool IsHmcCapable = true;
-    static constexpr bool IsLLRCapable = true;
 
     /* Action parameters */
     struct Params {
@@ -133,7 +124,7 @@ inline void RelativisticBoseGas<TImpl>::setup(const YAML::Node& ActionParams) {
 }
 
 template <RealValue TImpl>
-inline void RelativisticBoseGas<TImpl>::lattice_sync(Lattice<field_type>& field) {
+inline void RelativisticBoseGas<TImpl>::lattice_sync(Lattice<field_type>& /*unused*/) {
     // Maybe do some checks here
 }
 
@@ -284,25 +275,5 @@ inline auto RelativisticBoseGas<TImpl>::Measure(Lattice<field_type>& field) -> R
 }
 
 }  // namespace action
-
-/*--------------------------------------------------------------------------------------------------
-  HDF5 helper method instantiations
---------------------------------------------------------------------------------------------------*/
-template <>
-auto make_H5_Type<action::RelativisticBoseGas<RealF>::Observables>() -> hid_t {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGas<RealF>::Observables));
-    H5Tinsert(DataTypeHid, "phi2", HOFFSET(action::RelativisticBoseGas<RealF>::Observables, phi2), H5T_NATIVE_FLOAT);
-    H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGas<RealF>::Observables, density),
-              H5T_NATIVE_FLOAT);
-    return DataTypeHid;
-}
-template <>
-auto make_H5_Type<action::RelativisticBoseGas<RealD>::Observables>() -> hid_t {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(action::RelativisticBoseGas<RealD>::Observables));
-    H5Tinsert(DataTypeHid, "phi2", HOFFSET(action::RelativisticBoseGas<RealD>::Observables, phi2), H5T_NATIVE_DOUBLE);
-    H5Tinsert(DataTypeHid, "density", HOFFSET(action::RelativisticBoseGas<RealD>::Observables, density),
-              H5T_NATIVE_DOUBLE);
-    return DataTypeHid;
-}
 
 }  // namespace reticolo

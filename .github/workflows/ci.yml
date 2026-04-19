@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-gcc
+            os: ubuntu-latest
+            configure_preset: linux-gcc
+            build_preset: linux-gcc
+            test_preset: linux-gcc
+            install_cmd: sudo apt-get update && sudo apt-get install -y ninja-build libhdf5-dev
+          - name: macos-appleclang
+            os: macos-latest
+            configure_preset: macos-appleclang
+            build_preset: macos-appleclang
+            test_preset: macos-appleclang
+            install_cmd: brew install ninja hdf5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: ${{ matrix.install_cmd }}
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.configure_preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.build_preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.test_preset }}

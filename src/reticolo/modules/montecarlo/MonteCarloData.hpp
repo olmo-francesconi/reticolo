@@ -10,10 +10,6 @@
 
 #pragma once
 
-#include <H5Ipublic.h>
-#include <H5Tpublic.h>
-
-#include "reticolo/core/tools/hdf5_helpers.hpp"  // IWYU pragma: keep
 #include "reticolo/core/types/complex.hpp"
 #include "reticolo/core/types/real.hpp"
 
@@ -31,7 +27,9 @@ struct data<ActionType> {
 
     /* Constructors*/
     data() = default;  // Default
-    data(double acceptance, ActionType action, ActionType action_change)
+    data(const data&) = default;
+    data(data&&) = default;
+    data(double acceptance, ActionType action, ActionType /*unused*/)
         : _Acceptance(acceptance), _S(double(action)) {};  // Parameter
 
     /* Update values */
@@ -49,6 +47,7 @@ struct data<ActionType> {
 
     /* Operators overloading */
     auto operator=(const data<ActionType>& rhs) -> data<ActionType>& = default;
+    auto operator=(data<ActionType>&&) -> data<ActionType>& = default;
 
     auto operator+=(const data<ActionType>& rhs) -> data<ActionType>& {
         _Acceptance += rhs._Acceptance;
@@ -110,7 +109,9 @@ struct data<ActionType> {
 
     /* Constructors*/
     data() = default;  // Default
-    data(double acceptance, ActionType action, ActionType action_change)
+    data(const data&) = default;
+    data(data&&) = default;
+    data(double acceptance, ActionType action, ActionType /*unused*/)
         : _Acceptance(acceptance), _SRe(double(action.real())), _SIm(double(action.imag())) {};  // Parameter
 
     /* Update values */
@@ -133,6 +134,7 @@ struct data<ActionType> {
 
     /* Operators overloading */
     auto operator=(const data<ActionType>& rhs) -> data<ActionType>& = default;
+    auto operator=(data<ActionType>&&) -> data<ActionType>& = default;
 
     auto operator+=(const data<ActionType>& rhs) -> data<ActionType>& {
         _Acceptance += rhs._Acceptance;
@@ -191,40 +193,3 @@ struct data<ActionType> {
 };
 
 }  // namespace reticolo::MMonteCarlo
-
-namespace reticolo {
-
-template <>
-auto make_H5_Type<MMonteCarlo::data<RealF>>() -> hid_t {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(MMonteCarlo::data<RealD>));
-    H5Tinsert(DataTypeHid, "acceptance", HOFFSET(MMonteCarlo::data<RealD>, _Acceptance), H5T_NATIVE_DOUBLE);
-    H5Tinsert(DataTypeHid, "S", HOFFSET(MMonteCarlo::data<RealD>, _S), H5T_NATIVE_DOUBLE);
-    return DataTypeHid;
-};
-
-template <>
-auto make_H5_Type<MMonteCarlo::data<RealD>>() -> hid_t {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(MMonteCarlo::data<RealD>));
-    H5Tinsert(DataTypeHid, "acceptance", HOFFSET(MMonteCarlo::data<RealD>, _Acceptance), H5T_NATIVE_DOUBLE);
-    H5Tinsert(DataTypeHid, "S", HOFFSET(MMonteCarlo::data<RealD>, _S), H5T_NATIVE_DOUBLE);
-    return DataTypeHid;
-};
-
-template <>
-auto make_H5_Type<MMonteCarlo::data<ComplexF>>() -> hid_t {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(MMonteCarlo::data<ComplexD>));
-    H5Tinsert(DataTypeHid, "acceptance", HOFFSET(MMonteCarlo::data<ComplexD>, _Acceptance), H5T_NATIVE_DOUBLE);
-    H5Tinsert(DataTypeHid, "S_re", HOFFSET(MMonteCarlo::data<ComplexD>, _SRe), H5T_NATIVE_DOUBLE);
-    H5Tinsert(DataTypeHid, "S_im", HOFFSET(MMonteCarlo::data<ComplexD>, _SIm), H5T_NATIVE_DOUBLE);
-    return DataTypeHid;
-};
-
-template <>
-auto make_H5_Type<MMonteCarlo::data<ComplexD>>() -> hid_t {
-    hid_t DataTypeHid = H5Tcreate(H5T_COMPOUND, sizeof(MMonteCarlo::data<ComplexD>));
-    H5Tinsert(DataTypeHid, "acceptance", HOFFSET(MMonteCarlo::data<ComplexD>, _Acceptance), H5T_NATIVE_DOUBLE);
-    H5Tinsert(DataTypeHid, "S_re", HOFFSET(MMonteCarlo::data<ComplexD>, _SRe), H5T_NATIVE_DOUBLE);
-    H5Tinsert(DataTypeHid, "S_im", HOFFSET(MMonteCarlo::data<ComplexD>, _SIm), H5T_NATIVE_DOUBLE);
-    return DataTypeHid;
-};
-}  // namespace reticolo

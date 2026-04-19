@@ -2,15 +2,11 @@
 
 #include <H5Ipublic.h>
 #include <H5Tpublic.h>
-#include <omp.h>
 
 #include <cstddef>
 
 namespace reticolo {
 
-/*--------------------------------------------------------------------------------------------------
-    Hdf5 type make template function
---------------------------------------------------------------------------------------------------*/
 template <typename T>
 inline auto make_H5_Type() -> hid_t;
 

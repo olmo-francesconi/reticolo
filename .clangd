@@ -1,12 +1,29 @@
 CompileFlags:
+  CompilationDatabase: build/default
   Add: [-xc++, -std=c++20, -Wall, -Wno-missing-prototypes]
   Remove: [-mabi]
-  Compiler: /opt/homebrew/opt/llvm/bin/clang++
 Diagnostics:
   ClangTidy:
     Add: [performance*, modernize*, readability*]
     Remove:
-      [readability-magic-numbers, readability-function-cognitive-complexity]
+      [
+        modernize-use-trailing-return-type,
+        modernize-use-nodiscard,
+        modernize-use-equals-default,
+        modernize-avoid-c-arrays,
+        modernize-macro-to-enum,
+        performance-enum-size,
+        readability-magic-numbers,
+        readability-function-cognitive-complexity,
+        readability-identifier-length,
+        readability-named-parameter,
+        readability-convert-member-functions-to-static,
+        readability-make-member-function-const,
+        readability-use-concise-preprocessor-directives,
+        readability-redundant-access-specifiers,
+        readability-math-missing-parentheses,
+        readability-braces-around-statements,
+      ]
     CheckOptions:
       readability-identifier-naming.VariableCase: CamelCase
       readability-identifier-naming.VariableIgnoredRegexp: ^[_eijk]$
@@ -20,7 +37,13 @@ Diagnostics:
       readability-identifier-length.IgnoredExceptionVariableNames: ^[_e]$
 
   UnusedIncludes: Strict
-  MissingIncludes: Strict
+  MissingIncludes: None
+
+---
+If:
+  PathMatch: .*/build/_deps/.*
+Diagnostics:
+  Suppress: "*"
 
 InlayHints:
   Enabled: No

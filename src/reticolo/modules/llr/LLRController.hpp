@@ -27,9 +27,12 @@
 #include <utility>
 #include <vector>
 
+#include "reticolo/core/storage/StorageFacade.hpp"
+#include "reticolo/core/storage/StorageSchema.hpp"
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/modules/factory/ModuleBase.hpp"
 #include "reticolo/modules/llr/LLRHMCWorker.hpp"
+#include "reticolo/modules/llr/LegacyLLRSupport.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloData.hpp"
 #include "reticolo/tools/io_utils.hpp"
 #include "reticolo/tools/logger.hpp"
@@ -40,6 +43,9 @@
 namespace fs = std::filesystem;
 
 namespace reticolo::MLLR {
+
+static_assert(!::reticolo::legacy::llr::is_registry_integrated,
+              "Legacy LLR support should not be treated as registry-integrated yet.");
 
 /*--------------------------------------------------------------------------------------------------
     LLRController Class declaration
@@ -121,16 +127,14 @@ LLRController<Action>::LLRController(Action::Params par, const fs::path& out_pat
         _WorkspacePath = fs::canonical(_WorkspacePath);
         fs::create_directories(_WorkspacePath / "raw_data");
     } catch (const std::exception& Exept) {
-        std::cerr << Exept.what() << '\n';
-        exit(EXIT_FAILURE);
+        throw std::runtime_error("Failed to initialize workspace for LLR controller: " + std::string(Exept.what()));
     }
 
     // Initialize the Logger
     try {
         _Logger.init(_WorkspacePath, "controller.log", "LLR_controller_LOGGER", true);
     } catch (const std::exception& e) {
-        std::cerr << e.what() << '\n';
-        exit(EXIT_FAILURE);
+        throw std::runtime_error("Failed to initialize logger for LLR controller: " + std::string(e.what()));
     }
 
     // Log folder structure
@@ -140,7 +144,7 @@ LLRController<Action>::LLRController(Action::Params par, const fs::path& out_pat
 
     // Initialize the output file
     _HDF5OutputFile = _WorkspacePath / "llr.h5";
-    IO::GlobalHdf5Handler.initFile(_HDF5OutputFile);
+    storage::GlobalStorage.initialize_file(_HDF5OutputFile);
 
     // Log llr info
     _Logger << IO::LI_void() + "         ak output file: " + _HDF5OutputFile.string() + '\n';
@@ -280,13 +284,14 @@ void LLRController<Action>::run(const std::string& run_id, uint nNewton_Raphson,
     std::vector<McDataType> McVarBuffer;
     std::vector<ObsType>    ObsBuffer;
     AkBuffer.reserve(_AkHist.size());
-    IO::GlobalHdf5Handler.createGroup(_HDF5OutputFile, run_id);
+    storage::GlobalStorage.ensure_group(_HDF5OutputFile, storage::schema::llr::run_group(run_id));
     for (uint WorkerId = 0; WorkerId < _Workers.size(); WorkerId++) {
         AkBuffer.clear();
         for (const auto& Elem : _AkHist) {
             AkBuffer.push_back(Elem[WorkerId]);
         }
-        IO::GlobalHdf5Handler.writeDataset(_HDF5OutputFile, std::format("{}/[{}]ak", run_id, WorkerId), AkBuffer);
+        storage::GlobalStorage.write_dataset(_HDF5OutputFile,
+                                             storage::schema::llr::ak_history_dataset(run_id, WorkerId), AkBuffer);
     }
     _Logger << IO::LI_void() + std::format("[{}] Data saved                  [{:.3f} s]\n", run_id, _T.elapsed_s());
 }  // namespace reticolo::LLR

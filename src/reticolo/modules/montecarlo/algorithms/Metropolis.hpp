@@ -24,6 +24,7 @@
 
 #include "reticolo/lattice/lattice.hpp"
 #include "reticolo/modules/factory/MCAlgorithmBase.hpp"
+#include "reticolo/modules/factory/MCAlgorithmRegistry.hpp"
 #include "reticolo/modules/montecarlo/MonteCarloData.hpp"
 #include "yaml-cpp/node/node.h"
 
@@ -66,7 +67,7 @@ class Metropolis : public MCAlgorithmBase<Action, TGen> {
   Metropolis<Action>::setup(...) implementation
 --------------------------------------------------------------------------------------------------*/
 template <class Action, class TGen>
-inline void Metropolis<Action, TGen>::setup(const YAML::Node& Params, const lattice_type& Field) {
+inline void Metropolis<Action, TGen>::setup(const YAML::Node& Params, const lattice_type& /*unused*/) {
     /* Parse parameters */
     _ProposalWidth = Params["prop_width"].as<impl_type>();
 
@@ -101,7 +102,16 @@ inline void Metropolis<Action, TGen>::updateField(lattice_type& field, Action& a
             SVarTot += SVar;
         }
     }
-    state.update(((impl_type)Acc) / field.getNsites(), SVarTot);
+    state.update(static_cast<impl_type>(Acc) / field.getNsites(), SVarTot);
+}
+
+template <class Action, class TGen = std::mt19937_64>
+inline void register_metropolis_algorithm() {
+    static const bool Registered = []() {
+        register_algorithm_type<Action, Metropolis<Action, TGen>, TGen>("Metropolis");
+        return true;
+    }();
+    (void)Registered;
 }
 
 }  // namespace reticolo::MMonteCarlo
