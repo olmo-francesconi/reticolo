@@ -43,11 +43,15 @@ struct SineGordon {
     }
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T total = T{0};
-        for (Site const x : l.sites()) {
-            T const phi     = l[x];
-            T const fwd_sum = fwd_neighbour_sum(l, x);
-            total += (T{-2} * kappa * phi * fwd_sum) + (phi * phi) - (alpha * std::cos(phi));
+        T total            = T{0};
+        auto const on_site = [this](T phi, T fwd_sum) {
+            return (T{-2} * kappa * phi * fwd_sum) + (phi * phi) - (alpha * std::cos(phi));
+        };
+        for (Site const x : l.bulk_sites()) {
+            total += on_site(l[x], fwd_neighbour_sum_unchecked(l, x));
+        }
+        for (Site const x : l.skin_sites()) {
+            total += on_site(l[x], fwd_neighbour_sum(l, x));
         }
         return total;
     }
@@ -55,10 +59,15 @@ struct SineGordon {
     // force(x) = -dS/dphi(x)
     //         = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x) - alpha sin(phi(x))
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-        for (Site const x : l.sites()) {
-            T const phi  = l[x];
-            T const nbrs = nn_neighbour_sum(l, x);
-            force[x]     = (T{2} * kappa * nbrs) - (T{2} * phi) - (alpha * std::sin(phi));
+        auto const at = [&](Site x, T nbrs) {
+            T const phi = l[x];
+            force[x]    = (T{2} * kappa * nbrs) - (T{2} * phi) - (alpha * std::sin(phi));
+        };
+        for (Site const x : l.bulk_sites()) {
+            at(x, nn_neighbour_sum_unchecked(l, x));
+        }
+        for (Site const x : l.skin_sites()) {
+            at(x, nn_neighbour_sum(l, x));
         }
     }
 };

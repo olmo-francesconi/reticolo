@@ -53,14 +53,18 @@ struct Phi6 {
     }
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T total = T{0};
-        for (Site const x : l.sites()) {
-            T const phi     = l[x];
-            T const fwd_sum = fwd_neighbour_sum(l, x);
-            T const phi2    = phi * phi;
-            T const dev     = phi2 - T{1};
-            T const phi6    = phi2 * phi2 * phi2;
-            total += (T{-2} * kappa * phi * fwd_sum) + phi2 + (lambda * dev * dev) + (g6 * phi6);
+        T total            = T{0};
+        auto const on_site = [this](T phi, T fwd_sum) {
+            T const phi2 = phi * phi;
+            T const dev  = phi2 - T{1};
+            T const phi6 = phi2 * phi2 * phi2;
+            return (T{-2} * kappa * phi * fwd_sum) + phi2 + (lambda * dev * dev) + (g6 * phi6);
+        };
+        for (Site const x : l.bulk_sites()) {
+            total += on_site(l[x], fwd_neighbour_sum_unchecked(l, x));
+        }
+        for (Site const x : l.skin_sites()) {
+            total += on_site(l[x], fwd_neighbour_sum(l, x));
         }
         return total;
     }
@@ -69,13 +73,18 @@ struct Phi6 {
     //         = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x)
     //           - 4 lambda phi(x) (phi(x)^2 - 1) - 6 g6 phi(x)^5
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-        for (Site const x : l.sites()) {
+        auto const at = [&](Site x, T nbrs) {
             T const phi  = l[x];
-            T const nbrs = nn_neighbour_sum(l, x);
             T const phi2 = phi * phi;
             T const phi5 = phi2 * phi2 * phi;
             force[x]     = (T{2} * kappa * nbrs) - (T{2} * phi) -
                        (T{4} * lambda * phi * (phi2 - T{1})) - (T{6} * g6 * phi5);
+        };
+        for (Site const x : l.bulk_sites()) {
+            at(x, nn_neighbour_sum_unchecked(l, x));
+        }
+        for (Site const x : l.skin_sites()) {
+            at(x, nn_neighbour_sum(l, x));
         }
     }
 };

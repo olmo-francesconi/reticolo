@@ -66,7 +66,13 @@ struct Xy {
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
         T total = T{0};
-        for (Site const x : l.sites()) {
+        for (Site const x : l.bulk_sites()) {
+            T const theta = l[x];
+            for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
+                total += std::cos(theta - l[l.next(x, mu)]);
+            }
+        }
+        for (Site const x : l.skin_sites()) {
             T const theta = l[x];
             for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
                 Site const fwd = l.next(x, mu);
@@ -80,7 +86,16 @@ struct Xy {
 
     // force(x) = -dS/dtheta(x) = -beta * sum_{mu, +-} sin(theta(x) - theta(x+mu)).
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-        for (Site const x : l.sites()) {
+        for (Site const x : l.bulk_sites()) {
+            T const theta = l[x];
+            T sum         = T{0};
+            for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
+                sum += std::sin(theta - l[l.next(x, mu)]);
+                sum += std::sin(theta - l[l.prev(x, mu)]);
+            }
+            force[x] = -beta * sum;
+        }
+        for (Site const x : l.skin_sites()) {
             T const theta = l[x];
             T sum         = T{0};
             for (std::size_t mu = 0; mu < l.ndims(); ++mu) {

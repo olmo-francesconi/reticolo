@@ -75,7 +75,13 @@ struct OnSigma {
 
     [[nodiscard]] T s_full(Lattice<value_type> const& l) const noexcept {
         T total = T{0};
-        for (Site const x : l.sites()) {
+        for (Site const x : l.bulk_sites()) {
+            auto const& phi = l[x];
+            for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
+                total += dot(phi, l[l.next(x, mu)]);
+            }
+        }
+        for (Site const x : l.skin_sites()) {
             auto const& phi = l[x];
             for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
                 Site const fwd = l.next(x, mu);
