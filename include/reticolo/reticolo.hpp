@@ -7,4 +7,6 @@
 #include <reticolo/core/bc.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/log.hpp>
+#include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
