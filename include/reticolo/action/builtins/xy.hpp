@@ -1,10 +1,14 @@
 #pragma once
 
+#include <reticolo/action/concepts.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <numbers>
 
 namespace reticolo::action {
 
@@ -18,9 +22,8 @@ namespace reticolo::action {
 //  the contribution to S that involves theta(x), with each bond touching x
 //  counted once.
 //
-//  HMC-friendly: the force is -dS/dtheta. Wolff-cluster compatibility lands
-//  alongside the Wolff updater at M9 (additional axis_type / wolff_reflect
-//  members will be added there).
+//  HMC-friendly: the force is -dS/dtheta. Also satisfies WolffEmbeddable via
+//  the axis_type / wolff_* member block below.
 // =============================================================================
 
 template <class T = double>
@@ -92,6 +95,36 @@ struct Xy {
             }
             force[x] = -beta * sum;
         }
+    }
+
+    // -------- Wolff embedding ------------------------------------------------
+    //
+    // The stored angle `axis` is the direction of the reflection LINE: the
+    // reflection sends theta -> 2*axis - theta, which preserves the component
+    // of the spin parallel to that line and flips the perpendicular component.
+    // The perpendicular unit vector therefore plays the role of Wolff's n,
+    // and n·phi(theta) = sin(theta - axis), giving
+    //
+    //   p = 1 - exp(min(0, -2 * beta * sin(theta_x - axis) * sin(theta_y - axis)))
+    //
+    // i.e. the O(2) specialisation of Wolff (1989).
+    using axis_type = T;
+
+    template <class R>
+        requires Rng<R>
+    [[nodiscard]] axis_type wolff_random_axis(R& rng) const noexcept {
+        return static_cast<T>(2.0 * std::numbers::pi * rng.uniform());
+    }
+
+    [[nodiscard]] T wolff_reflect(T theta, axis_type const& axis) const noexcept {
+        return (T{2} * axis) - theta;
+    }
+
+    [[nodiscard]] double wolff_link_p(T theta_x, T theta_y, axis_type const& axis) const noexcept {
+        double const sx = std::sin(static_cast<double>(theta_x - axis));
+        double const sy = std::sin(static_cast<double>(theta_y - axis));
+        double const w  = -2.0 * static_cast<double>(beta) * sx * sy;
+        return 1.0 - std::exp(std::min(0.0, w));
     }
 };
 

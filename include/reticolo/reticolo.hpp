@@ -14,6 +14,7 @@
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/algorithm/metropolis.hpp>
+#include <reticolo/algorithm/wolff.hpp>
 #include <reticolo/cli/parser.hpp>
 #include <reticolo/core/bc.hpp>
 #include <reticolo/core/indexing.hpp>

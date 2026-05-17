@@ -58,13 +58,18 @@ concept HasProposal =
 
 // Refinement: action admits a Wolff cluster embedding. The cluster updater
 // is action-agnostic; it asks the action for an axis, a reflection, and a
-// link-acceptance probability.
+// link-acceptance probability. `wolff_link_p` returns the bond-activation
+// probability between two ORIGINAL (pre-flip) field values across the given
+// reflection — this keeps all action-specific physics (beta, coupling form,
+// projection onto the reflection axis) inside the action itself.
 template <class A, class F, class R>
-concept WolffEmbeddable = LocalAction<A, F> && Rng<R> && requires(A const& a, F v, R& rng) {
-    typename A::axis_type;
-    { a.wolff_random_axis(rng) } -> std::same_as<typename A::axis_type>;
-    { a.wolff_reflect(v, typename A::axis_type{}) } -> std::same_as<F>;
-    { a.wolff_beta() } -> std::convertible_to<double>;
-};
+concept WolffEmbeddable =
+    LocalAction<A, F> && Rng<R> &&
+    requires(A const& a, F const& v, typename A::axis_type const& axis, R& rng) {
+        typename A::axis_type;
+        { a.wolff_random_axis(rng) } -> std::same_as<typename A::axis_type>;
+        { a.wolff_reflect(v, axis) } -> std::same_as<F>;
+        { a.wolff_link_p(v, v, axis) } -> std::convertible_to<double>;
+    };
 
 }  // namespace reticolo::action

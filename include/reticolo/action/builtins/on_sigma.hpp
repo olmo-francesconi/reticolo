@@ -5,6 +5,7 @@
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -93,6 +94,47 @@ struct OnSigma {
         requires Rng<R>
     [[nodiscard]] value_type
     propose(Lattice<value_type> const& /*l*/, Site /*x*/, R& rng) const noexcept {
+        return random_unit_(rng);
+    }
+
+    // -------- Wolff embedding ------------------------------------------------
+    //
+    // The reflection axis is a uniformly-random unit vector r on S^(N-1); the
+    // reflection across the plane perpendicular to r is the Householder map
+    // R(phi) = phi - 2(r·phi)r. The bond-activation probability is
+    //
+    //   p = 1 - exp(min(0, -2*beta*(r·phi_x)(r·phi_y)))
+    //
+    // which is Wolff (1989) eq. (4) for O(N).
+    using axis_type = value_type;
+
+    template <class R>
+        requires Rng<R>
+    [[nodiscard]] axis_type wolff_random_axis(R& rng) const noexcept {
+        return random_unit_(rng);
+    }
+
+    [[nodiscard]] value_type wolff_reflect(value_type const& phi,
+                                           axis_type const& r) const noexcept {
+        double const proj = 2.0 * dot(phi, r);
+        value_type out{};
+        for (std::size_t i = 0; i < N; ++i) {
+            out[i] = phi[i] - proj * r[i];
+        }
+        return out;
+    }
+
+    [[nodiscard]] double wolff_link_p(value_type const& phi_x,
+                                      value_type const& phi_y,
+                                      axis_type const& r) const noexcept {
+        double const w = -2.0 * beta * dot(r, phi_x) * dot(r, phi_y);
+        return 1.0 - std::exp(std::min(0.0, w));
+    }
+
+private:
+    template <class R>
+        requires Rng<R>
+    [[nodiscard]] static value_type random_unit_(R& rng) noexcept {
         value_type p{};
         double norm_sq = 0.0;
         do {
