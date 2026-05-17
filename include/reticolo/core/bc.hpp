@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -29,12 +30,7 @@ public:
     [[nodiscard]] Bc operator[](std::size_t mu) const noexcept { return bcs_[mu]; }
 
     [[nodiscard]] bool all_periodic() const noexcept {
-        for (Bc b : bcs_) {
-            if (b != Bc::Periodic) {
-                return false;
-            }
-        }
-        return true;
+        return std::ranges::all_of(bcs_, [](Bc b) { return b == Bc::Periodic; });
     }
 
     [[nodiscard]] bool affects_topology(std::size_t mu) const noexcept {

@@ -1,10 +1,12 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
 #include <iostream>
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace reticolo::log {
 
@@ -21,6 +23,7 @@ inline int& depth() noexcept {
 }
 
 inline std::string indent() {
+    // NOLINTNEXTLINE(modernize-return-braced-init-list)
     return std::string(static_cast<std::size_t>(depth()) * 2, ' ');
 }
 

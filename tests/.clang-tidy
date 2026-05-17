@@ -1,0 +1,13 @@
+---
+# Tests inherit the project policy but relax checks that produce only noise
+# in TEST_CASE bodies: include-cleaner doesn't understand Catch2's transitive
+# header use, const-correctness over loop variables and locals is style not
+# safety, and we don't enforce readability rewrites in tests.
+InheritParentConfig: true
+Checks: >
+  -misc-include-cleaner,
+  -misc-const-correctness,
+  -modernize-return-braced-init-list,
+  -readability-use-anyofallof,
+  -readability-magic-numbers,
+  -cppcoreguidelines-avoid-magic-numbers

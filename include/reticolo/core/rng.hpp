@@ -64,8 +64,8 @@ public:
             return 0;
         }
 #if defined(__SIZEOF_INT128__)
-        __uint128_t m = static_cast<__uint128_t>(uniform_u64()) * static_cast<__uint128_t>(n);
-        state_type l  = static_cast<state_type>(m);
+        auto m = static_cast<__uint128_t>(uniform_u64()) * static_cast<__uint128_t>(n);
+        auto l = static_cast<state_type>(m);
         if (l < n) {
             state_type const threshold = (-n) % n;
             while (l < threshold) {

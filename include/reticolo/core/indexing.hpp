@@ -57,7 +57,7 @@ public:
 
 private:
     Indexing(SizeVec shape, BcMask bcs);
-    void build_();
+    void build();
 
     SizeVec shape_;
     BcMask bcs_;
@@ -90,7 +90,7 @@ struct IndexingPoolKeyHash {
         for (auto s : k.shape) {
             mix(std::hash<std::size_t>{}(s));
         }
-        for (Bc b : k.bcs.as_vector()) {
+        for (Bc const b : k.bcs.as_vector()) {
             mix(std::hash<std::uint8_t>{}(static_cast<std::uint8_t>(b)));
         }
         return h;
@@ -132,10 +132,10 @@ inline std::shared_ptr<Indexing const> Indexing::acquire(SizeVec shape, BcMask b
 
 inline Indexing::Indexing(SizeVec shape, BcMask bcs)
     : shape_{std::move(shape)}, bcs_{std::move(bcs)} {
-    build_();
+    build();
 }
 
-inline void Indexing::build_() {
+inline void Indexing::build() {
     std::size_t const d = shape_.size();
 
     nsites_ = 1;

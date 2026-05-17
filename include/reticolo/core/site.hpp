@@ -1,6 +1,6 @@
 #pragma once
 
-#include <compare>
+#include <compare>  // NOLINT(misc-include-cleaner): required by defaulted operator<=>
 #include <cstddef>
 #include <cstdint>
 #include <functional>

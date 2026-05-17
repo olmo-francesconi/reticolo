@@ -34,7 +34,9 @@ function(reticolo_configure_warnings target)
 
     # Clang's -Wpedantic flags __COUNTER__ via -Wc2y-extensions; Catch2's
     # TEST_CASE expansion lives in user TUs, so SYSTEM doesn't suppress it.
-    set(_clang_quiet -Wno-c2y-extensions)
+    # -Wno-unknown-warning-option goes first so older clang versions silently
+    # accept the c2y-specific flag they don't recognise.
+    set(_clang_quiet -Wno-unknown-warning-option -Wno-c2y-extensions)
 
     set(_gcc_extra
         -Wmisleading-indentation
