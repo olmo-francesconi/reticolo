@@ -1,4 +1,6 @@
-// HMC for the phi^4 scalar field on a 4D hypercubic lattice.
+// HMC for the phi^4 scalar field on a `ndim`-dimensional hypercubic lattice
+// (default ndim = 4; the example sweeps use ndim = 3 for cleaner FSS in the
+// 3D Ising universality class).
 //
 // Output schema:
 //   /run@*                — reproducibility metadata stamped by Writer
@@ -7,8 +9,9 @@
 //   /prod/stats/dH        — H_final - H_initial per production trajectory
 //   /prod/stats/accepted  — 0/1 acceptance flag
 //   /prod/obs/s           — S_full
-//   /prod/obs/mag         — |<phi>|
-//   /prod/obs/m2          — <phi^2>
+//   /prod/obs/mag         — |<phi>|           (per-config magnetization magnitude)
+//   /prod/obs/mag_sq      — (<phi>)^2         (per-config magnetization squared; chi input)
+//   /prod/obs/m2          — <phi^2>           (per-site field-squared average)
 
 #include <reticolo/reticolo.hpp>
 
@@ -21,6 +24,7 @@ int main(int argc, char** argv) {
     auto const& L          = p.req<int>("L,size", "linear lattice extent");
     auto const& kappa      = p.req<double>("kappa", "hopping parameter");
     auto const& lambda     = p.req<double>("lambda", "quartic coupling");
+    auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
     auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md       = p.opt<int>("n_md", 20, "MD steps per trajectory");
     auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation trajectories");
@@ -30,8 +34,8 @@ int main(int argc, char** argv) {
     auto const& outpath    = p.opt<std::string>("out", std::string{"phi4.h5"}, "HDF5 output path");
     p.parse(argc, argv);
 
-    auto const l_sz = static_cast<std::size_t>(L);
-    Lattice<double> phi{{l_sz, l_sz, l_sz, l_sz}};
+    Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    Lattice<double> phi{shape};
     FastRng rng{seed};
     act::Phi4<double> phi4{.kappa = kappa, .lambda = lambda};
 
@@ -43,6 +47,7 @@ int main(int argc, char** argv) {
     auto accepted = out.series<int>("/prod/stats/accepted");
     auto s_prod   = out.series<double>("/prod/obs/s");
     auto mag      = out.series<double>("/prod/obs/mag");
+    auto mag_sq   = out.series<double>("/prod/obs/mag_sq");
     auto m_sq     = out.series<double>("/prod/obs/m2");
 
     alg::Hmc<act::Phi4<double>, FastRng> hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
@@ -58,6 +63,7 @@ int main(int argc, char** argv) {
         if (i % meas_every == 0) {
             s_prod.append(phi4.s_full(phi));
             mag.append(obs::magnetization(phi));
+            mag_sq.append(obs::mean_sq(phi));
             m_sq.append(obs::m2(phi));
         }
     }

@@ -46,11 +46,23 @@ template <class T>
     return std::abs(mean(l));
 }
 
-// m2 = <phi^2>.  Aliased separately from `sq` for naming clarity when an app
-// records both for downstream susceptibility / Binder cumulant computation.
+// m2 = <phi^2> = (1/V) Σ_x phi(x)^2.  Aliased separately from `sq` for naming
+// clarity. NOTE: this is the per-site field squared, NOT the squared
+// magnetization (Σ phi / V)^2 — use `mean_sq` for the latter. Both quantities
+// are commonly written "m^2" in different parts of the literature.
 template <class T>
 [[nodiscard]] double m2(Lattice<T> const& l) noexcept {
     return sq(l);
+}
+
+// (Σ_x phi(x) / V)^2 — the SQUARED magnetization-per-site of one configuration.
+// This is the right input for the connected susceptibility
+//   chi = V * (<mean_sq> - <|mean|>^2)
+// and for the Binder cumulant of a scalar field. Distinct from `m2` above.
+template <class T>
+[[nodiscard]] double mean_sq(Lattice<T> const& l) noexcept {
+    double const m = mean(l);
+    return m * m;
 }
 
 // m4 = (1/N) Σ_x phi(x)^4.

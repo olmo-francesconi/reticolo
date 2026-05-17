@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Sweep kappa across the phi^4 phase transition (lambda fixed) and produce one
-# HDF5 file per point. Pair with analyze.py for the susceptibility plot.
+# Sweep kappa across the 2D phi^4 broken-symmetry transition for several
+# lattice sizes; pair with analyze.py for the finite-size-scaling collapse.
+# 2D Ising universality gives exact analytic exponents (nu = 1, gamma/nu = 7/4)
+# that the collapse fit should reproduce to within a couple of percent.
+#
+# Runs `JOBS` sweeps in parallel (default: one per core).
 
 set -euo pipefail
 
@@ -17,27 +21,43 @@ fi
 
 results="$here/results"
 mkdir -p "$results"
-rm -f "$results"/phi4_kappa_*.h5
+rm -f "$results"/phi4_L*_kappa*.h5
 
-L=${L:-6}
-lambda=${LAMBDA:-0.02}
-n_therm=${N_THERM:-200}
-n_prod=${N_PROD:-2000}
+ndim=${NDIM:-2}
+lambda=${LAMBDA:-1.145}
+n_therm=${N_THERM:-3000}
+n_prod=${N_PROD:-50000}
 seed=${SEED:-20260517}
+jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 
-# Kappa range chosen to bracket the broken-symmetry transition for these
-# values of lambda and L; widen if tuning a different point in the (kappa,
-# lambda) plane.
-kappas=(0.115 0.120 0.124 0.127 0.129 0.131 0.133 0.135 0.138 0.142 0.150)
+# Four sizes spanning V = 256 -> 2304 give a clean lever arm in 2D; kappa grid
+# bracketed densely around the peak (kappa_c ≈ 0.33 for lambda = 1.145).
+sizes=(${SIZES:-16 24 32 48})
+kappas=(0.300 0.315 0.322 0.328 0.330 0.331 0.332 0.333 0.334 0.335 0.336 0.337 0.339 0.342 0.348 0.358 0.370)
 
-for kappa in "${kappas[@]}"; do
-    out="$results/phi4_kappa_${kappa}.h5"
-    echo "==> kappa=$kappa  -> $out"
+export binary results ndim lambda n_therm n_prod seed
+
+run_one() {
+    local L=$1 kappa=$2
+    local out="$results/phi4_L${L}_kappa${kappa}.h5"
     "$binary" \
-        --size="$L" --kappa="$kappa" --lambda="$lambda" \
+        --size="$L" --kappa="$kappa" --lambda="$lambda" --ndim="$ndim" \
         --n_therm="$n_therm" --n_prod="$n_prod" --seed="$seed" \
-        --out="$out"
-done
+        --out="$out" >/dev/null
+    printf '[%s] L=%-3s kappa=%s  done\n' "$(date +%H:%M:%S)" "$L" "$kappa"
+}
+export -f run_one
+
+n_jobs=$(( ${#sizes[@]} * ${#kappas[@]} ))
+echo "running $n_jobs sweeps ($jobs at a time)"
+
+{
+    for L in "${sizes[@]}"; do
+        for kappa in "${kappas[@]}"; do
+            printf '%s %s\n' "$L" "$kappa"
+        done
+    done
+} | xargs -L 1 -P "$jobs" bash -c 'run_one "$@"' _
 
 echo
 echo "Done. Now run:  python3 $here/analyze.py"

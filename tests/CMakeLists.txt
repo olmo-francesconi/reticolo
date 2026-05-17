@@ -67,4 +67,6 @@ if(RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS)
         XY_WOLFF_BINARY            apps/test_xy_wolff_smoke.cpp)
     reticolo_add_app_smoke(test_on_sigma_metropolis_smoke on_sigma_metropolis
         ON_SIGMA_METROPOLIS_BINARY apps/test_on_sigma_metropolis_smoke.cpp)
+    reticolo_add_app_smoke(test_on_sigma_wolff_smoke      on_sigma_wolff
+        ON_SIGMA_WOLFF_BINARY      apps/test_on_sigma_wolff_smoke.cpp)
 endif()
