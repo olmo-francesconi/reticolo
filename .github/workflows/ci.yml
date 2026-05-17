@@ -15,6 +15,10 @@ env:
   # in its action.yml (actions/cache@v4 as of 2026-05). Removes the
   # deprecation annotation noise; revert if any action breaks under Node 24.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  # ccache tuning — keep cache compact, compress aggressively.
+  CCACHE_MAXSIZE: "400M"
+  CCACHE_COMPRESS: "true"
+  CCACHE_COMPRESSLEVEL: "6"
 
 jobs:
   build:
@@ -32,13 +36,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: install ninja (linux)
+      - name: install tools (linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        run: sudo apt-get update && sudo apt-get install -y ninja-build ccache
 
-      - name: install ninja (macos)
+      - name: install tools (macos)
         if: runner.os == 'macOS'
-        run: brew install ninja
+        run: brew install ninja ccache
 
       - name: install homebrew llvm (macos-llvm)
         if: matrix.preset == 'macos-llvm'
@@ -48,14 +52,24 @@ jobs:
         if: matrix.preset == 'linux-clang'
         run: sudo apt-get install -y clang
 
-      - name: cache _deps (catch2)
+      - name: ccache dir
+        id: ccache_dir
+        shell: bash
+        run: echo "path=$(ccache -k cache_dir)" >> "$GITHUB_OUTPUT"
+
+      - name: cache compiler outputs (ccache)
         uses: actions/cache@v4
         with:
-          path: build/${{ matrix.preset }}/_deps
-          key: ${{ runner.os }}-${{ matrix.preset }}-deps-${{ hashFiles('tests/CMakeLists.txt', 'cmake/ReticoloWarnings.cmake', 'CMakeLists.txt') }}
+          path: ${{ steps.ccache_dir.outputs.path }}
+          key: ${{ runner.os }}-${{ matrix.preset }}-ccache-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.preset }}-ccache-
 
       - name: configure
-        run: cmake --preset ${{ matrix.preset }}
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -63,6 +77,10 @@ jobs:
       - name: test
         if: hashFiles('tests/CMakeLists.txt') != ''
         run: ctest --preset ${{ matrix.preset }}
+
+      - name: ccache stats
+        if: always()
+        run: ccache --show-stats --verbose
 
   format:
     name: clang-format
