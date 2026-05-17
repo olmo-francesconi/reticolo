@@ -66,10 +66,15 @@ jobs:
             ${{ runner.os }}-${{ matrix.preset }}-ccache-
 
       - name: configure
+        # RETICOLO_TUNE_NATIVE=OFF: ccache caches objects across GitHub
+        # runners with different CPUs; -march=native bakes per-CPU
+        # instructions into the cached object and crashes on a different
+        # runner with SIGILL. Local dev still defaults to ON via the preset.
         run: >
           cmake --preset ${{ matrix.preset }}
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DRETICOLO_TUNE_NATIVE=OFF
 
       - name: build
         run: cmake --build --preset ${{ matrix.preset }}
