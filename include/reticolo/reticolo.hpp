@@ -5,7 +5,11 @@
 // types: lattice + indexing + site + bc + rng + log.
 
 // NOLINTBEGIN(misc-include-cleaner): re-exports are the whole point of the umbrella.
+#include <reticolo/action/builtins/on_sigma.hpp>
 #include <reticolo/action/builtins/phi4.hpp>
+#include <reticolo/action/builtins/phi6.hpp>
+#include <reticolo/action/builtins/sine_gordon.hpp>
+#include <reticolo/action/builtins/xy.hpp>
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
