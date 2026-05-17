@@ -7,6 +7,9 @@
 // NOLINTBEGIN(misc-include-cleaner): re-exports are the whole point of the umbrella.
 #include <reticolo/action/builtins/phi4.hpp>
 #include <reticolo/action/concepts.hpp>
+#include <reticolo/algorithm/hmc.hpp>
+#include <reticolo/algorithm/integrators.hpp>
+#include <reticolo/algorithm/metropolis.hpp>
 #include <reticolo/core/bc.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/lattice.hpp>
