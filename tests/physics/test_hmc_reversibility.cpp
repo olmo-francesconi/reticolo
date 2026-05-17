@@ -16,7 +16,6 @@ using reticolo::Lattice;
 using reticolo::Site;
 using reticolo::action::Phi4;
 using reticolo::alg::Hmc;
-using reticolo::alg::HmcSpec;
 using reticolo::alg::integ::Leapfrog;
 
 TEST_CASE("HMC Leapfrog is reversible to ~1e-10", "[physics][hmc][reversibility]") {

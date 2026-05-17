@@ -16,6 +16,7 @@ struct HmcSpec {
 };
 
 struct HmcStep {
+    // NOLINTNEXTLINE(readability-identifier-naming) physics convention for ΔH = H_final - H_initial
     double dH     = 0.0;
     bool accepted = false;
 };
@@ -60,6 +61,7 @@ public:
         Integrator::run(action_, field_, mom_, force_, tau_, n_md_);
 
         double const h1 = hamiltonian_();
+        // NOLINTNEXTLINE(readability-identifier-naming) physics convention
         double const dH = h1 - h0;
 
         bool const accepted = (dH <= 0.0) || (rng_.uniform() < std::exp(-dH));
@@ -97,7 +99,7 @@ private:
     [[nodiscard]] double hamiltonian_() const {
         double kin = 0.0;
         for (Site x : field_.sites()) {
-            double const p = static_cast<double>(mom_[x]);
+            auto const p = static_cast<double>(mom_[x]);
             kin += p * p;
         }
         kin *= 0.5;

@@ -46,7 +46,7 @@ public:
         for (Site x : field_.sites()) {
             F const new_v = propose_(x);
 
-            double const ds = static_cast<double>(action_.ds_local(field_, x, new_v));
+            auto const ds = static_cast<double>(action_.ds_local(field_, x, new_v));
             ++stats.attempts;
             if (ds <= 0.0 || rng_.uniform() < std::exp(-ds)) {
                 field_[x] = new_v;

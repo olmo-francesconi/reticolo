@@ -24,7 +24,7 @@ jobs:
           - { os: ubuntu-latest, preset: linux-clang }
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: install ninja (linux)
         if: runner.os == 'Linux'
@@ -42,6 +42,12 @@ jobs:
         if: matrix.preset == 'linux-clang'
         run: sudo apt-get install -y clang
 
+      - name: cache _deps (catch2)
+        uses: actions/cache@v4
+        with:
+          path: build/${{ matrix.preset }}/_deps
+          key: ${{ runner.os }}-${{ matrix.preset }}-deps-${{ hashFiles('tests/CMakeLists.txt', 'cmake/ReticoloWarnings.cmake', 'CMakeLists.txt') }}
+
       - name: configure
         run: cmake --preset ${{ matrix.preset }}
 
@@ -56,7 +62,7 @@ jobs:
     name: clang-format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
       - name: check formatting
@@ -73,11 +79,13 @@ jobs:
     name: clang-tidy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: install
         run: sudo apt-get update && sudo apt-get install -y clang-tidy clang ninja-build
+
       - name: configure
         run: cmake --preset linux-clang
+
       - name: tidy
         run: |
           shopt -s globstar nullglob

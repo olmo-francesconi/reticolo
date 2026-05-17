@@ -16,7 +16,6 @@ using reticolo::Lattice;
 using reticolo::Site;
 using reticolo::action::Phi4;
 using reticolo::alg::Hmc;
-using reticolo::alg::HmcSpec;
 using reticolo::alg::integ::Leapfrog;
 
 // Returns ensemble-mean |dH| over `n_traj` trajectories of (tau, n_md).
@@ -71,7 +70,7 @@ TEST_CASE("HMC Leapfrog has integrator order p ~ 2 in |dH| vs dt", "[physics][hm
         sum_xx += x * x;
         sum_xy += x * y;
     }
-    double const n     = static_cast<double>(k_n_mds.size());
+    auto const n       = static_cast<double>(k_n_mds.size());
     double const slope = ((n * sum_xy) - (sum_x * sum_y)) / ((n * sum_xx) - (sum_x * sum_x));
 
     INFO("dt    : " << dt[0] << ", " << dt[1] << ", " << dt[2] << ", " << dt[3]);
