@@ -81,9 +81,12 @@ jobs:
       - name: tidy
         run: |
           shopt -s globstar nullglob
-          files=(include/**/*.hpp src/**/*.cpp apps/**/*.cpp tests/**/*.cpp)
+          # clang-tidy needs TUs (.cpp) to resolve include paths; library
+          # headers are linted via the HeaderFilterRegex configured in
+          # .clang-tidy as the .cpp TUs include them.
+          files=(src/**/*.cpp apps/**/*.cpp tests/**/*.cpp)
           if [ ${#files[@]} -gt 0 ]; then
             clang-tidy -p build/linux-clang "${files[@]}"
           else
-            echo "no C++ sources yet — skipping"
+            echo "no C++ TUs yet — skipping"
           fi

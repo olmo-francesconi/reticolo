@@ -5,7 +5,6 @@
 #include <reticolo/core/site.hpp>
 
 #include <concepts>
-#include <cstddef>
 
 namespace reticolo::action {
 
