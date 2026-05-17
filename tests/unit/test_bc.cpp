@@ -16,16 +16,14 @@ TEST_CASE("BcMask defaults to all-periodic for given ndims", "[bc]") {
 }
 
 TEST_CASE("BcMask from initializer_list captures per-direction BCs", "[bc]") {
-    BcMask const m{Bc::Periodic, Bc::Open, Bc::Antiperiodic};
-    REQUIRE(m.ndims() == 3);
+    BcMask const m{Bc::Open, Bc::Periodic};
+    REQUIRE(m.ndims() == 2);
     REQUIRE_FALSE(m.all_periodic());
-    REQUIRE(m[0] == Bc::Periodic);
-    REQUIRE(m[1] == Bc::Open);
-    REQUIRE(m[2] == Bc::Antiperiodic);
+    REQUIRE(m[0] == Bc::Open);
+    REQUIRE(m[1] == Bc::Periodic);
 
-    REQUIRE_FALSE(m.affects_topology(0));
-    REQUIRE(m.affects_topology(1));
-    REQUIRE_FALSE(m.affects_topology(2));
+    REQUIRE(m.affects_topology(0));
+    REQUIRE_FALSE(m.affects_topology(1));
 }
 
 TEST_CASE("BcMask equality compares structure", "[bc]") {

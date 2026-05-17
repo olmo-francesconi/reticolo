@@ -32,7 +32,8 @@ int main(int argc, char** argv) {
     auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N trajectories");
     auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
     auto const& outpath    = p.opt<std::string>("out", std::string{"phi4.h5"}, "HDF5 output path");
-    p.parse(argc, argv);
+    if (!p.parse(argc, argv))
+        return 0;
 
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Lattice<double> phi{shape};

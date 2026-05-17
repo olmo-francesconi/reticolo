@@ -96,6 +96,12 @@ public:
 
     // Write a scalar attribute at `path` of the form "<group_or_dataset>@<name>".
     // Examples: "/vars@kappa", "/run@operator_note".
+    //
+    // If the parent path doesn't exist, it is auto-created as an HDF5 group.
+    // That's convenient for `/vars@*` and `/run@*` (the metadata roots), but
+    // means a typo'd parent silently lands on a phantom new group instead of
+    // failing. Treat `attr` as a metadata sink for known-flat namespaces, not
+    // as a general dataset-attribute API.
     template <class T>
     void attr(std::string_view path, T const& value);
 

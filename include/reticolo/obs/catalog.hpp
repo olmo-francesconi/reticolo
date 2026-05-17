@@ -105,13 +105,13 @@ template <class T>
 //   |M|^2 / V^2  with M = Σ_x phi(x)  (phi(x) ∈ R^N)
 // Returns a rotation-invariant scalar suitable for ensemble averaging into
 // susceptibility / Binder cumulants of an O(N) symmetry.
-template <std::size_t N>
-[[nodiscard]] double vector_magnetization_sq(Lattice<std::array<double, N>> const& l) noexcept {
+template <std::size_t N, class T>
+[[nodiscard]] double vector_magnetization_sq(Lattice<std::array<T, N>> const& l) noexcept {
     std::array<double, N> sum{};
     for (Site const x : l.sites()) {
         auto const& v = l[x];
         for (std::size_t i = 0; i < N; ++i) {
-            sum[i] += v[i];
+            sum[i] += static_cast<double>(v[i]);
         }
     }
     double m_sq = 0.0;

@@ -11,7 +11,6 @@ namespace reticolo {
 
 enum class Bc : std::uint8_t {
     Periodic,
-    Antiperiodic,
     Open,
 };
 

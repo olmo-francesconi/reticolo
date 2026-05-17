@@ -33,7 +33,8 @@ int main(int argc, char** argv) {
     auto const& n_prod    = p.opt<int>("n_prod", 2000, "production measurements");
     auto const& seed      = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
     auto const& outpath = p.opt<std::string>("out", std::string{"xy_wolff.h5"}, "HDF5 output path");
-    p.parse(argc, argv);
+    if (!p.parse(argc, argv))
+        return 0;
 
     auto const l_sz = static_cast<std::size_t>(L);
     Lattice<double> theta{{l_sz, l_sz}};

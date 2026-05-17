@@ -25,6 +25,7 @@ int main(int argc, char** argv) {
     auto const& L          = p.req<int>("L,size", "linear lattice extent");
     auto const& kappa      = p.req<double>("kappa", "hopping parameter");
     auto const& alpha      = p.req<double>("alpha", "cosine-potential strength");
+    auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
     auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md       = p.opt<int>("n_md", 20, "MD steps per trajectory");
     auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation trajectories");
@@ -33,10 +34,11 @@ int main(int argc, char** argv) {
     auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
     auto const& outpath =
         p.opt<std::string>("out", std::string{"sine_gordon.h5"}, "HDF5 output path");
-    p.parse(argc, argv);
+    if (!p.parse(argc, argv))
+        return 0;
 
-    auto const l_sz = static_cast<std::size_t>(L);
-    Lattice<double> phi{{l_sz, l_sz, l_sz, l_sz}};
+    Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    Lattice<double> phi{shape};
     FastRng rng{seed};
     act::SineGordon<double> sg{.kappa = kappa, .alpha = alpha};
 

@@ -30,7 +30,8 @@ int main(int argc, char** argv) {
     auto const& n_prod  = p.opt<int>("n_prod", 2000, "production sweeps");
     auto const& seed    = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
     auto const& outpath = p.opt<std::string>("out", std::string{"on_sigma.h5"}, "HDF5 output path");
-    p.parse(argc, argv);
+    if (!p.parse(argc, argv))
+        return 0;
 
     Lattice<std::array<double, k_n>>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                     static_cast<std::size_t>(L));
@@ -38,8 +39,8 @@ int main(int argc, char** argv) {
     FastRng rng{seed};
     act::OnSigma<k_n> on{.beta = beta};
 
-    // Cold start (all spins aligned along the first axis), then a quick
-    // randomising pass before measurement begins.
+    // Cold start: every spin aligned along the first axis. The thermalisation
+    // sweeps below decorrelate from this configuration before measurement.
     for (Site const x : phi.sites()) {
         phi[x] = {1.0, 0.0, 0.0};
     }

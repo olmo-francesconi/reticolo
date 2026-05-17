@@ -42,13 +42,13 @@ HDF5's `hid_t` never leaves `src/io/writer.cpp`.
 ```
 
 re-exports every public header (core, actions, algorithms, observers, IO,
-CLI) plus a one-liner that gives terse namespace aliases inside
-`namespace reticolo`:
+CLI). The library uses short namespace names directly — `reticolo::alg`,
+`reticolo::obs`, `reticolo::io`, `reticolo::cli` — and the umbrella adds
+exactly one alias inside `namespace reticolo` so the longer-named action
+namespace can be referenced as `act`:
 
 ```cpp
 namespace act = action;
-namespace alg = algorithm;
-namespace obs = observables;
 ```
 
 so `using namespace reticolo;` in an app yields `Lattice<double>`, `FastRng`,
@@ -221,7 +221,7 @@ in Python, or in C++ over a span if you prefer).
 
 ## Tests
 
-112 Catch2 tests live in `tests/`:
+Over a hundred Catch2 cases live in `tests/`:
 
 - `tests/unit/` — `Site`, `Indexing`, pool, `Lattice`, `FastRng`, `BcMask`,
   `Parser`, observers, analysis.

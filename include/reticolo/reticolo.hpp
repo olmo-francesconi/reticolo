@@ -11,6 +11,7 @@
 #include <reticolo/action/builtins/sine_gordon.hpp>
 #include <reticolo/action/builtins/xy.hpp>
 #include <reticolo/action/concepts.hpp>
+#include <reticolo/action/helpers.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/algorithm/metropolis.hpp>

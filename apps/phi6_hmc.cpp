@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
     auto const& kappa      = p.req<double>("kappa", "hopping parameter");
     auto const& lambda     = p.req<double>("lambda", "quartic coupling");
     auto const& g6         = p.req<double>("g6", "sextic coupling");
+    auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
     auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md       = p.opt<int>("n_md", 20, "MD steps per trajectory");
     auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation trajectories");
@@ -29,10 +30,11 @@ int main(int argc, char** argv) {
     auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N trajectories");
     auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
     auto const& outpath    = p.opt<std::string>("out", std::string{"phi6.h5"}, "HDF5 output path");
-    p.parse(argc, argv);
+    if (!p.parse(argc, argv))
+        return 0;
 
-    auto const l_sz = static_cast<std::size_t>(L);
-    Lattice<double> phi{{l_sz, l_sz, l_sz, l_sz}};
+    Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    Lattice<double> phi{shape};
     FastRng rng{seed};
     act::Phi6<double> phi6{.kappa = kappa, .lambda = lambda, .g6 = g6};
 

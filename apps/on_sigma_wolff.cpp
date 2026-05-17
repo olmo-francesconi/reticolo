@@ -34,7 +34,8 @@ int main(int argc, char** argv) {
     auto const& seed      = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
     auto const& outpath =
         p.opt<std::string>("out", std::string{"on_sigma_wolff.h5"}, "HDF5 output path");
-    p.parse(argc, argv);
+    if (!p.parse(argc, argv))
+        return 0;
 
     Lattice<std::array<double, k_n>>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                     static_cast<std::size_t>(L));

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 namespace reticolo::alg {
@@ -22,14 +23,20 @@ struct WolffStep {
 //  Algorithm (Wolff 1989):
 //    1. Pick a uniformly-random seed site and an action-supplied reflection
 //       axis (random unit vector for O(N), random angle for XY).
-//    2. BFS the seed's neighbourhood: a candidate link (x in cluster, y not)
-//       is activated with action-supplied probability `wolff_link_p` computed
-//       on the ORIGINAL field values. y is added to the cluster on activation.
-//    3. Once the BFS terminates, reflect every cluster member in-place.
+//    2. DFS the seed's neighbourhood (LIFO via `stack_`): a candidate link
+//       (x in cluster, y not) is activated with action-supplied probability
+//       `wolff_link_p` computed on the ORIGINAL field values. y is added to
+//       the cluster on activation.
+//    3. Once the walk terminates, reflect every cluster member in-place.
 //
-//  Storing membership in `in_cluster_` and deferring the flip to the end keeps
-//  link probabilities consistent (every test sees the same pre-flip field) and
-//  avoids the order-dependence trap of flipping on visit.
+//  Membership uses a per-call generation tag (`gen_`) compared against
+//  `mark_[i]` — bumping `gen_` is O(1) and effectively clears the membership
+//  set, so the clear cost does not scale with `nsites()` per update. When the
+//  tag is about to wrap, the buffer is zeroed and `gen_` reset.
+//
+//  Deferring the flip to the end keeps link probabilities consistent (every
+//  test sees the same pre-flip field) and avoids the order-dependence trap
+//  of flipping on visit.
 //
 //  Open-BC: invalid neighbours (returned as `Site::k_invalid_value` by the
 //  `Indexing`) are skipped, so the cluster naturally terminates at boundaries.
@@ -40,10 +47,12 @@ class Wolff {
 public:
     using value_type = F;
     using axis_type  = typename A::axis_type;
+    using mark_type  = std::uint32_t;
 
     Wolff(A const& action, Lattice<F>& field, R& rng)
-        : action_{action}, field_{field}, rng_{rng}, in_cluster_(field.nsites(), 0) {
+        : action_{action}, field_{field}, rng_{rng}, mark_(field.nsites(), 0) {
         stack_.reserve(field.nsites());
+        cluster_sites_.reserve(field.nsites());
     }
 
     WolffStep update() {
@@ -51,30 +60,27 @@ public:
         Site const seed{rng_.uniform_int(n_sites)};
         axis_type const axis = action_.wolff_random_axis(rng_);
 
-        std::ranges::fill(in_cluster_, std::uint8_t{0});
+        bump_generation_();
         stack_.clear();
+        cluster_sites_.clear();
         stack_.push_back(seed);
-        in_cluster_[seed.value()] = 1;
+        cluster_sites_.push_back(seed);
+        mark_[seed.value()] = gen_;
 
-        std::size_t cluster_size = 0;
         while (!stack_.empty()) {
             Site const x = stack_.back();
             stack_.pop_back();
-            ++cluster_size;
             for (std::size_t mu = 0; mu < field_.ndims(); ++mu) {
                 consider_link_(x, field_.next(x, mu), axis);
                 consider_link_(x, field_.prev(x, mu), axis);
             }
         }
 
-        for (std::size_t i = 0; i < n_sites; ++i) {
-            if (in_cluster_[i] != 0) {
-                Site const s{i};
-                field_[s] = action_.wolff_reflect(field_[s], axis);
-            }
+        for (Site const s : cluster_sites_) {
+            field_[s] = action_.wolff_reflect(field_[s], axis);
         }
 
-        return {.cluster_size = cluster_size};
+        return {.cluster_size = cluster_sites_.size()};
     }
 
 private:
@@ -82,21 +88,32 @@ private:
         if (!y.is_valid()) {
             return;
         }
-        if (in_cluster_[y.value()] != 0) {
+        if (mark_[y.value()] == gen_) {
             return;
         }
         double const p = action_.wolff_link_p(field_[x], field_[y], axis);
         if (p > 0.0 && rng_.uniform() < p) {
-            in_cluster_[y.value()] = 1;
+            mark_[y.value()] = gen_;
+            cluster_sites_.push_back(y);
             stack_.push_back(y);
         }
+    }
+
+    void bump_generation_() {
+        if (gen_ == std::numeric_limits<mark_type>::max()) {
+            std::fill(mark_.begin(), mark_.end(), mark_type{0});
+            gen_ = 0;
+        }
+        ++gen_;
     }
 
     A const& action_;
     Lattice<F>& field_;
     R& rng_;
-    std::vector<std::uint8_t> in_cluster_;
+    std::vector<mark_type> mark_;
     std::vector<Site> stack_;
+    std::vector<Site> cluster_sites_;
+    mark_type gen_ = 0;
 };
 
 }  // namespace reticolo::alg

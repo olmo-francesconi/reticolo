@@ -1,9 +1,8 @@
 #pragma once
 
+#include <reticolo/action/helpers.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/site.hpp>
-
-#include <cstddef>
 
 namespace reticolo::action {
 
@@ -29,18 +28,8 @@ struct Phi6 {
     T g6     = T{0};
 
     [[nodiscard]] T s_local(Lattice<T> const& l, Site x) const noexcept {
-        T const phi = l[x];
-        T nbrs      = T{0};
-        for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-            Site const fwd = l.next(x, mu);
-            Site const bwd = l.prev(x, mu);
-            if (fwd.is_valid()) {
-                nbrs += l[fwd];
-            }
-            if (bwd.is_valid()) {
-                nbrs += l[bwd];
-            }
-        }
+        T const phi  = l[x];
+        T const nbrs = nn_neighbour_sum(l, x);
         T const phi2 = phi * phi;
         T const dev  = phi2 - T{1};
         T const phi6 = phi2 * phi2 * phi2;
@@ -48,18 +37,8 @@ struct Phi6 {
     }
 
     [[nodiscard]] T ds_local(Lattice<T> const& l, Site x, T new_v) const noexcept {
-        T const phi = l[x];
-        T nbrs      = T{0};
-        for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-            Site const fwd = l.next(x, mu);
-            Site const bwd = l.prev(x, mu);
-            if (fwd.is_valid()) {
-                nbrs += l[fwd];
-            }
-            if (bwd.is_valid()) {
-                nbrs += l[bwd];
-            }
-        }
+        T const phi      = l[x];
+        T const nbrs     = nn_neighbour_sum(l, x);
         T const phi2_old = phi * phi;
         T const phi2_new = new_v * new_v;
         T const dev_old  = phi2_old - T{1};
@@ -76,17 +55,11 @@ struct Phi6 {
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
         T total = T{0};
         for (Site const x : l.sites()) {
-            T const phi = l[x];
-            T fwd_sum   = T{0};
-            for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-                Site const fwd = l.next(x, mu);
-                if (fwd.is_valid()) {
-                    fwd_sum += l[fwd];
-                }
-            }
-            T const phi2 = phi * phi;
-            T const dev  = phi2 - T{1};
-            T const phi6 = phi2 * phi2 * phi2;
+            T const phi     = l[x];
+            T const fwd_sum = fwd_neighbour_sum(l, x);
+            T const phi2    = phi * phi;
+            T const dev     = phi2 - T{1};
+            T const phi6    = phi2 * phi2 * phi2;
             total += (T{-2} * kappa * phi * fwd_sum) + phi2 + (lambda * dev * dev) + (g6 * phi6);
         }
         return total;
@@ -97,18 +70,8 @@ struct Phi6 {
     //           - 4 lambda phi(x) (phi(x)^2 - 1) - 6 g6 phi(x)^5
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
         for (Site const x : l.sites()) {
-            T const phi = l[x];
-            T nbrs      = T{0};
-            for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-                Site const fwd = l.next(x, mu);
-                Site const bwd = l.prev(x, mu);
-                if (fwd.is_valid()) {
-                    nbrs += l[fwd];
-                }
-                if (bwd.is_valid()) {
-                    nbrs += l[bwd];
-                }
-            }
+            T const phi  = l[x];
+            T const nbrs = nn_neighbour_sum(l, x);
             T const phi2 = phi * phi;
             T const phi5 = phi2 * phi2 * phi;
             force[x]     = (T{2} * kappa * nbrs) - (T{2} * phi) -

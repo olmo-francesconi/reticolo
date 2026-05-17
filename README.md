@@ -118,7 +118,7 @@ src/io/                the one TU that owns <hdf5.h> (PIMPL'd)
 src/lint/              amalgamation TU for constant-time clang-tidy
 apps/                  hand-written reference simulations
 examples/              end-to-end studies with bash + python post-processing
-tests/                 unit + physics + e2e smoke tests (112 Catch2 tests)
+tests/                 unit + physics + e2e smoke tests (100+ Catch2 cases)
 proposals/             v3 plan + audit of the prior branch
 ```
 

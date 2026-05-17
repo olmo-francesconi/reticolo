@@ -147,9 +147,14 @@ public:
         return ref;
     }
 
-    // Parse argv. Throws on missing required / parse failure. On --help / -h
-    // prints the usage to stdout and calls std::exit(0).
-    void parse(int argc, char const* const* argv) {
+    // Parse argv. Returns true on a normal parse. Returns false (after
+    // printing usage to `out`) when the user passed `--help` / `-h` —
+    // apps write `if (!p.parse(argc, argv)) return 0;` as the canonical
+    // first line of main, which lets the app's RAII destructors run cleanly
+    // instead of being bypassed by `std::exit`. Bad-argument failures
+    // (missing required flag, parse error, unknown flag) propagate as
+    // `std::runtime_error` / `cxxopts::exceptions::*`.
+    bool parse(int argc, char const* const* argv, std::ostream& out = std::cout) {
         cxxopts::Options opts{name_, desc_};
         opts.add_options()("h,help", "Show this help and exit");
         for (auto const& s : slots_) {
@@ -159,14 +164,15 @@ public:
         cxxopts::ParseResult const result = opts.parse(argc, argv);
 
         if (result.count("help") > 0) {
-            std::cout << opts.help() << '\n';
-            std::exit(0);  // NOLINT(concurrency-mt-unsafe)
+            out << opts.help() << '\n';
+            return false;
         }
 
         for (auto& s : slots_) {
             s->read_from(result);
         }
         parsed_ = true;
+        return true;
     }
 
     // Stamp every registered var at /vars@<name>. Called automatically by the
