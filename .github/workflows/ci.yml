@@ -10,6 +10,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Opt every JS-based action into Node 24 even when it still declares Node 20
+  # in its action.yml (actions/cache@v4 as of 2026-05). Removes the
+  # deprecation annotation noise; revert if any action breaks under Node 24.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     name: ${{ matrix.preset }}

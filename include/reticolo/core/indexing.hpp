@@ -57,7 +57,7 @@ public:
 
 private:
     Indexing(SizeVec shape, BcMask bcs);
-    void build();
+    void build_();
 
     SizeVec shape_;
     BcMask bcs_;
@@ -132,10 +132,10 @@ inline std::shared_ptr<Indexing const> Indexing::acquire(SizeVec shape, BcMask b
 
 inline Indexing::Indexing(SizeVec shape, BcMask bcs)
     : shape_{std::move(shape)}, bcs_{std::move(bcs)} {
-    build();
+    build_();
 }
 
-inline void Indexing::build() {
+inline void Indexing::build_() {
     std::size_t const d = shape_.size();
 
     nsites_ = 1;
