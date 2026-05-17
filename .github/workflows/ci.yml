@@ -84,9 +84,11 @@ jobs:
           # clang-tidy needs TUs (.cpp) to resolve include paths; library
           # headers are linted via the HeaderFilterRegex configured in
           # .clang-tidy as the .cpp TUs include them.
+          # run-clang-tidy parallelises across cores and -quiet suppresses
+          # the per-warning chatter that comes from analysing Catch2 templates.
           files=(src/**/*.cpp apps/**/*.cpp tests/**/*.cpp)
           if [ ${#files[@]} -gt 0 ]; then
-            clang-tidy -p build/linux-clang "${files[@]}"
+            run-clang-tidy -p build/linux-clang -j "$(nproc)" -quiet "${files[@]}"
           else
             echo "no C++ TUs yet — skipping"
           fi
