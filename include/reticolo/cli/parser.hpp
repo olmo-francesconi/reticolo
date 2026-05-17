@@ -54,7 +54,7 @@ std::string to_default_string(T const& v) {
 struct VarSlotBase {
     std::string name;  // cxxopts spec; "short,long" or a single name.
     std::string desc;
-    bool        required = false;
+    bool required = false;
 
     VarSlotBase()                                  = default;
     VarSlotBase(VarSlotBase const&)                = delete;
@@ -103,9 +103,7 @@ struct VarSlot : VarSlotBase {
         value = result[key].template as<T>();
     }
 
-    void stamp_into(io::Writer& w) const override {
-        w.attr<T>("/vars@" + canonical_name(), value);
-    }
+    void stamp_into(io::Writer& w) const override { w.attr<T>("/vars@" + canonical_name(), value); }
 };
 
 }  // namespace detail
