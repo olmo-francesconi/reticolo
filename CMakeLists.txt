@@ -99,6 +99,14 @@ if(RETICOLO_BUILD_IO)
 endif()
 
 # ---------------------------------------------------------------------------
+# Lint amalgamation TU (CI-only — see src/lint/CMakeLists.txt for rationale).
+# Only registered if we have the umbrella's transitive deps.
+# ---------------------------------------------------------------------------
+if(RETICOLO_BUILD_IO)
+    add_subdirectory(src/lint)
+endif()
+
+# ---------------------------------------------------------------------------
 # reticolo::reticolo  (umbrella)
 # ---------------------------------------------------------------------------
 add_library(reticolo INTERFACE)

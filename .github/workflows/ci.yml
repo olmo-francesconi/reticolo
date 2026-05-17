@@ -121,18 +121,21 @@ jobs:
       - name: configure
         run: cmake --preset linux-clang
 
+      - name: build amalgamation (warms the lint TU into compile_commands.json)
+        run: cmake --build --preset linux-clang --target reticolo_lint_amalgamation
+
       - name: tidy
         run: |
           shopt -s globstar nullglob
-          # Tidy scope: production code only (src/ + apps/). Test TUs are
-          # excluded — they're verification code, never shipped, and each one
-          # pulls Catch2's heavy templates which dominate analysis time. Every
-          # library header is still covered: apps/phi4_hmc.cpp includes the
-          # umbrella header so every public header is reached, and the
-          # HeaderFilterRegex in .clang-tidy surfaces findings on them.
-          # run-clang-tidy parallelises across cores; -quiet suppresses
-          # per-warning chatter from system headers.
-          files=(src/**/*.cpp apps/**/*.cpp)
+          # Tidy scope: src/ only — *constant* size as more apps land.
+          #   - src/lint/amalgamation.cpp `#include <reticolo/reticolo.hpp>`,
+          #     giving full library-header coverage in ONE TU. HeaderFilterRegex
+          #     in .clang-tidy surfaces findings on every public header.
+          #   - src/io/writer.cpp is the only library implementation TU.
+          # apps/ and tests/ are deliberately not tidied: re-parsing the umbrella
+          # per-app costs ~30s each and adds no signal (format + build + runtime
+          # tests already gate app and test code).
+          files=(src/**/*.cpp)
           if [ ${#files[@]} -gt 0 ]; then
             run-clang-tidy -p build/linux-clang -j "$(nproc)" -quiet "${files[@]}"
           else
