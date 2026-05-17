@@ -22,3 +22,9 @@
 #include <reticolo/obs/catalog.hpp>
 #include <reticolo/obs/concepts.hpp>
 // NOLINTEND(misc-include-cleaner)
+
+// Short namespace aliases. One `using namespace reticolo;` per app then gives
+// terse `act::Phi4`, `alg::Hmc`, `obs::mean`, `io::Writer`, `cli::Parser`.
+namespace reticolo {
+namespace act = action;
+}  // namespace reticolo

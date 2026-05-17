@@ -42,3 +42,11 @@ if(RETICOLO_BUILD_IO)
     reticolo_add_test(test_writer_vars_stamping     io/test_writer_vars_stamping.cpp)
     reticolo_add_test(test_cli_parser               unit/test_cli_parser.cpp)
 endif()
+
+if(RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS AND TARGET phi4_hmc)
+    reticolo_add_test(test_phi4_hmc_smoke           apps/test_phi4_hmc_smoke.cpp)
+    target_compile_definitions(test_phi4_hmc_smoke PRIVATE
+        PHI4_HMC_BINARY="$<TARGET_FILE:phi4_hmc>"
+    )
+    add_dependencies(test_phi4_hmc_smoke phi4_hmc)
+endif()
