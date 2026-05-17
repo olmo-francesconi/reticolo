@@ -38,11 +38,11 @@ jobs:
 
       - name: install tools (linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build ccache
+        run: sudo apt-get update && sudo apt-get install -y ninja-build ccache libhdf5-dev
 
       - name: install tools (macos)
         if: runner.os == 'macOS'
-        run: brew install ninja ccache
+        run: brew install ninja ccache hdf5
 
       - name: install homebrew llvm (macos-llvm)
         if: matrix.preset == 'macos-llvm'
@@ -110,7 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: install
-        run: sudo apt-get update && sudo apt-get install -y clang-tidy clang ninja-build
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy clang ninja-build libhdf5-dev
 
       - name: configure
         run: cmake --preset linux-clang

@@ -32,3 +32,9 @@ reticolo_add_test(test_phi4_force_consistency       physics/test_phi4_force_cons
 reticolo_add_test(test_hmc_reversibility            physics/test_hmc_reversibility.cpp)
 reticolo_add_test(test_hmc_integrator_order         physics/test_hmc_integrator_order.cpp)
 reticolo_add_test(test_metropolis_gaussian_limit    physics/test_metropolis_gaussian_limit.cpp)
+
+if(RETICOLO_BUILD_IO)
+    reticolo_add_test(test_writer_roundtrip         io/test_writer_roundtrip.cpp)
+    reticolo_add_test(test_writer_metadata          io/test_writer_metadata.cpp)
+    reticolo_add_test(test_writer_phase_collision   io/test_writer_phase_collision.cpp)
+endif()

@@ -16,4 +16,5 @@
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
+#include <reticolo/io/writer.hpp>
 // NOLINTEND(misc-include-cleaner)

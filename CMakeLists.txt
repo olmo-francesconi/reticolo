@@ -18,11 +18,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(RETICOLO_BUILD_APPS         "Build reference apps"                ON)
 option(RETICOLO_BUILD_TESTS        "Build test suite"                    ON)
+option(RETICOLO_BUILD_IO           "Build the HDF5-backed io subsystem"  ON)
 option(RETICOLO_WARNINGS_AS_ERRORS "Treat warnings as errors"            OFF)
 option(RETICOLO_TUNE_NATIVE        "Build with -march=native"            ON)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(ReticoloWarnings)
+
+if(RETICOLO_BUILD_IO)
+    find_package(HDF5 REQUIRED COMPONENTS C)
+endif()
 
 execute_process(
     COMMAND git rev-parse --short HEAD
@@ -67,11 +72,21 @@ endif()
 reticolo_configure_warnings(reticolo_core)
 
 # ---------------------------------------------------------------------------
-# reticolo::reticolo  (umbrella; gains reticolo::io at M5)
+# reticolo::io  (static; owns libhdf5)
+# ---------------------------------------------------------------------------
+if(RETICOLO_BUILD_IO)
+    add_subdirectory(src/io)
+endif()
+
+# ---------------------------------------------------------------------------
+# reticolo::reticolo  (umbrella)
 # ---------------------------------------------------------------------------
 add_library(reticolo INTERFACE)
 add_library(reticolo::reticolo ALIAS reticolo)
 target_link_libraries(reticolo INTERFACE reticolo::core)
+if(RETICOLO_BUILD_IO)
+    target_link_libraries(reticolo INTERFACE reticolo::io)
+endif()
 
 # ---------------------------------------------------------------------------
 # Subdirectories
@@ -90,3 +105,6 @@ message(STATUS "reticolo: commit        ${RETICOLO_GIT_COMMIT}")
 message(STATUS "reticolo: build type    ${CMAKE_BUILD_TYPE}")
 message(STATUS "reticolo: C++ standard  ${CMAKE_CXX_STANDARD}")
 message(STATUS "reticolo: native tuning ${RETICOLO_TUNE_NATIVE}")
+if(RETICOLO_BUILD_IO)
+    message(STATUS "reticolo: HDF5          ${HDF5_VERSION}")
+endif()
