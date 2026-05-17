@@ -3,6 +3,7 @@
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/site.hpp>
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <stdexcept>
@@ -86,6 +87,44 @@ template <class T>
         sum += static_cast<double>(l[x]) * static_cast<double>(l[y]);
     }
     return sum / static_cast<double>(l.nsites());
+}
+
+// Squared magnetization per site for a vector-valued field:
+//   |M|^2 / V^2  with M = Σ_x phi(x)  (phi(x) ∈ R^N)
+// Returns a rotation-invariant scalar suitable for ensemble averaging into
+// susceptibility / Binder cumulants of an O(N) symmetry.
+template <std::size_t N>
+[[nodiscard]] double vector_magnetization_sq(Lattice<std::array<double, N>> const& l) noexcept {
+    std::array<double, N> sum{};
+    for (Site const x : l.sites()) {
+        auto const& v = l[x];
+        for (std::size_t i = 0; i < N; ++i) {
+            sum[i] += v[i];
+        }
+    }
+    double m_sq = 0.0;
+    for (std::size_t i = 0; i < N; ++i) {
+        m_sq += sum[i] * sum[i];
+    }
+    auto const inv_v_sq = 1.0 / (static_cast<double>(l.nsites()) * static_cast<double>(l.nsites()));
+    return m_sq * inv_v_sq;
+}
+
+// XY-specialised |M|^2 / V^2 for a Lattice<theta>: projects theta -> (cosθ,sinθ)
+// before summing so the rotation-invariant 2-vector magnetization comes out
+// without forcing the app to allocate an array<double,2> field.
+template <class T>
+[[nodiscard]] double xy_magnetization_sq(Lattice<T> const& theta) noexcept {
+    double mx = 0.0;
+    double my = 0.0;
+    for (Site const x : theta.sites()) {
+        auto const t = static_cast<double>(theta[x]);
+        mx += std::cos(t);
+        my += std::sin(t);
+    }
+    auto const inv_v_sq =
+        1.0 / (static_cast<double>(theta.nsites()) * static_cast<double>(theta.nsites()));
+    return ((mx * mx) + (my * my)) * inv_v_sq;
 }
 
 }  // namespace reticolo::obs

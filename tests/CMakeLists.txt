@@ -48,10 +48,23 @@ if(RETICOLO_BUILD_IO)
     reticolo_add_test(test_cli_parser               unit/test_cli_parser.cpp)
 endif()
 
-if(RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS AND TARGET phi4_hmc)
-    reticolo_add_test(test_phi4_hmc_smoke           apps/test_phi4_hmc_smoke.cpp)
-    target_compile_definitions(test_phi4_hmc_smoke PRIVATE
-        PHI4_HMC_BINARY="$<TARGET_FILE:phi4_hmc>"
-    )
-    add_dependencies(test_phi4_hmc_smoke phi4_hmc)
+if(RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS)
+    function(reticolo_add_app_smoke test_name app_target define_name source)
+        reticolo_add_test(${test_name} ${source})
+        target_compile_definitions(${test_name} PRIVATE
+            ${define_name}="$<TARGET_FILE:${app_target}>"
+        )
+        add_dependencies(${test_name} ${app_target})
+    endfunction()
+
+    reticolo_add_app_smoke(test_phi4_hmc_smoke          phi4_hmc
+        PHI4_HMC_BINARY            apps/test_phi4_hmc_smoke.cpp)
+    reticolo_add_app_smoke(test_phi6_hmc_smoke          phi6_hmc
+        PHI6_HMC_BINARY            apps/test_phi6_hmc_smoke.cpp)
+    reticolo_add_app_smoke(test_sine_gordon_hmc_smoke   sine_gordon_hmc
+        SINE_GORDON_HMC_BINARY     apps/test_sine_gordon_hmc_smoke.cpp)
+    reticolo_add_app_smoke(test_xy_wolff_smoke          xy_wolff
+        XY_WOLFF_BINARY            apps/test_xy_wolff_smoke.cpp)
+    reticolo_add_app_smoke(test_on_sigma_metropolis_smoke on_sigma_metropolis
+        ON_SIGMA_METROPOLIS_BINARY apps/test_on_sigma_metropolis_smoke.cpp)
 endif()
