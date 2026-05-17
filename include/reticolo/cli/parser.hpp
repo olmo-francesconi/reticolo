@@ -156,7 +156,7 @@ public:
             s->add_to(opts);
         }
 
-        cxxopts::ParseResult result = opts.parse(argc, argv);
+        cxxopts::ParseResult const result = opts.parse(argc, argv);
 
         if (result.count("help") > 0) {
             std::cout << opts.help() << '\n';

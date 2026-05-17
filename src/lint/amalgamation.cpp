@@ -6,6 +6,7 @@
 //
 // This TU is not linked into any binary; it exists purely for the lint scan.
 
+// NOLINTNEXTLINE(misc-include-cleaner) the entire point is to pull every header
 #include <reticolo/reticolo.hpp>
 
 namespace {

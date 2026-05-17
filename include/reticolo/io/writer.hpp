@@ -111,8 +111,10 @@ private:
 };
 
 // -----------------------------------------------------------------------------
-// Extern template declarations for the supported scalar set.
-// -----------------------------------------------------------------------------
+// Extern template declarations for the supported scalar set. The macro is the
+// only sane way to write three correlated extern-template declarations per
+// type; a `constexpr` template helper can't issue declarations.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define RETICOLO_IO_DECLARE(T)                                                                     \
     extern template class Series<T>;                                                               \
     extern template Series<T> Writer::series<T>(std::string_view, std::size_t);                    \

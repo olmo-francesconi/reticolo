@@ -121,9 +121,6 @@ jobs:
       - name: configure
         run: cmake --preset linux-clang
 
-      - name: build amalgamation (warms the lint TU into compile_commands.json)
-        run: cmake --build --preset linux-clang --target reticolo_lint_amalgamation
-
       - name: tidy
         run: |
           shopt -s globstar nullglob
