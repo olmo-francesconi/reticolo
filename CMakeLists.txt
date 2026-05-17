@@ -29,6 +29,19 @@ if(RETICOLO_BUILD_IO)
     find_package(HDF5 REQUIRED COMPONENTS C)
 endif()
 
+include(FetchContent)
+FetchContent_Declare(
+    cxxopts
+    GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
+    GIT_TAG        v3.2.1
+    GIT_SHALLOW    TRUE
+    SYSTEM
+)
+set(CXXOPTS_BUILD_EXAMPLES OFF CACHE INTERNAL "")
+set(CXXOPTS_BUILD_TESTS    OFF CACHE INTERNAL "")
+set(CXXOPTS_ENABLE_INSTALL OFF CACHE INTERNAL "")
+FetchContent_MakeAvailable(cxxopts)
+
 execute_process(
     COMMAND git rev-parse --short HEAD
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -79,13 +92,20 @@ if(RETICOLO_BUILD_IO)
 endif()
 
 # ---------------------------------------------------------------------------
+# reticolo::cli  (header-only; wraps cxxopts; needs reticolo::io for stamping)
+# ---------------------------------------------------------------------------
+if(RETICOLO_BUILD_IO)
+    add_subdirectory(src/cli)
+endif()
+
+# ---------------------------------------------------------------------------
 # reticolo::reticolo  (umbrella)
 # ---------------------------------------------------------------------------
 add_library(reticolo INTERFACE)
 add_library(reticolo::reticolo ALIAS reticolo)
 target_link_libraries(reticolo INTERFACE reticolo::core)
 if(RETICOLO_BUILD_IO)
-    target_link_libraries(reticolo INTERFACE reticolo::io)
+    target_link_libraries(reticolo INTERFACE reticolo::io reticolo::cli)
 endif()
 
 # ---------------------------------------------------------------------------

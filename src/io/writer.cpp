@@ -1,3 +1,4 @@
+#include <reticolo/cli/parser.hpp>
 #include <reticolo/io/writer.hpp>
 
 #include <algorithm>
@@ -399,8 +400,15 @@ bool Series<T>::valid() const noexcept {
 // ============================================================================
 //  Writer definitions
 // ============================================================================
-Writer::Writer(std::filesystem::path const& path, int argc, char const* const* argv)
-    : impl_{std::make_unique<Impl>(path, argc, argv)} {}
+Writer::Writer(std::filesystem::path const& path,
+               int argc,
+               char const* const* argv,
+               cli::Parser const* params)
+    : impl_{std::make_unique<Impl>(path, argc, argv)} {
+    if (params != nullptr) {
+        params->stamp_into(*this);
+    }
+}
 
 Writer::~Writer()                            = default;
 Writer::Writer(Writer&&) noexcept            = default;

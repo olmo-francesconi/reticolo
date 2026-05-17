@@ -29,6 +29,10 @@
 //     instantiation in writer.cpp — the linker will tell you if you forget.
 // =============================================================================
 
+namespace reticolo::cli {
+class Parser;  // forward declaration; Writer accepts a Parser ptr for /vars@*
+}
+
 namespace reticolo::io {
 
 class Writer;
@@ -70,10 +74,13 @@ private:
 class Writer {
 public:
     // Open `path` with truncate-or-fail and stamp /run@* metadata.
-    // `argc`/`argv` are recorded as /run@cmdline if given.
+    // `argc`/`argv` are recorded as /run@cmdline if given. If `params` is
+    // non-null, every resolved var is stamped to /vars@<name> after the file
+    // is initialised.
     explicit Writer(std::filesystem::path const& path,
-                    int argc                = 0,
-                    char const* const* argv = nullptr);
+                    int argc                  = 0,
+                    char const* const* argv   = nullptr,
+                    cli::Parser const* params = nullptr);
 
     ~Writer();
 

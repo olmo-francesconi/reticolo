@@ -4,6 +4,9 @@ add_library(reticolo::io ALIAS reticolo_io)
 target_link_libraries(reticolo_io
     PUBLIC  reticolo::core
             HDF5::HDF5
+    # writer.cpp transitively includes <reticolo/cli/parser.hpp> to call
+    # Parser::stamp_into; cxxopts is header-only so PRIVATE is enough.
+    PRIVATE cxxopts::cxxopts
 )
 
 target_include_directories(reticolo_io PUBLIC
