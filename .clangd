@@ -1,0 +1,35 @@
+CompileFlags:
+  Add:
+    - -std=c++23
+    - -Wall
+    - -Wextra
+    - -Wpedantic
+  Remove:
+    - -fno-finite-loops
+
+Diagnostics:
+  UnusedIncludes: Strict
+  MissingIncludes: Strict
+  ClangTidy:
+    Add:
+      - bugprone-*
+      - cppcoreguidelines-*
+      - modernize-*
+      - performance-*
+      - readability-*
+    Remove:
+      - modernize-use-trailing-return-type
+      - readability-identifier-length
+      - readability-magic-numbers
+
+InlayHints:
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: true
+
+Hover:
+  ShowAKA: true
+
+Index:
+  Background: Build
+  StandardLibrary: true

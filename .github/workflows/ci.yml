@@ -1,0 +1,89 @@
+name: ci
+
+on:
+  push:
+    branches: [rewrite/v3, main]
+  pull_request:
+    branches: [rewrite/v3, main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.preset }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, preset: macos-appleclang }
+          - { os: macos-latest, preset: macos-llvm }
+          - { os: ubuntu-latest, preset: linux-gcc }
+          - { os: ubuntu-latest, preset: linux-clang }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install ninja (linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: install ninja (macos)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: install homebrew llvm (macos-llvm)
+        if: matrix.preset == 'macos-llvm'
+        run: brew install llvm
+
+      - name: install clang (linux-clang)
+        if: matrix.preset == 'linux-clang'
+        run: sudo apt-get install -y clang
+
+      - name: configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: test
+        if: hashFiles('tests/CMakeLists.txt') != ''
+        run: ctest --preset ${{ matrix.preset }}
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+      - name: check formatting
+        run: |
+          shopt -s globstar nullglob
+          files=(include/**/*.hpp src/**/*.cpp src/**/*.hpp apps/**/*.cpp tests/**/*.cpp tests/**/*.hpp)
+          if [ ${#files[@]} -gt 0 ]; then
+            clang-format --dry-run --Werror "${files[@]}"
+          else
+            echo "no C++ sources yet — skipping"
+          fi
+
+  tidy:
+    name: clang-tidy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy clang ninja-build
+      - name: configure
+        run: cmake --preset linux-clang
+      - name: tidy
+        run: |
+          shopt -s globstar nullglob
+          files=(include/**/*.hpp src/**/*.cpp apps/**/*.cpp tests/**/*.cpp)
+          if [ ${#files[@]} -gt 0 ]; then
+            clang-tidy -p build/linux-clang "${files[@]}"
+          else
+            echo "no C++ sources yet — skipping"
+          fi

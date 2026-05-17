@@ -1,0 +1,92 @@
+cmake_minimum_required(VERSION 3.25)
+
+project(
+    reticolo
+    VERSION 0.3.0
+    DESCRIPTION "Lightweight serial C++23 library for lattice quantum field theory MCMC"
+    LANGUAGES CXX
+)
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+option(RETICOLO_BUILD_APPS         "Build reference apps"                ON)
+option(RETICOLO_BUILD_TESTS        "Build test suite"                    ON)
+option(RETICOLO_WARNINGS_AS_ERRORS "Treat warnings as errors"            OFF)
+option(RETICOLO_TUNE_NATIVE        "Build with -march=native"            ON)
+
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+include(ReticoloWarnings)
+
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_VARIABLE  RETICOLO_GIT_COMMIT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE  _reticolo_git_rc
+    ERROR_QUIET
+)
+if(NOT _reticolo_git_rc EQUAL 0)
+    set(RETICOLO_GIT_COMMIT "unknown")
+endif()
+
+# ---------------------------------------------------------------------------
+# reticolo::core  (header-only)
+# ---------------------------------------------------------------------------
+add_library(reticolo_core INTERFACE)
+add_library(reticolo::core ALIAS reticolo_core)
+
+target_compile_features(reticolo_core INTERFACE cxx_std_23)
+target_include_directories(reticolo_core INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+string(TOUPPER "${CMAKE_BUILD_TYPE}" _reticolo_build_type_upper)
+set(_reticolo_compile_flags "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_reticolo_build_type_upper}}")
+string(STRIP "${_reticolo_compile_flags}" _reticolo_compile_flags)
+
+target_compile_definitions(reticolo_core INTERFACE
+    RETICOLO_VERSION="${PROJECT_VERSION}"
+    RETICOLO_GIT_COMMIT="${RETICOLO_GIT_COMMIT}"
+    RETICOLO_COMPILE_FLAGS="${_reticolo_compile_flags}"
+)
+
+if(RETICOLO_TUNE_NATIVE)
+    target_compile_options(reticolo_core INTERFACE
+        $<$<COMPILE_LANGUAGE:CXX>:-march=native>
+    )
+endif()
+
+reticolo_configure_warnings(reticolo_core)
+
+# ---------------------------------------------------------------------------
+# reticolo::reticolo  (umbrella; gains reticolo::io at M5)
+# ---------------------------------------------------------------------------
+add_library(reticolo INTERFACE)
+add_library(reticolo::reticolo ALIAS reticolo)
+target_link_libraries(reticolo INTERFACE reticolo::core)
+
+# ---------------------------------------------------------------------------
+# Subdirectories
+# ---------------------------------------------------------------------------
+if(PROJECT_IS_TOP_LEVEL AND RETICOLO_BUILD_APPS AND EXISTS "${PROJECT_SOURCE_DIR}/apps/CMakeLists.txt")
+    add_subdirectory(apps)
+endif()
+
+if(PROJECT_IS_TOP_LEVEL AND RETICOLO_BUILD_TESTS AND EXISTS "${PROJECT_SOURCE_DIR}/tests/CMakeLists.txt")
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+message(STATUS "reticolo: version       ${PROJECT_VERSION}")
+message(STATUS "reticolo: commit        ${RETICOLO_GIT_COMMIT}")
+message(STATUS "reticolo: build type    ${CMAKE_BUILD_TYPE}")
+message(STATUS "reticolo: C++ standard  ${CMAKE_CXX_STANDARD}")
+message(STATUS "reticolo: native tuning ${RETICOLO_TUNE_NATIVE}")

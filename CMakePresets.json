@@ -1,0 +1,82 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+
+    "configurePresets": [
+        {
+            "name":         "_base",
+            "hidden":       true,
+            "binaryDir":    "${sourceDir}/build/${presetName}",
+            "generator":    "Ninja",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE":         "Release",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "RETICOLO_WARNINGS_AS_ERRORS":  "ON"
+            }
+        },
+
+        {
+            "name":         "macos-appleclang",
+            "inherits":     "_base",
+            "description":  "Apple Clang on macOS (no OpenMP, no special toolchain)",
+            "condition":    { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" }
+        },
+        {
+            "name":         "macos-llvm",
+            "inherits":     "_base",
+            "description":  "Homebrew LLVM clang on macOS",
+            "condition":    { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
+            "cacheVariables": {
+                "CMAKE_C_COMPILER":   "/opt/homebrew/opt/llvm/bin/clang",
+                "CMAKE_CXX_COMPILER": "/opt/homebrew/opt/llvm/bin/clang++"
+            }
+        },
+        {
+            "name":         "linux-gcc",
+            "inherits":     "_base",
+            "description":  "GCC on Linux",
+            "condition":    { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "cacheVariables": {
+                "CMAKE_C_COMPILER":   "gcc",
+                "CMAKE_CXX_COMPILER": "g++"
+            }
+        },
+        {
+            "name":         "linux-clang",
+            "inherits":     "_base",
+            "description":  "Clang on Linux",
+            "condition":    { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "cacheVariables": {
+                "CMAKE_C_COMPILER":   "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+
+        {
+            "name":         "debug",
+            "inherits":     "_base",
+            "description":  "Debug build with sanitizers (asan + ubsan)",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE":    "Debug",
+                "CMAKE_CXX_FLAGS":     "-fsanitize=address,undefined -fno-omit-frame-pointer",
+                "RETICOLO_TUNE_NATIVE": "OFF"
+            }
+        }
+    ],
+
+    "buildPresets": [
+        { "name": "macos-appleclang", "configurePreset": "macos-appleclang" },
+        { "name": "macos-llvm",       "configurePreset": "macos-llvm"       },
+        { "name": "linux-gcc",        "configurePreset": "linux-gcc"        },
+        { "name": "linux-clang",      "configurePreset": "linux-clang"      },
+        { "name": "debug",            "configurePreset": "debug"            }
+    ],
+
+    "testPresets": [
+        { "name": "macos-appleclang", "configurePreset": "macos-appleclang", "output": { "outputOnFailure": true } },
+        { "name": "macos-llvm",       "configurePreset": "macos-llvm",       "output": { "outputOnFailure": true } },
+        { "name": "linux-gcc",        "configurePreset": "linux-gcc",        "output": { "outputOnFailure": true } },
+        { "name": "linux-clang",      "configurePreset": "linux-clang",      "output": { "outputOnFailure": true } },
+        { "name": "debug",            "configurePreset": "debug",            "output": { "outputOnFailure": true } }
+    ]
+}
