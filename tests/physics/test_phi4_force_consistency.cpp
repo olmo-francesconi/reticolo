@@ -1,0 +1,152 @@
+#include <reticolo/action/builtins/phi4.hpp>
+#include <reticolo/action/concepts.hpp>
+#include <reticolo/core/bc.hpp>
+#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/rng.hpp>
+#include <reticolo/core/site.hpp>
+
+#include <cmath>
+
+#include <catch2/catch_test_macros.hpp>
+
+using reticolo::Bc;
+using reticolo::BcMask;
+using reticolo::FastRng;
+using reticolo::Lattice;
+using reticolo::Site;
+using reticolo::action::HasForce;
+using reticolo::action::HasSEff;
+using reticolo::action::LocalAction;
+using reticolo::action::Phi4;
+
+static_assert(LocalAction<Phi4<double>, double>);
+static_assert(HasSEff<Phi4<double>, double>);
+static_assert(HasForce<Phi4<double>, double>);
+
+// Seed a small lattice with iid N(0, 1) values.
+template <class T>
+static void randomize(Lattice<T>& phi, FastRng& rng) {
+    for (Site x : phi.sites()) {
+        phi[x] = static_cast<T>(rng.normal());
+    }
+}
+
+TEST_CASE("Phi4: ds_local matches finite difference of s_full", "[physics][phi4]") {
+    Phi4<double> const action{.kappa = 0.13, .lambda = 0.05};
+
+    Lattice<double> phi{{6, 6, 6}};
+    FastRng rng{1234};
+    randomize(phi, rng);
+
+    for (std::size_t trial = 0; trial < 20; ++trial) {
+        Site const x     = Site{rng.uniform_int(phi.nsites())};
+        double const old = phi[x];
+        double const nv  = old + rng.normal();
+
+        double const ds_predicted = action.ds_local(phi, x, nv);
+
+        double const s_old = action.s_full(phi);
+        phi[x]             = nv;
+        double const s_new = action.s_full(phi);
+        phi[x]             = old;
+
+        double const ds_measured = s_new - s_old;
+        REQUIRE(std::abs(ds_predicted - ds_measured) < 1e-9);
+    }
+}
+
+TEST_CASE("Phi4: compute_force matches central finite difference of s_full", "[physics][phi4]") {
+    Phi4<double> const action{.kappa = 0.18, .lambda = 0.04};
+
+    Lattice<double> phi{{6, 6, 6}};
+    Lattice<double> force{phi.indexing()};
+    FastRng rng{56789};
+    randomize(phi, rng);
+
+    action.compute_force(phi, force);
+
+    constexpr double k_eps = 1e-4;
+    constexpr double k_tol = 1e-7;  // central diff O(eps^2) ~ 1e-8; allow margin
+
+    for (std::size_t trial = 0; trial < 25; ++trial) {
+        Site const x     = Site{rng.uniform_int(phi.nsites())};
+        double const old = phi[x];
+
+        phi[x]              = old + k_eps;
+        double const s_plus = action.s_full(phi);
+
+        phi[x]               = old - k_eps;
+        double const s_minus = action.s_full(phi);
+
+        phi[x] = old;
+
+        double const grad_numeric    = (s_plus - s_minus) / (2.0 * k_eps);
+        double const force_predicted = force[x];
+        double const force_numeric   = -grad_numeric;
+
+        REQUIRE(std::abs(force_predicted - force_numeric) < k_tol);
+    }
+}
+
+TEST_CASE("Phi4: free-theory limit (lambda=0) gives force = 2 kappa sum_nn - 2 phi",
+          "[physics][phi4]") {
+    Phi4<double> const action{.kappa = 0.15, .lambda = 0.0};
+
+    Lattice<double> phi{{4, 4, 4}};
+    Lattice<double> force{phi.indexing()};
+    FastRng rng{42};
+    randomize(phi, rng);
+    action.compute_force(phi, force);
+
+    for (Site x : phi.sites()) {
+        double nbrs = 0.0;
+        for (std::size_t mu = 0; mu < phi.ndims(); ++mu) {
+            nbrs += phi[phi.next(x, mu)] + phi[phi.prev(x, mu)];
+        }
+        double const expected = (2.0 * action.kappa * nbrs) - (2.0 * phi[x]);
+        REQUIRE(std::abs(force[x] - expected) < 1e-12);
+    }
+}
+
+TEST_CASE("Phi4: zero coupling (kappa=0, lambda=0) reduces to phi^2 + 1", "[physics][phi4]") {
+    Phi4<double> const action{.kappa = 0.0, .lambda = 0.0};
+
+    Lattice<double> phi{{4, 4}};
+    FastRng rng{7};
+    randomize(phi, rng);
+
+    double s = 0.0;
+    for (Site x : phi.sites()) {
+        s += phi[x] * phi[x];
+    }
+    REQUIRE(std::abs(action.s_full(phi) - s) < 1e-12);
+}
+
+TEST_CASE("Phi4: handles Open BCs without UB on boundary neighbours", "[physics][phi4]") {
+    Phi4<double> const action{.kappa = 0.1, .lambda = 0.02};
+
+    Lattice<double> phi{{4, 4}, BcMask{Bc::Open, Bc::Open}};
+    Lattice<double> force{phi.indexing()};
+    FastRng rng{11};
+    randomize(phi, rng);
+
+    // Computing s_full + compute_force must not crash. The boundary terms
+    // simply drop coupling to non-existent sites.
+    (void)action.s_full(phi);
+    action.compute_force(phi, force);
+
+    // Finite-difference check holds on a boundary site too.
+    Site const x     = Site{0};  // corner: (0, 0)
+    double const old = phi[x];
+
+    constexpr double k_eps = 1e-4;
+    phi[x]                 = old + k_eps;
+    double const s_plus    = action.s_full(phi);
+    phi[x]                 = old - k_eps;
+    double const s_minus   = action.s_full(phi);
+    phi[x]                 = old;
+
+    double const grad_numeric  = (s_plus - s_minus) / (2.0 * k_eps);
+    double const force_numeric = -grad_numeric;
+    REQUIRE(std::abs(force[x] - force_numeric) < 1e-7);
+}
