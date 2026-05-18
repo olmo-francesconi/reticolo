@@ -1,6 +1,5 @@
 #pragma once
 
-#include <reticolo/core/bc.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <cstddef>
@@ -15,15 +14,20 @@
 
 namespace reticolo {
 
+// =============================================================================
+//  Periodic-only neighbour table for a hypercubic lattice. The library does
+//  not currently support open / antiperiodic boundaries — every `next(s, mu)`
+//  and `prev(s, mu)` wraps around. Hot kernels therefore never need a
+//  validity check in the inner loop. If open BCs are ever needed, they land
+//  as a separate `OpenIndexing` (or a constexpr policy template parameter)
+//  alongside this class, not as a runtime flag inside it.
+// =============================================================================
 class Indexing {
 public:
     using SizeVec = std::vector<std::size_t>;
     using SiteVec = std::vector<Site>;
 
-    // Acquire or construct the shared Indexing for (shape, bcs).
-    // Instances are pool-shared via weak_ptr; identical (shape, bcs)
-    // requests return the same shared_ptr.
-    static std::shared_ptr<Indexing const> acquire(SizeVec shape, BcMask bcs = {});
+    static std::shared_ptr<Indexing const> acquire(SizeVec shape);
 
     Indexing(Indexing const&)            = delete;
     Indexing& operator=(Indexing const&) = delete;
@@ -32,45 +36,38 @@ public:
     ~Indexing()                          = default;
 
     [[nodiscard]] SizeVec const& shape() const noexcept { return shape_; }
-    [[nodiscard]] BcMask const& bcs() const noexcept { return bcs_; }
     [[nodiscard]] std::size_t ndims() const noexcept { return shape_.size(); }
     [[nodiscard]] std::size_t nsites() const noexcept { return nsites_; }
-    [[nodiscard]] bool all_periodic() const noexcept { return all_periodic_; }
 
     [[nodiscard]] Site next(Site s, std::size_t mu) const noexcept {
-        return Site{next_[s.value() * ndims() + mu]};
+        return Site{next_[(s.value() * ndims()) + mu]};
     }
     [[nodiscard]] Site prev(Site s, std::size_t mu) const noexcept {
-        return Site{prev_[s.value() * ndims() + mu]};
+        return Site{prev_[(s.value() * ndims()) + mu]};
     }
     [[nodiscard]] Parity parity_of(Site s) const noexcept {
         return parity_[s.value()] == 0 ? Parity::Even : Parity::Odd;
     }
-    [[nodiscard]] bool is_interior(Site s) const noexcept {
-        return all_periodic_ || skin_lookup_[s.value()] == 0;
-    }
 
-    [[nodiscard]] SiteVec const& bulk_sites() const noexcept { return bulk_; }
-    [[nodiscard]] SiteVec const& skin_sites() const noexcept { return skin_; }
     [[nodiscard]] SiteVec const& even_sites() const noexcept { return even_; }
     [[nodiscard]] SiteVec const& odd_sites() const noexcept { return odd_; }
 
+    // Raw neighbour-table pointers for hot kernels. Layout: `[site * ndims + mu]`.
+    // Stable for the life of this `Indexing` (immutable post-construction).
+    [[nodiscard]] Site::value_type const* next_data() const noexcept { return next_.data(); }
+    [[nodiscard]] Site::value_type const* prev_data() const noexcept { return prev_.data(); }
+
 private:
-    Indexing(SizeVec shape, BcMask bcs);
+    explicit Indexing(SizeVec shape);
     void build_();
 
-    SizeVec shape_;
-    BcMask bcs_;
-    bool all_periodic_  = true;
+    SizeVec     shape_;
     std::size_t nsites_ = 0;
 
     std::vector<Site::value_type> next_;
     std::vector<Site::value_type> prev_;
-    std::vector<std::uint8_t> parity_;
-    std::vector<std::uint8_t> skin_lookup_;
+    std::vector<std::uint8_t>     parity_;
 
-    SiteVec bulk_;
-    SiteVec skin_;
     SiteVec even_;
     SiteVec odd_;
 };
@@ -79,19 +76,17 @@ namespace detail {
 
 struct IndexingPoolKey {
     Indexing::SizeVec shape;
-    BcMask bcs;
     bool operator==(IndexingPoolKey const&) const = default;
 };
 
 struct IndexingPoolKeyHash {
     std::size_t operator()(IndexingPoolKey const& k) const noexcept {
         std::size_t h = 0;
-        auto mix = [&h](std::size_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6U) + (h >> 2U); };
+        auto        mix = [&h](std::size_t v) {
+            h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6U) + (h >> 2U);
+        };
         for (auto s : k.shape) {
             mix(std::hash<std::size_t>{}(s));
-        }
-        for (Bc const b : k.bcs.as_vector()) {
-            mix(std::hash<std::uint8_t>{}(static_cast<std::uint8_t>(b)));
         }
         return h;
     }
@@ -99,7 +94,7 @@ struct IndexingPoolKeyHash {
 
 }  // namespace detail
 
-inline std::shared_ptr<Indexing const> Indexing::acquire(SizeVec shape, BcMask bcs) {
+inline std::shared_ptr<Indexing const> Indexing::acquire(SizeVec shape) {
     static std::mutex pool_mutex;
     static std::unordered_map<detail::IndexingPoolKey,
                               std::weak_ptr<Indexing const>,
@@ -109,14 +104,8 @@ inline std::shared_ptr<Indexing const> Indexing::acquire(SizeVec shape, BcMask b
     if (shape.empty()) {
         throw std::invalid_argument{"Indexing: shape must be non-empty"};
     }
-    if (bcs.ndims() == 0) {
-        bcs = BcMask(shape.size(), Bc::Periodic);
-    }
-    if (bcs.ndims() != shape.size()) {
-        throw std::invalid_argument{"Indexing: BcMask dims must match shape"};
-    }
 
-    detail::IndexingPoolKey key{std::move(shape), std::move(bcs)};
+    detail::IndexingPoolKey key{std::move(shape)};
 
     std::lock_guard const lock{pool_mutex};
     if (auto it = pool.find(key); it != pool.end()) {
@@ -125,13 +114,12 @@ inline std::shared_ptr<Indexing const> Indexing::acquire(SizeVec shape, BcMask b
         }
         pool.erase(it);
     }
-    auto sp = std::shared_ptr<Indexing const>(new Indexing(key.shape, key.bcs));
+    auto sp = std::shared_ptr<Indexing const>(new Indexing(key.shape));
     pool.emplace(std::move(key), sp);
     return sp;
 }
 
-inline Indexing::Indexing(SizeVec shape, BcMask bcs)
-    : shape_{std::move(shape)}, bcs_{std::move(bcs)} {
+inline Indexing::Indexing(SizeVec shape) : shape_{std::move(shape)} {
     build_();
 }
 
@@ -145,12 +133,10 @@ inline void Indexing::build_() {
         }
         nsites_ *= length;
     }
-    all_periodic_ = bcs_.all_periodic();
 
-    next_.assign(nsites_ * d, Site::k_invalid_value);
-    prev_.assign(nsites_ * d, Site::k_invalid_value);
+    next_.assign(nsites_ * d, 0);
+    prev_.assign(nsites_ * d, 0);
     parity_.assign(nsites_, std::uint8_t{0});
-    skin_lookup_.assign(nsites_, std::uint8_t{0});
 
     std::vector<std::size_t> coord(d, 0);
     std::vector<std::size_t> stride(d, 1);
@@ -161,54 +147,28 @@ inline void Indexing::build_() {
     for (std::size_t s = 0; s < nsites_; ++s) {
         std::size_t r          = s;
         std::size_t parity_sum = 0;
-        bool is_skin           = false;
         for (std::size_t mu = 0; mu < d; ++mu) {
             coord[mu] = r % shape_[mu];
             r /= shape_[mu];
             parity_sum += coord[mu];
-            if (!all_periodic_ && bcs_.affects_topology(mu) &&
-                (coord[mu] == 0 || coord[mu] + 1 == shape_[mu])) {
-                is_skin = true;
-            }
         }
-        parity_[s]      = static_cast<std::uint8_t>(parity_sum & 1U);
-        skin_lookup_[s] = is_skin ? std::uint8_t{1} : std::uint8_t{0};
+        parity_[s] = static_cast<std::uint8_t>(parity_sum & 1U);
 
         for (std::size_t mu = 0; mu < d; ++mu) {
             std::size_t const length = shape_[mu];
-
-            if (coord[mu] + 1 < length) {
-                next_[s * d + mu] = s + stride[mu];
-            } else if (bcs_[mu] == Bc::Open) {
-                next_[s * d + mu] = Site::k_invalid_value;
-            } else {
-                next_[s * d + mu] = s + stride[mu] - length * stride[mu];
-            }
-
-            if (coord[mu] > 0) {
-                prev_[s * d + mu] = s - stride[mu];
-            } else if (bcs_[mu] == Bc::Open) {
-                prev_[s * d + mu] = Site::k_invalid_value;
-            } else {
-                prev_[s * d + mu] = s + (length - 1) * stride[mu];
-            }
+            next_[(s * d) + mu] =
+                (coord[mu] + 1 < length) ? s + stride[mu] : s + stride[mu] - (length * stride[mu]);
+            prev_[(s * d) + mu] =
+                (coord[mu] > 0) ? s - stride[mu] : s + ((length - 1) * stride[mu]);
         }
     }
 
-    bulk_.clear();
-    skin_.clear();
     even_.clear();
     odd_.clear();
-    bulk_.reserve(nsites_);
     even_.reserve(nsites_ / 2 + 1);
     odd_.reserve(nsites_ / 2 + 1);
     for (std::size_t s = 0; s < nsites_; ++s) {
         Site const site{s};
-        if (skin_lookup_[s] != 0) {
-            skin_.push_back(site);
-        } else {
-            bulk_.push_back(site);
-        }
         if (parity_[s] == 0) {
             even_.push_back(site);
         } else {

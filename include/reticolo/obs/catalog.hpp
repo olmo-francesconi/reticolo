@@ -80,15 +80,12 @@ template <class T>
 // Translation-averaged two-point function in direction `mu` at separation `r`:
 //   G(r) = (1/N) Σ_x phi(x) phi(x + r·ê_μ)
 // where the shift uses the lattice's neighbour table (`r` applications of next).
-// Requires the lattice to be periodic along `mu` for `r > 0`; throws otherwise.
+// The lattice is always periodic, so `r` may exceed the linear extent without
+// concern — wraps just keep walking.
 template <class T>
 [[nodiscard]] double two_point(Lattice<T> const& l, std::size_t r, std::size_t mu) {
     if (mu >= l.ndims()) {
         throw std::out_of_range{"obs::two_point: direction mu out of range"};
-    }
-    if (r > 0 && l.bcs().affects_topology(mu)) {
-        throw std::invalid_argument{
-            "obs::two_point: open boundary in direction mu would yield invalid shifts"};
     }
     double sum = 0.0;
     for (Site const x : l.sites()) {

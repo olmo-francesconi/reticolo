@@ -42,52 +42,40 @@ struct OnSigma {
 
     [[nodiscard]] T s_local(Lattice<value_type> const& l, Site x) const noexcept {
         auto const& phi = l[x];
-        T sum           = T{0};
+        T           sum = T{0};
         for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-            Site const fwd = l.next(x, mu);
-            Site const bwd = l.prev(x, mu);
-            if (fwd.is_valid()) {
-                sum += dot(phi, l[fwd]);
-            }
-            if (bwd.is_valid()) {
-                sum += dot(phi, l[bwd]);
-            }
+            sum += dot(phi, l[l.next(x, mu)]);
+            sum += dot(phi, l[l.prev(x, mu)]);
         }
         return -beta * sum;
     }
 
     [[nodiscard]] T
     ds_local(Lattice<value_type> const& l, Site x, value_type const& new_v) const noexcept {
-        auto const& phi = l[x];
-        T delta_s       = T{0};
+        auto const& phi     = l[x];
+        T           delta_s = T{0};
         for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-            Site const fwd = l.next(x, mu);
-            Site const bwd = l.prev(x, mu);
-            if (fwd.is_valid()) {
-                delta_s += dot(new_v, l[fwd]) - dot(phi, l[fwd]);
-            }
-            if (bwd.is_valid()) {
-                delta_s += dot(new_v, l[bwd]) - dot(phi, l[bwd]);
-            }
+            auto const& fwd = l[l.next(x, mu)];
+            auto const& bwd = l[l.prev(x, mu)];
+            delta_s += dot(new_v, fwd) - dot(phi, fwd);
+            delta_s += dot(new_v, bwd) - dot(phi, bwd);
         }
         return -beta * delta_s;
     }
 
     [[nodiscard]] T s_full(Lattice<value_type> const& l) const noexcept {
+        auto const&             idx  = l.indexing_ref();
+        value_type const*       data = l.data();
+        Site::value_type const* next = idx.next_data();
+        std::size_t const       n    = idx.nsites();
+        std::size_t const       d    = idx.ndims();
+
         T total = T{0};
-        for (Site const x : l.bulk_sites()) {
-            auto const& phi = l[x];
-            for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-                total += dot(phi, l[l.next(x, mu)]);
-            }
-        }
-        for (Site const x : l.skin_sites()) {
-            auto const& phi = l[x];
-            for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-                Site const fwd = l.next(x, mu);
-                if (fwd.is_valid()) {
-                    total += dot(phi, l[fwd]);
-                }
+        for (std::size_t i = 0; i < n; ++i) {
+            auto const&       phi  = data[i];
+            std::size_t const base = i * d;
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                total += dot(phi, data[next[base + mu]]);
             }
         }
         return -beta * total;

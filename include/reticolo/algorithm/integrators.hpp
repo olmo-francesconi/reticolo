@@ -1,5 +1,6 @@
 #pragma once
 
+#include <reticolo/action/concepts.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/site.hpp>
 
@@ -39,20 +40,25 @@ struct Leapfrog {
         double const dt      = tau / static_cast<double>(n_md);
         double const half_dt = dt * 0.5;
 
-        action.compute_force(field, force);
-        for (Site x : field.sites()) {
-            mom[x] += static_cast<F>(half_dt) * force[x];
-        }
+        // Force evaluation + kick — fused when the action provides it.
+        auto kick = [&](double k_dt) {
+            if constexpr (action::HasFusedKick<A, F>) {
+                action.compute_force_and_kick(field, mom, static_cast<F>(k_dt));
+            } else {
+                action.compute_force(field, force);
+                for (Site x : field.sites()) {
+                    mom[x] += static_cast<F>(k_dt) * force[x];
+                }
+            }
+        };
+
+        kick(half_dt);
 
         for (int step = 0; step < n_md; ++step) {
             for (Site x : field.sites()) {
                 field[x] += static_cast<F>(dt) * mom[x];
             }
-            action.compute_force(field, force);
-            double const kick = (step < n_md - 1) ? dt : half_dt;
-            for (Site x : field.sites()) {
-                mom[x] += static_cast<F>(kick) * force[x];
-            }
+            kick(step < n_md - 1 ? dt : half_dt);
         }
     }
 };

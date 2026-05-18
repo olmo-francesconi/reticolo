@@ -4,8 +4,8 @@
 #include <bit>
 #include <cmath>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
-#include <optional>
 
 namespace reticolo {
 
@@ -37,7 +37,7 @@ public:
             z            = (z ^ (z >> 27U)) * 0x94D049BB133111EBULL;
             w            = z ^ (z >> 31U);
         }
-        normal_cached_.reset();
+        has_cached_normal_ = false;
     }
 
     [[nodiscard]] state_type uniform_u64() noexcept {
@@ -80,12 +80,14 @@ public:
 #endif
     }
 
-    // Standard normal via Box-Muller polar form; second sample cached.
+    // Standard normal via Box-Muller polar form; second sample cached. The cache
+    // uses a plain (bool, double) pair — std::optional<double> here adds a branch
+    // + indirection that is measurable in MC sweeps where normal() is the hottest
+    // member.
     [[nodiscard]] double normal() noexcept {
-        if (normal_cached_.has_value()) {
-            double const cached = *normal_cached_;
-            normal_cached_.reset();
-            return cached;
+        if (has_cached_normal_) {
+            has_cached_normal_ = false;
+            return cached_normal_;
         }
         double u1 = 0.0;
         double u2 = 0.0;
@@ -96,15 +98,47 @@ public:
             s  = (u1 * u1) + (u2 * u2);
         } while (s >= 1.0 || s == 0.0);
         double const factor = std::sqrt(-2.0 * std::log(s) / s);
-        normal_cached_      = u2 * factor;
+        cached_normal_      = u2 * factor;
+        has_cached_normal_  = true;
         return u1 * factor;
+    }
+
+    // Batched-fill: writes `n` standard normals into `out`. Equivalent to calling
+    // normal() `n` times — same byte stream, same statistical properties — but the
+    // hot loop is straight-line code with no per-call cache branch and no virtual
+    // boundary, so the OoO engine sees more work to overlap. Used by HMC momentum
+    // sampling where every site needs an independent normal.
+    void normal_fill(double* out, std::size_t n) noexcept {
+        std::size_t i = 0;
+        if (has_cached_normal_ && i < n) {
+            out[i++]           = cached_normal_;
+            has_cached_normal_ = false;
+        }
+        // Emit pairs.
+        for (; i + 1 < n; i += 2) {
+            double u1 = 0.0;
+            double u2 = 0.0;
+            double s  = 0.0;
+            do {
+                u1 = (2.0 * uniform()) - 1.0;
+                u2 = (2.0 * uniform()) - 1.0;
+                s  = (u1 * u1) + (u2 * u2);
+            } while (s >= 1.0 || s == 0.0);
+            double const factor = std::sqrt(-2.0 * std::log(s) / s);
+            out[i]     = u1 * factor;
+            out[i + 1] = u2 * factor;
+        }
+        if (i < n) {
+            out[i] = normal();  // updates the cache for the next call.
+        }
     }
 
     [[nodiscard]] std::array<state_type, 4> const& state() const noexcept { return s_; }
 
 private:
     std::array<state_type, 4> s_{};
-    std::optional<double> normal_cached_;
+    double                    cached_normal_     = 0.0;
+    bool                      has_cached_normal_ = false;
 };
 
 static_assert(Rng<FastRng>);

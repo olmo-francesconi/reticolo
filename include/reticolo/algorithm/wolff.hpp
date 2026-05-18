@@ -37,9 +37,6 @@ struct WolffStep {
 //  Deferring the flip to the end keeps link probabilities consistent (every
 //  test sees the same pre-flip field) and avoids the order-dependence trap
 //  of flipping on visit.
-//
-//  Open-BC: invalid neighbours (returned as `Site::k_invalid_value` by the
-//  `Indexing`) are skipped, so the cluster naturally terminates at boundaries.
 // =============================================================================
 template <class A, class R, class F = typename A::value_type>
     requires action::WolffEmbeddable<A, F, R>
@@ -85,9 +82,6 @@ public:
 
 private:
     void consider_link_(Site x, Site y, axis_type const& axis) {
-        if (!y.is_valid()) {
-            return;
-        }
         if (mark_[y.value()] == gen_) {
             return;
         }

@@ -74,7 +74,7 @@ TEST_CASE("Xy Wolff at beta=0: cluster is always the seed alone", "[physics][wol
 TEST_CASE("Xy Wolff at large beta: aligned start grows full-volume clusters",
           "[physics][wolff][xy]") {
     Xy<double> const action{.beta = 6.0};
-    Lattice<double> theta{{8, 8}, /*bcs=*/{}, /*fill=*/0.0};
+    Lattice<double> theta{{8, 8}, /*fill=*/0.0};
     FastRng rng{42};
     Wolff<Xy<double>, FastRng> w{action, theta, rng};
 
@@ -99,7 +99,7 @@ TEST_CASE("Xy Wolff at large beta: aligned start grows full-volume clusters",
 TEST_CASE("OnSigma<3> Wolff at large beta: average cluster fills the volume",
           "[physics][wolff][on]") {
     OnSigma<3> const action{.beta = 6.0};
-    Lattice<std::array<double, 3>> phi{{6, 6}, {}, {1.0, 0.0, 0.0}};
+    Lattice<std::array<double, 3>> phi{{6, 6}, {1.0, 0.0, 0.0}};
     FastRng rng{7};
 
     Wolff<OnSigma<3>, FastRng> w{action, phi, rng};

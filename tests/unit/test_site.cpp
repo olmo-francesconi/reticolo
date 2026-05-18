@@ -9,18 +9,15 @@ using reticolo::flip;
 using reticolo::Parity;
 using reticolo::Site;
 
-TEST_CASE("Site default-constructs to zero and is valid", "[site]") {
+TEST_CASE("Site default-constructs to zero", "[site]") {
     Site const s{};
     REQUIRE(s.value() == 0);
-    REQUIRE(s.is_valid());
 }
 
-TEST_CASE("Site::invalid() is sentinel and compares ordered", "[site]") {
+TEST_CASE("Site comparison is ordered", "[site]") {
     Site const a{3};
     Site const b{7};
-    Site const inv = Site::invalid();
 
-    REQUIRE_FALSE(inv.is_valid());
     REQUIRE(a < b);
     REQUIRE(a != b);
     REQUIRE(a == Site{3});

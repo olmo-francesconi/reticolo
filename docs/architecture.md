@@ -77,25 +77,28 @@ three. This is the most performance-sensitive shortcut in the library.
 ### `Indexing` + pool
 
 `Indexing` holds the neighbour table (`next(s, mu)`, `prev(s, mu)`), parity
-labels, bulk/skin partition, and the `(shape, BcMask)` it was built from.
-It's expensive to construct (precomputes everything once) and immutable
-once built, so the library keeps a process-wide pool of them keyed on
-`(shape, BcMask)`:
+labels, and the `shape` it was built from. It's expensive to construct
+(precomputes everything once) and immutable once built, so the library
+keeps a process-wide pool of them keyed on `shape`:
 
 ```cpp
-auto idx = Indexing::acquire(shape, bcs);   // hits pool, builds once
+auto idx = Indexing::acquire(shape);   // hits pool, builds once
 ```
 
 `acquire` returns a `shared_ptr<Indexing const>`; the pool itself holds
 `weak_ptr`s, so once nobody references an entry it dies. Lattices with the
 same shape automatically share — no manual cache management.
 
-### `Site`, `Parity`, `BcMask`
+Boundary conditions are always periodic. The current scope of the library
+is bulk-spectrum physics where periodic BCs are universal; non-periodic
+BCs and the associated bulk/skin partitioning have been removed in favour
+of a single tight hot loop with no per-site BC branching.
 
-`Site` is a strong typedef around a flat index. `BcMask` is a tiny bitmask
-of per-axis boundary conditions (periodic / open / antiperiodic — only the
-first two ship today). Open boundaries return `Site::k_invalid_value` from
-`next/prev`; every action body guards with `s.is_valid()`.
+### `Site`, `Parity`
+
+`Site` is a strong typedef around a flat index. `Parity` labels each site
+as `Even` or `Odd` based on the sum of its coordinates — used by checker-
+board Metropolis sweeps.
 
 ### `FastRng`
 
@@ -223,7 +226,7 @@ in Python, or in C++ over a span if you prefer).
 
 Over a hundred Catch2 cases live in `tests/`:
 
-- `tests/unit/` — `Site`, `Indexing`, pool, `Lattice`, `FastRng`, `BcMask`,
+- `tests/unit/` — `Site`, `Indexing`, pool, `Lattice`, `FastRng`,
   `Parser`, observers, analysis.
 - `tests/physics/` — force-vs-FD consistency for every action with HMC, HMC
   reversibility & integrator-order tests, Metropolis acceptance in the

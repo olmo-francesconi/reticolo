@@ -1,28 +1,29 @@
 #pragma once
 
 #include <reticolo/action/helpers.hpp>
+#include <reticolo/action/hot_loop.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/site.hpp>
+
+#include <cstddef>
 
 namespace reticolo::action {
 
 // =============================================================================
-//  Phi^4 scalar action on a hypercubic lattice.
+//  Phi^4 scalar action on a hypercubic (periodic) lattice.
 //
 //    S = sum_x  [  -2 kappa phi(x) sum_{mu>0} phi(x+mu)
 //                 + phi(x)^2
 //                 + lambda (phi(x)^2 - 1)^2 ]
 //
-//  Each nearest-neighbour bond appears once in the global sum (positive-mu
-//  convention). The single-site `s_local(x)` for the Metropolis update sums
-//  ALL 2d neighbours of x — that is the contribution to S that involves
-//  phi(x), with each bond touching x counted once.
+//  Each nearest-neighbour bond appears once in `s_full` (positive-mu
+//  convention). `s_local(x)` for Metropolis sums all 2d neighbours of x —
+//  the contribution to S that involves phi(x), each touching bond once.
 //
-//  The MD force is force(x) = -dS/dphi(x).
-//
-//  Open boundaries are supported: invalid neighbour Sites contribute zero
-//  (no field-with-the-outside coupling). For all-periodic shapes the validity
-//  check always passes — single well-predicted branch in the hot path.
+//  MD force is `force(x) = -dS/dphi(x)`. The hot kernels (`s_full`,
+//  `compute_force`) hoist raw pointers and run a tight counter-indexed
+//  loop with no per-iteration member-access — see the body for the layout
+//  the compiler vectorises around.
 // =============================================================================
 
 template <class T = double>
@@ -41,8 +42,12 @@ struct Phi4 {
     }
 
     [[nodiscard]] T ds_local(Lattice<T> const& l, Site x, T new_v) const noexcept {
-        T const phi      = l[x];
-        T const nbrs     = nn_neighbour_sum(l, x);
+        return ds_local_from_nbrs(l[x], new_v, nn_neighbour_sum(l, x));
+    }
+
+    // Pure-math form: ds given phi, new_v, and the unweighted sum of all 2*ndims
+    // nearest-neighbour values. Used by the visit_nn Metropolis fast path.
+    [[nodiscard]] T ds_local_from_nbrs(T phi, T new_v, T nbrs) const noexcept {
         T const phi2_old = phi * phi;
         T const phi2_new = new_v * new_v;
         T const dev_old  = phi2_old - T{1};
@@ -54,35 +59,38 @@ struct Phi4 {
     }
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T total            = T{0};
-        auto const on_site = [this](T phi, T fwd_sum) {
+        T const k = kappa;
+        T const lam = lambda;
+        return detail::reduce_fwd<T>(l, [k, lam](T phi, T fwd_sum) {
             T const phi2 = phi * phi;
             T const dev  = phi2 - T{1};
-            return (T{-2} * kappa * phi * fwd_sum) + phi2 + (lambda * dev * dev);
-        };
-        for (Site const x : l.bulk_sites()) {
-            total += on_site(l[x], fwd_neighbour_sum_unchecked(l, x));
-        }
-        for (Site const x : l.skin_sites()) {
-            total += on_site(l[x], fwd_neighbour_sum(l, x));
-        }
-        return total;
+            return (T{-2} * k * phi * fwd_sum) + phi2 + (lam * dev * dev);
+        });
     }
 
     // force(x) = -dS/dphi(x) = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x) - 4 lambda phi(x)
     // (phi(x)^2 - 1)
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-        auto const at = [&](Site x, T nbrs) {
-            T const phi  = l[x];
+        T const k    = kappa;
+        T const lam  = lambda;
+        T* const out = force.data();
+        detail::visit_nn<T>(l, [k, lam, out](std::size_t i, T phi, T nbrs) {
             T const phi2 = phi * phi;
-            force[x] = (T{2} * kappa * nbrs) - (T{2} * phi) - (T{4} * lambda * phi * (phi2 - T{1}));
-        };
-        for (Site const x : l.bulk_sites()) {
-            at(x, nn_neighbour_sum_unchecked(l, x));
-        }
-        for (Site const x : l.skin_sites()) {
-            at(x, nn_neighbour_sum(l, x));
-        }
+            out[i] = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * (phi2 - T{1}));
+        });
+    }
+
+    // Fused force + leapfrog kick: computes F(x) and applies mom(x) += k * F(x) in
+    // one pass — the force lattice is never written or read.
+    void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept {
+        T const k    = kappa;
+        T const lam  = lambda;
+        T* const m   = mom.data();
+        detail::visit_nn<T>(l, [k, lam, k_dt, m](std::size_t i, T phi, T nbrs) {
+            T const phi2 = phi * phi;
+            T const F    = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * (phi2 - T{1}));
+            m[i] += k_dt * F;
+        });
     }
 };
 

@@ -1,6 +1,5 @@
 #include <reticolo/action/builtins/phi4.hpp>
 #include <reticolo/action/concepts.hpp>
-#include <reticolo/core/bc.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
@@ -9,8 +8,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using reticolo::Bc;
-using reticolo::BcMask;
 using reticolo::FastRng;
 using reticolo::Lattice;
 using reticolo::Site;
@@ -122,31 +119,3 @@ TEST_CASE("Phi4: zero coupling (kappa=0, lambda=0) reduces to phi^2 + 1", "[phys
     REQUIRE(std::abs(action.s_full(phi) - s) < 1e-12);
 }
 
-TEST_CASE("Phi4: handles Open BCs without UB on boundary neighbours", "[physics][phi4]") {
-    Phi4<double> const action{.kappa = 0.1, .lambda = 0.02};
-
-    Lattice<double> phi{{4, 4}, BcMask{Bc::Open, Bc::Open}};
-    Lattice<double> force{phi.indexing()};
-    FastRng rng{11};
-    randomize(phi, rng);
-
-    // Computing s_full + compute_force must not crash. The boundary terms
-    // simply drop coupling to non-existent sites.
-    (void)action.s_full(phi);
-    action.compute_force(phi, force);
-
-    // Finite-difference check holds on a boundary site too.
-    Site const x     = Site{0};  // corner: (0, 0)
-    double const old = phi[x];
-
-    constexpr double k_eps = 1e-4;
-    phi[x]                 = old + k_eps;
-    double const s_plus    = action.s_full(phi);
-    phi[x]                 = old - k_eps;
-    double const s_minus   = action.s_full(phi);
-    phi[x]                 = old;
-
-    double const grad_numeric  = (s_plus - s_minus) / (2.0 * k_eps);
-    double const force_numeric = -grad_numeric;
-    REQUIRE(std::abs(force[x] - force_numeric) < 1e-7);
-}

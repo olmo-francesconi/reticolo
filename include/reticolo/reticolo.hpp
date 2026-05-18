@@ -17,7 +17,6 @@
 #include <reticolo/algorithm/metropolis.hpp>
 #include <reticolo/algorithm/wolff.hpp>
 #include <reticolo/cli/parser.hpp>
-#include <reticolo/core/bc.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>

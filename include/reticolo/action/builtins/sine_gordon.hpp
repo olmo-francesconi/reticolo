@@ -1,23 +1,22 @@
 #pragma once
 
 #include <reticolo/action/helpers.hpp>
+#include <reticolo/action/hot_loop.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <cmath>
+#include <cstddef>
 
 namespace reticolo::action {
 
 // =============================================================================
-//  Sine-Gordon scalar action with the same NN hopping + on-site mass term as
-//  Phi4, plus a periodic potential -alpha * cos(phi):
+//  Sine-Gordon scalar action: same NN hopping + on-site mass term as Phi4,
+//  plus a periodic potential -alpha * cos(phi):
 //
 //    S = sum_x [ -2 kappa phi(x) sum_{mu>0} phi(x+mu)
 //                + phi(x)^2
 //                - alpha * cos(phi(x)) ]
-//
-//  At alpha = 0 this is exactly Phi4 with lambda = 0 — verified by the test
-//  suite. HMC-friendly (force is the negative gradient of S).
 // =============================================================================
 
 template <class T = double>
@@ -34,8 +33,10 @@ struct SineGordon {
     }
 
     [[nodiscard]] T ds_local(Lattice<T> const& l, Site x, T new_v) const noexcept {
-        T const phi  = l[x];
-        T const nbrs = nn_neighbour_sum(l, x);
+        return ds_local_from_nbrs(l[x], new_v, nn_neighbour_sum(l, x));
+    }
+
+    [[nodiscard]] T ds_local_from_nbrs(T phi, T new_v, T nbrs) const noexcept {
         T const hop  = T{-2} * kappa * (new_v - phi) * nbrs;
         T const mass = (new_v * new_v) - (phi * phi);
         T const pot  = -alpha * (std::cos(new_v) - std::cos(phi));
@@ -43,32 +44,33 @@ struct SineGordon {
     }
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T total            = T{0};
-        auto const on_site = [this](T phi, T fwd_sum) {
-            return (T{-2} * kappa * phi * fwd_sum) + (phi * phi) - (alpha * std::cos(phi));
-        };
-        for (Site const x : l.bulk_sites()) {
-            total += on_site(l[x], fwd_neighbour_sum_unchecked(l, x));
-        }
-        for (Site const x : l.skin_sites()) {
-            total += on_site(l[x], fwd_neighbour_sum(l, x));
-        }
-        return total;
+        T const k   = kappa;
+        T const alp = alpha;
+        return detail::reduce_fwd<T>(l, [k, alp](T phi, T fwd_sum) {
+            return (T{-2} * k * phi * fwd_sum) + (phi * phi) - (alp * std::cos(phi));
+        });
     }
 
     // force(x) = -dS/dphi(x)
     //         = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x) - alpha sin(phi(x))
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-        auto const at = [&](Site x, T nbrs) {
-            T const phi = l[x];
-            force[x]    = (T{2} * kappa * nbrs) - (T{2} * phi) - (alpha * std::sin(phi));
-        };
-        for (Site const x : l.bulk_sites()) {
-            at(x, nn_neighbour_sum_unchecked(l, x));
-        }
-        for (Site const x : l.skin_sites()) {
-            at(x, nn_neighbour_sum(l, x));
-        }
+        T const  k    = kappa;
+        T const  alp  = alpha;
+        T* const out  = force.data();
+        detail::visit_nn<T>(l, [k, alp, out](std::size_t i, T phi, T nbrs) {
+            out[i] = (T{2} * k * nbrs) - (T{2} * phi) - (alp * std::sin(phi));
+        });
+    }
+
+    // Fused force + leapfrog kick.
+    void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept {
+        T const  k    = kappa;
+        T const  alp  = alpha;
+        T* const m    = mom.data();
+        detail::visit_nn<T>(l, [k, alp, k_dt, m](std::size_t i, T phi, T nbrs) {
+            T const F = (T{2} * k * nbrs) - (T{2} * phi) - (alp * std::sin(phi));
+            m[i] += k_dt * F;
+        });
     }
 };
 

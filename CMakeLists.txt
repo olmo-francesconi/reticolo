@@ -76,6 +76,10 @@ target_compile_definitions(reticolo_core INTERFACE
     RETICOLO_COMPILE_FLAGS="${_reticolo_compile_flags}"
 )
 
+target_compile_options(reticolo_core INTERFACE
+    $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:Release>>:-fno-math-errno>
+)
+
 if(RETICOLO_TUNE_NATIVE)
     target_compile_options(reticolo_core INTERFACE
         $<$<COMPILE_LANGUAGE:CXX>:-march=native>

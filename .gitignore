@@ -5,6 +5,7 @@ out/
 .idea/
 .vscode/
 .zed/
+.claude/
 .DS_Store
 *.swp
 *.swo

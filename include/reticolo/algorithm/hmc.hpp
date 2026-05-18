@@ -7,6 +7,7 @@
 #include <reticolo/core/site.hpp>
 
 #include <cmath>
+#include <type_traits>
 
 namespace reticolo::alg {
 
@@ -91,8 +92,14 @@ public:
 
 private:
     void sample_momenta_() {
-        for (Site x : field_.sites()) {
-            mom_[x] = static_cast<F>(rng_.normal());
+        // Fast path for F == double: fill directly into the lattice storage with
+        // the batched normal generator (no per-site cache branch, paired Box-Muller).
+        if constexpr (std::is_same_v<F, double>) {
+            rng_.normal_fill(mom_.data(), mom_.nsites());
+        } else {
+            for (Site x : field_.sites()) {
+                mom_[x] = static_cast<F>(rng_.normal());
+            }
         }
     }
 

@@ -1,4 +1,3 @@
-#include <reticolo/core/bc.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/site.hpp>
@@ -7,8 +6,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using reticolo::Bc;
-using reticolo::BcMask;
 using reticolo::Lattice;
 using reticolo::Parity;
 using reticolo::Site;
@@ -17,14 +14,13 @@ TEST_CASE("Lattice default-constructs to T{} on every site", "[lattice]") {
     Lattice<double> const phi{{4, 4, 4}};
     REQUIRE(phi.nsites() == 64);
     REQUIRE(phi.ndims() == 3);
-    REQUIRE(phi.all_periodic());
     for (Site s : phi.sites()) {
         REQUIRE(phi[s] == 0.0);
     }
 }
 
 TEST_CASE("Fill-construct seeds every site", "[lattice]") {
-    Lattice<int> const phi{{4, 4}, BcMask{2, Bc::Periodic}, 7};
+    Lattice<int> const phi{{4, 4}, 7};
     for (Site s : phi.sites()) {
         REQUIRE(phi[s] == 7);
     }
@@ -34,7 +30,6 @@ TEST_CASE("Element write/read is direct-indexed by Site", "[lattice]") {
     Lattice<double> phi{{4, 4}};
     phi[Site{5}] = 2.5;
     REQUIRE(phi[Site{5}] == 2.5);
-    // Other sites unchanged.
     REQUIRE(phi[Site{0}] == 0.0);
     REQUIRE(phi[Site{15}] == 0.0);
 }
@@ -46,12 +41,10 @@ TEST_CASE("Copy-construct deep-copies data but shares Indexing", "[lattice]") {
     Lattice<double> psi = phi;  // NOLINT(performance-unnecessary-copy-initialization)
     REQUIRE(psi[Site{2}] == 11.0);
 
-    // Mutating the copy must not touch the original.
     psi[Site{2}] = 99.0;
     REQUIRE(phi[Site{2}] == 11.0);
     REQUIRE(psi[Site{2}] == 99.0);
 
-    // Indexing is shared.
     REQUIRE(phi.indexing().get() == psi.indexing().get());
 }
 
@@ -72,7 +65,6 @@ TEST_CASE("Topology queries delegate to Indexing", "[lattice]") {
     REQUIRE(phi.prev(Site{0}, 0) == Site{3});
     REQUIRE(phi.parity_of(Site{0}) == Parity::Even);
     REQUIRE(phi.parity_of(Site{1}) == Parity::Odd);
-    REQUIRE(phi.is_interior(Site{0}));  // all-periodic => every site is interior
 }
 
 TEST_CASE("sites() iota-view yields every Site exactly once in order", "[lattice]") {
@@ -97,17 +89,11 @@ TEST_CASE("even/odd site spans partition the lattice", "[lattice]") {
     }
 }
 
-TEST_CASE("bulk/skin spans partition the lattice under Open BC", "[lattice]") {
-    Lattice<int> const phi{{4, 4}, BcMask{Bc::Open, Bc::Open}};
-    REQUIRE(phi.bulk_sites().size() + phi.skin_sites().size() == phi.nsites());
-    REQUIRE_FALSE(phi.all_periodic());
-}
-
 TEST_CASE("data() exposes a contiguous flat buffer", "[lattice]") {
     Lattice<double> phi{{4, 4}};
     phi[Site{0}] = 1.0;
     phi[Site{1}] = 2.0;
     REQUIRE(phi.data()[0] == 1.0);
     REQUIRE(phi.data()[1] == 2.0);
-    REQUIRE(std::count(phi.begin(), phi.end(), 0.0) == 14);  // 16 - 2
+    REQUIRE(std::count(phi.begin(), phi.end(), 0.0) == 14);
 }

@@ -13,17 +13,13 @@
 namespace reticolo::action {
 
 // =============================================================================
-//  XY (planar rotor) model. The field theta(x) is an angle and the action is
+//  XY (planar rotor) model on a hypercubic (periodic) lattice. theta(x) is an
+//  angle and the action is
 //
 //    S = -beta * sum_<x,y>  cos(theta(x) - theta(y))
 //
-//  Each NN bond is counted once in s_full (positive-mu convention). The
-//  per-site `s_local(x)` for Metropolis sums over all 2d neighbours of x —
-//  the contribution to S that involves theta(x), with each bond touching x
-//  counted once.
-//
-//  HMC-friendly: the force is -dS/dtheta. Also satisfies WolffEmbeddable via
-//  the axis_type / wolff_* member block below.
+//  HMC-friendly: force is -dS/dtheta. Also satisfies WolffEmbeddable via the
+//  axis_type / wolff_* member block below.
 // =============================================================================
 
 template <class T = double>
@@ -34,51 +30,39 @@ struct Xy {
 
     [[nodiscard]] T s_local(Lattice<T> const& l, Site x) const noexcept {
         T const theta = l[x];
-        T sum         = T{0};
+        T       sum   = T{0};
         for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-            Site const fwd = l.next(x, mu);
-            Site const bwd = l.prev(x, mu);
-            if (fwd.is_valid()) {
-                sum += std::cos(theta - l[fwd]);
-            }
-            if (bwd.is_valid()) {
-                sum += std::cos(theta - l[bwd]);
-            }
+            sum += std::cos(theta - l[l.next(x, mu)]);
+            sum += std::cos(theta - l[l.prev(x, mu)]);
         }
         return -beta * sum;
     }
 
     [[nodiscard]] T ds_local(Lattice<T> const& l, Site x, T new_v) const noexcept {
-        T const theta = l[x];
-        T delta_s     = T{0};
+        T const theta   = l[x];
+        T       delta_s = T{0};
         for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-            Site const fwd = l.next(x, mu);
-            Site const bwd = l.prev(x, mu);
-            if (fwd.is_valid()) {
-                delta_s += std::cos(new_v - l[fwd]) - std::cos(theta - l[fwd]);
-            }
-            if (bwd.is_valid()) {
-                delta_s += std::cos(new_v - l[bwd]) - std::cos(theta - l[bwd]);
-            }
+            T const phi_fwd = l[l.next(x, mu)];
+            T const phi_bwd = l[l.prev(x, mu)];
+            delta_s += std::cos(new_v - phi_fwd) - std::cos(theta - phi_fwd);
+            delta_s += std::cos(new_v - phi_bwd) - std::cos(theta - phi_bwd);
         }
         return -beta * delta_s;
     }
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
+        auto const&             idx  = l.indexing_ref();
+        T const*                data = l.data();
+        Site::value_type const* next = idx.next_data();
+        std::size_t const       n    = idx.nsites();
+        std::size_t const       d    = idx.ndims();
+
         T total = T{0};
-        for (Site const x : l.bulk_sites()) {
-            T const theta = l[x];
-            for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-                total += std::cos(theta - l[l.next(x, mu)]);
-            }
-        }
-        for (Site const x : l.skin_sites()) {
-            T const theta = l[x];
-            for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-                Site const fwd = l.next(x, mu);
-                if (fwd.is_valid()) {
-                    total += std::cos(theta - l[fwd]);
-                }
+        for (std::size_t i = 0; i < n; ++i) {
+            T const           theta = data[i];
+            std::size_t const base  = i * d;
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                total += std::cos(theta - data[next[base + mu]]);
             }
         }
         return -beta * total;
@@ -86,29 +70,23 @@ struct Xy {
 
     // force(x) = -dS/dtheta(x) = -beta * sum_{mu, +-} sin(theta(x) - theta(x+mu)).
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-        for (Site const x : l.bulk_sites()) {
-            T const theta = l[x];
-            T sum         = T{0};
-            for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-                sum += std::sin(theta - l[l.next(x, mu)]);
-                sum += std::sin(theta - l[l.prev(x, mu)]);
+        auto const&             idx  = l.indexing_ref();
+        T const*                data = l.data();
+        T*                      out  = force.data();
+        Site::value_type const* next = idx.next_data();
+        Site::value_type const* prev = idx.prev_data();
+        std::size_t const       n    = idx.nsites();
+        std::size_t const       d    = idx.ndims();
+
+        for (std::size_t i = 0; i < n; ++i) {
+            T const           theta = data[i];
+            T                 sum   = T{0};
+            std::size_t const base  = i * d;
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                sum += std::sin(theta - data[next[base + mu]]);
+                sum += std::sin(theta - data[prev[base + mu]]);
             }
-            force[x] = -beta * sum;
-        }
-        for (Site const x : l.skin_sites()) {
-            T const theta = l[x];
-            T sum         = T{0};
-            for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-                Site const fwd = l.next(x, mu);
-                Site const bwd = l.prev(x, mu);
-                if (fwd.is_valid()) {
-                    sum += std::sin(theta - l[fwd]);
-                }
-                if (bwd.is_valid()) {
-                    sum += std::sin(theta - l[bwd]);
-                }
-            }
-            force[x] = -beta * sum;
+            out[i] = -beta * sum;
         }
     }
 

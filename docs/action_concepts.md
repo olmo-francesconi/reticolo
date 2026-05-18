@@ -126,10 +126,8 @@ struct XyWithMass {
         T const theta = l[x];
         T hop = T{0};
         for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-            Site const fwd = l.next(x, mu);
-            Site const bwd = l.prev(x, mu);
-            if (fwd.is_valid()) hop += std::cos(theta - l[fwd]);
-            if (bwd.is_valid()) hop += std::cos(theta - l[bwd]);
+            hop += std::cos(theta - l[l.next(x, mu)]);
+            hop += std::cos(theta - l[l.prev(x, mu)]);
         }
         return -beta * hop + T{0.5} * m2 * theta * theta;
     }
@@ -144,8 +142,7 @@ struct XyWithMass {
             T const theta = l[x];
             total += T{0.5} * m2 * theta * theta;
             for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-                Site const fwd = l.next(x, mu);
-                if (fwd.is_valid()) total += -beta * std::cos(theta - l[fwd]);
+                total += -beta * std::cos(theta - l[l.next(x, mu)]);
             }
         }
         return total;
@@ -171,11 +168,10 @@ would fail to compile with a concept-check error pointing at the missing
 
 ## Boundary conditions
 
-Every action body guards neighbour accesses with
-`if (s.is_valid()) { ... }`. The lattice's `Indexing` returns
-`Site{Site::k_invalid_value}` for off-lattice neighbours under open BCs, so
-the action stays BC-agnostic — the same `s_local` body works for periodic,
-open, or mixed boundaries with no `#ifdef`.
+All lattices are periodic — `l.next(x, mu)` and `l.prev(x, mu)` always
+return a valid in-bounds `Site`. Action bodies never need to guard
+neighbour accesses; the hot loop is a single unbranched inner loop over
+directions. Open / antiperiodic BCs are not supported in v3.
 
 ## What about gauge actions?
 

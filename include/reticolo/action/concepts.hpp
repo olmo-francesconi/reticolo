@@ -48,6 +48,26 @@ concept HasForce =
         { a.compute_force(l, force) };
     };
 
+// Refinement: fused force + kick. `compute_force_and_kick(field, mom, k)` computes
+// the per-site force F(x) and applies `mom(x) += k * F(x)` in a single pass — never
+// materialising the force lattice in memory. The HMC integrator prefers this path
+// when present; actions that only implement `compute_force` keep working unchanged.
+template <class A, class F>
+concept HasFusedKick =
+    HasForce<A, F> && requires(A const& a, Lattice<F> const& l, Lattice<F>& mom, F k) {
+        { a.compute_force_and_kick(l, mom, k) };
+    };
+
+// Refinement: action exposes ds_local as pure math on (phi, new_v, nbrs), where
+// nbrs is the unweighted sum of all 2*ndims nearest neighbours of the site. The
+// Metropolis sweep uses this path with `visit_nn` (direct-stride neighbour reads,
+// vectorisation-friendly) when supported; otherwise it falls back to `ds_local`.
+template <class A, class F>
+concept HasDsLocalFromNbrs =
+    LocalAction<A, F> && requires(A const& a, F phi, F new_v, F nbrs) {
+        { a.ds_local_from_nbrs(phi, new_v, nbrs) } -> std::convertible_to<double>;
+    };
+
 // Refinement: action provides its own Metropolis proposal kernel. Selected at
 // updater instantiation via `if constexpr`; the fallback is a Gaussian proposal.
 template <class A, class F, class R>
