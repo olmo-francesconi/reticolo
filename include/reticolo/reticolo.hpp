@@ -23,6 +23,10 @@
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/io/writer.hpp>
+#include <reticolo/llr/exchange.hpp>
+#include <reticolo/llr/replica.hpp>
+#include <reticolo/llr/update_a.hpp>
+#include <reticolo/llr/windowed_action.hpp>
 #include <reticolo/obs/analysis.hpp>
 #include <reticolo/obs/catalog.hpp>
 #include <reticolo/obs/concepts.hpp>

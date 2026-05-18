@@ -7,6 +7,7 @@ function(reticolo_add_app name)
 endfunction()
 
 reticolo_add_app(phi4_hmc            phi4_hmc.cpp)
+reticolo_add_app(phi4_llr            phi4_llr.cpp)
 reticolo_add_app(phi6_hmc            phi6_hmc.cpp)
 reticolo_add_app(sine_gordon_hmc     sine_gordon_hmc.cpp)
 reticolo_add_app(xy_wolff            xy_wolff.cpp)
