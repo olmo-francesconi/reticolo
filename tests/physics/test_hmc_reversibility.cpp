@@ -17,19 +17,22 @@ using reticolo::Site;
 using reticolo::action::Phi4;
 using reticolo::alg::Hmc;
 using reticolo::alg::integ::Leapfrog;
+using reticolo::alg::integ::Omelyan2;
+using reticolo::alg::integ::Omelyan4;
 
-TEST_CASE("HMC Leapfrog is reversible to ~1e-10", "[physics][hmc][reversibility]") {
+template <class Integrator>
+static void check_reversibility() {
     Phi4<double> const action{.kappa = 0.18, .lambda = 0.04};
 
     Lattice<double> phi{{4, 4, 4}};
-    FastRng rng{31415};
+    FastRng         rng{31415};
     for (Site x : phi.sites()) {
         phi[x] = rng.normal();
     }
 
-    Hmc<Phi4<double>, FastRng, Leapfrog> hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
+    Hmc<Phi4<double>, FastRng, Integrator> hmc{action, phi, rng,
+                                               {.tau = 1.0, .n_md = 20}};
 
-    // Seed the momentum buffer once, snapshot (q0, p0).
     for (Site x : phi.sites()) {
         hmc.momentum()[x] = rng.normal();
     }
@@ -40,11 +43,8 @@ TEST_CASE("HMC Leapfrog is reversible to ~1e-10", "[physics][hmc][reversibility]
         p0[x.value()] = hmc.momentum()[x];
     }
 
-    // Phi(+tau)
     hmc.integrate_only(1.0, 20);
 
-    // Flip momentum and re-integrate. Symplectic + time-reversal symmetry of
-    // Leapfrog says we land back on (q0, -p0).
     for (Site x : phi.sites()) {
         hmc.momentum()[x] = -hmc.momentum()[x];
     }
@@ -58,6 +58,18 @@ TEST_CASE("HMC Leapfrog is reversible to ~1e-10", "[physics][hmc][reversibility]
     }
     REQUIRE(max_q_err < 1e-10);
     REQUIRE(max_p_err < 1e-10);
+}
+
+TEST_CASE("HMC Leapfrog is reversible to ~1e-10", "[physics][hmc][reversibility]") {
+    check_reversibility<Leapfrog>();
+}
+
+TEST_CASE("HMC Omelyan2 is reversible to ~1e-10", "[physics][hmc][reversibility]") {
+    check_reversibility<Omelyan2>();
+}
+
+TEST_CASE("HMC Omelyan4 is reversible to ~1e-10", "[physics][hmc][reversibility]") {
+    check_reversibility<Omelyan4>();
 }
 
 TEST_CASE("HMC trajectory is symplectic: dH small and bounded vs trajectory length",

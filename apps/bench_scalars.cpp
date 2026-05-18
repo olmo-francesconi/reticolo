@@ -97,4 +97,51 @@ int main() {
             cases, /*sigma=*/0.4, k_n_md);
     run_one("SineGordon",  act::SineGordon<double>{.kappa = 0.18, .alpha = 1.0},
             cases, /*sigma=*/0.4, k_n_md);
+
+    // -------------------------------------------------------------------------
+    // Integrator comparison: same Phi4 at 3D L=24, tau=1.0. n_md is hand-picked
+    // per integrator so all three sit near accept ~0.85, then we report
+    // wall-time per trajectory and wall-time per *accepted* trajectory — the
+    // latter is the metric you actually care about for production HMC.
+    // -------------------------------------------------------------------------
+    std::printf("\n=== Integrator comparison (Phi4, 3D L=24, tau=1.0) ===\n");
+    std::printf("%-14s %-6s   %-14s   %-14s   %-12s   %-14s\n",
+                "integrator", "n_md", "force evals", "traj [s]", "accept",
+                "s / accepted");
+    std::printf("%-14s %-6s   %-14s   %-14s   %-12s   %-14s\n",
+                "----------", "----", "-----------", "--------", "------",
+                "------------");
+
+    act::Phi4<double> const phi4{.kappa = 0.18, .lambda = 1.145};
+    Lattice<double>::SizeVec const shape{24, 24, 24};
+
+    auto run_integ = [&](char const* name, auto integ_tag, int n_md, int fe_per_traj) {
+        using Integ = decltype(integ_tag);
+        Lattice<double> phi{shape};
+        FastRng         rng{42};
+        alg::Hmc<act::Phi4<double>, FastRng, Integ> hmc{phi4, phi, rng,
+                                                        {.tau = 1.0, .n_md = n_md}};
+        // Warmup.
+        for (int i = 0; i < 50; ++i) (void)hmc.trajectory();
+
+        constexpr int n_traj  = 50;
+        int           accepted = 0;
+        auto const    t0       = bench_clock::now();
+        for (int i = 0; i < n_traj; ++i) {
+            accepted += hmc.trajectory().accepted ? 1 : 0;
+        }
+        double const traj_s    = seconds(bench_clock::now() - t0) / n_traj;
+        double const accept    = static_cast<double>(accepted) / n_traj;
+        double const s_per_acc = traj_s / accept;
+        std::printf("%-14s %-6d   %-14d   %-14.3e   %-12.3f   %-14.3e\n",
+                    name, n_md, fe_per_traj, traj_s, accept, s_per_acc);
+    };
+
+    // Force-eval count per trajectory:
+    //   Leapfrog : n_md + 1
+    //   Omelyan2 : 2*n_md + 1
+    //   Omelyan4 : 4*n_md + 1
+    run_integ("Leapfrog",  alg::integ::Leapfrog{}, /*n_md=*/30, /*fe=*/31);
+    run_integ("Omelyan2",  alg::integ::Omelyan2{}, /*n_md=*/16, /*fe=*/33);
+    run_integ("Omelyan4",  alg::integ::Omelyan4{}, /*n_md=*/6,  /*fe=*/25);
 }
