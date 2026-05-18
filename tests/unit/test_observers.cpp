@@ -68,9 +68,9 @@ TEST_CASE("obs::two_point recovers the squared mean on a constant field", "[obs]
 
 TEST_CASE("obs::two_point: plane wave along mu=0", "[obs][two_point]") {
     constexpr std::size_t k_l = 4;
-    Lattice<double>       phi{{k_l, k_l}};
+    Lattice<double> phi{{k_l, k_l}};
     for (Site const s : phi.sites()) {
-        auto const   i = s.value() % k_l;
+        auto const i   = s.value() % k_l;
         double const v = std::cos(2.0 * std::numbers::pi * static_cast<double>(i) / k_l);
         phi[s]         = v;
     }

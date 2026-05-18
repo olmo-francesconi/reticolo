@@ -59,7 +59,7 @@ struct Phi4 {
     }
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T const k = kappa;
+        T const k   = kappa;
         T const lam = lambda;
         return detail::reduce_fwd<T>(l, [k, lam](T phi, T fwd_sum) {
             T const phi2 = phi * phi;
@@ -76,16 +76,16 @@ struct Phi4 {
         T* const out = force.data();
         detail::visit_nn<T>(l, [k, lam, out](std::size_t i, T phi, T nbrs) {
             T const phi2 = phi * phi;
-            out[i] = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * (phi2 - T{1}));
+            out[i]       = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * (phi2 - T{1}));
         });
     }
 
     // Fused force + leapfrog kick: computes F(x) and applies mom(x) += k * F(x) in
     // one pass — the force lattice is never written or read.
     void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept {
-        T const k    = kappa;
-        T const lam  = lambda;
-        T* const m   = mom.data();
+        T const k   = kappa;
+        T const lam = lambda;
+        T* const m  = mom.data();
         detail::visit_nn<T>(l, [k, lam, k_dt, m](std::size_t i, T phi, T nbrs) {
             T const phi2 = phi * phi;
             T const F    = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * (phi2 - T{1}));

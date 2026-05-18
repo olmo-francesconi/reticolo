@@ -51,7 +51,7 @@ public:
             F* const fdata = field_.data();
             action::detail::visit_nn<F>(
                 field_, [this, fdata, &stats](std::size_t i, F phi, F nbrs) {
-                    F const    new_v = propose_local_(phi, i);
+                    F const new_v = propose_local_(phi, i);
                     auto const ds =
                         static_cast<double>(action_.ds_local_from_nbrs(phi, new_v, nbrs));
                     ++stats.attempts;
@@ -62,8 +62,8 @@ public:
                 });
         } else {
             for (Site x : field_.sites()) {
-                F const    new_v = propose_(x);
-                auto const ds    = static_cast<double>(action_.ds_local(field_, x, new_v));
+                F const new_v = propose_(x);
+                auto const ds = static_cast<double>(action_.ds_local(field_, x, new_v));
                 ++stats.attempts;
                 if (ds <= 0.0 || rng_.uniform() < std::exp(-ds)) {
                     field_[x] = new_v;

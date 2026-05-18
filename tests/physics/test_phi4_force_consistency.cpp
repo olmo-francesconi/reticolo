@@ -118,4 +118,3 @@ TEST_CASE("Phi4: zero coupling (kappa=0, lambda=0) reduces to phi^2 + 1", "[phys
     }
     REQUIRE(std::abs(action.s_full(phi) - s) < 1e-12);
 }
-

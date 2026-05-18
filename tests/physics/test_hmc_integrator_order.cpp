@@ -39,8 +39,7 @@ static double mean_abs_dh(A const& action,
 }
 
 template <std::size_t N>
-static double dh_slope(std::array<double, N> const& dt,
-                       std::array<double, N> const& mean_dh) {
+static double dh_slope(std::array<double, N> const& dt, std::array<double, N> const& mean_dh) {
     double sum_x  = 0.0;
     double sum_y  = 0.0;
     double sum_xx = 0.0;
@@ -68,7 +67,7 @@ static double measure_order(Phi4<double> const& action,
         // Same starting field + seed for every dt → all comparisons see the
         // same (q0, p0) draws. This isolates the integrator-error scaling.
         Lattice<double> phi{{4, 4, 4}};
-        FastRng         rng{11223344};
+        FastRng rng{11223344};
         for (Site x : phi.sites()) {
             phi[x] = 0.1 * rng.normal();
         }
@@ -82,32 +81,29 @@ static double measure_order(Phi4<double> const& action,
 }
 
 TEST_CASE("HMC Leapfrog has integrator order p ~ 2 in |dH| vs dt", "[physics][hmc][order]") {
-    Phi4<double> const                 action{.kappa = 0.13, .lambda = 0.02};
+    Phi4<double> const action{.kappa = 0.13, .lambda = 0.02};
     constexpr std::array<int, 4> const k_n_mds = {8, 16, 32, 64};
-    double const                       slope =
-        measure_order<Leapfrog>(action, /*tau=*/1.0, k_n_mds, /*n_traj=*/64);
+    double const slope = measure_order<Leapfrog>(action, /*tau=*/1.0, k_n_mds, /*n_traj=*/64);
     INFO("Leapfrog slope = " << slope);
     REQUIRE(slope > 1.7);
     REQUIRE(slope < 2.3);
 }
 
 TEST_CASE("HMC Omelyan2 has integrator order p ~ 2 in |dH| vs dt", "[physics][hmc][order]") {
-    Phi4<double> const                 action{.kappa = 0.13, .lambda = 0.02};
+    Phi4<double> const action{.kappa = 0.13, .lambda = 0.02};
     constexpr std::array<int, 4> const k_n_mds = {8, 16, 32, 64};
-    double const                       slope =
-        measure_order<Omelyan2>(action, /*tau=*/1.0, k_n_mds, /*n_traj=*/64);
+    double const slope = measure_order<Omelyan2>(action, /*tau=*/1.0, k_n_mds, /*n_traj=*/64);
     INFO("Omelyan2 slope = " << slope);
     REQUIRE(slope > 1.7);
     REQUIRE(slope < 2.3);
 }
 
 TEST_CASE("HMC Omelyan4 has integrator order p ~ 4 in |dH| vs dt", "[physics][hmc][order]") {
-    Phi4<double> const                 action{.kappa = 0.13, .lambda = 0.02};
+    Phi4<double> const action{.kappa = 0.13, .lambda = 0.02};
     // Order-4 |dH| collapses fast — keep dt larger so we stay clear of the
     // floating-point noise floor at the small end.
     constexpr std::array<int, 4> const k_n_mds = {4, 6, 8, 12};
-    double const                       slope =
-        measure_order<Omelyan4>(action, /*tau=*/1.0, k_n_mds, /*n_traj=*/64);
+    double const slope = measure_order<Omelyan4>(action, /*tau=*/1.0, k_n_mds, /*n_traj=*/64);
     INFO("Omelyan4 slope = " << slope);
     REQUIRE(slope > 3.5);
     REQUIRE(slope < 4.5);

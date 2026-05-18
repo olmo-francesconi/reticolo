@@ -125,8 +125,8 @@ public:
                 s  = (u1 * u1) + (u2 * u2);
             } while (s >= 1.0 || s == 0.0);
             double const factor = std::sqrt(-2.0 * std::log(s) / s);
-            out[i]     = u1 * factor;
-            out[i + 1] = u2 * factor;
+            out[i]              = u1 * factor;
+            out[i + 1]          = u2 * factor;
         }
         if (i < n) {
             out[i] = normal();  // updates the cache for the next call.
@@ -137,8 +137,8 @@ public:
 
 private:
     std::array<state_type, 4> s_{};
-    double                    cached_normal_     = 0.0;
-    bool                      has_cached_normal_ = false;
+    double cached_normal_   = 0.0;
+    bool has_cached_normal_ = false;
 };
 
 static_assert(Rng<FastRng>);

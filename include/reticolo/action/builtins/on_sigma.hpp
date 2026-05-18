@@ -42,7 +42,7 @@ struct OnSigma {
 
     [[nodiscard]] T s_local(Lattice<value_type> const& l, Site x) const noexcept {
         auto const& phi = l[x];
-        T           sum = T{0};
+        T sum           = T{0};
         for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
             sum += dot(phi, l[l.next(x, mu)]);
             sum += dot(phi, l[l.prev(x, mu)]);
@@ -52,8 +52,8 @@ struct OnSigma {
 
     [[nodiscard]] T
     ds_local(Lattice<value_type> const& l, Site x, value_type const& new_v) const noexcept {
-        auto const& phi     = l[x];
-        T           delta_s = T{0};
+        auto const& phi = l[x];
+        T delta_s       = T{0};
         for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
             auto const& fwd = l[l.next(x, mu)];
             auto const& bwd = l[l.prev(x, mu)];
@@ -64,15 +64,15 @@ struct OnSigma {
     }
 
     [[nodiscard]] T s_full(Lattice<value_type> const& l) const noexcept {
-        auto const&             idx  = l.indexing_ref();
-        value_type const*       data = l.data();
+        auto const& idx              = l.indexing_ref();
+        value_type const* data       = l.data();
         Site::value_type const* next = idx.next_data();
-        std::size_t const       n    = idx.nsites();
-        std::size_t const       d    = idx.ndims();
+        std::size_t const n          = idx.nsites();
+        std::size_t const d          = idx.ndims();
 
         T total = T{0};
         for (std::size_t i = 0; i < n; ++i) {
-            auto const&       phi  = data[i];
+            auto const& phi        = data[i];
             std::size_t const base = i * d;
             for (std::size_t mu = 0; mu < d; ++mu) {
                 total += dot(phi, data[next[base + mu]]);

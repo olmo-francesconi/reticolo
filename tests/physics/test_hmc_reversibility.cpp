@@ -25,13 +25,12 @@ static void check_reversibility() {
     Phi4<double> const action{.kappa = 0.18, .lambda = 0.04};
 
     Lattice<double> phi{{4, 4, 4}};
-    FastRng         rng{31415};
+    FastRng rng{31415};
     for (Site x : phi.sites()) {
         phi[x] = rng.normal();
     }
 
-    Hmc<Phi4<double>, FastRng, Integrator> hmc{action, phi, rng,
-                                               {.tau = 1.0, .n_md = 20}};
+    Hmc<Phi4<double>, FastRng, Integrator> hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
 
     for (Site x : phi.sites()) {
         hmc.momentum()[x] = rng.normal();

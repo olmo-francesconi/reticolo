@@ -61,12 +61,12 @@ private:
     explicit Indexing(SizeVec shape);
     void build_();
 
-    SizeVec     shape_;
+    SizeVec shape_;
     std::size_t nsites_ = 0;
 
     std::vector<Site::value_type> next_;
     std::vector<Site::value_type> prev_;
-    std::vector<std::uint8_t>     parity_;
+    std::vector<std::uint8_t> parity_;
 
     SiteVec even_;
     SiteVec odd_;
@@ -82,9 +82,7 @@ struct IndexingPoolKey {
 struct IndexingPoolKeyHash {
     std::size_t operator()(IndexingPoolKey const& k) const noexcept {
         std::size_t h = 0;
-        auto        mix = [&h](std::size_t v) {
-            h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6U) + (h >> 2U);
-        };
+        auto mix = [&h](std::size_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6U) + (h >> 2U); };
         for (auto s : k.shape) {
             mix(std::hash<std::size_t>{}(s));
         }

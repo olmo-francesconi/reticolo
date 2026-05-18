@@ -54,9 +54,9 @@ struct SineGordon {
     // force(x) = -dS/dphi(x)
     //         = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x) - alpha sin(phi(x))
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-        T const  k    = kappa;
-        T const  alp  = alpha;
-        T* const out  = force.data();
+        T const k    = kappa;
+        T const alp  = alpha;
+        T* const out = force.data();
         detail::visit_nn<T>(l, [k, alp, out](std::size_t i, T phi, T nbrs) {
             out[i] = (T{2} * k * nbrs) - (T{2} * phi) - (alp * std::sin(phi));
         });
@@ -64,9 +64,9 @@ struct SineGordon {
 
     // Fused force + leapfrog kick.
     void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept {
-        T const  k    = kappa;
-        T const  alp  = alpha;
-        T* const m    = mom.data();
+        T const k   = kappa;
+        T const alp = alpha;
+        T* const m  = mom.data();
         detail::visit_nn<T>(l, [k, alp, k_dt, m](std::size_t i, T phi, T nbrs) {
             T const F = (T{2} * k * nbrs) - (T{2} * phi) - (alp * std::sin(phi));
             m[i] += k_dt * F;

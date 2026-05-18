@@ -52,9 +52,9 @@ struct Phi6 {
     }
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T const k = kappa;
+        T const k   = kappa;
         T const lam = lambda;
-        T const g = g6;
+        T const g   = g6;
         return detail::reduce_fwd<T>(l, [k, lam, g](T phi, T fwd_sum) {
             T const phi2 = phi * phi;
             T const dev  = phi2 - T{1};
@@ -67,29 +67,29 @@ struct Phi6 {
     //         = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x)
     //           - 4 lambda phi(x) (phi(x)^2 - 1) - 6 g6 phi(x)^5
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-        T const  k    = kappa;
-        T const  lam  = lambda;
-        T const  g    = g6;
-        T* const out  = force.data();
+        T const k    = kappa;
+        T const lam  = lambda;
+        T const g    = g6;
+        T* const out = force.data();
         detail::visit_nn<T>(l, [k, lam, g, out](std::size_t i, T phi, T nbrs) {
             T const phi2 = phi * phi;
             T const phi5 = phi2 * phi2 * phi;
-            out[i] = (T{2} * k * nbrs) - (T{2} * phi) -
-                     (T{4} * lam * phi * (phi2 - T{1})) - (T{6} * g * phi5);
+            out[i]       = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * (phi2 - T{1})) -
+                     (T{6} * g * phi5);
         });
     }
 
     // Fused force + leapfrog kick.
     void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept {
-        T const  k    = kappa;
-        T const  lam  = lambda;
-        T const  g    = g6;
-        T* const m    = mom.data();
+        T const k   = kappa;
+        T const lam = lambda;
+        T const g   = g6;
+        T* const m  = mom.data();
         detail::visit_nn<T>(l, [k, lam, g, k_dt, m](std::size_t i, T phi, T nbrs) {
             T const phi2 = phi * phi;
             T const phi5 = phi2 * phi2 * phi;
-            T const F    = (T{2} * k * nbrs) - (T{2} * phi) -
-                           (T{4} * lam * phi * (phi2 - T{1})) - (T{6} * g * phi5);
+            T const F    = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * (phi2 - T{1})) -
+                        (T{6} * g * phi5);
             m[i] += k_dt * F;
         });
     }

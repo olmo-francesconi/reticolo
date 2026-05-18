@@ -30,7 +30,7 @@ struct Xy {
 
     [[nodiscard]] T s_local(Lattice<T> const& l, Site x) const noexcept {
         T const theta = l[x];
-        T       sum   = T{0};
+        T sum         = T{0};
         for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
             sum += std::cos(theta - l[l.next(x, mu)]);
             sum += std::cos(theta - l[l.prev(x, mu)]);
@@ -39,8 +39,8 @@ struct Xy {
     }
 
     [[nodiscard]] T ds_local(Lattice<T> const& l, Site x, T new_v) const noexcept {
-        T const theta   = l[x];
-        T       delta_s = T{0};
+        T const theta = l[x];
+        T delta_s     = T{0};
         for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
             T const phi_fwd = l[l.next(x, mu)];
             T const phi_bwd = l[l.prev(x, mu)];
@@ -51,16 +51,16 @@ struct Xy {
     }
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        auto const&             idx  = l.indexing_ref();
-        T const*                data = l.data();
+        auto const& idx              = l.indexing_ref();
+        T const* data                = l.data();
         Site::value_type const* next = idx.next_data();
-        std::size_t const       n    = idx.nsites();
-        std::size_t const       d    = idx.ndims();
+        std::size_t const n          = idx.nsites();
+        std::size_t const d          = idx.ndims();
 
         T total = T{0};
         for (std::size_t i = 0; i < n; ++i) {
-            T const           theta = data[i];
-            std::size_t const base  = i * d;
+            T const theta          = data[i];
+            std::size_t const base = i * d;
             for (std::size_t mu = 0; mu < d; ++mu) {
                 total += std::cos(theta - data[next[base + mu]]);
             }
@@ -70,18 +70,18 @@ struct Xy {
 
     // force(x) = -dS/dtheta(x) = -beta * sum_{mu, +-} sin(theta(x) - theta(x+mu)).
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-        auto const&             idx  = l.indexing_ref();
-        T const*                data = l.data();
-        T*                      out  = force.data();
+        auto const& idx              = l.indexing_ref();
+        T const* data                = l.data();
+        T* out                       = force.data();
         Site::value_type const* next = idx.next_data();
         Site::value_type const* prev = idx.prev_data();
-        std::size_t const       n    = idx.nsites();
-        std::size_t const       d    = idx.ndims();
+        std::size_t const n          = idx.nsites();
+        std::size_t const d          = idx.ndims();
 
         for (std::size_t i = 0; i < n; ++i) {
-            T const           theta = data[i];
-            T                 sum   = T{0};
-            std::size_t const base  = i * d;
+            T const theta          = data[i];
+            T sum                  = T{0};
+            std::size_t const base = i * d;
             for (std::size_t mu = 0; mu < d; ++mu) {
                 sum += std::sin(theta - data[next[base + mu]]);
                 sum += std::sin(theta - data[prev[base + mu]]);

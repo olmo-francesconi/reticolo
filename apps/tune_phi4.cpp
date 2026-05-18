@@ -32,13 +32,13 @@ using bench_clock = std::chrono::steady_clock;
 
 template <class Integrator>
 void run_hmc(reticolo::act::Phi4<double> const& action,
-             reticolo::Lattice<double>&         field,
-             reticolo::FastRng&                 rng,
-             double                             tau,
-             int                                n_md,
-             int                                n_therm,
-             int                                n_prod,
-             reticolo::io::Writer&              out) {
+             reticolo::Lattice<double>& field,
+             reticolo::FastRng& rng,
+             double tau,
+             int n_md,
+             int n_therm,
+             int n_prod,
+             reticolo::io::Writer& out) {
     using namespace reticolo;
 
     alg::Hmc<act::Phi4<double>, FastRng, Integrator> hmc{
@@ -51,14 +51,14 @@ void run_hmc(reticolo::act::Phi4<double> const& action,
     auto s       = out.series<double>("/prod/obs/s");
     auto mean_sq = out.series<double>("/prod/obs/mean_sq");
 
-    int    accepted = 0;
-    double algo_s   = 0.0;  // sum of algorithm-only wall time across all updates
-    double obs_s    = 0.0;
+    int accepted       = 0;
+    double algo_s      = 0.0;  // sum of algorithm-only wall time across all updates
+    double obs_s       = 0.0;
     auto const t_wall0 = bench_clock::now();
     for (int i = 0; i < n_prod; ++i) {
-        auto const ta = bench_clock::now();
+        auto const ta   = bench_clock::now();
         auto const step = hmc.trajectory();
-        auto const tb = bench_clock::now();
+        auto const tb   = bench_clock::now();
         algo_s += std::chrono::duration<double>(tb - ta).count();
         accepted += step.accepted ? 1 : 0;
 
@@ -72,19 +72,19 @@ void run_hmc(reticolo::act::Phi4<double> const& action,
 
     out.attr<double>("/prod@wall_seconds", wall_s);
     out.attr<double>("/prod@algo_seconds", algo_s);
-    out.attr<double>("/prod@obs_seconds",  obs_s);
+    out.attr<double>("/prod@obs_seconds", obs_s);
     out.attr<int>("/prod@n_meas", n_prod);
     out.attr<double>("/prod@accept_rate",
                      static_cast<double>(accepted) / static_cast<double>(n_prod));
 }
 
 void run_metropolis(reticolo::act::Phi4<double> const& action,
-                    reticolo::Lattice<double>&         field,
-                    reticolo::FastRng&                 rng,
-                    double                             sigma,
-                    int                                n_therm,
-                    int                                n_prod,
-                    reticolo::io::Writer&              out) {
+                    reticolo::Lattice<double>& field,
+                    reticolo::FastRng& rng,
+                    double sigma,
+                    int n_therm,
+                    int n_prod,
+                    reticolo::io::Writer& out) {
     using namespace reticolo;
 
     alg::Metropolis<act::Phi4<double>, FastRng> mc{action, field, rng, sigma};
@@ -98,13 +98,13 @@ void run_metropolis(reticolo::act::Phi4<double> const& action,
 
     std::size_t accepted = 0;
     std::size_t attempts = 0;
-    double      algo_s   = 0.0;
-    double      obs_s    = 0.0;
-    auto const  t_wall0  = bench_clock::now();
+    double algo_s        = 0.0;
+    double obs_s         = 0.0;
+    auto const t_wall0   = bench_clock::now();
     for (int i = 0; i < n_prod; ++i) {
-        auto const ta = bench_clock::now();
+        auto const ta    = bench_clock::now();
         auto const stats = mc.sweep();
-        auto const tb = bench_clock::now();
+        auto const tb    = bench_clock::now();
         algo_s += std::chrono::duration<double>(tb - ta).count();
         accepted += stats.accepted;
         attempts += stats.attempts;
@@ -119,7 +119,7 @@ void run_metropolis(reticolo::act::Phi4<double> const& action,
 
     out.attr<double>("/prod@wall_seconds", wall_s);
     out.attr<double>("/prod@algo_seconds", algo_s);
-    out.attr<double>("/prod@obs_seconds",  obs_s);
+    out.attr<double>("/prod@obs_seconds", obs_s);
     out.attr<int>("/prod@n_meas", n_prod);
     out.attr<double>("/prod@accept_rate",
                      attempts == 0 ? 0.0
@@ -132,36 +132,36 @@ int main(int argc, char** argv) {
     using namespace reticolo;
 
     cli::Parser p{"tune_phi4", "Algorithm-tuning rig for Phi4 (autocorrelation vs wall time)"};
-    auto const& L       = p.req<int>("L,size", "linear lattice extent");
-    auto const& kappa   = p.req<double>("kappa", "hopping parameter");
-    auto const& lambda  = p.req<double>("lambda", "quartic coupling");
-    auto const& ndim    = p.opt<int>("ndim", 3, "spatial dimensions");
-    auto const& algo    = p.req<std::string>("algo",
+    auto const& L          = p.req<int>("L,size", "linear lattice extent");
+    auto const& kappa      = p.req<double>("kappa", "hopping parameter");
+    auto const& lambda     = p.req<double>("lambda", "quartic coupling");
+    auto const& ndim       = p.opt<int>("ndim", 3, "spatial dimensions");
+    auto const& algo       = p.req<std::string>("algo",
                                           "one of: metropolis, hmc_leapfrog, "
-                                             "hmc_omelyan2, hmc_omelyan4");
-    auto const& sigma   = p.opt<double>("sigma", 0.4, "Metropolis proposal width");
-    auto const& tau     = p.opt<double>("tau", 1.0, "HMC trajectory length");
-    auto const& n_md    = p.opt<int>("n_md", 20, "MD steps per HMC trajectory");
-    auto const& n_therm = p.opt<int>("n_therm", 1000, "thermalisation updates");
-    auto const& n_prod  = p.opt<int>("n_prod", 5000, "production updates");
-    auto const& seed    = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& outpath    = p.opt<std::string>("out", std::string{"tune.h5"},
-                                                "HDF5 output path");
-    auto const& init_from  = p.opt<std::string>("init_from", std::string{},
-                                                "raw-binary field state to load before "
+                                                "hmc_omelyan2, hmc_omelyan4");
+    auto const& sigma      = p.opt<double>("sigma", 0.4, "Metropolis proposal width");
+    auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
+    auto const& n_md       = p.opt<int>("n_md", 20, "MD steps per HMC trajectory");
+    auto const& n_therm    = p.opt<int>("n_therm", 1000, "thermalisation updates");
+    auto const& n_prod     = p.opt<int>("n_prod", 5000, "production updates");
+    auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
+    auto const& outpath    = p.opt<std::string>("out", std::string{"tune.h5"}, "HDF5 output path");
+    auto const& init_from  = p.opt<std::string>("init_from",
+                                               std::string{},
+                                               "raw-binary field state to load before "
                                                 "production (skip thermalisation)");
-    auto const& save_state = p.opt<std::string>("save_state", std::string{},
+    auto const& save_state = p.opt<std::string>("save_state",
+                                                std::string{},
                                                 "raw-binary field state to save at the "
                                                 "end of the run (after production)");
     if (!p.parse(argc, argv)) {
         return 0;
     }
 
-    Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim),
-                                   static_cast<std::size_t>(L));
-    Lattice<double>          phi{shape};
-    FastRng                  rng{seed};
-    act::Phi4<double> const  phi4{.kappa = kappa, .lambda = lambda};
+    Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    Lattice<double> phi{shape};
+    FastRng rng{seed};
+    act::Phi4<double> const phi4{.kappa = kappa, .lambda = lambda};
 
     // Load thermalised state from a previous run (shared across the parameter
     // grid). Layout: `nsites()` doubles in lattice index order. Caller must
@@ -173,13 +173,13 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "init_from: cannot open %s\n", init_from.c_str());
             return 1;
         }
-        std::size_t const got = std::fread(phi.data(), sizeof(double),
-                                           phi.nsites(), f);
+        std::size_t const got = std::fread(phi.data(), sizeof(double), phi.nsites(), f);
         std::fclose(f);
         if (got != phi.nsites()) {
             std::fprintf(stderr,
                          "init_from: expected %zu doubles, got %zu — shape mismatch?\n",
-                         phi.nsites(), got);
+                         phi.nsites(),
+                         got);
             return 1;
         }
     }
@@ -203,8 +203,7 @@ int main(int argc, char** argv) {
     if (!save_state.empty()) {
         std::FILE* f = std::fopen(save_state.c_str(), "wb");
         if (f == nullptr) {
-            std::fprintf(stderr, "save_state: cannot open %s for writing\n",
-                         save_state.c_str());
+            std::fprintf(stderr, "save_state: cannot open %s for writing\n", save_state.c_str());
             return 1;
         }
         std::fwrite(phi.data(), sizeof(double), phi.nsites(), f);

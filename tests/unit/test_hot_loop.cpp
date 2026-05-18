@@ -3,10 +3,10 @@
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 
-#include <catch2/catch_test_macros.hpp>
-
 #include <cstddef>
 #include <vector>
+
+#include <catch2/catch_test_macros.hpp>
 
 using reticolo::FastRng;
 using reticolo::Lattice;
@@ -20,8 +20,8 @@ namespace {
 template <class Shape>
 Lattice<double> make_random_lattice(Shape shape, std::uint64_t seed) {
     Lattice<double> l{Lattice<double>::SizeVec(shape.begin(), shape.end())};
-    FastRng         rng{seed};
-    double*         data = l.data();
+    FastRng rng{seed};
+    double* data = l.data();
     for (std::size_t i = 0; i < l.nsites(); ++i) {
         data[i] = rng.normal();
     }
@@ -32,14 +32,14 @@ Lattice<double> make_random_lattice(Shape shape, std::uint64_t seed) {
 
 TEST_CASE("visit_nn dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_loop]") {
     std::vector<std::vector<std::size_t>> const shapes = {
-        {8},                  // 1D
-        {6, 5},               // 2D
-        {4, 5, 6},            // 3D
-        {3, 4, 5, 3},         // 4D
+        {8},           // 1D
+        {6, 5},        // 2D
+        {4, 5, 6},     // 3D
+        {3, 4, 5, 3},  // 4D
     };
 
     for (auto const& shape : shapes) {
-        auto                l = make_random_lattice(shape, /*seed=*/42);
+        auto l = make_random_lattice(shape, /*seed=*/42);
         std::vector<double> out_dispatch(l.nsites(), 0.0);
         std::vector<double> out_fallback(l.nsites(), 0.0);
 
@@ -82,8 +82,8 @@ TEST_CASE("reduce_fwd dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_lo
 
 TEST_CASE("visit_nn nbrs sums all 2*ndims neighbours (3D constant field)", "[hot_loop]") {
     Lattice<double> l{{4, 4, 4}, /*fill=*/3.5};
-    std::size_t     visited = 0;
-    double          max_err = 0.0;
+    std::size_t visited = 0;
+    double max_err      = 0.0;
 
     visit_nn<double>(l, [&](std::size_t /*i*/, double phi, double nbrs) {
         ++visited;

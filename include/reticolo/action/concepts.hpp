@@ -63,10 +63,9 @@ concept HasFusedKick =
 // Metropolis sweep uses this path with `visit_nn` (direct-stride neighbour reads,
 // vectorisation-friendly) when supported; otherwise it falls back to `ds_local`.
 template <class A, class F>
-concept HasDsLocalFromNbrs =
-    LocalAction<A, F> && requires(A const& a, F phi, F new_v, F nbrs) {
-        { a.ds_local_from_nbrs(phi, new_v, nbrs) } -> std::convertible_to<double>;
-    };
+concept HasDsLocalFromNbrs = LocalAction<A, F> && requires(A const& a, F phi, F new_v, F nbrs) {
+    { a.ds_local_from_nbrs(phi, new_v, nbrs) } -> std::convertible_to<double>;
+};
 
 // Refinement: action provides its own Metropolis proposal kernel. Selected at
 // updater instantiation via `if constexpr`; the fallback is a Gaussian proposal.

@@ -37,8 +37,8 @@ namespace reticolo::alg::integ {
 namespace detail {
 
 template <class A, class F>
-[[gnu::always_inline]] inline void kick_(A const& action, Lattice<F>& field, Lattice<F>& mom,
-                                         Lattice<F>& force, double k_dt) noexcept {
+[[gnu::always_inline]] inline void kick_(
+    A const& action, Lattice<F>& field, Lattice<F>& mom, Lattice<F>& force, double k_dt) noexcept {
     if constexpr (action::HasFusedKick<A, F>) {
         action.compute_force_and_kick(field, mom, static_cast<F>(k_dt));
     } else {
@@ -50,8 +50,8 @@ template <class A, class F>
 }
 
 template <class F>
-[[gnu::always_inline]] inline void drift_(Lattice<F>& field, Lattice<F> const& mom,
-                                          double c_dt) noexcept {
+[[gnu::always_inline]] inline void
+drift_(Lattice<F>& field, Lattice<F> const& mom, double c_dt) noexcept {
     for (Site x : field.sites()) {
         field[x] += static_cast<F>(c_dt) * mom[x];
     }
@@ -78,8 +78,7 @@ struct Leapfrog {
         detail::kick_(action, field, mom, force, half_dt);
         for (int step = 0; step < n_md; ++step) {
             detail::drift_(field, mom, dt);
-            detail::kick_(action, field, mom, force,
-                          step + 1 < n_md ? dt : half_dt);
+            detail::kick_(action, field, mom, force, step + 1 < n_md ? dt : half_dt);
         }
     }
 };
@@ -118,8 +117,7 @@ struct Omelyan2 {
             detail::drift_(field, mom, dt_h);
             detail::kick_(action, field, mom, force, dt_mid);
             detail::drift_(field, mom, dt_h);
-            detail::kick_(action, field, mom, force,
-                          step + 1 < n_md ? dt_2lam : dt_lam);
+            detail::kick_(action, field, mom, force, step + 1 < n_md ? dt_2lam : dt_lam);
         }
     }
 };
@@ -171,8 +169,7 @@ struct Omelyan4 {
             detail::drift_(field, mom, dt_mu);
             detail::kick_(action, field, mom, force, dt_lam);
             detail::drift_(field, mom, dt_theta);
-            detail::kick_(action, field, mom, force,
-                          step + 1 < n_md ? dt_2rho : dt_rho);
+            detail::kick_(action, field, mom, force, step + 1 < n_md ? dt_2rho : dt_rho);
         }
     }
 };

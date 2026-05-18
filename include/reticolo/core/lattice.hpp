@@ -23,8 +23,7 @@ public:
         : idx_{Indexing::acquire(std::move(shape))}, data_(idx_->nsites(), T{}) {}
 
     Lattice(SizeVec shape, T fill)
-        : idx_{Indexing::acquire(std::move(shape))},
-          data_(idx_->nsites(), std::move(fill)) {}
+        : idx_{Indexing::acquire(std::move(shape))}, data_(idx_->nsites(), std::move(fill)) {}
 
     // Sibling-lattice constructors: reuse an existing Indexing
     // (the HMC pattern — mom, force, old_field share the field's topology).
@@ -41,16 +40,16 @@ public:
     Lattice& operator=(Lattice&&) noexcept = default;
     ~Lattice()                             = default;
 
-    [[nodiscard]] T&       operator[](Site s) noexcept { return data_[s.value()]; }
+    [[nodiscard]] T& operator[](Site s) noexcept { return data_[s.value()]; }
     [[nodiscard]] T const& operator[](Site s) const noexcept { return data_[s.value()]; }
 
-    [[nodiscard]] Site   next(Site s, std::size_t mu) const noexcept { return idx_->next(s, mu); }
-    [[nodiscard]] Site   prev(Site s, std::size_t mu) const noexcept { return idx_->prev(s, mu); }
+    [[nodiscard]] Site next(Site s, std::size_t mu) const noexcept { return idx_->next(s, mu); }
+    [[nodiscard]] Site prev(Site s, std::size_t mu) const noexcept { return idx_->prev(s, mu); }
     [[nodiscard]] Parity parity_of(Site s) const noexcept { return idx_->parity_of(s); }
 
     [[nodiscard]] SizeVec const& shape() const noexcept { return idx_->shape(); }
-    [[nodiscard]] std::size_t    ndims() const noexcept { return idx_->ndims(); }
-    [[nodiscard]] std::size_t    nsites() const noexcept { return idx_->nsites(); }
+    [[nodiscard]] std::size_t ndims() const noexcept { return idx_->ndims(); }
+    [[nodiscard]] std::size_t nsites() const noexcept { return idx_->nsites(); }
 
     [[nodiscard]] auto sites() const noexcept {
         return std::views::iota(std::size_t{0}, nsites()) |
@@ -59,7 +58,7 @@ public:
     [[nodiscard]] std::span<Site const> even_sites() const noexcept { return idx_->even_sites(); }
     [[nodiscard]] std::span<Site const> odd_sites() const noexcept { return idx_->odd_sites(); }
 
-    [[nodiscard]] T*       data() noexcept { return data_.data(); }
+    [[nodiscard]] T* data() noexcept { return data_.data(); }
     [[nodiscard]] T const* data() const noexcept { return data_.data(); }
 
     [[nodiscard]] auto begin() noexcept { return data_.begin(); }
@@ -76,7 +75,7 @@ public:
 
 private:
     std::shared_ptr<Indexing const> idx_;
-    std::vector<T>                  data_;
+    std::vector<T> data_;
 };
 
 }  // namespace reticolo
