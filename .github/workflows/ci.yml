@@ -121,6 +121,12 @@ jobs:
       - name: configure
         run: cmake --preset linux-clang
 
+      # Sleef generates <sleef.h> at build time, not configure time. Build the
+      # sleef target so the umbrella TU's `#include <sleef.h>` resolves when
+      # clang-tidy parses it stand-alone.
+      - name: build sleef header
+        run: cmake --build build/linux-clang --target sleef
+
       - name: tidy
         run: |
           shopt -s globstar nullglob

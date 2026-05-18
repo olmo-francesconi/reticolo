@@ -130,10 +130,10 @@ int main(int argc, char** argv) {
     }
 
     auto hot_start_field = [](Lattice<std::complex<double>>& phi, FastRng& rng, double sigma) {
-        auto* p              = phi.data();
+        auto* data           = phi.data();
         std::size_t const ns = phi.nsites();
         for (std::size_t i = 0; i < ns; ++i) {
-            p[i] = {sigma * rng.normal(), sigma * rng.normal()};
+            data[i] = {sigma * rng.normal(), sigma * rng.normal()};
         }
     };
 

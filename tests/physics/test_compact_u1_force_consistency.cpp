@@ -40,7 +40,7 @@ TEST_CASE("CompactU1: ds_local matches finite difference of s_full", "[physics][
 
     for (std::size_t trial = 0; trial < 20; ++trial) {
         Site const x     = Site{rng.uniform_int(links.nsites())};
-        std::size_t mu   = static_cast<std::size_t>(rng.uniform_int(links.ndims()));
+        std::size_t mu   = rng.uniform_int(links.ndims());
         double const old = links(x, mu);
         double const nv  = old + rng.normal();
 
@@ -70,7 +70,7 @@ TEST_CASE("CompactU1: compute_force matches central finite difference of s_full"
 
     for (std::size_t trial = 0; trial < 25; ++trial) {
         Site const x     = Site{rng.uniform_int(links.nsites())};
-        std::size_t mu   = static_cast<std::size_t>(rng.uniform_int(links.ndims()));
+        std::size_t mu   = rng.uniform_int(links.ndims());
         double const old = links(x, mu);
 
         links(x, mu)        = old + k_eps;
