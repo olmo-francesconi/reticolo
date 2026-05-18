@@ -14,15 +14,17 @@ namespace reticolo {
 // =============================================================================
 //  Link field on a hypercubic (periodic) lattice. Each site x owns `ndim`
 //  outgoing links theta_mu(x), mu = 0..ndim-1, where theta_mu(x) is the
-//  oriented link x -> x + mu_hat. Every link in the lattice appears exactly
-//  once.
+//  oriented link x -> x + mu_hat.
 //
-//  Storage is a single flat std::vector<T> of size `ndim * nsites`, indexed
-//  site-major:
-//        flat = ndim * site_index(x) + mu
-//  so a site's ndim outgoing links are contiguous. The shape-pooled
-//  Indexing is shared with the sibling site `Lattice<F>` of the same shape
-//  (e.g. field, momentum, force in HMC share one neighbour table).
+//  Storage is **direction-major**: a single flat std::vector<T> of size
+//  `ndim * nsites`, with each direction's links forming a contiguous nsites
+//  block. Indexing is
+//        flat = mu * nsites + site_index(x)
+//  so for a fixed direction mu the per-site array `mu_data(mu)` is a plain
+//  stride-1 buffer — same memory pattern as the sibling site `Lattice<T>`,
+//  which lets the same bulk-vs-slab autovectorisation pattern apply
+//  plane-by-plane in the gauge action hot loops. The pooled Indexing is
+//  shared with any sibling `Lattice<F>` of the same shape (e.g. force, mom).
 // =============================================================================
 
 template <class T>
@@ -51,10 +53,18 @@ public:
     ~LinkLattice()                                 = default;
 
     [[nodiscard]] T& operator()(Site s, std::size_t mu) noexcept {
-        return data_[(idx_->ndims() * s.value()) + mu];
+        return data_[(mu * idx_->nsites()) + s.value()];
     }
     [[nodiscard]] T const& operator()(Site s, std::size_t mu) const noexcept {
-        return data_[(idx_->ndims() * s.value()) + mu];
+        return data_[(mu * idx_->nsites()) + s.value()];
+    }
+
+    // Pointer to the contiguous direction-mu block (length nsites).
+    [[nodiscard]] T* mu_data(std::size_t mu) noexcept {
+        return data_.data() + (mu * idx_->nsites());
+    }
+    [[nodiscard]] T const* mu_data(std::size_t mu) const noexcept {
+        return data_.data() + (mu * idx_->nsites());
     }
 
     [[nodiscard]] Site next(Site s, std::size_t mu) const noexcept { return idx_->next(s, mu); }

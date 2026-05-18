@@ -3,6 +3,7 @@
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/site.hpp>
+#include <reticolo/gauge/hot_loop.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -11,8 +12,8 @@
 namespace reticolo::gauge::action {
 
 // =============================================================================
-//  Compact U(1) gauge theory with the Wilson plaquette action, written in
-//  the paper convention of Langfeld-Lucini-Pellegrini-Rago (arxiv:1509.08391):
+//  Compact U(1) gauge theory with the Wilson plaquette action, in the paper
+//  convention of Langfeld-Lucini-Pellegrini-Rago (arxiv:1509.08391):
 //
 //      S = beta * sum_x  sum_{mu<nu}  cos( theta_{mu,nu}(x) )
 //
@@ -22,28 +23,17 @@ namespace reticolo::gauge::action {
 //                        - theta_nu(x)
 //
 //  Boltzmann weight in this convention is exp(+S) (NOT exp(-S)). The gauge
-//  HMC uses Hamiltonian H = K - S so that exp(-H) = exp(-K)*exp(+S). All
-//  downstream sign conventions (compute_force, Metropolis acceptance,
-//  WindowedAction) follow from this.
+//  HMC uses Hamiltonian H = K - S so that exp(-H) = exp(-K) * exp(+S).
+//  `compute_force` returns +dS/dtheta; the integrator kick is
+//  `mom += k_dt * compute_force(field)`. `LinkMetropolis` accepts moves with
+//  `ds >= 0 || rng < exp(ds)` (favours moves that increase S).
 //
-//  Force on each link (HMC drift `mom += k_dt * F` with F = +dS/dtheta):
-//      F_mu(x)      <-  -beta * sin(theta_{mu,nu}(x))      (forward plaq)
-//      F_nu(x+mu)   <-  -beta * sin(theta_{mu,nu}(x))
-//      F_mu(x+nu)   <-  +beta * sin(theta_{mu,nu}(x))
-//      F_nu(x)      <-  +beta * sin(theta_{mu,nu}(x))
-//
-//  (The numerical values coincide with the previous "1 - cos" convention's
-//  -dS/dtheta — the two sign flips cancel — so the plaquette-centric scatter
-//  code is unchanged; only the semantic interpretation differs.)
-//
-//  s_full and the force kernels are plaquette-centric: each plaquette is
-//  evaluated exactly once and scatters its (beta * sin) contribution to the
-//  four boundary links. Halves the trig-call count vs a link-centric loop.
-//
-//  s_local / ds_local on the Metropolis path return paper-convention values
-//  (sums of `cos`, not `1 - cos`). The LinkMetropolis acceptance is
-//  `accept if ds >= 0 or rng < exp(ds)` (paper convention favours moves
-//  that increase S).
+//  Storage layout: `LinkLattice<T>` is direction-major (each direction is a
+//  contiguous nsites-element block). The hot loops here iterate one
+//  plaquette plane (mu, nu) at a time via `gauge::detail::visit_plane`,
+//  which peels wrap slabs off the boundary so the bulk body sees stride-1
+//  reads and writes through fixed `(s_pmu - s, s_pnu - s)` offsets — clean
+//  autovectorisation territory.
 // =============================================================================
 
 template <class T = double>
@@ -93,91 +83,77 @@ struct CompactU1 {
             Site const x_mnu_pmu = l.next(x_mnu, mu);
             T const fwd_old      = plaq_angle(l, x, mu, nu);
             T const bwd_old      = l(x_mnu, mu) + l(x_mnu_pmu, nu) - l(x, mu) - l(x_mnu, nu);
-            // dS = beta * sum [cos(new) - cos(old)] over plaquettes touching the link.
             accum += std::cos(fwd_old + dtheta) - std::cos(fwd_old);
             accum += std::cos(bwd_old - dtheta) - std::cos(bwd_old);
         }
         return beta * accum;
     }
 
-    // ---------- HasLinkSEff — plaquette-centric hot loop ----------
+    // ---------- HasLinkSEff — plane-by-plane on direction-major blocks ------
 
     [[nodiscard]] T s_full(LinkLattice<T> const& l) const noexcept {
-        Indexing const& idx          = l.indexing_ref();
-        Site::value_type const* next = idx.next_data();
-        T const* tp                  = l.data();
-        std::size_t const ns         = l.nsites();
-        std::size_t const d          = l.ndims();
-        T accum                      = T{0};
-        for (std::size_t s = 0; s < ns; ++s) {
-            std::size_t const base_s = s * d;
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                std::size_t const base_pmu = next[base_s + mu] * d;
-                T const t_mu_x             = tp[base_s + mu];
-                for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                    std::size_t const base_pnu = next[base_s + nu] * d;
-                    T const plaq = t_mu_x + tp[base_pmu + nu] - tp[base_pnu + mu] - tp[base_s + nu];
-                    accum += std::cos(plaq);
-                }
+        std::size_t const d = l.ndims();
+        T accum             = T{0};
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            T const* mb = l.mu_data(mu);
+            for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                T const* nb = l.mu_data(nu);
+                detail::visit_plane(
+                    l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                        T const plaq = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                        accum += std::cos(plaq);
+                    });
             }
         }
         return beta * accum;
     }
 
-    // ---------- HasLinkForce — plaquette-centric scatter ----------
+    // ---------- HasLinkForce — plaquette-centric scatter -------------------
 
     void compute_force(LinkLattice<T> const& l, LinkLattice<T>& force) const noexcept {
         std::fill(force.begin(), force.end(), T{0});
-        Indexing const& idx          = l.indexing_ref();
-        Site::value_type const* next = idx.next_data();
-        T const* tp                  = l.data();
-        T* fp                        = force.data();
-        std::size_t const ns         = l.nsites();
-        std::size_t const d          = l.ndims();
-        T const b                    = beta;
-        for (std::size_t s = 0; s < ns; ++s) {
-            std::size_t const base_s = s * d;
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                std::size_t const base_pmu = next[base_s + mu] * d;
-                T const t_mu_x             = tp[base_s + mu];
-                for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                    std::size_t const base_pnu = next[base_s + nu] * d;
-                    T const plaq = t_mu_x + tp[base_pmu + nu] - tp[base_pnu + mu] - tp[base_s + nu];
-                    T const c    = -b * std::sin(plaq);
-                    fp[base_s + mu] += c;
-                    fp[base_pmu + nu] += c;
-                    fp[base_pnu + mu] -= c;
-                    fp[base_s + nu] -= c;
-                }
+        std::size_t const d = l.ndims();
+        T const b           = beta;
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            T const* mb  = l.mu_data(mu);
+            T* const fmu = force.mu_data(mu);
+            for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                T const* nb  = l.mu_data(nu);
+                T* const fnu = force.mu_data(nu);
+                detail::visit_plane(
+                    l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                        T const plaq = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                        T const c    = -b * std::sin(plaq);
+                        fmu[s] += c;
+                        fnu[s_pmu] += c;
+                        fmu[s_pnu] -= c;
+                        fnu[s] -= c;
+                    });
             }
         }
     }
 
-    // ---------- HasLinkFusedKick — same scatter into mom ----------
+    // ---------- HasLinkFusedKick — scatter directly into mom ---------------
 
     void
     compute_force_and_kick(LinkLattice<T> const& l, LinkLattice<T>& mom, T k_dt) const noexcept {
-        Indexing const& idx          = l.indexing_ref();
-        Site::value_type const* next = idx.next_data();
-        T const* tp                  = l.data();
-        T* mp                        = mom.data();
-        std::size_t const ns         = l.nsites();
-        std::size_t const d          = l.ndims();
-        T const c0                   = -k_dt * beta;
-        for (std::size_t s = 0; s < ns; ++s) {
-            std::size_t const base_s = s * d;
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                std::size_t const base_pmu = next[base_s + mu] * d;
-                T const t_mu_x             = tp[base_s + mu];
-                for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                    std::size_t const base_pnu = next[base_s + nu] * d;
-                    T const plaq = t_mu_x + tp[base_pmu + nu] - tp[base_pnu + mu] - tp[base_s + nu];
-                    T const c    = c0 * std::sin(plaq);
-                    mp[base_s + mu] += c;
-                    mp[base_pmu + nu] += c;
-                    mp[base_pnu + mu] -= c;
-                    mp[base_s + nu] -= c;
-                }
+        std::size_t const d = l.ndims();
+        T const c0          = -k_dt * beta;
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            T const* mb  = l.mu_data(mu);
+            T* const mmu = mom.mu_data(mu);
+            for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                T const* nb  = l.mu_data(nu);
+                T* const mnu = mom.mu_data(nu);
+                detail::visit_plane(
+                    l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                        T const plaq = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                        T const c    = c0 * std::sin(plaq);
+                        mmu[s] += c;
+                        mnu[s_pmu] += c;
+                        mmu[s_pnu] -= c;
+                        mnu[s] -= c;
+                    });
             }
         }
     }
