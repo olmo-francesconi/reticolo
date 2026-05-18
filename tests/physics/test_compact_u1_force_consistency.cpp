@@ -1,0 +1,130 @@
+#include <reticolo/core/link_lattice.hpp>
+#include <reticolo/core/rng.hpp>
+#include <reticolo/core/site.hpp>
+#include <reticolo/gauge/builtins/compact_u1.hpp>
+#include <reticolo/gauge/concepts.hpp>
+
+#include <cmath>
+#include <cstddef>
+
+#include <catch2/catch_test_macros.hpp>
+
+using reticolo::FastRng;
+using reticolo::LinkLattice;
+using reticolo::Site;
+using reticolo::gauge::HasLinkForce;
+using reticolo::gauge::HasLinkFusedKick;
+using reticolo::gauge::HasLinkSEff;
+using reticolo::gauge::LinkLocalAction;
+using reticolo::gauge::action::CompactU1;
+
+static_assert(LinkLocalAction<CompactU1<double>, double>);
+static_assert(HasLinkSEff<CompactU1<double>, double>);
+static_assert(HasLinkForce<CompactU1<double>, double>);
+static_assert(HasLinkFusedKick<CompactU1<double>, double>);
+
+template <class T>
+static void randomize(LinkLattice<T>& l, FastRng& rng) {
+    T* const d          = l.data();
+    std::size_t const n = l.nlinks();
+    for (std::size_t i = 0; i < n; ++i) {
+        d[i] = static_cast<T>(rng.normal());
+    }
+}
+
+TEST_CASE("CompactU1: ds_local matches finite difference of s_full", "[physics][u1]") {
+    CompactU1<double> const action{.beta = 1.0};
+    LinkLattice<double> links{{4, 4, 4, 4}};
+    FastRng rng{1234};
+    randomize(links, rng);
+
+    for (std::size_t trial = 0; trial < 20; ++trial) {
+        Site const x     = Site{rng.uniform_int(links.nsites())};
+        std::size_t mu   = static_cast<std::size_t>(rng.uniform_int(links.ndims()));
+        double const old = links(x, mu);
+        double const nv  = old + rng.normal();
+
+        double const ds_predicted = action.ds_local(links, x, mu, nv);
+
+        double const s_old = action.s_full(links);
+        links(x, mu)       = nv;
+        double const s_new = action.s_full(links);
+        links(x, mu)       = old;
+
+        double const ds_measured = s_new - s_old;
+        REQUIRE(std::abs(ds_predicted - ds_measured) < 1e-9);
+    }
+}
+
+TEST_CASE("CompactU1: compute_force matches central finite difference of s_full", "[physics][u1]") {
+    CompactU1<double> const action{.beta = 1.0};
+    LinkLattice<double> links{{4, 4, 4, 4}};
+    LinkLattice<double> force{links.indexing()};
+    FastRng rng{56789};
+    randomize(links, rng);
+
+    action.compute_force(links, force);
+
+    constexpr double k_eps = 1e-4;
+    constexpr double k_tol = 1e-7;
+
+    for (std::size_t trial = 0; trial < 25; ++trial) {
+        Site const x     = Site{rng.uniform_int(links.nsites())};
+        std::size_t mu   = static_cast<std::size_t>(rng.uniform_int(links.ndims()));
+        double const old = links(x, mu);
+
+        links(x, mu)        = old + k_eps;
+        double const s_plus = action.s_full(links);
+
+        links(x, mu)         = old - k_eps;
+        double const s_minus = action.s_full(links);
+
+        links(x, mu) = old;
+
+        // Paper convention: compute_force returns +dS/dtheta.
+        double const grad_numeric    = (s_plus - s_minus) / (2.0 * k_eps);
+        double const force_predicted = force(x, mu);
+
+        REQUIRE(std::abs(force_predicted - grad_numeric) < k_tol);
+    }
+}
+
+TEST_CASE("CompactU1: compute_force_and_kick matches compute_force + manual kick",
+          "[physics][u1]") {
+    CompactU1<double> const action{.beta = 1.5};
+    LinkLattice<double> links{{4, 4, 4, 4}};
+    LinkLattice<double> mom_a{links.indexing(), 0.7};
+    LinkLattice<double> mom_b{links.indexing(), 0.7};
+    LinkLattice<double> force{links.indexing()};
+    FastRng rng{11};
+    randomize(links, rng);
+
+    constexpr double k_dt = 0.123;
+
+    action.compute_force(links, force);
+    double* const ma       = mom_a.data();
+    double const* const fp = force.data();
+    for (std::size_t i = 0; i < mom_a.nlinks(); ++i) {
+        ma[i] += k_dt * fp[i];
+    }
+
+    action.compute_force_and_kick(links, mom_b, k_dt);
+
+    double const* const mb = mom_b.data();
+    for (std::size_t i = 0; i < mom_a.nlinks(); ++i) {
+        REQUIRE(std::abs(ma[i] - mb[i]) < 1e-12);
+    }
+}
+
+TEST_CASE("CompactU1: aligned plaquette config (all theta=0) has S = beta * n_plaq",
+          "[physics][u1]") {
+    // Paper convention: S = beta * sum cos(theta_p). With all theta=0, every
+    // plaquette contributes 1.
+    constexpr double k_beta = 2.7;
+    CompactU1<double> const action{.beta = k_beta};
+    LinkLattice<double> links{{6, 6, 6}, 0.0};
+    std::size_t const d      = links.ndims();
+    std::size_t const n_plaq = (d * (d - 1) / 2) * links.nsites();
+    double const expected    = k_beta * static_cast<double>(n_plaq);
+    REQUIRE(std::abs(action.s_full(links) - expected) < 1e-9);
+}

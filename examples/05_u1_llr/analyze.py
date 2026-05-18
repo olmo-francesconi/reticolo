@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
-"""Compare HMC histogram of S with the LLR-reconstructed ln rho(S), and
-plot the a_n convergence history per replica.
+"""Compare HMC histogram of S with the LLR-reconstructed ln rho(S) for
+compact U(1), plus a_n convergence panel.
 
-Top row, one column per kappa:
-  ln rho(S) — HMC histogram (markers) vs LLR reconstruction (line),
-  aligned at the HMC peak.
-
-Bottom row, one column per kappa:
-  a_n vs iteration for each replica through NR warm-up + RM phase.
-  Vertical dashed line marks the NR -> RM transition.
+Per-beta panel layout mirrors example 04 (phi^4).
 """
 from __future__ import annotations
 
@@ -18,7 +12,6 @@ from pathlib import Path
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import cm
 
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
@@ -39,60 +32,75 @@ def load_llr(path):
         a_hist = np.empty((n_rep, n_nr + n_rm), dtype=float)
         for n in range(n_rep):
             a = np.asarray(f[f"/replica_{n:03d}/a"][:], dtype=float)
-            # The series length should equal n_nr + n_rm; be defensive anyway.
             m = min(len(a), n_nr + n_rm)
             a_hist[n, :m] = a[:m]
             if m < n_nr + n_rm:
                 a_hist[n, m:] = a[-1]
-    return {"E_n": e_n, "a_hist": a_hist, "n_nr": n_nr, "n_rm": n_rm, "delta": delta}
+        size = int(f["/vars"].attrs["size"])
+        ndim = int(f["/vars"].attrs["ndim"])
+        beta = float(f["/vars"].attrs["beta"])
+    # Per-plaquette intensive variable, beta-free:
+    #     e_p = (1 - cos theta_p)_avg = S / (beta * 6 V)
+    # where V = L^ndim is the lattice volume (sites) and the 6 comes from
+    # ndim*(ndim-1)/2 plaquette planes in 4D. Our internal S already has beta
+    # baked in (S = beta * sum_p (1 - cos theta_p)), so we divide by both.
+    n_plaq = (ndim * (ndim - 1) // 2) * (size ** ndim)   # = 6V in 4D
+    scale  = beta * n_plaq
+    return {"E_n": e_n, "a_hist": a_hist, "n_nr": n_nr, "n_rm": n_rm,
+            "delta": delta, "scale": scale}
 
 
 def reconstruct_log_rho(e_n, a_final):
-    """Reconstruct ln rho at each window centre E_n via the trapezoidal rule.
-    Continuity at the boundary E_n + delta/2 between adjacent piecewise
-    exponentials gives ln rho(E_{n+1}) = ln rho(E_n) + (a_n + a_{n+1}) * delta / 2.
+    """Reconstruct ln rho_natural at each window centre E_n via the trapezoidal
+    rule.
+
+    Paper convention: a_n = d ln g/dS at E_n, where g is the *bare* density of
+    states. The natural Boltzmann distribution is rho_natural(S) = g(S)*exp(+S),
+    so ln rho_natural has slope (1 + a_n) in S. Integrating that slope over the
+    grid (and using continuity between adjacent piecewise-exponential windows)
+    gives the trapezoid sum below.
     """
     log_rho = np.zeros_like(e_n)
     for i in range(1, len(e_n)):
-        log_rho[i] = log_rho[i - 1] + 0.5 * (a_final[i - 1] + a_final[i]) * (e_n[i] - e_n[i - 1])
+        slope = 0.5 * ((1.0 + a_final[i - 1]) + (1.0 + a_final[i]))
+        log_rho[i] = log_rho[i - 1] + slope * (e_n[i] - e_n[i - 1])
     return log_rho
 
 
 def piecewise_log_rho(e_n, a_final, log_rho, delta, n_per_window=16):
-    """Build a finely-sampled piecewise-exponential reconstruction.
+    """Finely-sampled piecewise-exponential reconstruction of ln rho_natural.
 
-    Within each window [E_n - delta/2, E_n + delta/2] the DoS is
-        rho(E) = rho(E_n) * exp(a_n * (E - E_n))
-    i.e. a straight line of slope a_n in log space. Adjacent segments share
-    their endpoint by construction of `reconstruct_log_rho` (continuity).
+    Inside each window the local model is
+        rho_natural(S) = rho_natural(E_n) * exp((1 + a_n) * (S - E_n))
+    (slope 1 + a_n in log space — same `+1` as `reconstruct_log_rho`).
     """
     xs, ys = [], []
     half = 0.5 * delta
     for n in range(len(e_n)):
         seg_x = np.linspace(e_n[n] - half, e_n[n] + half, n_per_window)
-        seg_y = log_rho[n] + a_final[n] * (seg_x - e_n[n])
+        seg_y = log_rho[n] + (1.0 + a_final[n]) * (seg_x - e_n[n])
         xs.append(seg_x)
         ys.append(seg_y)
     return np.concatenate(xs), np.concatenate(ys)
 
 
-def kappa_of(path):
-    return float(path.stem.split("kappa")[-1])
+def beta_of(path):
+    return float(path.stem.split("beta")[-1])
 
 
 def main():
-    hmc_files = sorted(RESULTS.glob("hmc_kappa*.h5"))
+    hmc_files = sorted(RESULTS.glob("hmc_beta*.h5"))
     if not hmc_files:
         print(f"no inputs in {RESULTS}; run run.sh first", file=sys.stderr)
         return 1
 
     pairs = []
     for h in hmc_files:
-        suffix = h.stem.split("kappa")[-1]
-        l = RESULTS / f"llr_kappa{suffix}.h5"
+        suffix = h.stem.split("beta")[-1]
+        l = RESULTS / f"llr_beta{suffix}.h5"
         if not l.exists():
             continue
-        pairs.append((kappa_of(h), h, l))
+        pairs.append((beta_of(h), h, l))
     pairs.sort(key=lambda p: p[0])
 
     n_cols = len(pairs)
@@ -100,7 +108,7 @@ def main():
         4, n_cols, figsize=(4.5 * n_cols, 14.0), constrained_layout=True, squeeze=False
     )
 
-    for col, (kappa, hmc_path, llr_path) in enumerate(pairs):
+    for col, (beta, hmc_path, llr_path) in enumerate(pairs):
         s_chain = load_hmc(hmc_path)
         llr = load_llr(llr_path)
         e_n = llr["E_n"]
@@ -115,6 +123,7 @@ def main():
         bin_edges = np.concatenate([[e_n[0] - delta / 2.0], e_n + delta / 2.0])
         raw_counts, _ = np.histogram(s_chain, bins=bin_edges)
         n_total = len(s_chain)
+        # bin width = delta everywhere (uniform LLR grid).
         counts = raw_counts / (n_total * delta)
         # Naive Poisson sigma(N) ~ sqrt(N) per bin. Under-estimates the true
         # uncertainty because HMC samples are autocorrelated.
@@ -129,77 +138,105 @@ def main():
         peak_idx = int(np.nanargmax(log_rho_hmc))
         peak_s = centres[peak_idx]
         peak_log_hmc = log_rho_hmc[peak_idx]
-        # Same grid → no interp; align at the HMC peak index directly.
+        # Both HMC and LLR are now evaluated on the same e_n grid — align at
+        # the same index (HMC peak) directly, no interpolation needed.
         log_rho_llr_shifted = log_rho_llr + (peak_log_hmc - log_rho_llr[peak_idx])
 
         # Piecewise-exponential reconstruction: one exp per LLR window.
         pw_x, pw_log = piecewise_log_rho(e_n, a_final, log_rho_llr_shifted, delta)
 
-        # ---------- top: ln rho HMC vs LLR ----------
+        # ---- Rescale x to the mean plaquette (paper convention,
+        #      S = beta * sum cos theta_p):
+        #          <cos theta_p> = S / (beta * 6 V)
+        #      Density picks up the Jacobian factor `scale`; unit-integral
+        #      is preserved by the trapezoid normalisation below.
+        scale = llr["scale"]   # = beta * 6V
+        centres = centres / scale
+        e_n = e_n / scale
+        pw_x = pw_x / scale
+        peak_s = peak_s / scale
+        counts = counts * scale
+        counts_err = counts_err * scale
+        # No reordering needed — the original action grid is monotone.
+        e_n_plot = e_n
+        centres_plot = centres
+        log_rho_llr_plot = log_rho_llr_shifted
+        counts_plot = counts
+        counts_err_plot = counts_err
+        log_rho_hmc_plot = log_rho_hmc
+        log_rho_hmc_err_plot = log_rho_hmc_err
+        mask_plot = mask
+
         ax = axes[0, col]
-        ax.errorbar(centres[mask], log_rho_hmc[mask], yerr=log_rho_hmc_err[mask],
+        ax.errorbar(centres_plot[mask_plot], log_rho_hmc_plot[mask_plot],
+                    yerr=log_rho_hmc_err_plot[mask_plot],
                     fmt="x", markersize=4, markeredgewidth=0.8,
                     elinewidth=0.8, capsize=2,
                     color="C0", label="HMC histogram")
         ax.plot(pw_x, pw_log, "-", color="C3", linewidth=0.7,
                 label="LLR (piecewise exp)")
-        ax.plot(e_n, log_rho_llr_shifted, "x", color="C3", markersize=4,
+        ax.plot(e_n_plot, log_rho_llr_plot, "x", color="C3", markersize=4,
                 markeredgewidth=0.8)
         ax.axvline(peak_s, color="0.7", linewidth=0.8, linestyle="--")
-        ax.set_title(rf"$\kappa = {kappa:.3f}$")
-        ax.set_xlabel(r"$S$")
-        ax.set_ylabel(r"$\ln \rho(S)$ + const.")
+        ax.set_title(rf"$\beta = {beta:.3f}$")
+        ax.set_xlabel(r"$\langle \cos\theta_p\rangle = S / (\beta\, 6 V)$")
+        ax.set_ylabel(r"$\ln \rho$ + const.")
         ax.legend(loc="best", fontsize=8)
 
-        # ---------- middle: linear-scale rho(S), unit integral ----------
+        # Linear-scale rho(S), both normalised to unit integral.
         ax = axes[1, col]
         pw_log_shifted = pw_log - pw_log.max()
         rho_pw_un = np.exp(pw_log_shifted)
         z_llr = float(np.trapezoid(rho_pw_un, pw_x))
         rho_pw = rho_pw_un / z_llr if z_llr > 0 else rho_pw_un
+        # Marker values at the window centres on the same normalisation.
         rho_centre = np.exp(log_rho_llr_shifted - pw_log.max())
         rho_centre = rho_centre / z_llr if z_llr > 0 else rho_centre
 
-        ax.errorbar(centres, counts, yerr=counts_err, fmt="x", markersize=4,
-                    markeredgewidth=0.8, elinewidth=0.8, capsize=2,
+        # No re-sort needed.
+        rho_centre_plot = rho_centre
+        ax.errorbar(centres_plot, counts_plot, yerr=counts_err_plot,
+                    fmt="x", markersize=4, markeredgewidth=0.8,
+                    elinewidth=0.8, capsize=2,
                     color="C0", label="HMC histogram")
         ax.plot(pw_x, rho_pw, "-", color="C3", linewidth=0.7,
                 label="LLR (piecewise exp)")
-        ax.plot(e_n, rho_centre, "x", color="C3", markersize=4,
+        ax.plot(e_n_plot, rho_centre_plot, "x", color="C3", markersize=4,
                 markeredgewidth=0.8)
         ax.axvline(peak_s, color="0.7", linewidth=0.8, linestyle="--")
-        ax.set_xlabel(r"$S$")
-        ax.set_ylabel(r"$\rho(S)$  ($\int \rho\, dS = 1$)")
+        ax.set_xlabel(r"$\langle \cos\theta_p\rangle = S / (\beta\, 6 V)$")
+        ax.set_ylabel(r"$\rho$  (unit integral)")
         ax.legend(loc="best", fontsize=8)
 
-        # ---------- bottom: a_n history per replica ----------
         ax = axes[2, col]
         n_rep, n_iter = a_hist.shape
         iters = np.arange(n_iter)
         cmap = plt.get_cmap("viridis", n_rep)
         for n in range(n_rep):
+            show_label = (n_rep <= 8 or n % max(1, n_rep // 6) == 0)
             ax.plot(iters, a_hist[n], linewidth=1.0, color=cmap(n),
-                    label=f"E_n={e_n[n]:.1f}" if (n_rep <= 8 or n % max(1, n_rep // 6) == 0) else None)
+                    label=f"$e_p$={e_n[n]:.3f}" if show_label else None)
         ax.axvline(llr["n_nr"] - 0.5, color="0.4", linewidth=0.8, linestyle="--",
                    label="NR → RM")
-        ax.axhline(0.0, color="0.8", linewidth=0.8)
+        ax.axhline(-1.0, color="0.8", linewidth=0.8)
         ax.set_xlabel("iteration (NR then RM)")
         ax.set_ylabel(r"$a_n$")
         ax.set_title(r"$a_n$ convergence per replica")
         ax.legend(loc="best", fontsize=7, ncol=2)
 
-        # a_n vs E_n: the converged LLR slope as a function of the window
-        # centre. Energy-convention `a* = d ln g/dS - 1`, so at any natural
-        # peak a* = 0; broken-symmetry / metastable regions show up as a
-        # plateau or sign change as a sweeps through the corresponding S.
+        # a_n vs E_n/(6V): the converged LLR slope as a function of the
+        # intensive plaquette variable. Paper-convention `a* = d ln g/dS`,
+        # so at any natural peak a* = -1; bulk first-order transitions show
+        # up as a slope-1 stretch where d ln g/dS sweeps through the
+        # metastable region between the two phases.
         ax = axes[3, col]
-        ax.plot(e_n, a_final, "o-", color="C2", markersize=4,
+        ax.plot(e_n_plot, a_final, "o-", color="C2", markersize=4,
                 linewidth=0.7, label=r"$a_n$ (LLR final)")
-        ax.axhline(0.0, color="0.6", linewidth=0.8, linestyle="--",
-                   label=r"$a = 0$ (natural peak)")
+        ax.axhline(-1.0, color="0.6", linewidth=0.8, linestyle="--",
+                   label=r"$a = -1$ (natural peak)")
         ax.axvline(peak_s, color="0.7", linewidth=0.8, linestyle="--")
-        ax.set_xlabel(r"$S$")
-        ax.set_ylabel(r"$a_n = d \ln g/dS - 1$")
+        ax.set_xlabel(r"$\langle \cos\theta_p\rangle = S / (\beta\, 6 V)$")
+        ax.set_ylabel(r"$a_n = d \ln g / dS$")
         ax.legend(loc="best", fontsize=8)
 
     out = HERE / "rho_hmc_vs_llr.pdf"

@@ -180,7 +180,7 @@ def main() -> int:
     ax_col.legend(fontsize=9)
 
     fig.tight_layout()
-    out = HERE / "binder.png"
+    out = HERE / "binder.pdf"
     fig.savefig(out, dpi=150)
     print(f"\nwrote {out}")
     return 0

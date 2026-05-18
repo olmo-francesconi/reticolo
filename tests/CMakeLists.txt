@@ -31,6 +31,8 @@ reticolo_add_test(test_log             unit/test_log.cpp)
 reticolo_add_test(test_observers       unit/test_observers.cpp)
 reticolo_add_test(test_obs_analysis    unit/test_obs_analysis.cpp)
 reticolo_add_test(test_phi4_force_consistency       physics/test_phi4_force_consistency.cpp)
+reticolo_add_test(test_compact_u1_force_consistency physics/test_compact_u1_force_consistency.cpp)
+reticolo_add_test(test_u1_hmc_reversibility         physics/test_u1_hmc_reversibility.cpp)
 reticolo_add_test(test_phi6_force_consistency       physics/test_phi6_force_consistency.cpp)
 reticolo_add_test(test_sine_gordon_force_consistency physics/test_sine_gordon_force_consistency.cpp)
 reticolo_add_test(test_xy_force_consistency         physics/test_xy_force_consistency.cpp)
@@ -69,4 +71,10 @@ if(RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS)
         ON_SIGMA_METROPOLIS_BINARY apps/test_on_sigma_metropolis_smoke.cpp)
     reticolo_add_app_smoke(test_on_sigma_wolff_smoke      on_sigma_wolff
         ON_SIGMA_WOLFF_BINARY      apps/test_on_sigma_wolff_smoke.cpp)
+    reticolo_add_app_smoke(test_u1_metropolis_smoke       u1_metropolis
+        U1_METROPOLIS_BINARY       apps/test_u1_metropolis_smoke.cpp)
+    reticolo_add_app_smoke(test_u1_hmc_smoke              u1_hmc
+        U1_HMC_BINARY              apps/test_u1_hmc_smoke.cpp)
+    reticolo_add_app_smoke(test_u1_llr_smoke              u1_llr
+        U1_LLR_BINARY              apps/test_u1_llr_smoke.cpp)
 endif()

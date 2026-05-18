@@ -161,9 +161,9 @@ def plot_rho_semilog(scenarios):
             ax.legend(fontsize=7.5, framealpha=0.9, loc="upper right")
     fig.suptitle("Autocorrelation function — best run per algorithm, both scenarios")
     fig.tight_layout()
-    fig.savefig(HERE / "rho_semilog.png", dpi=140)
+    fig.savefig(HERE / "rho_semilog.pdf", dpi=140)
     plt.close(fig)
-    print("wrote rho_semilog.png")
+    print("wrote rho_semilog.pdf")
 
 
 # -----------------------------------------------------------------------------
@@ -219,9 +219,9 @@ def plot_hmc_step_scan(scenarios):
     fig.suptitle(r"HMC tuning curves per scenario: $\tau_{\rm int}(\Sigma\phi^2)$ "
                  "(top) and acceptance (bottom) vs step size")
     fig.tight_layout()
-    fig.savefig(HERE / "hmc_step_scan.png", dpi=140)
+    fig.savefig(HERE / "hmc_step_scan.pdf", dpi=140)
     plt.close(fig)
-    print("wrote hmc_step_scan.png")
+    print("wrote hmc_step_scan.pdf")
 
 
 # -----------------------------------------------------------------------------
@@ -272,9 +272,9 @@ def plot_pareto(scenarios):
         ax.set_title(f"{name}: Pareto frontier per integrator")
     fig.suptitle("Cost per independent sample vs acceptance — the Pareto view")
     fig.tight_layout()
-    fig.savefig(HERE / "pareto.png", dpi=140)
+    fig.savefig(HERE / "pareto.pdf", dpi=140)
     plt.close(fig)
-    print("wrote pareto.png")
+    print("wrote pareto.pdf")
 
 
 # -----------------------------------------------------------------------------
@@ -318,9 +318,9 @@ def plot_metropolis_scan(scenarios):
         ax.set_title(f"{name} — acceptance")
     fig.suptitle("Metropolis tuning per scenario")
     fig.tight_layout()
-    fig.savefig(HERE / "metropolis_scan.png", dpi=140)
+    fig.savefig(HERE / "metropolis_scan.pdf", dpi=140)
     plt.close(fig)
-    print("wrote metropolis_scan.png")
+    print("wrote metropolis_scan.pdf")
 
 
 # -----------------------------------------------------------------------------
@@ -364,9 +364,9 @@ def plot_summary(scenarios):
                         f"{v:.0f}", ha="center", va="bottom", fontsize=9)
     fig.suptitle("Best per algorithm: independent samples per wall-second")
     fig.tight_layout()
-    fig.savefig(HERE / "summary_bar.png", dpi=140)
+    fig.savefig(HERE / "summary_bar.pdf", dpi=140)
     plt.close(fig)
-    print("wrote summary_bar.png")
+    print("wrote summary_bar.pdf")
 
 
 def main() -> None:
