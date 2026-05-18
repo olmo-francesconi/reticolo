@@ -6,6 +6,7 @@
 
 #include <complex>
 #include <cstddef>
+#include <optional>
 
 namespace reticolo::llr {
 
@@ -95,9 +96,9 @@ struct WindowedAction {
         if constexpr (k_complex) {
             // Combined: F_R + (a + (S_I - E_n)/delta^2) * F_I.
             base.compute_force(l, force);
-            scalar_t const s     = base.s_imag(l);
-            scalar_t const scale = a + ((s - E_n) / (delta * delta));
-            Lattice<T> imag_force{force.indexing()};
+            scalar_t const s       = base.s_imag(l);
+            scalar_t const scale   = a + ((s - E_n) / (delta * delta));
+            Lattice<T>& imag_force = imag_scratch_(force.indexing());
             base.compute_force_imag(l, imag_force);
             T* const fp         = force.data();
             T const* const ip   = imag_force.data();
@@ -123,9 +124,9 @@ struct WindowedAction {
         if constexpr (k_complex) {
             // Real-part kick (unscaled), then imag-part kick scaled by (a + (S_I - E_n)/delta^2).
             base.compute_force_and_kick(l, mom, k_dt);
-            scalar_t const s     = base.s_imag(l);
-            scalar_t const scale = a + ((s - E_n) / (delta * delta));
-            Lattice<T> imag_force{mom.indexing()};
+            scalar_t const s       = base.s_imag(l);
+            scalar_t const scale   = a + ((s - E_n) / (delta * delta));
+            Lattice<T>& imag_force = imag_scratch_(mom.indexing());
             base.compute_force_imag(l, imag_force);
             T* const mp         = mom.data();
             T const* const ip   = imag_force.data();
@@ -139,6 +140,20 @@ struct WindowedAction {
             scalar_t const scale = scalar_t{1} + a + ((s - E_n) / (delta * delta));
             base.compute_force_and_kick(l, mom, k_dt * scale);
         }
+    }
+
+    // Lazy scratch buffer for the complex-LLR imag-force pass. Allocated on
+    // first force call and reused for every subsequent call on the same
+    // Replica — avoids the per-MD-step malloc/free that used to dominate the
+    // bose_gas_llr force path. `mutable` because the force methods are const.
+    mutable std::optional<Lattice<T>> imag_scratch_storage{};
+
+private:
+    [[nodiscard]] Lattice<T>& imag_scratch_(std::shared_ptr<Indexing const> idx) const noexcept {
+        if (!imag_scratch_storage) {
+            imag_scratch_storage.emplace(std::move(idx));
+        }
+        return *imag_scratch_storage;
     }
 };
 

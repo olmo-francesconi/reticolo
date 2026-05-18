@@ -54,9 +54,13 @@ public:
     HmcStep trajectory() {
         sample_momenta_();
 
-        // Snapshot for rejection rollback and for the initial energy.
-        for (Site x : field_.sites()) {
-            old_field_[x] = field_[x];
+        // Snapshot for rejection rollback. Flat-buffer copy — same memcpy
+        // pattern as the gauge HMC twin.
+        std::size_t const n     = field_.nsites();
+        F* const old            = old_field_.data();
+        F const* const fp_const = field_.data();
+        for (std::size_t i = 0; i < n; ++i) {
+            old[i] = fp_const[i];
         }
         double const h0 = hamiltonian_();
 
@@ -68,8 +72,10 @@ public:
 
         bool const accepted = (dH <= 0.0) || (rng_.uniform() < std::exp(-dH));
         if (!accepted) {
-            for (Site x : field_.sites()) {
-                field_[x] = old_field_[x];
+            F* const fp         = field_.data();
+            F const* const oldp = old_field_.data();
+            for (std::size_t i = 0; i < n; ++i) {
+                fp[i] = oldp[i];
             }
         }
         return {.dH = dH, .accepted = accepted};
@@ -109,13 +115,17 @@ private:
     }
 
     [[nodiscard]] double hamiltonian_() const {
-        double kin = 0.0;
-        for (Site x : field_.sites()) {
-            if constexpr (is_complex_v_) {
-                kin += std::norm(mom_[x]);
-            } else {
-                auto const p = static_cast<double>(mom_[x]);
-                kin += p * p;
+        double kin          = 0.0;
+        F const* const p    = mom_.data();
+        std::size_t const n = mom_.nsites();
+        if constexpr (is_complex_v_) {
+            for (std::size_t i = 0; i < n; ++i) {
+                kin += std::norm(p[i]);
+            }
+        } else {
+            for (std::size_t i = 0; i < n; ++i) {
+                auto const pi = static_cast<double>(p[i]);
+                kin += pi * pi;
             }
         }
         kin *= 0.5;

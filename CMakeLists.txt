@@ -42,6 +42,27 @@ set(CXXOPTS_BUILD_TESTS    OFF CACHE INTERNAL "")
 set(CXXOPTS_ENABLE_INSTALL OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(cxxopts)
 
+# Sleef: portable vector libm (sin/cos/exp). Used by the transcendental action
+# hot loops (SineGordon, XY, CompactU1). We only need the main vector lib —
+# disable DFT, quad, GNU ABI shims, scalar-only lib, and tests.
+FetchContent_Declare(
+    sleef
+    GIT_REPOSITORY https://github.com/shibatch/sleef.git
+    GIT_TAG        3.6.1
+    GIT_SHALLOW    TRUE
+    SYSTEM
+)
+set(SLEEF_BUILD_DFT            OFF CACHE INTERNAL "")
+set(SLEEF_BUILD_QUAD           OFF CACHE INTERNAL "")
+set(SLEEF_BUILD_GNUABI_LIBS    OFF CACHE INTERNAL "")
+set(SLEEF_BUILD_SCALAR_LIB     OFF CACHE INTERNAL "")
+set(SLEEF_BUILD_INLINE_HEADERS OFF CACHE INTERNAL "")
+set(SLEEF_BUILD_TESTS          OFF CACHE INTERNAL "")
+set(SLEEF_BUILD_LIBM           ON  CACHE INTERNAL "")
+set(SLEEF_BUILD_SHARED_LIBS    OFF CACHE INTERNAL "")
+set(BUILD_SHARED_LIBS          OFF CACHE INTERNAL "")
+FetchContent_MakeAvailable(sleef)
+
 execute_process(
     COMMAND git rev-parse --short HEAD
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -65,6 +86,13 @@ target_include_directories(reticolo_core INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+# Sleef's exported target doesn't propagate its build-tree include dir to
+# consumers (it only sets it on install). Pin the generated <sleef.h> path
+# explicitly so the action hot loops can include it during the build.
+target_include_directories(reticolo_core SYSTEM INTERFACE
+    $<BUILD_INTERFACE:${sleef_BINARY_DIR}/include>
+)
+target_link_libraries(reticolo_core INTERFACE sleef)
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" _reticolo_build_type_upper)
 set(_reticolo_compile_flags "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_reticolo_build_type_upper}}")

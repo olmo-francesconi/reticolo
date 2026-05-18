@@ -4,10 +4,13 @@
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/gauge/hot_loop.hpp>
+#include <reticolo/math/vec_libm.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <type_traits>
+#include <vector>
 
 namespace reticolo::gauge::action {
 
@@ -94,15 +97,44 @@ struct CompactU1 {
     [[nodiscard]] T s_full(LinkLattice<T> const& l) const noexcept {
         std::size_t const d = l.ndims();
         T accum             = T{0};
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            T const* mb = l.mu_data(mu);
-            for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                T const* nb = l.mu_data(nu);
-                detail::visit_plane(
-                    l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                        T const plaq = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
-                        accum += std::cos(plaq);
-                    });
+        if constexpr (std::is_same_v<T, double>) {
+            std::size_t const n = l.nsites();
+            ensure_scratch_(n);
+            double* const buf = scratch.data();
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                T const* mb = l.mu_data(mu);
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    T const* nb = l.mu_data(nu);
+                    // Pass 1: stash plaquette angles for the plane into the scratch.
+                    detail::visit_plane(
+                        l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            buf[s] = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                        });
+                    // Vector cos in place.
+                    math::cos_batch(buf, buf, n);
+                    // Tree-reducible scalar reduction; reassociate so the
+                    // OoO engine can fold multiple lanes in parallel.
+                    {
+#if defined(__clang__)
+                        _Pragma("clang fp reassociate(on)")
+#endif
+                            for (std::size_t s = 0; s < n; ++s) {
+                            accum += buf[s];
+                        }
+                    }
+                }
+            }
+        } else {
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                T const* mb = l.mu_data(mu);
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    T const* nb = l.mu_data(nu);
+                    detail::visit_plane(
+                        l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            T const plaq = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                            accum += std::cos(plaq);
+                        });
+                }
             }
         }
         return beta * accum;
@@ -114,21 +146,48 @@ struct CompactU1 {
         std::fill(force.begin(), force.end(), T{0});
         std::size_t const d = l.ndims();
         T const b           = beta;
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            T const* mb  = l.mu_data(mu);
-            T* const fmu = force.mu_data(mu);
-            for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                T const* nb  = l.mu_data(nu);
-                T* const fnu = force.mu_data(nu);
-                detail::visit_plane(
-                    l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                        T const plaq = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
-                        T const c    = -b * std::sin(plaq);
-                        fmu[s] += c;
-                        fnu[s_pmu] += c;
-                        fmu[s_pnu] -= c;
-                        fnu[s] -= c;
-                    });
+        if constexpr (std::is_same_v<T, double>) {
+            std::size_t const n = l.nsites();
+            ensure_scratch_(n);
+            double* const buf = scratch.data();
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                T const* mb  = l.mu_data(mu);
+                T* const fmu = force.mu_data(mu);
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    T const* nb  = l.mu_data(nu);
+                    T* const fnu = force.mu_data(nu);
+                    detail::visit_plane(
+                        l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            buf[s] = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                        });
+                    math::sin_batch(buf, buf, n);
+                    detail::visit_plane(
+                        l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            T const c = -b * buf[s];
+                            fmu[s] += c;
+                            fnu[s_pmu] += c;
+                            fmu[s_pnu] -= c;
+                            fnu[s] -= c;
+                        });
+                }
+            }
+        } else {
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                T const* mb  = l.mu_data(mu);
+                T* const fmu = force.mu_data(mu);
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    T const* nb  = l.mu_data(nu);
+                    T* const fnu = force.mu_data(nu);
+                    detail::visit_plane(
+                        l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            T const plaq = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                            T const c    = -b * std::sin(plaq);
+                            fmu[s] += c;
+                            fnu[s_pmu] += c;
+                            fmu[s_pnu] -= c;
+                            fnu[s] -= c;
+                        });
+                }
             }
         }
     }
@@ -139,22 +198,60 @@ struct CompactU1 {
     compute_force_and_kick(LinkLattice<T> const& l, LinkLattice<T>& mom, T k_dt) const noexcept {
         std::size_t const d = l.ndims();
         T const c0          = -k_dt * beta;
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            T const* mb  = l.mu_data(mu);
-            T* const mmu = mom.mu_data(mu);
-            for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                T const* nb  = l.mu_data(nu);
-                T* const mnu = mom.mu_data(nu);
-                detail::visit_plane(
-                    l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                        T const plaq = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
-                        T const c    = c0 * std::sin(plaq);
-                        mmu[s] += c;
-                        mnu[s_pmu] += c;
-                        mmu[s_pnu] -= c;
-                        mnu[s] -= c;
-                    });
+        if constexpr (std::is_same_v<T, double>) {
+            std::size_t const n = l.nsites();
+            ensure_scratch_(n);
+            double* const buf = scratch.data();
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                T const* mb  = l.mu_data(mu);
+                T* const mmu = mom.mu_data(mu);
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    T const* nb  = l.mu_data(nu);
+                    T* const mnu = mom.mu_data(nu);
+                    detail::visit_plane(
+                        l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            buf[s] = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                        });
+                    math::sin_batch(buf, buf, n);
+                    detail::visit_plane(
+                        l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            T const c = c0 * buf[s];
+                            mmu[s] += c;
+                            mnu[s_pmu] += c;
+                            mmu[s_pnu] -= c;
+                            mnu[s] -= c;
+                        });
+                }
             }
+        } else {
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                T const* mb  = l.mu_data(mu);
+                T* const mmu = mom.mu_data(mu);
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    T const* nb  = l.mu_data(nu);
+                    T* const mnu = mom.mu_data(nu);
+                    detail::visit_plane(
+                        l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            T const plaq = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                            T const c    = c0 * std::sin(plaq);
+                            mmu[s] += c;
+                            mnu[s_pmu] += c;
+                            mmu[s_pnu] -= c;
+                            mnu[s] -= c;
+                        });
+                }
+            }
+        }
+    }
+
+    // Per-plane plaquette / sin-plaq / cos-plaq scratch — populated by
+    // vector libm at the start of each plane's loop. Sized lazily to nsites.
+    mutable std::vector<double> scratch{};
+
+private:
+    void ensure_scratch_(std::size_t n) const noexcept {
+        if (scratch.size() < n) {
+            scratch.resize(n);
         }
     }
 };

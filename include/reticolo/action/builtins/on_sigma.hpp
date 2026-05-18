@@ -123,7 +123,11 @@ struct OnSigma {
                                       axis_type const& r) const noexcept {
         double const w = -2.0 * static_cast<double>(beta) * static_cast<double>(dot(r, phi_x)) *
                          static_cast<double>(dot(r, phi_y));
-        return 1.0 - std::exp(std::min(0.0, w));
+        // Skip the libm exp on unfavoured bonds (w >= 0 → p = 0).
+        if (w >= 0.0) {
+            return 0.0;
+        }
+        return 1.0 - std::exp(w);
     }
 
 private:

@@ -43,8 +43,12 @@ template <class A, class F>
         action.compute_force_and_kick(field, mom, static_cast<F>(k_dt));
     } else {
         action.compute_force(field, force);
-        for (Site x : field.sites()) {
-            mom[x] += static_cast<F>(k_dt) * force[x];
+        F* const m          = mom.data();
+        F const* const fp   = force.data();
+        std::size_t const n = mom.nsites();
+        F const kdt         = static_cast<F>(k_dt);
+        for (std::size_t i = 0; i < n; ++i) {
+            m[i] += kdt * fp[i];
         }
     }
 }
@@ -52,8 +56,12 @@ template <class A, class F>
 template <class F>
 [[gnu::always_inline]] inline void
 drift_(Lattice<F>& field, Lattice<F> const& mom, double c_dt) noexcept {
-    for (Site x : field.sites()) {
-        field[x] += static_cast<F>(c_dt) * mom[x];
+    F* const f          = field.data();
+    F const* const p    = mom.data();
+    std::size_t const n = field.nsites();
+    F const cdt         = static_cast<F>(c_dt);
+    for (std::size_t i = 0; i < n; ++i) {
+        f[i] += cdt * p[i];
     }
 }
 

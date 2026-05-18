@@ -117,7 +117,12 @@ struct Xy {
         double const sx = std::sin(static_cast<double>(theta_x - axis));
         double const sy = std::sin(static_cast<double>(theta_y - axis));
         double const w  = -2.0 * static_cast<double>(beta) * sx * sy;
-        return 1.0 - std::exp(std::min(0.0, w));
+        // The historical form was `1 - exp(min(0, w))`. For unfavoured bonds
+        // (w >= 0) the result is 0 — skip the libm exp call entirely.
+        if (w >= 0.0) {
+            return 0.0;
+        }
+        return 1.0 - std::exp(w);
     }
 };
 
