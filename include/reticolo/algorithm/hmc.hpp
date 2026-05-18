@@ -7,6 +7,7 @@
 #include <reticolo/core/site.hpp>
 
 #include <cmath>
+#include <complex>
 #include <type_traits>
 
 namespace reticolo::alg {
@@ -92,10 +93,14 @@ public:
 
 private:
     void sample_momenta_() {
-        // Fast path for F == double: fill directly into the lattice storage with
-        // the batched normal generator (no per-site cache branch, paired Box-Muller).
+        // Fast paths fill the lattice storage in one call to the batched
+        // normal generator. Complex F is layout-compatible with F::value_type[2]
+        // (mandated by §29.5.4): independent N(0,1) draws for Re and Im give
+        // the correct sampling of K = ½ Σ |p|² = ½ Σ (p_re² + p_im²).
         if constexpr (std::is_same_v<F, double>) {
             rng_.normal_fill(mom_.data(), mom_.nsites());
+        } else if constexpr (std::is_same_v<F, std::complex<double>>) {
+            rng_.normal_fill(reinterpret_cast<double*>(mom_.data()), 2 * mom_.nsites());
         } else {
             for (Site x : field_.sites()) {
                 mom_[x] = static_cast<F>(rng_.normal());
@@ -106,12 +111,19 @@ private:
     [[nodiscard]] double hamiltonian_() const {
         double kin = 0.0;
         for (Site x : field_.sites()) {
-            auto const p = static_cast<double>(mom_[x]);
-            kin += p * p;
+            if constexpr (is_complex_v_) {
+                kin += std::norm(mom_[x]);
+            } else {
+                auto const p = static_cast<double>(mom_[x]);
+                kin += p * p;
+            }
         }
         kin *= 0.5;
         return kin + static_cast<double>(action_.s_full(field_));
     }
+
+    static constexpr bool is_complex_v_ =
+        requires(F f) { std::norm(f); } && !std::is_arithmetic_v<F>;
 
     A const& action_;
     Lattice<F>& field_;

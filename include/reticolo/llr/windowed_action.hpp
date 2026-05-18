@@ -4,68 +4,141 @@
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/site.hpp>
 
+#include <complex>
 #include <cstddef>
 
 namespace reticolo::llr {
 
+// Strip std::complex<T> down to T; pass-through for non-complex types. Used so
+// that LLR window parameters (a, E_n, delta) stay real-valued even when the
+// field is complex.
+template <class T>
+struct scalar_of {
+    using type = T;
+};
+template <class T>
+struct scalar_of<std::complex<T>> {
+    using type = T;
+};
+template <class T>
+using scalar_of_t = typename scalar_of<T>::type;
+
 // =============================================================================
-//  LLR-tilted action with Gaussian-penalty window.
+//  LLR-tilted action with Gaussian-penalty window. Two modes, picked at
+//  compile time from the base action's interface:
 //
-//  Energy variable is the base action itself: E(phi) = S_base(phi).
+//  Mode A — real LLR, `Base` does NOT satisfy `HasImagPart`. The window
+//  constrains the base action itself:
 //
-//    S_LLR     = (1 + a) * S_base + (S_base - E_n)^2 / (2 * delta^2)
-//    F_LLR(x)  = (1 + a + (S_base - E_n) / delta^2) * F_base(x)
+//      S_LLR    = (1 + a) * S_base + (S_base - E_n)^2 / (2 * delta^2)
+//      F_LLR(x) = (1 + a + (S_base - E_n) / delta^2) * F_base(x)
 //
-//  Mutable scalars a, E_n, delta are read on every `s_full` / force call —
-//  the LLR driver updates them between sampling blocks.
+//  This is the existing scalar-LLR formulation; back-compat is verbatim.
 //
-//  `s_local` / `ds_local` forward to the base action. They do *not* include
-//  the LLR window correction and would be wrong for a Metropolis sampler;
-//  v1 only uses HMC, which only calls `s_full` and `compute_force(_and_kick)`.
+//  Mode B — complex LLR, `Base` satisfies `HasImagPart`. HMC samples on the
+//  real (phase-quenched) part S_R and the window constrains the imaginary
+//  observable S_I = `base.s_imag(field)`:
+//
+//      S_LLR    = S_R + a * S_I + (S_I - E_n)^2 / (2 * delta^2)
+//      F_LLR(x) = F_R(x) + (a + (S_I - E_n) / delta^2) * F_I(x)
+//
+//  where F_R = base.compute_force, F_I = base.compute_force_imag. The NR/RM
+//  loop watches <S_I - E_n>; reconstructing ln rho(S_I) recovers the DoS of
+//  the imaginary part in the phase-quenched ensemble.
+//
+//  `s_local` / `ds_local` forward to the base action in both modes — they
+//  are not used on the HMC path; only the local Metropolis path would call
+//  them and they would be wrong with the LLR tilt (v1 LLR is HMC-only).
 // =============================================================================
 
-template <class Base, class T = Base::value_type>
+template <class Base, class T = typename Base::value_type>
 struct WindowedAction {
     using value_type = T;
+    using scalar_t   = scalar_of_t<T>;
 
     Base const& base;
-    T a = T{0};
+    scalar_t a = scalar_t{0};
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention E_n = window centre
-    T E_n   = T{0};
-    T delta = T{1};
+    scalar_t E_n   = scalar_t{0};
+    scalar_t delta = scalar_t{1};
 
-    [[nodiscard]] T s_local(Lattice<T> const& l, Site x) const noexcept {
+    static constexpr bool k_complex = action::HasImagPart<Base, T>;
+
+    [[nodiscard]] scalar_t s_local(Lattice<T> const& l, Site x) const noexcept {
         return base.s_local(l, x);
     }
 
-    [[nodiscard]] T ds_local(Lattice<T> const& l, Site x, T new_v) const noexcept {
+    [[nodiscard]] scalar_t ds_local(Lattice<T> const& l, Site x, T new_v) const noexcept {
         return base.ds_local(l, x, new_v);
     }
 
-    [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T const s   = base.s_full(l);
-        T const ds  = s - E_n;
-        T const inv = T{1} / (T{2} * delta * delta);
-        return ((T{1} + a) * s) + (ds * ds * inv);
-    }
-
-    void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-        base.compute_force(l, force);
-        T const s           = base.s_full(l);
-        T const scale       = T{1} + a + ((s - E_n) / (delta * delta));
-        T* const fp         = force.data();
-        std::size_t const n = force.nsites();
-        for (std::size_t i = 0; i < n; ++i) {
-            fp[i] *= scale;
+    [[nodiscard]] scalar_t constraint_value(Lattice<T> const& l) const noexcept {
+        if constexpr (k_complex) {
+            return base.s_imag(l);
+        } else {
+            return base.s_full(l);
         }
     }
 
-    void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept
+    [[nodiscard]] scalar_t s_full(Lattice<T> const& l) const noexcept {
+        scalar_t const q   = constraint_value(l);
+        scalar_t const dq  = q - E_n;
+        scalar_t const inv = scalar_t{1} / (scalar_t{2} * delta * delta);
+        if constexpr (k_complex) {
+            return base.s_full(l) + (a * q) + (dq * dq * inv);
+        } else {
+            return ((scalar_t{1} + a) * q) + (dq * dq * inv);
+        }
+    }
+
+    void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
+        if constexpr (k_complex) {
+            // Combined: F_R + (a + (S_I - E_n)/delta^2) * F_I.
+            base.compute_force(l, force);
+            scalar_t const s     = base.s_imag(l);
+            scalar_t const scale = a + ((s - E_n) / (delta * delta));
+            Lattice<T> imag_force{force.indexing()};
+            base.compute_force_imag(l, imag_force);
+            T* const fp         = force.data();
+            T const* const ip   = imag_force.data();
+            std::size_t const n = force.nsites();
+            for (std::size_t i = 0; i < n; ++i) {
+                fp[i] += scale * ip[i];
+            }
+        } else {
+            base.compute_force(l, force);
+            scalar_t const s     = base.s_full(l);
+            scalar_t const scale = scalar_t{1} + a + ((s - E_n) / (delta * delta));
+            T* const fp          = force.data();
+            std::size_t const n  = force.nsites();
+            for (std::size_t i = 0; i < n; ++i) {
+                fp[i] *= scale;
+            }
+        }
+    }
+
+    void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, scalar_t k_dt) const noexcept
         requires action::HasFusedKick<Base, T>
     {
-        T const s     = base.s_full(l);
-        T const scale = T{1} + a + ((s - E_n) / (delta * delta));
-        base.compute_force_and_kick(l, mom, k_dt * scale);
+        if constexpr (k_complex) {
+            // Real-part kick (unscaled), then imag-part kick scaled by (a + (S_I - E_n)/delta^2).
+            base.compute_force_and_kick(l, mom, k_dt);
+            scalar_t const s     = base.s_imag(l);
+            scalar_t const scale = a + ((s - E_n) / (delta * delta));
+            Lattice<T> imag_force{mom.indexing()};
+            base.compute_force_imag(l, imag_force);
+            T* const mp         = mom.data();
+            T const* const ip   = imag_force.data();
+            std::size_t const n = mom.nsites();
+            scalar_t const k    = k_dt * scale;
+            for (std::size_t i = 0; i < n; ++i) {
+                mp[i] += k * ip[i];
+            }
+        } else {
+            scalar_t const s     = base.s_full(l);
+            scalar_t const scale = scalar_t{1} + a + ((s - E_n) / (delta * delta));
+            base.compute_force_and_kick(l, mom, k_dt * scale);
+        }
     }
 };
 

@@ -5,6 +5,7 @@
 // types: lattice + indexing + site + bc + rng + log.
 
 // NOLINTBEGIN(misc-include-cleaner): re-exports are the whole point of the umbrella.
+#include <reticolo/action/builtins/bose_gas.hpp>
 #include <reticolo/action/builtins/on_sigma.hpp>
 #include <reticolo/action/builtins/phi4.hpp>
 #include <reticolo/action/builtins/phi6.hpp>

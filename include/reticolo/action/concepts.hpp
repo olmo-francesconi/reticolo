@@ -75,6 +75,19 @@ concept HasProposal =
         { a.propose(l, x, rng) } -> std::convertible_to<F>;
     };
 
+// Refinement: action has a complex-valued total, decomposed as S = S_R + i*S_I,
+// where `s_full` returns the real (phase-quenched) part driving HMC and
+// `s_imag` returns the imaginary part — typically used as the LLR constraint
+// observable when the full theory has a sign problem. `compute_force_imag`
+// writes the analog of `compute_force` (the gradient of `s_imag`) into a
+// separate buffer; the LLR window combines them with the right coefficients.
+template <class A, class F>
+concept HasImagPart = HasSEff<A, F> && HasForce<A, F> &&
+                      requires(A const& a, Lattice<F> const& l, Lattice<F>& force) {
+                          { a.s_imag(l) } -> std::convertible_to<double>;
+                          { a.compute_force_imag(l, force) };
+                      };
+
 // Refinement: action admits a Wolff cluster embedding. The cluster updater
 // is action-agnostic; it asks the action for an axis, a reflection, and a
 // link-acceptance probability. `wolff_link_p` returns the bond-activation

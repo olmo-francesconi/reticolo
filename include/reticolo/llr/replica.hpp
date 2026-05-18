@@ -32,13 +32,14 @@ template <class Base,
 class Replica {
 public:
     using value_type = T;
+    using scalar_t   = scalar_of_t<T>;
 
     Replica(Lattice<T>::SizeVec shape,
             Base const& base,
             Rng rng_init,
-            T e_n_init,
-            T delta_init,
-            T a_init,
+            scalar_t e_n_init,
+            scalar_t delta_init,
+            scalar_t a_init,
             alg::HmcSpec const& spec)
         : phi_{std::move(shape)}, rng_{std::move(rng_init)},
           windowed_{.base = base, .a = a_init, .E_n = e_n_init, .delta = delta_init},
@@ -60,33 +61,34 @@ public:
         }
     }
 
-    // Returns the running mean of `E(phi) - E_n` over `n` trajectories,
-    // measured at the end of each trajectory (accepted or not). E = S_base.
-    [[nodiscard]] T sample(int n) {
-        T sum = T{0};
+    // Running mean of `Q(phi) - E_n` over `n` trajectories, measured at the
+    // end of each trajectory (accepted or not). Q = base.s_full when the
+    // base is a real action, Q = base.s_imag in the complex-LLR case.
+    [[nodiscard]] scalar_t sample(int n) {
+        scalar_t sum = scalar_t{0};
         for (int i = 0; i < n; ++i) {
             auto const step = hmc_.trajectory();
             ++stats_.n_traj;
             if (step.accepted) {
                 ++stats_.n_accepted;
             }
-            sum += windowed_.base.s_full(phi_) - windowed_.E_n;
+            sum += windowed_.constraint_value(phi_) - windowed_.E_n;
         }
-        return sum / static_cast<T>(n);
+        return sum / static_cast<scalar_t>(n);
     }
 
-    [[nodiscard]] T energy() const noexcept { return windowed_.base.s_full(phi_); }
+    [[nodiscard]] scalar_t energy() const noexcept { return windowed_.base.s_full(phi_); }
 
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
-    [[nodiscard]] T a() const noexcept { return windowed_.a; }
+    [[nodiscard]] scalar_t a() const noexcept { return windowed_.a; }
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention E_n
-    [[nodiscard]] T E_n() const noexcept { return windowed_.E_n; }
-    [[nodiscard]] T delta() const noexcept { return windowed_.delta; }
+    [[nodiscard]] scalar_t E_n() const noexcept { return windowed_.E_n; }
+    [[nodiscard]] scalar_t delta() const noexcept { return windowed_.delta; }
 
-    void set_a(T v) noexcept { windowed_.a = v; }
+    void set_a(scalar_t v) noexcept { windowed_.a = v; }
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention E_n
-    void set_E_n(T v) noexcept { windowed_.E_n = v; }
-    void set_delta(T v) noexcept { windowed_.delta = v; }
+    void set_E_n(scalar_t v) noexcept { windowed_.E_n = v; }
+    void set_delta(scalar_t v) noexcept { windowed_.delta = v; }
 
     [[nodiscard]] Lattice<T>& phi() noexcept { return phi_; }
     [[nodiscard]] Lattice<T> const& phi() const noexcept { return phi_; }
