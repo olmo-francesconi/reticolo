@@ -147,18 +147,28 @@ struct WindowedAction {
         requires action::HasFusedKick<Base, T> || gauge::HasLinkFusedKick<Base, T>
     {
         if constexpr (k_complex) {
-            // Real-part kick (unscaled), then imag-part kick scaled by (a + (S_I - E_n)/delta^2).
-            base.compute_force_and_kick(l, mom, k_dt);
             scalar_t const s     = base.s_imag(l);
             scalar_t const scale = a + ((s - E_n) / (delta * delta));
-            Field& imag_force    = imag_scratch_(mom.indexing());
-            base.compute_force_imag(l, imag_force);
-            T* const mp         = mom.data();
-            T const* const ip   = imag_force.data();
-            std::size_t const n = flat_size(mom);
-            scalar_t const k    = k_dt * scale;
-            for (std::size_t i = 0; i < n; ++i) {
-                mp[i] += k * ip[i];
+            // If the base action exposes a fused combined-force kernel
+            // (F_R + scale·F_I in one pass directly into mom), use it —
+            // skips the imag_force scratch buffer and the merge pass.
+            // Otherwise fall back to the two-pass form.
+            if constexpr (requires {
+                              base.compute_force_combined_and_kick(
+                                  l, mom, scalar_t{1}, scale, k_dt);
+                          }) {
+                base.compute_force_combined_and_kick(l, mom, scalar_t{1}, scale, k_dt);
+            } else {
+                base.compute_force_and_kick(l, mom, k_dt);
+                Field& imag_force = imag_scratch_(mom.indexing());
+                base.compute_force_imag(l, imag_force);
+                T* const mp         = mom.data();
+                T const* const ip   = imag_force.data();
+                std::size_t const n = flat_size(mom);
+                scalar_t const k    = k_dt * scale;
+                for (std::size_t i = 0; i < n; ++i) {
+                    mp[i] += k * ip[i];
+                }
             }
         } else {
             scalar_t const s     = base.s_full(l);

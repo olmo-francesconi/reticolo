@@ -126,6 +126,29 @@ struct BoseGas {
             });
     }
 
+    // Fused force-and-kick: mom += k_dt * F_R[i] in one visit_nn pass.
+    // Satisfies HasFusedKick, which lets WindowedAction expose its own
+    // compute_force_and_kick and gives the LLR complex path access to the
+    // combined-kick kernel below.
+    void compute_force_and_kick(Lattice<complex_t> const& l,
+                                Lattice<complex_t>& mom,
+                                complex_t k_dt) const noexcept {
+        std::size_t const d = l.ndims();
+        T const coef_mass   = (T{2} * static_cast<T>(d)) + (mass * mass);
+        T const ch_minus_1  = std::cosh(mu) - T{1};
+        complex_t* const mp = mom.data();
+        detail::visit_nn_split_last<complex_t>(
+            l,
+            [coef_mass, lam = lambda, ch_minus_1, mp, k_dt](
+                std::size_t i, complex_t phi, complex_t nbrs_total, complex_t nbrs_last) {
+                T const abs2           = std::norm(phi);
+                complex_t const staple = nbrs_total + (ch_minus_1 * nbrs_last);
+                complex_t const f_r =
+                    (T{-2} * coef_mass * phi) - (T{4} * lam * abs2 * phi) + (T{2} * staple);
+                mp[i] += k_dt * f_r;
+            });
+    }
+
     // ---------- HasImagPart: S_I and F_I = -dS_I/dphi* ---------------------
 
     // Local change in S_I when phi_x → new_v. Only the two time-direction
@@ -187,6 +210,63 @@ struct BoseGas {
             std::size_t const base_p = wp * s_tau;
             for (std::size_t k = 0; k < s_tau; ++k) {
                 out[base + k] = two_i * (in[base_p + k] - in[base_m + k]);
+            }
+        }
+    }
+
+    // ---------- Fused combined force-and-kick (LLR complex-mode helper) ---
+    //
+    //   mom[i] += k_dt * ( scale_r * F_R[i] + scale_i * F_I[i] )
+    //
+    // Equivalent to:
+    //   compute_force_and_kick(l, mom, k_dt * scale_r);
+    //   compute_force_imag(l, imag_scratch);
+    //   for (i) mom[i] += k_dt * scale_i * imag_scratch[i];
+    //
+    // but avoids the imag_scratch allocation and the merge-pass round trip.
+    // `WindowedAction` picks this up via concept-detection in mode B and uses
+    // it when present (BoseGas today, future complex-action implementations
+    // tomorrow).
+    void compute_force_combined_and_kick(Lattice<complex_t> const& l,
+                                         Lattice<complex_t>& mom,
+                                         T scale_r,
+                                         T scale_i,
+                                         T k_dt) const noexcept {
+        std::size_t const d = l.ndims();
+        T const coef_mass   = (T{2} * static_cast<T>(d)) + (mass * mass);
+        T const ch_minus_1  = std::cosh(mu) - T{1};
+        complex_t* const mp = mom.data();
+        T const k_r         = k_dt * scale_r;
+
+        // F_R contribution — same generic visit as compute_force, but
+        // accumulates `k_r * F_R[i]` directly into mom instead of writing
+        // to a separate buffer.
+        detail::visit_nn_split_last<complex_t>(
+            l,
+            [coef_mass, lam = lambda, ch_minus_1, mp, k_r](
+                std::size_t i, complex_t phi, complex_t nbrs_total, complex_t nbrs_last) {
+                T const abs2           = std::norm(phi);
+                complex_t const staple = nbrs_total + (ch_minus_1 * nbrs_last);
+                complex_t const f_r =
+                    (T{-2} * coef_mass * phi) - (T{4} * lam * abs2 * phi) + (T{2} * staple);
+                mp[i] += k_r * f_r;
+            });
+
+        // F_I contribution — time-only sweep, accumulates directly into mom.
+        std::size_t const L_tau   = l.shape()[d - 1];
+        std::size_t const n       = l.nsites();
+        std::size_t const s_tau   = n / L_tau;
+        complex_t const* const in = l.data();
+        T const k_i               = k_dt * scale_i;
+        complex_t const k_i_two_i{T{0}, T{2} * k_i};  // pre-scale 2i by k_i
+        for (std::size_t w = 0; w < L_tau; ++w) {
+            std::size_t const wm     = (w == 0) ? (L_tau - 1) : (w - 1);
+            std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
+            std::size_t const base   = w * s_tau;
+            std::size_t const base_m = wm * s_tau;
+            std::size_t const base_p = wp * s_tau;
+            for (std::size_t k = 0; k < s_tau; ++k) {
+                mp[base + k] += k_i_two_i * (in[base_p + k] - in[base_m + k]);
             }
         }
     }
