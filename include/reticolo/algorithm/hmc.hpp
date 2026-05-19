@@ -49,13 +49,26 @@ struct HmcStep {
 //    - anything else:          per-element static_cast<F>(rng_.normal())
 // =============================================================================
 
+// Field-agnostic action gate: any action with `s_full(field)` and
+// `compute_force(field, force)` qualifies. The existing scalar/U(1) actions
+// satisfy this via `HasSEff`+`HasForce` / `HasLinkSEff`+`HasLinkForce`; the
+// new `Wilson<G>` over `MatrixLinkLattice<G, T>` satisfies it directly.
+template <class A, class Field>
+concept HmcAction = requires(A const& a, Field const& l, Field& f) {
+    { a.s_full(l) } -> std::convertible_to<double>;
+    { a.compute_force(l, f) };
+};
+
+// Compile-time tag: Field is a MatrixLinkLattice (carries a Group type alias).
+template <class Field>
+concept MatrixLinkField = requires { typename Field::group_type; };
+
 template <class A,
           class R,
           class Integrator = integ::Leapfrog,
           class Field      = Lattice<typename A::value_type>,
           class F          = typename A::value_type>
-    requires(action::HasForce<A, F> || gauge::HasLinkForce<A, F>) &&
-            (action::HasSEff<A, F> || gauge::HasLinkSEff<A, F>) && Rng<R>
+    requires HmcAction<A, Field> && Rng<R>
 class Hmc {
 public:
     using value_type = F;
@@ -113,13 +126,24 @@ public:
 
 private:
     void sample_momenta_() {
-        std::size_t const n = flat_size(mom_);
-        if constexpr (std::is_same_v<F, double>) {
-            rng_.normal_fill(mom_.data(), n);
+        if constexpr (MatrixLinkField<Field>) {
+            // Algebra-aware momentum sampling per direction. The group writes
+            // anti-hermitian elements with the right structural zeros;
+            // raw normal_fill would put noise on the constrained slots.
+            using Group          = typename Field::group_type;
+            std::size_t const d  = mom_.ndims();
+            std::size_t const ns = mom_.nsites();
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                Group::sample_algebra_slab(mom_.mu_block_data(mu), rng_, ns);
+            }
+        } else if constexpr (std::is_same_v<F, double>) {
+            rng_.normal_fill(mom_.data(), flat_size(mom_));
         } else if constexpr (std::is_same_v<F, std::complex<double>>) {
+            std::size_t const n = flat_size(mom_);
             rng_.normal_fill(reinterpret_cast<double*>(mom_.data()), 2 * n);
         } else {
-            F* const m = mom_.data();
+            F* const m          = mom_.data();
+            std::size_t const n = flat_size(mom_);
             for (std::size_t i = 0; i < n; ++i) {
                 m[i] = static_cast<F>(rng_.normal());
             }
@@ -127,20 +151,33 @@ private:
     }
 
     [[nodiscard]] double hamiltonian_() const {
-        double kin          = 0.0;
-        F const* const p    = mom_.data();
-        std::size_t const n = flat_size(mom_);
-        if constexpr (is_complex_v_) {
-            for (std::size_t i = 0; i < n; ++i) {
-                kin += std::norm(p[i]);
+        double kin = 0.0;
+        if constexpr (MatrixLinkField<Field>) {
+            // K = (1/2)·Tr(P†P) = ‖h‖² for SU(N) with P = i·(h·σ). Hamilton's
+            // dU/dt = P·U gives ∂K/∂P = P → K = (1/2)·Tr(P†P) = ‖h‖² (no extra
+            // 1/2 here). For exp(-K) detailed balance the algebra coords are
+            // sampled with variance 1/2 (see SU2::sample_algebra_slab).
+            using Group          = typename Field::group_type;
+            std::size_t const d  = mom_.ndims();
+            std::size_t const ns = mom_.nsites();
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                kin += Group::kinetic_slab(mom_.mu_block_data(mu), ns);
             }
         } else {
-            for (std::size_t i = 0; i < n; ++i) {
-                auto const pi = static_cast<double>(p[i]);
-                kin += pi * pi;
+            F const* const p    = mom_.data();
+            std::size_t const n = flat_size(mom_);
+            if constexpr (is_complex_v_) {
+                for (std::size_t i = 0; i < n; ++i) {
+                    kin += std::norm(p[i]);
+                }
+            } else {
+                for (std::size_t i = 0; i < n; ++i) {
+                    auto const pi = static_cast<double>(p[i]);
+                    kin += pi * pi;
+                }
             }
+            kin *= 0.5;
         }
-        kin *= 0.5;
         return kin + static_cast<double>(action_.s_full(field_));
     }
 

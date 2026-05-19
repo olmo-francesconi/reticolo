@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/core/field_traits.hpp>
+#include <reticolo/core/matrix_link_lattice.hpp>
 
 #include <cstddef>
 
@@ -44,6 +45,20 @@ kick_add(Mom& mom, Force const& force, double kdt) noexcept {
     F const c            = static_cast<F>(kdt);
     for (std::size_t i = 0; i < n; ++i) {
         m[i] += c * fp[i];
+    }
+}
+
+// Matrix-link drift overload: U ← exp(dt·P)·U per direction, dispatched
+// through the group model's `expi_lmul_slab` so SU(2)/SU(3)/U(1) all reuse
+// the same per-direction loop.
+template <class G, class T>
+[[gnu::always_inline]] inline void drift_field(MatrixLinkLattice<G, T>& field,
+                                               MatrixLinkLattice<G, T> const& mom,
+                                               double cdt) noexcept {
+    std::size_t const d  = field.ndims();
+    std::size_t const ns = field.nsites();
+    for (std::size_t mu = 0; mu < d; ++mu) {
+        G::expi_lmul_slab(field.mu_block_data(mu), mom.mu_block_data(mu), cdt, ns);
     }
 }
 

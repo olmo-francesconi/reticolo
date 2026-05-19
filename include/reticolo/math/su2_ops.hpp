@@ -141,6 +141,29 @@ adj_mul_2x2(double* out, double const* a, double const* b) noexcept {
     cmul_acc_a_conj(out[6], out[7], a[6], a[7], b[6], b[7]);
 }
 
+// ---------- traceless anti-hermitian projection (su(2) algebra) -------------
+// TA(M) = (M − M†)/2 − (1/N)·Tr((M−M†)/2)·I. For SU(2) the diagonals become
+// ±i·(Im M_{00} − Im M_{11})/2 and the off-diagonals are the anti-hermitian
+// completion of M_{01}, M_{10} (already trace-zero after the diagonal fix).
+[[gnu::always_inline]] inline void
+traceless_antiherm_2x2(double* out, double const* in) noexcept {
+    double const im00    = in[1];
+    double const im11    = in[7];
+    double const re01    = in[2];
+    double const im01    = in[3];
+    double const re10    = in[4];
+    double const im10    = in[5];
+    double const diag_im = 0.5 * (im00 - im11);
+    out[0]               = 0.0;
+    out[1]               = diag_im;
+    out[2]               = 0.5 * (re01 - re10);
+    out[3]               = 0.5 * (im01 + im10);
+    out[4]               = -out[2];
+    out[5]               = out[3];
+    out[6]               = 0.0;
+    out[7]               = -diag_im;
+}
+
 // ---------- closed-form group exponential and projection --------------------
 
 // Build V = exp(dt · P) where P is anti-hermitian 2×2 (su(2) algebra element)
@@ -282,16 +305,20 @@ expi_lmul_slab(double* u, double const* p, double dt, std::size_t n) noexcept {
     }
 }
 
-// Sample P from the anti-hermitian-traceless-Gaussian ensemble: each algebra
-// coordinate h_a (a = 1,2,3) drawn i.i.d. ~ N(0, 1) and packed into the
-// 8-real storage with the structural zeros enforced.
+// Sample P from the anti-hermitian-traceless Gaussian ensemble. Algebra
+// coordinates h_a (a = 1,2,3) drawn i.i.d. ~ N(0, 1/√2) so that
+//   Q(P) ∝ exp(−‖h‖²) = exp(−K(P))    with    K = (1/2)·Tr(P†P) = ‖h‖²
+// matches the kinetic part of H used by the Metropolis accept (HMC detailed
+// balance). Variance 1/2 is the SU(N) analog of the scalar N(0, 1) sampling
+// against K = (1/2)·p²: in both cases σ² = 1 / (∂²K/∂coord²).
 template <class Rng>
 [[gnu::always_inline]] inline void
 sample_algebra_slab(double* p, Rng& rng, std::size_t n) noexcept {
+    constexpr double k_inv_sqrt2 = 0.70710678118654752440;
     for (std::size_t s = 0; s < n; ++s) {
-        double const h1 = rng.normal();
-        double const h2 = rng.normal();
-        double const h3 = rng.normal();
+        double const h1 = rng.normal() * k_inv_sqrt2;
+        double const h2 = rng.normal() * k_inv_sqrt2;
+        double const h3 = rng.normal() * k_inv_sqrt2;
         p[(0 * n) + s]  = 0.0;
         p[(1 * n) + s]  = h3;
         p[(2 * n) + s]  = h2;

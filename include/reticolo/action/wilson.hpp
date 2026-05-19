@@ -64,27 +64,16 @@ struct Wilson {
     }
 
     // ---- HasLinkForce equivalent ---------------------------------------------
+    //
+    // Each gauge group owns its force algorithm — U(1) uses the per-plaquette
+    // scatter that matches CompactU1 bit-for-bit; SU(N) uses a link-centric
+    // staple sum + TA[U·V] step that fits the matrix structure. Wilson<G> is
+    // just a thin wrapper that hands G the beta/N prefactor.
 
     void compute_force(field_type const& U, field_type& force) const noexcept {
-        std::fill(force.begin(), force.end(), T{0});
-        std::size_t const d           = U.ndims();
-        std::size_t const ns          = U.nsites();
-        T const N_re                  = static_cast<T>(G::n_color);
-        T const beta_over_n           = beta / N_re;
-        double const beta_over_n_dbl  = static_cast<double>(beta_over_n);
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            T const* mb = U.mu_block_data(mu);
-            T* const fmu_blk = force.mu_block_data(mu);
-            for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                T const* nb       = U.mu_block_data(nu);
-                T* const fnu_blk  = force.mu_block_data(nu);
-                detail::visit_plane(
-                    U, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                        G::plaq_force_accum(
-                            mb, nb, fmu_blk, fnu_blk, s, s_pmu, s_pnu, ns, beta_over_n_dbl);
-                    });
-            }
-        }
+        T const beta_over_n          = beta / static_cast<T>(G::n_color);
+        double const beta_over_n_dbl = static_cast<double>(beta_over_n);
+        G::compute_force(U, force, beta_over_n_dbl);
     }
 
     // ---- LinkLocalAction equivalent ------------------------------------------

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <reticolo/action/detail/gauge_group/base.hpp>
+#include <reticolo/core/indexing.hpp>
+#include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/site.hpp>
 #include <reticolo/math/su2_ops.hpp>
 
 #include <cstddef>
@@ -57,6 +60,113 @@ struct SU2 {
             re_tr += ab[k] * dc[k];
         }
         return re_tr;
+    }
+
+    // -------- HMC slab hooks (raw-pointer thin wrappers over math::su2) ------
+    // These keep `Hmc` field-agnostic: HMC loops directions and calls
+    // `G::sample_algebra_slab` / `kinetic_slab` / `expi_lmul_slab` per
+    // direction. For non-`double` T the wrappers simply don't instantiate —
+    // matrix-link SU(2) is a `double`-only field type in this implementation.
+    template <class Rng>
+    [[gnu::always_inline]] static inline void
+    sample_algebra_slab(double* p_blk, Rng& rng, std::size_t n) noexcept {
+        math::su2::sample_algebra_slab(p_blk, rng, n);
+    }
+
+    [[gnu::always_inline]] static inline double
+    kinetic_slab(double const* p_blk, std::size_t n) noexcept {
+        return math::su2::kinetic_slab(p_blk, n);
+    }
+
+    [[gnu::always_inline]] static inline void
+    expi_lmul_slab(double* u_blk, double const* p_blk, double dt, std::size_t n) noexcept {
+        math::su2::expi_lmul_slab(u_blk, p_blk, dt, n);
+    }
+
+    // -------- link-centric Wilson force --------------------------------------
+    //
+    //   V_μ(x) = sum_{ν ≠ μ} [ fwd_μν(x) + bwd_μν(x) ]
+    //   fwd_μν(x) = U_ν(x+μ) · U_μ(x+ν)† · U_ν(x)†
+    //   bwd_μν(x) = U_ν(x+μ−ν)† · U_μ(x−ν)† · U_ν(x−ν)
+    //   F_μ(x) = −(β/N) · TA[U_μ(x) · V_μ(x)]
+    //
+    // Per link: 2(d−1) staples · 2 cmm each + 1 cmm + TA + scalar mul.
+    template <class T>
+    static void compute_force(MatrixLinkLattice<SU2, T> const& u,
+                              MatrixLinkLattice<SU2, T>& force,
+                              double beta_over_n) noexcept {
+        std::size_t const d   = u.ndims();
+        std::size_t const ns  = u.nsites();
+        Indexing const& idx   = u.indexing_ref();
+        double const neg_b_oN = -beta_over_n;
+
+        auto load_link = [ns](double* dst, T const* blk, std::size_t s) noexcept {
+            for (std::size_t k = 0; k < 8; ++k) {
+                dst[k] = static_cast<double>(blk[(k * ns) + s]);
+            }
+        };
+
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            T const* const u_mu_blk = u.mu_block_data(mu);
+            T* const f_mu_blk       = force.mu_block_data(mu);
+            for (std::size_t s = 0; s < ns; ++s) {
+                double v[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+                Site const x{s};
+                std::size_t const s_pmu = idx.next(x, mu).value();
+                for (std::size_t nu = 0; nu < d; ++nu) {
+                    if (nu == mu) {
+                        continue;
+                    }
+                    T const* const u_nu_blk = u.mu_block_data(nu);
+                    std::size_t const s_pnu = idx.next(x, nu).value();
+                    std::size_t const s_mnu = idx.prev(x, nu).value();
+                    std::size_t const s_pmu_mnu =
+                        idx.prev(Site{s_pmu}, nu).value();
+
+                    // Forward staple: U_ν(s+μ) · U_μ(s+ν)† · U_ν(s)†
+                    {
+                        double a[8];
+                        double b[8];
+                        double c[8];
+                        double t1[8];
+                        double t2[8];
+                        load_link(a, u_nu_blk, s_pmu);
+                        load_link(b, u_mu_blk, s_pnu);
+                        load_link(c, u_nu_blk, s);
+                        math::su2::mul_adj_2x2(t1, a, b);
+                        math::su2::mul_adj_2x2(t2, t1, c);
+                        for (std::size_t k = 0; k < 8; ++k) {
+                            v[k] += t2[k];
+                        }
+                    }
+                    // Backward staple: U_ν(s+μ−ν)† · U_μ(s−ν)† · U_ν(s−ν)
+                    {
+                        double a[8];
+                        double b[8];
+                        double c[8];
+                        double t1[8];
+                        double t2[8];
+                        load_link(a, u_nu_blk, s_pmu_mnu);
+                        load_link(b, u_mu_blk, s_mnu);
+                        load_link(c, u_nu_blk, s_mnu);
+                        math::su2::adj_mul_2x2(t1, b, c);
+                        math::su2::adj_mul_2x2(t2, a, t1);
+                        for (std::size_t k = 0; k < 8; ++k) {
+                            v[k] += t2[k];
+                        }
+                    }
+                }
+                double u_s[8];
+                double uv[8];
+                double ta[8];
+                load_link(u_s, u_mu_blk, s);
+                math::su2::mul_2x2(uv, u_s, v);
+                math::su2::traceless_antiherm_2x2(ta, uv);
+                for (std::size_t k = 0; k < 8; ++k) {
+                    f_mu_blk[(k * ns) + s] = static_cast<T>(neg_b_oN * ta[k]);
+                }
+            }
+        }
     }
 };
 

@@ -35,6 +35,8 @@ reticolo_add_test(test_phi4_force_consistency       physics/test_phi4_force_cons
 reticolo_add_test(test_compact_u1_force_consistency physics/test_compact_u1_force_consistency.cpp)
 reticolo_add_test(test_u1_hmc_reversibility         physics/test_u1_hmc_reversibility.cpp)
 reticolo_add_test(test_wilson_u1_vs_compact         physics/test_wilson_u1_vs_compact.cpp)
+reticolo_add_test(test_su2_hmc_reversibility        physics/test_su2_hmc_reversibility.cpp)
+reticolo_add_test(test_wilson_su2_weak_coupling     physics/test_wilson_su2_weak_coupling.cpp)
 reticolo_add_test(test_phi6_force_consistency       physics/test_phi6_force_consistency.cpp)
 reticolo_add_test(test_sine_gordon_force_consistency physics/test_sine_gordon_force_consistency.cpp)
 reticolo_add_test(test_xy_force_consistency         physics/test_xy_force_consistency.cpp)

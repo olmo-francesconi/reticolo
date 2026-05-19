@@ -1,7 +1,10 @@
 #pragma once
 
 #include <reticolo/action/detail/gauge_group/base.hpp>
+#include <reticolo/action/detail/gauge_helpers.hpp>
+#include <reticolo/core/matrix_link_lattice.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 
@@ -60,6 +63,39 @@ struct U1 {
         fnu[s_pmu] += c;
         fmu[s_pnu] -= c;
         fnu[s] -= c;
+    }
+
+    // Plaquette-centric Wilson force scatter — same shape as the legacy
+    // `CompactU1::compute_force` per-plaquette path. For U(1) the force on a
+    // link is just −β·sin(θ_p) added/subtracted into the 4 links of every
+    // plaquette through it.
+    template <class T>
+    static void compute_force(MatrixLinkLattice<U1, T> const& u,
+                              MatrixLinkLattice<U1, T>& force,
+                              double beta_over_n) noexcept {
+        std::fill(force.begin(), force.end(), T{0});
+        std::size_t const d  = u.ndims();
+        std::size_t const ns = u.nsites();
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            T const* const u_mu_blk = u.mu_block_data(mu);
+            T* const f_mu_blk       = force.mu_block_data(mu);
+            for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                T const* const u_nu_blk = u.mu_block_data(nu);
+                T* const f_nu_blk       = force.mu_block_data(nu);
+                action::detail::visit_plane(
+                    u, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                        plaq_force_accum(u_mu_blk,
+                                         u_nu_blk,
+                                         f_mu_blk,
+                                         f_nu_blk,
+                                         s,
+                                         s_pmu,
+                                         s_pnu,
+                                         ns,
+                                         beta_over_n);
+                    });
+            }
+        }
     }
 };
 
