@@ -48,14 +48,24 @@ struct Wilson {
         std::size_t const ns     = U.nsites();
         std::size_t const n_plaq = (d * (d - 1) / 2) * ns;
         double accum_re_tr       = 0.0;
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            T const* mb = U.mu_block_data(mu);
-            for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                T const* nb = U.mu_block_data(nu);
-                detail::visit_plane(
-                    U, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                        accum_re_tr += G::plaq_re_tr(mb, nb, s, s_pmu, s_pnu, ns);
-                    });
+        // If G provides a per-plane batched Σ Re Tr U_p, use it (Sleef cos
+        // path on U(1)); otherwise fall back to per-plaquette plaq_re_tr.
+        if constexpr (requires { G::template s_full_plane_re_tr_sum<T>(U, 0, 1); }) {
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    accum_re_tr += G::template s_full_plane_re_tr_sum<T>(U, mu, nu);
+                }
+            }
+        } else {
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                T const* mb = U.mu_block_data(mu);
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    T const* nb = U.mu_block_data(nu);
+                    detail::visit_plane(
+                        U, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            accum_re_tr += G::plaq_re_tr(mb, nb, s, s_pmu, s_pnu, ns);
+                        });
+                }
             }
         }
         T const N_re        = static_cast<T>(G::n_color);
@@ -74,6 +84,22 @@ struct Wilson {
         T const beta_over_n          = beta / static_cast<T>(G::n_color);
         double const beta_over_n_dbl = static_cast<double>(beta_over_n);
         G::compute_force(U, force, beta_over_n_dbl);
+    }
+
+    // ---- HasLinkFusedKick equivalent -----------------------------------------
+    //
+    // Fused force-and-kick: scatter the per-plaquette force contribution
+    // directly into the momentum field with the integrator's scale, skipping
+    // the dedicated force buffer the kick_add path would otherwise allocate
+    // and stream. Only enabled when G provides its own fused kernel — that's
+    // U(1) today; SU(2)/SU(3) plug in via the H1 SU(N) slab work.
+    void compute_force_and_kick(field_type const& U, field_type& mom, T k_dt) const noexcept
+        requires requires(field_type const& cu, field_type& m) {
+            G::compute_force_and_kick(cu, m, double{}, double{});
+        }
+    {
+        double const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
+        G::compute_force_and_kick(U, mom, beta_over_n_dbl, static_cast<double>(k_dt));
     }
 
     // ---- LinkLocalAction equivalent ------------------------------------------

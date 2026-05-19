@@ -3,10 +3,13 @@
 #include <reticolo/action/detail/gauge_group/base.hpp>
 #include <reticolo/action/detail/gauge_helpers.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/math/vec_libm.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <type_traits>
+#include <vector>
 
 namespace reticolo::gauge_group {
 
@@ -16,12 +19,23 @@ namespace reticolo::gauge_group {
 //  abelian, so the plaquette product reduces to a sum of four signed angles
 //  and Re Tr U_p = cos(θ_p). All "matrix" math collapses to scalar math.
 //
-//  The plaquette-action / plaquette-force kernels here are bitwise-identical
-//  to the per-site fallback path in `action::CompactU1`. The vector-libm
-//  batched path (Sleef cos/sin on scratch slabs) lives in CompactU1; once
-//  Wilson<U1> ships an equivalent batched primitive we can retire CompactU1
-//  (the M8 commit).
+//  The slab-batched hot paths here use the same Sleef cos/sin scratch
+//  pattern as `action::CompactU1`, so Wilson<U(1)> matches CompactU1
+//  throughput on the HMC bench (M8: retire CompactU1 once verified).
+//  Scratch is owned per call-site via a function-local thread_local —
+//  the gauge group struct itself stays stateless.
 // =============================================================================
+//
+// One nsites-sized scratch shared by all hot paths in this TU.
+namespace u1_detail {
+[[gnu::always_inline]] inline double* plane_scratch(std::size_t n) noexcept {
+    thread_local std::vector<double> buf;
+    if (buf.size() < n) {
+        buf.resize(n);
+    }
+    return buf.data();
+}
+}  // namespace u1_detail
 
 struct U1 {
     using scalar_t                                 = double;
@@ -92,10 +106,12 @@ struct U1 {
         }
     }
 
-    // Plaquette-centric Wilson force scatter — same shape as the legacy
-    // `CompactU1::compute_force` per-plaquette path. For U(1) the force on a
-    // link is just −β·sin(θ_p) added/subtracted into the 4 links of every
-    // plaquette through it.
+    // Plaquette-centric Wilson force scatter. The double specialisation goes
+    // through a plane-batched Sleef sin path (same shape as CompactU1):
+    // stash plaquette angles in nsites scratch → sin_batch → scatter the
+    // −(β/N)·sin(θ_p) into the 4 link forces. Non-double T falls back to the
+    // per-plaquette `plaq_force_accum` scalar libm path so float / extended
+    // precision keep working without Sleef widths for them.
     template <class T>
     static void compute_force(MatrixLinkLattice<U1, T> const& u,
                               MatrixLinkLattice<U1, T>& force,
@@ -103,26 +119,141 @@ struct U1 {
         std::fill(force.begin(), force.end(), T{0});
         std::size_t const d  = u.ndims();
         std::size_t const ns = u.nsites();
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            T const* const u_mu_blk = u.mu_block_data(mu);
-            T* const f_mu_blk       = force.mu_block_data(mu);
-            for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                T const* const u_nu_blk = u.mu_block_data(nu);
-                T* const f_nu_blk       = force.mu_block_data(nu);
-                action::detail::visit_plane(
-                    u, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                        plaq_force_accum(u_mu_blk,
-                                         u_nu_blk,
-                                         f_mu_blk,
-                                         f_nu_blk,
-                                         s,
-                                         s_pmu,
-                                         s_pnu,
-                                         ns,
-                                         beta_over_n);
-                    });
+        if constexpr (std::is_same_v<T, double>) {
+            double* const buf = u1_detail::plane_scratch(ns);
+            double const c0   = -beta_over_n;
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                double const* const u_mu_blk = u.mu_block_data(mu);
+                double* const f_mu_blk       = force.mu_block_data(mu);
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    double const* const u_nu_blk = u.mu_block_data(nu);
+                    double* const f_nu_blk       = force.mu_block_data(nu);
+                    action::detail::visit_plane(
+                        u, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            buf[s] = u_mu_blk[s] + u_nu_blk[s_pmu] - u_mu_blk[s_pnu] - u_nu_blk[s];
+                        });
+                    math::sin_batch(buf, buf, ns);
+                    action::detail::visit_plane(
+                        u, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            double const c = c0 * buf[s];
+                            f_mu_blk[s] += c;
+                            f_nu_blk[s_pmu] += c;
+                            f_mu_blk[s_pnu] -= c;
+                            f_nu_blk[s] -= c;
+                        });
+                }
+            }
+        } else {
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                T const* const u_mu_blk = u.mu_block_data(mu);
+                T* const f_mu_blk       = force.mu_block_data(mu);
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    T const* const u_nu_blk = u.mu_block_data(nu);
+                    T* const f_nu_blk       = force.mu_block_data(nu);
+                    action::detail::visit_plane(
+                        u, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            plaq_force_accum(u_mu_blk,
+                                             u_nu_blk,
+                                             f_mu_blk,
+                                             f_nu_blk,
+                                             s,
+                                             s_pmu,
+                                             s_pnu,
+                                             ns,
+                                             beta_over_n);
+                        });
+                }
             }
         }
+    }
+
+    // Fused force-and-kick: scatter −(k_dt·β/N)·sin(θ_p) directly into the
+    // momentum LinkLattice. Skips the dedicated force buffer the integrator
+    // would otherwise materialise via compute_force + kick_add. Double-only
+    // batched path; non-double falls back to per-plaquette scalar sin.
+    template <class T>
+    static void compute_force_and_kick(MatrixLinkLattice<U1, T> const& u,
+                                       MatrixLinkLattice<U1, T>& mom,
+                                       double beta_over_n,
+                                       double k_dt) noexcept {
+        std::size_t const d  = u.ndims();
+        std::size_t const ns = u.nsites();
+        if constexpr (std::is_same_v<T, double>) {
+            double* const buf = u1_detail::plane_scratch(ns);
+            double const c0   = -k_dt * beta_over_n;
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                double const* const u_mu_blk = u.mu_block_data(mu);
+                double* const m_mu_blk       = mom.mu_block_data(mu);
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    double const* const u_nu_blk = u.mu_block_data(nu);
+                    double* const m_nu_blk       = mom.mu_block_data(nu);
+                    action::detail::visit_plane(
+                        u, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            buf[s] = u_mu_blk[s] + u_nu_blk[s_pmu] - u_mu_blk[s_pnu] - u_nu_blk[s];
+                        });
+                    math::sin_batch(buf, buf, ns);
+                    action::detail::visit_plane(
+                        u, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            double const c = c0 * buf[s];
+                            m_mu_blk[s] += c;
+                            m_nu_blk[s_pmu] += c;
+                            m_mu_blk[s_pnu] -= c;
+                            m_nu_blk[s] -= c;
+                        });
+                }
+            }
+        } else {
+            T const c0_T = static_cast<T>(-k_dt * beta_over_n);
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                T const* const u_mu_blk = u.mu_block_data(mu);
+                T* const m_mu_blk       = mom.mu_block_data(mu);
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    T const* const u_nu_blk = u.mu_block_data(nu);
+                    T* const m_nu_blk       = mom.mu_block_data(nu);
+                    action::detail::visit_plane(
+                        u, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                            T const theta_p =
+                                u_mu_blk[s] + u_nu_blk[s_pmu] - u_mu_blk[s_pnu] - u_nu_blk[s];
+                            T const c = c0_T * std::sin(theta_p);
+                            m_mu_blk[s] += c;
+                            m_nu_blk[s_pmu] += c;
+                            m_mu_blk[s_pnu] -= c;
+                            m_nu_blk[s] -= c;
+                        });
+                }
+            }
+        }
+    }
+
+    // Plane-batched Σ Re Tr U_p over a single (mu, nu) plane. Returned value
+    // is added to an external accumulator by Wilson<G>::s_full. Double-only
+    // batched path; for other T the caller falls back to per-plaquette
+    // `plaq_re_tr`.
+    template <class T>
+    static double s_full_plane_re_tr_sum(MatrixLinkLattice<U1, T> const& u,
+                                         std::size_t mu,
+                                         std::size_t nu) noexcept
+        requires std::is_same_v<T, double>
+    {
+        std::size_t const ns         = u.nsites();
+        double* const buf            = u1_detail::plane_scratch(ns);
+        double const* const u_mu_blk = u.mu_block_data(mu);
+        double const* const u_nu_blk = u.mu_block_data(nu);
+        action::detail::visit_plane(
+            u, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                buf[s] = u_mu_blk[s] + u_nu_blk[s_pmu] - u_mu_blk[s_pnu] - u_nu_blk[s];
+            });
+        math::cos_batch(buf, buf, ns);
+        double accum = 0.0;
+        {
+#if defined(__clang__)
+            _Pragma("clang fp reassociate(on)")
+#endif
+                for (std::size_t s = 0; s < ns; ++s) {
+                accum += buf[s];
+            }
+        }
+        return accum;
     }
 };
 
