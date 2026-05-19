@@ -1,7 +1,10 @@
 #pragma once
 
+#include <reticolo/math/vec_libm.hpp>
+
 #include <cmath>
 #include <cstddef>
+#include <vector>
 
 namespace reticolo::math::su2 {
 
@@ -270,18 +273,69 @@ adj_mul_slab(double* out, double const* a, double const* b, std::size_t n) noexc
     }
 }
 
-// In-place U ← exp(dt·P) · U. Uses one scratch per site, no slab scratch.
+// In-place U ← exp(dt·P) · U.
+//
+// Three-pass slab kernel that hoists the two transcendental calls (sin+cos
+// of β = dt·‖h‖) out of the per-site body and runs them as one Sleef
+// sincos_batch over a flat β scratch — replaces 2 scalar libm calls per site
+// with one vectorised call per `k_vec_width_d` sites. Pass 1 computes
+// β = dt·sqrt(h₁²+h₂²+h₃²) and stashes (β, h₁, h₂, h₃, ‖h‖) per site; pass
+// 2 is sincos_batch; pass 3 builds V from (c, γ·h) and multiplies into U.
+// γ = sin(β)/‖h‖ has a branchless small-‖h‖ guard so the inner loop stays
+// vector-friendly.
 [[gnu::always_inline]] inline void
 expi_lmul_slab(double* u, double const* p, double dt, std::size_t n) noexcept {
+    thread_local std::vector<double> scratch;
+    if (scratch.size() < 7 * n) {
+        scratch.resize(7 * n);
+    }
+    double* const beta_buf = scratch.data();
+    double* const h_buf    = scratch.data() + n;
+    double* const h1_buf   = scratch.data() + (2 * n);
+    double* const h2_buf   = scratch.data() + (3 * n);
+    double* const h3_buf   = scratch.data() + (4 * n);
+    double* const sin_buf  = scratch.data() + (5 * n);
+    double* const cos_buf  = scratch.data() + (6 * n);
+
+    // Pass 1: per site, compute β = dt·‖h‖ and stash the algebra coords.
     for (std::size_t s = 0; s < n; ++s) {
-        double p_s[8];
+        double const h3 = p[(1 * n) + s];
+        double const h2 = p[(2 * n) + s];
+        double const h1 = p[(3 * n) + s];
+        double const hs = (h1 * h1) + (h2 * h2) + (h3 * h3);
+        double const h  = std::sqrt(hs);
+        beta_buf[s]     = dt * h;
+        h_buf[s]        = h;
+        h1_buf[s]       = h1;
+        h2_buf[s]       = h2;
+        h3_buf[s]       = h3;
+    }
+
+    // Pass 2: vectorised sincos of β.
+    reticolo::math::sincos_batch(sin_buf, cos_buf, beta_buf, n);
+
+    // Pass 3: build V = (c, γ·h₃, γ·h₂, γ·h₁, −γ·h₂, γ·h₁, c, −γ·h₃) and
+    // write U ← V · U. Branchless γ guard: at h ≈ 0 the algebra coords are
+    // also ≈ 0, so any finite γ leaves V ≈ I to first order; the only worry
+    // is division by zero, fixed by max(h, ε).
+    constexpr double k_eps_h = 1.0e-300;
+    for (std::size_t s = 0; s < n; ++s) {
+        double const h     = h_buf[s];
+        double const c     = cos_buf[s];
+        double const sb    = sin_buf[s];
+        double const gamma = sb / (h + k_eps_h);
         double u_s[8];
         for (std::size_t k = 0; k < 8; ++k) {
-            p_s[k] = p[(k * n) + s];
             u_s[k] = u[(k * n) + s];
         }
-        double v_s[8];
-        exp_su2(v_s, p_s, dt);
+        double const v_s[8] = {c,
+                               gamma * h3_buf[s],
+                               gamma * h2_buf[s],
+                               gamma * h1_buf[s],
+                               -(gamma * h2_buf[s]),
+                               gamma * h1_buf[s],
+                               c,
+                               -(gamma * h3_buf[s])};
         double o_s[8];
         mul_2x2(o_s, v_s, u_s);
         for (std::size_t k = 0; k < 8; ++k) {
@@ -313,10 +367,22 @@ template <class Rng>
 [[gnu::always_inline]] inline void
 sample_algebra_slab(double* p, Rng& rng, std::size_t n) noexcept {
     constexpr double k_inv_sqrt2 = 0.70710678118654752440;
+    // Pre-fill 3n independent N(0, 1/√2) draws into a thread-local buffer,
+    // then a single stride-1 scatter pass into the storage layout. Splits
+    // the random-draw (rng-state-bound) from the scatter (memory-bound,
+    // auto-vectorisable) — both phases run cleanly without interleaving.
+    thread_local std::vector<double> h_buf;
+    if (h_buf.size() < 3 * n) {
+        h_buf.resize(3 * n);
+    }
+    rng.normal_fill(h_buf.data(), 3 * n);
+    double const* const h1_arr = h_buf.data();
+    double const* const h2_arr = h_buf.data() + n;
+    double const* const h3_arr = h_buf.data() + (2 * n);
     for (std::size_t s = 0; s < n; ++s) {
-        double const h1 = rng.normal() * k_inv_sqrt2;
-        double const h2 = rng.normal() * k_inv_sqrt2;
-        double const h3 = rng.normal() * k_inv_sqrt2;
+        double const h1 = h1_arr[s] * k_inv_sqrt2;
+        double const h2 = h2_arr[s] * k_inv_sqrt2;
+        double const h3 = h3_arr[s] * k_inv_sqrt2;
         p[(0 * n) + s]  = 0.0;
         p[(1 * n) + s]  = h3;
         p[(2 * n) + s]  = h2;

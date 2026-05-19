@@ -1,11 +1,15 @@
 #pragma once
 
+#include <reticolo/math/vec_libm.hpp>
+
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace reticolo {
 
@@ -80,56 +84,74 @@ public:
 #endif
     }
 
-    // Standard normal via Box-Muller polar form; second sample cached. The cache
-    // uses a plain (bool, double) pair — std::optional<double> here adds a branch
-    // + indirection that is measurable in MC sweeps where normal() is the hottest
-    // member.
+    // Standard normal via classical Box-Muller (sincos form, no rejection).
+    // The polar form has data-dependent rejection that defeats vectorisation
+    // in `normal_fill`; classical form has fixed cost (2 uniforms, 1 sqrt,
+    // 1 log, 1 sincos per pair) and batches cleanly through Sleef. Uses
+    // Sleef's scalar `Sleef_sincos_u10` so the single-call path is bit-
+    // identical to the batched `normal_fill` path (which uses Sleef
+    // `sincos_batch`) — the test suite enforces this agreement.
     [[nodiscard]] double normal() noexcept {
         if (has_cached_normal_) {
             has_cached_normal_ = false;
             return cached_normal_;
         }
-        double u1 = 0.0;
-        double u2 = 0.0;
-        double s  = 0.0;
-        do {
-            u1 = (2.0 * uniform()) - 1.0;
-            u2 = (2.0 * uniform()) - 1.0;
-            s  = (u1 * u1) + (u2 * u2);
-        } while (s >= 1.0 || s == 0.0);
-        double const factor = std::sqrt(-2.0 * std::log(s) / s);
-        cached_normal_      = u2 * factor;
-        has_cached_normal_  = true;
-        return u1 * factor;
+        constexpr double k_two_pi = 6.283185307179586476925286766559;
+        double const u1           = std::max(uniform(), 1.0e-300);
+        double const u2           = uniform();
+        double const r            = std::sqrt(-2.0 * std::log(u1));
+        double const theta        = k_two_pi * u2;
+        Sleef_double_2 const sc   = Sleef_sincos_u10(theta);
+        cached_normal_            = r * sc.x;  // sin
+        has_cached_normal_        = true;
+        return r * sc.y;  // cos
     }
 
-    // Batched-fill: writes `n` standard normals into `out`. Equivalent to calling
-    // normal() `n` times — same byte stream, same statistical properties — but the
-    // hot loop is straight-line code with no per-call cache branch and no virtual
-    // boundary, so the OoO engine sees more work to overlap. Used by HMC momentum
-    // sampling where every site needs an independent normal.
+    // Batched-fill: writes `n` standard normals into `out`. Uses classical
+    // Box-Muller with `sincos_batch` from vec_libm — one Sleef sincos call
+    // per chunk of `k_vec_width_d` pairs. No rejection loop, no per-call
+    // cache branch. Used by HMC momentum sampling where every site needs an
+    // independent normal. The byte stream is not identical to repeated
+    // `normal()` calls (different algorithm); statistical properties are.
     void normal_fill(double* out, std::size_t n) noexcept {
         std::size_t i = 0;
         if (has_cached_normal_ && i < n) {
             out[i++]           = cached_normal_;
             has_cached_normal_ = false;
         }
-        // Emit pairs.
-        for (; i + 1 < n; i += 2) {
-            double u1 = 0.0;
-            double u2 = 0.0;
-            double s  = 0.0;
-            do {
-                u1 = (2.0 * uniform()) - 1.0;
-                u2 = (2.0 * uniform()) - 1.0;
-                s  = (u1 * u1) + (u2 * u2);
-            } while (s >= 1.0 || s == 0.0);
-            double const factor = std::sqrt(-2.0 * std::log(s) / s);
-            out[i]              = u1 * factor;
-            out[i + 1]          = u2 * factor;
+
+        std::size_t const remaining = n - i;
+        std::size_t const n_pairs   = remaining / 2;
+
+        if (n_pairs > 0) {
+            thread_local std::vector<double> r_buf;
+            thread_local std::vector<double> theta_buf;
+            thread_local std::vector<double> sin_buf;
+            thread_local std::vector<double> cos_buf;
+            if (r_buf.size() < n_pairs) {
+                r_buf.resize(n_pairs);
+                theta_buf.resize(n_pairs);
+                sin_buf.resize(n_pairs);
+                cos_buf.resize(n_pairs);
+            }
+            constexpr double k_two_pi = 6.283185307179586476925286766559;
+            for (std::size_t p = 0; p < n_pairs; ++p) {
+                double const u1 = std::max(uniform(), 1.0e-300);
+                double const u2 = uniform();
+                r_buf[p]        = std::sqrt(-2.0 * std::log(u1));
+                theta_buf[p]    = k_two_pi * u2;
+            }
+            math::sincos_batch(sin_buf.data(), cos_buf.data(), theta_buf.data(), n_pairs);
+            for (std::size_t p = 0; p < n_pairs; ++p) {
+                out[i + (2 * p)]     = r_buf[p] * cos_buf[p];
+                out[i + (2 * p) + 1] = r_buf[p] * sin_buf[p];
+            }
+            i += 2 * n_pairs;
         }
+
+        // Trailing odd element: generate a pair via normal() and cache the spare.
         if (i < n) {
-            out[i] = normal();  // updates the cache for the next call.
+            out[i] = normal();
         }
     }
 

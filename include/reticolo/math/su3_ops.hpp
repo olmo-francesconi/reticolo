@@ -1,8 +1,11 @@
 #pragma once
 
+#include <reticolo/math/vec_libm.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <vector>
 
 namespace reticolo::math::su3 {
 
@@ -226,7 +229,7 @@ adj_mul_3x3(double* out, double const* a, double const* b) noexcept {
                          (q2[idx_re(2, 0)] * q[idx_re(0, 2)] - q2[idx_im(2, 0)] * q[idx_im(0, 2)]) +
                          (q2[idx_re(2, 1)] * q[idx_re(1, 2)] - q2[idx_im(2, 1)] * q[idx_im(1, 2)]) +
                          (q2[idx_re(2, 2)] * q[idx_re(2, 2)] - q2[idx_im(2, 2)] * q[idx_im(2, 2)]);
-    double const c0 = tr_q3 / 3.0;
+    double const c0    = tr_q3 / 3.0;
 
     double const c1_over_3 = c1 / 3.0;
     double const c0_max    = 2.0 * c1_over_3 * std::sqrt(c1_over_3);
@@ -445,19 +448,228 @@ adj_mul_slab(double* out, double const* a, double const* b, std::size_t n) noexc
     }
 }
 
+// In-place U ← exp(dt·P) · U, slab edition.
+//
+// The per-site Cayley-Hamilton exp has 1 acos + 5 sincos calls per link plus
+// 2 sqrt. Batching them across all slab sites via Sleef cuts the
+// transcendental cost ~2× on AArch64 / AVX2. The structure is multi-pass:
+//
+//   pass 1 (per site, scalar): compute c1, c0, branch flag, ratio = c0/c0_max
+//                              (clamped + safe for small-c1), √(c1/3), √c1.
+//   pass 2 (vector):           theta = acos(ratio) via acos_batch.
+//   pass 3 (vector):           build theta/3 buffer; sincos_batch → (s_t3, c_t3).
+//   pass 3.5 (per site):       u = √(c1/3)·c_t3, w = √c1·s_t3.
+//   pass 4 (vector):           sincos_batch(u) → (su, cu), sincos_batch(w) → (sw, cw).
+//   pass 5 (per site):         assemble V = f₀·I + f₁·Q + f₂·Q² (main branch)
+//                              or fall back to Taylor for sites where small_flag = 1;
+//                              then U ← V · U.
+//
+// 2u-trig is computed inline as c2u = cu² − su² and s2u = 2·cu·su (no extra
+// transcendentals). ξ = sin(w)/w uses a branchless small-w guard.
 [[gnu::always_inline]] inline void
 expi_lmul_slab(double* u, double const* p, double dt, std::size_t n) noexcept {
+    thread_local std::vector<double> scratch;
+    constexpr std::size_t k_slabs = 13;
+    if (scratch.size() < k_slabs * n) {
+        scratch.resize(k_slabs * n);
+    }
+    double* const ratio_buf  = scratch.data() + (0 * n);  // pass1→pass2
+    double* const theta_buf  = scratch.data() + (1 * n);  // pass2→pass3 prep
+    double* const t3_buf     = scratch.data() + (2 * n);  // pass3 input
+    double* const sqrt_c1_3  = scratch.data() + (3 * n);
+    double* const sqrt_c1    = scratch.data() + (4 * n);
+    double* const small_flag = scratch.data() + (5 * n);
+    double* const u_buf      = scratch.data() + (6 * n);
+    double* const w_buf      = scratch.data() + (7 * n);
+    double* const cu_buf     = scratch.data() + (8 * n);
+    double* const su_buf     = scratch.data() + (9 * n);
+    double* const cw_buf     = scratch.data() + (10 * n);
+    double* const sw_buf     = scratch.data() + (11 * n);
+    double* const s_t3_buf   = scratch.data() + (12 * n);
+
+    constexpr double k_small_c1 = 1.0e-8;
+    constexpr double k_eps_w    = 1.0e-10;
+    constexpr double k_inv_3    = 1.0 / 3.0;
+
+    // ----- Pass 1: per-site scalar prep ----------------------------------
+    // Read p_s[18], build q = -i·dt·p, compute c1, c0, c0_max, clamped ratio
+    // and the two √c1 forms. Mark small-c1 sites for the Taylor fallback.
     for (std::size_t s = 0; s < n; ++s) {
-        double p_s[18];
-        double u_s[18];
-        for (std::size_t k = 0; k < 18; ++k) {
-            p_s[k] = p[(k * n) + s];
-            u_s[k] = u[(k * n) + s];
+        double q[18];
+        for (std::size_t k = 0; k < 9; ++k) {
+            q[2 * k]       = dt * p[((2 * k) + 1) * n + s];
+            q[(2 * k) + 1] = -dt * p[(2 * k) * n + s];
         }
-        double v_s[18];
-        exp_su3(v_s, p_s, dt);
+        double c1 = 0.0;
+        for (std::size_t k = 0; k < 18; ++k) {
+            c1 += q[k] * q[k];
+        }
+        c1 *= 0.5;
+        if (c1 < k_small_c1) {
+            small_flag[s] = 1.0;
+            ratio_buf[s]  = 0.0;
+            sqrt_c1_3[s]  = 0.0;
+            sqrt_c1[s]    = 0.0;
+            continue;
+        }
+        small_flag[s] = 0.0;
+        double q2[18];
+        mul_3x3(q2, q, q);
+        // c0 = Tr(Q³)/3 = Tr(Q² · Q)/3, real for hermitian Q.
+        double const tr_q3 =
+            (q2[idx_re(0, 0)] * q[idx_re(0, 0)] - q2[idx_im(0, 0)] * q[idx_im(0, 0)]) +
+            (q2[idx_re(0, 1)] * q[idx_re(1, 0)] - q2[idx_im(0, 1)] * q[idx_im(1, 0)]) +
+            (q2[idx_re(0, 2)] * q[idx_re(2, 0)] - q2[idx_im(0, 2)] * q[idx_im(2, 0)]) +
+            (q2[idx_re(1, 0)] * q[idx_re(0, 1)] - q2[idx_im(1, 0)] * q[idx_im(0, 1)]) +
+            (q2[idx_re(1, 1)] * q[idx_re(1, 1)] - q2[idx_im(1, 1)] * q[idx_im(1, 1)]) +
+            (q2[idx_re(1, 2)] * q[idx_re(2, 1)] - q2[idx_im(1, 2)] * q[idx_im(2, 1)]) +
+            (q2[idx_re(2, 0)] * q[idx_re(0, 2)] - q2[idx_im(2, 0)] * q[idx_im(0, 2)]) +
+            (q2[idx_re(2, 1)] * q[idx_re(1, 2)] - q2[idx_im(2, 1)] * q[idx_im(1, 2)]) +
+            (q2[idx_re(2, 2)] * q[idx_re(2, 2)] - q2[idx_im(2, 2)] * q[idx_im(2, 2)]);
+        double const c0        = tr_q3 * k_inv_3;
+        double const c1_over_3 = c1 * k_inv_3;
+        double const sc13      = std::sqrt(c1_over_3);
+        double const sc1       = std::sqrt(c1);
+        double const c0_max    = 2.0 * c1_over_3 * sc13;
+        double const ratio     = (c0_max > 0.0) ? std::max(-1.0, std::min(1.0, c0 / c0_max)) : 0.0;
+        ratio_buf[s]           = ratio;
+        sqrt_c1_3[s]           = sc13;
+        sqrt_c1[s]             = sc1;
+    }
+
+    // ----- Pass 2: theta = acos(ratio) -----------------------------------
+    reticolo::math::acos_batch(theta_buf, ratio_buf, n);
+
+    // ----- Pass 3: theta/3 → sincos --------------------------------------
+    for (std::size_t s = 0; s < n; ++s) {
+        t3_buf[s] = theta_buf[s] * k_inv_3;
+    }
+    reticolo::math::sincos_batch(s_t3_buf, /*cos*/ theta_buf, t3_buf, n);
+    //   ↑ reuse theta_buf for cos(theta/3) — its acos contents are no longer
+    //     needed. Calling convention of sincos_batch is (sin_dst, cos_dst, src, n).
+
+    // ----- Pass 3.5: u, w ------------------------------------------------
+    for (std::size_t s = 0; s < n; ++s) {
+        double const c_t3 = theta_buf[s];
+        double const s_t3 = s_t3_buf[s];
+        u_buf[s]          = sqrt_c1_3[s] * c_t3;
+        w_buf[s]          = sqrt_c1[s] * s_t3;
+    }
+
+    // ----- Pass 4: sincos(u), sincos(w) ----------------------------------
+    reticolo::math::sincos_batch(su_buf, cu_buf, u_buf, n);
+    reticolo::math::sincos_batch(sw_buf, cw_buf, w_buf, n);
+
+    // ----- Pass 5: per-site assembly + multiply --------------------------
+    for (std::size_t s = 0; s < n; ++s) {
+        // Recompute q (cheap vs stashing 18·n doubles).
+        double q[18];
+        for (std::size_t k = 0; k < 9; ++k) {
+            q[2 * k]       = dt * p[((2 * k) + 1) * n + s];
+            q[(2 * k) + 1] = -dt * p[(2 * k) * n + s];
+        }
+        double u_old[18];
+        for (std::size_t k = 0; k < 18; ++k) {
+            u_old[k] = u[(k * n) + s];
+        }
+
+        double v[18];
+        if (small_flag[s] != 0.0) {
+            // Taylor branch: V = I + iQ − Q²/2 − iQ³/6.
+            double q2[18];
+            mul_3x3(q2, q, q);
+            double q3[18];
+            mul_3x3(q3, q2, q);
+            for (std::size_t k = 0; k < 18; ++k) {
+                v[k] = -0.5 * q2[k];
+            }
+            v[idx_re(0, 0)] += 1.0;
+            v[idx_re(1, 1)] += 1.0;
+            v[idx_re(2, 2)] += 1.0;
+            for (std::size_t k = 0; k < 9; ++k) {
+                v[2 * k] += -q[(2 * k) + 1];
+                v[(2 * k) + 1] += q[2 * k];
+            }
+            constexpr double k_inv6 = 1.0 / 6.0;
+            for (std::size_t k = 0; k < 9; ++k) {
+                v[2 * k] += k_inv6 * q3[(2 * k) + 1];
+                v[(2 * k) + 1] -= k_inv6 * q3[2 * k];
+            }
+        } else {
+            double const u_ = u_buf[s];
+            double const w_ = w_buf[s];
+            double const cu = cu_buf[s];
+            double const su = su_buf[s];
+            double const cw = cw_buf[s];
+            double const sw = sw_buf[s];
+            // 2u trig via doubling — no extra Sleef call.
+            double const c2u = (cu * cu) - (su * su);
+            double const s2u = 2.0 * cu * su;
+            // ξ(w) = sin(w)/w, branchless small-w guard.
+            double const xi = (std::abs(w_) > k_eps_w) ? (sw / w_) : 1.0;
+
+            double const u2  = u_ * u_;
+            double const w2  = w_ * w_;
+            double const den = (9.0 * u2) - w2;
+
+            // h_0 = (u²−w²) e^{2iu} + e^{-iu}·[8 u² cw + 2 i u (3u² + w²) ξ]
+            double const t0a_re = (u2 - w2) * c2u;
+            double const t0a_im = (u2 - w2) * s2u;
+            double const inner0 = 2.0 * u_ * (3.0 * u2 + w2) * xi;
+            double const t0b_re = (cu * (8.0 * u2 * cw)) + (su * inner0);
+            double const t0b_im = -(su * (8.0 * u2 * cw)) + (cu * inner0);
+            double const h0_re  = t0a_re + t0b_re;
+            double const h0_im  = t0a_im + t0b_im;
+
+            // h_1 = 2u e^{2iu} − e^{-iu}·[2 u cw − i (3u² − w²) ξ]
+            double const t1a_re    = 2.0 * u_ * c2u;
+            double const t1a_im    = 2.0 * u_ * s2u;
+            double const inner1_re = 2.0 * u_ * cw;
+            double const inner1_im = -((3.0 * u2) - w2) * xi;
+            double const t1b_re    = (cu * inner1_re) + (su * inner1_im);
+            double const t1b_im    = (cu * inner1_im) - (su * inner1_re);
+            double const h1_re     = t1a_re - t1b_re;
+            double const h1_im     = t1a_im - t1b_im;
+
+            // h_2 = e^{2iu} − e^{-iu}·[cw + 3 i u ξ]
+            double const inner2_re = cw;
+            double const inner2_im = 3.0 * u_ * xi;
+            double const t2b_re    = (cu * inner2_re) + (su * inner2_im);
+            double const t2b_im    = (cu * inner2_im) - (su * inner2_re);
+            double const h2_re     = c2u - t2b_re;
+            double const h2_im     = s2u - t2b_im;
+
+            double const inv_den = 1.0 / den;
+            double const f0_re   = h0_re * inv_den;
+            double const f0_im   = h0_im * inv_den;
+            double const f1_re   = h1_re * inv_den;
+            double const f1_im   = h1_im * inv_den;
+            double const f2_re   = h2_re * inv_den;
+            double const f2_im   = h2_im * inv_den;
+
+            double q2[18];
+            mul_3x3(q2, q, q);
+            // V = f0·I + f1·Q + f2·Q²
+            for (std::size_t k = 0; k < 9; ++k) {
+                std::size_t const kr = 2 * k;
+                std::size_t const ki = kr + 1;
+                double const q_re    = q[kr];
+                double const q_im    = q[ki];
+                double const q2_re   = q2[kr];
+                double const q2_im   = q2[ki];
+                v[kr] = ((f1_re * q_re) - (f1_im * q_im)) + ((f2_re * q2_re) - (f2_im * q2_im));
+                v[ki] = ((f1_re * q_im) + (f1_im * q_re)) + ((f2_re * q2_im) + (f2_im * q2_re));
+            }
+            v[idx_re(0, 0)] += f0_re;
+            v[idx_im(0, 0)] += f0_im;
+            v[idx_re(1, 1)] += f0_re;
+            v[idx_im(1, 1)] += f0_im;
+            v[idx_re(2, 2)] += f0_re;
+            v[idx_im(2, 2)] += f0_im;
+        }
+
         double o_s[18];
-        mul_3x3(o_s, v_s, u_s);
+        mul_3x3(o_s, v, u_old);
         for (std::size_t k = 0; k < 18; ++k) {
             u[(k * n) + s] = o_s[k];
         }
@@ -487,15 +699,30 @@ template <class Rng>
 sample_algebra_slab(double* p, Rng& rng, std::size_t n) noexcept {
     constexpr double k_inv_sqrt2 = 0.70710678118654752440;
     constexpr double k_inv_sqrt3 = 0.57735026918962576451;
+    // Pre-fill 8n independent N(0, 1/√2) draws into a thread-local buffer
+    // then scatter — same shape as SU(2)::sample_algebra_slab.
+    thread_local std::vector<double> h_buf;
+    if (h_buf.size() < 8 * n) {
+        h_buf.resize(8 * n);
+    }
+    rng.normal_fill(h_buf.data(), 8 * n);
+    double const* const h1_arr = h_buf.data() + (0 * n);
+    double const* const h2_arr = h_buf.data() + (1 * n);
+    double const* const h3_arr = h_buf.data() + (2 * n);
+    double const* const h4_arr = h_buf.data() + (3 * n);
+    double const* const h5_arr = h_buf.data() + (4 * n);
+    double const* const h6_arr = h_buf.data() + (5 * n);
+    double const* const h7_arr = h_buf.data() + (6 * n);
+    double const* const h8_arr = h_buf.data() + (7 * n);
     for (std::size_t s = 0; s < n; ++s) {
-        double const h1            = rng.normal() * k_inv_sqrt2;
-        double const h2            = rng.normal() * k_inv_sqrt2;
-        double const h3            = rng.normal() * k_inv_sqrt2;
-        double const h4            = rng.normal() * k_inv_sqrt2;
-        double const h5            = rng.normal() * k_inv_sqrt2;
-        double const h6            = rng.normal() * k_inv_sqrt2;
-        double const h7            = rng.normal() * k_inv_sqrt2;
-        double const h8            = rng.normal() * k_inv_sqrt2;
+        double const h1            = h1_arr[s] * k_inv_sqrt2;
+        double const h2            = h2_arr[s] * k_inv_sqrt2;
+        double const h3            = h3_arr[s] * k_inv_sqrt2;
+        double const h4            = h4_arr[s] * k_inv_sqrt2;
+        double const h5            = h5_arr[s] * k_inv_sqrt2;
+        double const h6            = h6_arr[s] * k_inv_sqrt2;
+        double const h7            = h7_arr[s] * k_inv_sqrt2;
+        double const h8            = h8_arr[s] * k_inv_sqrt2;
         double const h8_over_sqrt3 = h8 * k_inv_sqrt3;
         // Diagonal: 00 = i·(h3 + h8/√3), 11 = i·(-h3 + h8/√3), 22 = i·(-2 h8/√3)
         p[(idx_re(0, 0) * n) + s] = 0.0;
