@@ -113,7 +113,7 @@ void print_row(Row const& r, int ndim, int L, int n_md) {
 int main() {
     using namespace reticolo;
     using Integ      = alg::integ::Omelyan2;
-    using GaugeInteg = gauge::alg::integ::Omelyan2;
+    using GaugeInteg = alg::integ::Omelyan2;
 
     std::vector<Case> const cases = {
         {.ndim = 3, .L = 8, .n_traj = 200},
@@ -138,7 +138,7 @@ int main() {
 
     using ScalarPhi4 = act::Phi4<double>;
     using ScalarSG   = act::SineGordon<double>;
-    using GaugeU1    = gauge::action::CompactU1<double>;
+    using GaugeU1    = action::CompactU1<double>;
 
     ScalarPhi4 const phi4{.kappa = k_kappa, .lambda = k_lambda};
     ScalarSG const sg{.kappa = k_kappa, .alpha = k_alpha};
@@ -203,7 +203,7 @@ int main() {
         {
             LinkLattice<double> theta{shape_g, 0.0};
             FastRng rng{42};
-            gauge::alg::Hmc<GaugeU1, FastRng, GaugeInteg> hmc{
+            alg::Hmc<GaugeU1, FastRng, GaugeInteg, LinkLattice<double>> hmc{
                 u1, theta, rng, {.tau = k_tau, .n_md = k_n_md}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.trajectory();

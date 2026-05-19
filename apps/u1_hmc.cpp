@@ -7,7 +7,7 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action = gauge::action::CompactU1<double>;
+    using Action = action::CompactU1<double>;
 
     cli::Parser p{"u1_hmc", "Compact U(1) Wilson action, HMC (link-field)"};
     auto const& L          = p.req<int>("L,size", "linear lattice extent");
@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
     auto s_prod   = out.series<double>("/prod/obs/s");
     auto plaq     = out.series<double>("/prod/obs/plaq");
 
-    gauge::alg::Hmc<Action, FastRng, gauge::alg::integ::Omelyan2> hmc{
+    alg::Hmc<Action, FastRng, alg::integ::Omelyan2, LinkLattice<double>> hmc{
         action, links, rng, {.tau = tau, .n_md = n_md}};
 
     std::size_t const v_sites = links.nsites();

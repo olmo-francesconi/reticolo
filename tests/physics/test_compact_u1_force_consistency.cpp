@@ -16,7 +16,7 @@ using reticolo::gauge::HasLinkForce;
 using reticolo::gauge::HasLinkFusedKick;
 using reticolo::gauge::HasLinkSEff;
 using reticolo::gauge::LinkLocalAction;
-using reticolo::gauge::action::CompactU1;
+using reticolo::action::CompactU1;
 
 static_assert(LinkLocalAction<CompactU1<double>, double>);
 static_assert(HasLinkSEff<CompactU1<double>, double>);

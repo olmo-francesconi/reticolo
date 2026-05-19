@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <utility>
 
-namespace reticolo::gauge::detail {
+namespace reticolo::action::detail {
 
 // =============================================================================
 //  Plaquette-plane bulk-vs-slab hot-loop helper for direction-major
@@ -258,4 +258,4 @@ visit_plane(LinkLattice<T> const& l, std::size_t mu, std::size_t nu, Body const&
     }
 }
 
-}  // namespace reticolo::gauge::detail
+}  // namespace reticolo::action::detail

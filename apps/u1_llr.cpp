@@ -22,8 +22,9 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action   = gauge::action::CompactU1<double>;
-    using ReplicaT = gauge::llr::Replica<Action, FastRng, gauge::alg::integ::Omelyan2>;
+    using Action   = action::CompactU1<double>;
+    using ReplicaT =
+        llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, LinkLattice<double>>;
 
     cli::Parser p{"u1_llr", "LLR with replica exchange for compact U(1) Wilson action"};
     auto const& L     = p.req<int>("L,size", "linear lattice extent");
@@ -74,7 +75,7 @@ int main(int argc, char** argv) {
                                        e_n,
                                        delta,
                                        a_init,
-                                       gauge::alg::HmcSpec{.tau = tau, .n_md = n_md}));
+                                       alg::HmcSpec{.tau = tau, .n_md = n_md}));
     }
 
     FastRng exch_rng{seed};

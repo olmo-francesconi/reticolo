@@ -15,7 +15,7 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action = gauge::action::CompactU1<double>;
+    using Action = action::CompactU1<double>;
 
     cli::Parser p{"u1_metropolis", "Compact U(1) Wilson action, link Metropolis"};
     auto const& L          = p.req<int>("L,size", "linear lattice extent");

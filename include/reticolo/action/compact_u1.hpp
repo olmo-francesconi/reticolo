@@ -12,7 +12,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace reticolo::gauge::action {
+namespace reticolo::action {
 
 // =============================================================================
 //  Compact U(1) gauge theory with the standard Wilson plaquette action:
@@ -269,4 +269,4 @@ private:
     }
 };
 
-}  // namespace reticolo::gauge::action
+}  // namespace reticolo::action

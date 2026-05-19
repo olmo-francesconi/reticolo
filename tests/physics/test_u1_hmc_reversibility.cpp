@@ -1,9 +1,9 @@
+#include <reticolo/action/compact_u1.hpp>
+#include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
-#include <reticolo/gauge/algorithm/hmc.hpp>
-#include <reticolo/action/compact_u1.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -15,11 +15,11 @@
 using reticolo::FastRng;
 using reticolo::LinkLattice;
 using reticolo::Site;
-using reticolo::gauge::action::CompactU1;
-using reticolo::gauge::alg::Hmc;
-using reticolo::gauge::alg::integ::Leapfrog;
-using reticolo::gauge::alg::integ::Omelyan2;
-using reticolo::gauge::alg::integ::Omelyan4;
+using reticolo::action::CompactU1;
+using reticolo::alg::Hmc;
+using reticolo::alg::integ::Leapfrog;
+using reticolo::alg::integ::Omelyan2;
+using reticolo::alg::integ::Omelyan4;
 
 template <class Integrator>
 static void check_reversibility() {
@@ -35,7 +35,8 @@ static void check_reversibility() {
         }
     }
 
-    Hmc<CompactU1<double>, FastRng, Integrator> hmc{action, links, rng, {.tau = 1.0, .n_md = 20}};
+    Hmc<CompactU1<double>, FastRng, Integrator, LinkLattice<double>> hmc{
+        action, links, rng, {.tau = 1.0, .n_md = 20}};
 
     {
         double* const mp    = hmc.momentum().data();
