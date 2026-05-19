@@ -55,6 +55,19 @@ public:
         return std::views::iota(std::size_t{0}, nsites()) |
                std::views::transform([](std::size_t i) { return Site{i}; });
     }
+
+    // Visit every elementary update slot — one DOF per site for a scalar
+    // field. Body is called as `body(Site x, T& ref)`. Driver for the
+    // unified Metropolis sweep (twin signature on LinkLattice yields an
+    // extra mu arg via parameter-pack expansion in the body).
+    template <class Body>
+    void for_each_update(Body&& body) {
+        T* const d          = data_.data();
+        std::size_t const n = idx_->nsites();
+        for (std::size_t i = 0; i < n; ++i) {
+            body(Site{i}, d[i]);
+        }
+    }
     [[nodiscard]] std::span<Site const> even_sites() const noexcept { return idx_->even_sites(); }
     [[nodiscard]] std::span<Site const> odd_sites() const noexcept { return idx_->odd_sites(); }
 

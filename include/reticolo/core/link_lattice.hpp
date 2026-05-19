@@ -88,6 +88,22 @@ public:
                std::views::transform([](std::size_t i) { return Site{i}; });
     }
 
+    // Visit every elementary update slot — one DOF per (site, mu) pair.
+    // Body is called as `body(Site x, std::size_t mu, T& ref)`. Order
+    // (site outer, mu inner) matches the existing LinkMetropolis sweep
+    // so RNG consumption is bit-stable. Driver for the unified Metropolis.
+    template <class Body>
+    void for_each_update(Body&& body) {
+        T* const d           = data_.data();
+        std::size_t const ns = idx_->nsites();
+        std::size_t const nd = idx_->ndims();
+        for (std::size_t i = 0; i < ns; ++i) {
+            for (std::size_t mu = 0; mu < nd; ++mu) {
+                body(Site{i}, mu, d[(mu * ns) + i]);
+            }
+        }
+    }
+
     [[nodiscard]] std::shared_ptr<Indexing const> indexing() const noexcept { return idx_; }
     [[nodiscard]] Indexing const& indexing_ref() const noexcept { return *idx_; }
 
