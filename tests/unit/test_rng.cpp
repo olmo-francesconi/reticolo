@@ -25,8 +25,8 @@ static_assert(Rng<Mt19937Rng>, "Mt19937Rng must satisfy the Rng concept");
 // to the type list. Statistical thresholds are loose enough to clear any
 // well-mixed engine.
 
-TEMPLATE_TEST_CASE("Rng is deterministic for a given seed", "[rng]",
-                   FastRng, RanluxRng, Mt19937Rng) {
+TEMPLATE_TEST_CASE(
+    "Rng is deterministic for a given seed", "[rng]", FastRng, RanluxRng, Mt19937Rng) {
     TestType a{42};
     TestType b{42};
     for (int i = 0; i < 1024; ++i) {
@@ -34,8 +34,7 @@ TEMPLATE_TEST_CASE("Rng is deterministic for a given seed", "[rng]",
     }
 }
 
-TEMPLATE_TEST_CASE("Rng reseed restarts the sequence", "[rng]",
-                   FastRng, RanluxRng, Mt19937Rng) {
+TEMPLATE_TEST_CASE("Rng reseed restarts the sequence", "[rng]", FastRng, RanluxRng, Mt19937Rng) {
     TestType r{1};
     std::array<std::uint64_t, 8> first{};
     for (auto& v : first) {
@@ -47,15 +46,15 @@ TEMPLATE_TEST_CASE("Rng reseed restarts the sequence", "[rng]",
     }
 }
 
-TEMPLATE_TEST_CASE("Different seeds produce different first words", "[rng]",
-                   FastRng, RanluxRng, Mt19937Rng) {
+TEMPLATE_TEST_CASE(
+    "Different seeds produce different first words", "[rng]", FastRng, RanluxRng, Mt19937Rng) {
     TestType a{0};
     TestType b{1};
     REQUIRE(a.uniform_u64() != b.uniform_u64());
 }
 
-TEMPLATE_TEST_CASE("Rng::uniform() stays in the unit interval", "[rng]",
-                   FastRng, RanluxRng, Mt19937Rng) {
+TEMPLATE_TEST_CASE(
+    "Rng::uniform() stays in the unit interval", "[rng]", FastRng, RanluxRng, Mt19937Rng) {
     TestType r{7};
     for (int i = 0; i < 200'000; ++i) {
         double const u = r.uniform();
@@ -64,8 +63,11 @@ TEMPLATE_TEST_CASE("Rng::uniform() stays in the unit interval", "[rng]",
     }
 }
 
-TEMPLATE_TEST_CASE("Rng::uniform_int(n) stays in range and handles edges", "[rng]",
-                   FastRng, RanluxRng, Mt19937Rng) {
+TEMPLATE_TEST_CASE("Rng::uniform_int(n) stays in range and handles edges",
+                   "[rng]",
+                   FastRng,
+                   RanluxRng,
+                   Mt19937Rng) {
     TestType r{13};
     REQUIRE(r.uniform_int(0) == 0);
     REQUIRE(r.uniform_int(1) == 0);
@@ -76,8 +78,8 @@ TEMPLATE_TEST_CASE("Rng::uniform_int(n) stays in range and handles edges", "[rng
     }
 }
 
-TEMPLATE_TEST_CASE("Rng::uniform_int distributes roughly uniformly", "[rng]",
-                   FastRng, RanluxRng, Mt19937Rng) {
+TEMPLATE_TEST_CASE(
+    "Rng::uniform_int distributes roughly uniformly", "[rng]", FastRng, RanluxRng, Mt19937Rng) {
     constexpr int k_bins        = 16;
     constexpr int k_samples     = 320'000;
     constexpr double k_expected = static_cast<double>(k_samples) / k_bins;
@@ -92,8 +94,8 @@ TEMPLATE_TEST_CASE("Rng::uniform_int distributes roughly uniformly", "[rng]",
     }
 }
 
-TEMPLATE_TEST_CASE("Rng::normal mean and stddev match standard normal", "[rng]",
-                   FastRng, RanluxRng, Mt19937Rng) {
+TEMPLATE_TEST_CASE(
+    "Rng::normal mean and stddev match standard normal", "[rng]", FastRng, RanluxRng, Mt19937Rng) {
     constexpr int k_samples = 200'000;
     TestType r{99};
     double sum = 0.0;
@@ -111,7 +113,10 @@ TEMPLATE_TEST_CASE("Rng::normal mean and stddev match standard normal", "[rng]",
 }
 
 TEMPLATE_TEST_CASE("Rng::normal_fill agrees with sequential normal() calls",
-                   "[rng]", FastRng, RanluxRng, Mt19937Rng) {
+                   "[rng]",
+                   FastRng,
+                   RanluxRng,
+                   Mt19937Rng) {
     constexpr std::size_t n = 1024;
     TestType a{123};
     TestType b{123};
@@ -124,7 +129,10 @@ TEMPLATE_TEST_CASE("Rng::normal_fill agrees with sequential normal() calls",
 }
 
 TEMPLATE_TEST_CASE("Copying Rng snapshots state and diverges after reseed",
-                   "[rng]", FastRng, RanluxRng, Mt19937Rng) {
+                   "[rng]",
+                   FastRng,
+                   RanluxRng,
+                   Mt19937Rng) {
     TestType a{55};
     (void)a.uniform_u64();
     (void)a.uniform_u64();

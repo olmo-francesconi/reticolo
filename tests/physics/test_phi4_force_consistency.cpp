@@ -1,5 +1,5 @@
-#include <reticolo/action/phi4.hpp>
 #include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/action/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>

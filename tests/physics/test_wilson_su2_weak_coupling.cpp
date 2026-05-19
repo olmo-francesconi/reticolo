@@ -35,16 +35,16 @@ using reticolo::gauge_group::SU2;
 
 TEST_CASE("Wilson<SU2> 4D L=4 β=8 matches LO weak-coupling plaquette (Creutz/Gattringer-Lang)",
           "[physics][gauge][su2][hmc][weak-coupling]") {
-    constexpr double k_beta             = 8.0;
-    constexpr std::size_t k_l           = 4;
-    constexpr std::size_t k_ndim        = 4;
-    constexpr int k_n_therm             = 200;
-    constexpr int k_n_prod              = 200;
-    constexpr double k_tau              = 1.0;
-    constexpr int k_n_md                = 20;
+    constexpr double k_beta      = 8.0;
+    constexpr std::size_t k_l    = 4;
+    constexpr std::size_t k_ndim = 4;
+    constexpr int k_n_therm      = 200;
+    constexpr int k_n_prod       = 200;
+    constexpr double k_tau       = 1.0;
+    constexpr int k_n_md         = 20;
     // Literature: ⟨P⟩(∞) ≈ 1 − (N²−1)/(d·β) = 1 − 3/(4·8) = 0.90625
-    constexpr double k_lit_plaq         = 1.0 - (3.0 / (4.0 * k_beta));
-    constexpr double k_tol              = 0.005;
+    constexpr double k_lit_plaq = 1.0 - (3.0 / (4.0 * k_beta));
+    constexpr double k_tol      = 0.005;
 
     Wilson<SU2, double> const action{.beta = k_beta};
     MatrixLinkLattice<SU2, double>::SizeVec const shape(k_ndim, k_l);

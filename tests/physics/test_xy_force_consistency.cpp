@@ -1,5 +1,5 @@
-#include <reticolo/action/xy.hpp>
 #include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/action/xy.hpp>
 #include <reticolo/algorithm/metropolis.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng.hpp>

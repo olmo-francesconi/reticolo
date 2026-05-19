@@ -42,15 +42,15 @@ using reticolo::gauge_group::SU3;
 
 TEST_CASE("Wilson<SU3> 4D L=4 β=6.0 matches Bali-Schilling 1993 mean plaquette",
           "[physics][gauge][su3][hmc][weak-coupling]") {
-    constexpr double k_beta             = 6.0;
-    constexpr std::size_t k_l           = 4;
-    constexpr std::size_t k_ndim        = 4;
-    constexpr int k_n_therm             = 200;
-    constexpr int k_n_prod              = 200;
-    constexpr double k_tau              = 1.0;
-    constexpr int k_n_md                = 30;
-    constexpr double k_lit_plaq         = 0.5937;
-    constexpr double k_tol              = 0.01;
+    constexpr double k_beta      = 6.0;
+    constexpr std::size_t k_l    = 4;
+    constexpr std::size_t k_ndim = 4;
+    constexpr int k_n_therm      = 200;
+    constexpr int k_n_prod       = 200;
+    constexpr double k_tau       = 1.0;
+    constexpr int k_n_md         = 30;
+    constexpr double k_lit_plaq  = 0.5937;
+    constexpr double k_tol       = 0.01;
 
     Wilson<SU3, double> const action{.beta = k_beta};
     MatrixLinkLattice<SU3, double>::SizeVec const shape(k_ndim, k_l);

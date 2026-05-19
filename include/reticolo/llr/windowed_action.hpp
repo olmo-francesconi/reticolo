@@ -92,8 +92,7 @@ struct WindowedAction {
     {
         return base.s_local(l, x, mu);
     }
-    [[nodiscard]] scalar_t
-    ds_local(Field const& l, Site x, std::size_t mu, T new_v) const noexcept
+    [[nodiscard]] scalar_t ds_local(Field const& l, Site x, std::size_t mu, T new_v) const noexcept
         requires gauge::LinkLocalAction<Base, T>
     {
         return base.ds_local(l, x, mu, new_v);

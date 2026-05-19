@@ -6,19 +6,19 @@
 
 // NOLINTBEGIN(misc-include-cleaner): re-exports are the whole point of the umbrella.
 #include <reticolo/action/bose_gas.hpp>
-#include <reticolo/action/on_sigma.hpp>
-#include <reticolo/action/phi4.hpp>
-#include <reticolo/action/phi6.hpp>
-#include <reticolo/action/sine_gordon.hpp>
-#include <reticolo/action/xy.hpp>
-#include <reticolo/action/detail/concepts.hpp>
-#include <reticolo/action/detail/helpers.hpp>
 #include <reticolo/action/compact_u1.hpp>
+#include <reticolo/action/detail/concepts.hpp>
 #include <reticolo/action/detail/gauge_group/base.hpp>
 #include <reticolo/action/detail/gauge_group/su2.hpp>
 #include <reticolo/action/detail/gauge_group/su3.hpp>
 #include <reticolo/action/detail/gauge_group/u1.hpp>
+#include <reticolo/action/detail/helpers.hpp>
+#include <reticolo/action/on_sigma.hpp>
+#include <reticolo/action/phi4.hpp>
+#include <reticolo/action/phi6.hpp>
+#include <reticolo/action/sine_gordon.hpp>
 #include <reticolo/action/wilson.hpp>
+#include <reticolo/action/xy.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/algorithm/metropolis.hpp>

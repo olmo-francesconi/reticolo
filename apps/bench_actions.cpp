@@ -5,10 +5,10 @@
 // Metropolis, no I/O. Reports per-call wall time and dofs/s (sites for
 // scalar, links for link/matrix-link).
 
+#include <reticolo/reticolo.hpp>
+
 #include "_bench/hot_init.hpp"
 #include "_bench/timing.hpp"
-
-#include <reticolo/reticolo.hpp>
 
 #include <array>
 #include <complex>
@@ -38,12 +38,8 @@ void print_header() {
                 "---------");
 }
 
-void print_row(int ndim,
-               int L,
-               char const* action_name,
-               std::size_t dofs,
-               char const* kernel,
-               double wall_s) {
+void print_row(
+    int ndim, int L, char const* action_name, std::size_t dofs, char const* kernel, double wall_s) {
     double const dof_per_s = static_cast<double>(dofs) / wall_s;
     std::printf("%dD L=%-3d   %-16s %-10zu %-22s %-12.3e %-12.2f M\n",
                 ndim,
@@ -56,54 +52,40 @@ void print_row(int ndim,
 }
 
 template <class Action, class Field>
-void bench_scalar_action(char const* name,
-                         int ndim,
-                         int L,
-                         Action const& action,
-                         Field& phi) {
+void bench_scalar_action(char const* name, int ndim, int L, Action const& action, Field& phi) {
     Field force{phi.indexing()};
     std::size_t const dofs = phi.nsites();
 
     double const t_sfull = time_per_call([&] { consume(action.s_full(phi)); });
     print_row(ndim, L, name, dofs, "s_full", t_sfull);
 
-    double const t_force =
-        time_per_call([&] { action.compute_force(phi, force); });
+    double const t_force = time_per_call([&] { action.compute_force(phi, force); });
     print_row(ndim, L, name, dofs, "compute_force", t_force);
 
     if constexpr (requires {
-                      action.compute_force_and_kick(
-                          phi, force, typename Action::value_type{0.123});
+                      action.compute_force_and_kick(phi, force, typename Action::value_type{0.123});
                   }) {
-        double const t_fk = time_per_call([&] {
-            action.compute_force_and_kick(
-                phi, force, typename Action::value_type{0.123});
-        });
+        double const t_fk = time_per_call(
+            [&] { action.compute_force_and_kick(phi, force, typename Action::value_type{0.123}); });
         print_row(ndim, L, name, dofs, "compute_force_and_kick", t_fk);
     }
 }
 
 template <class Action>
-void bench_link_action(char const* name,
-                       int ndim,
-                       int L,
-                       Action const& action,
-                       reticolo::LinkLattice<double>& phi) {
+void bench_link_action(
+    char const* name, int ndim, int L, Action const& action, reticolo::LinkLattice<double>& phi) {
     reticolo::LinkLattice<double> force{phi.indexing()};
     std::size_t const dofs = phi.nlinks();
 
     double const t_sfull = time_per_call([&] { consume(action.s_full(phi)); });
     print_row(ndim, L, name, dofs, "s_full", t_sfull);
 
-    double const t_force =
-        time_per_call([&] { action.compute_force(phi, force); });
+    double const t_force = time_per_call([&] { action.compute_force(phi, force); });
     print_row(ndim, L, name, dofs, "compute_force", t_force);
 
-    if constexpr (requires {
-                      action.compute_force_and_kick(phi, force, 0.123);
-                  }) {
-        double const t_fk = time_per_call(
-            [&] { action.compute_force_and_kick(phi, force, 0.123); });
+    if constexpr (requires { action.compute_force_and_kick(phi, force, 0.123); }) {
+        double const t_fk =
+            time_per_call([&] { action.compute_force_and_kick(phi, force, 0.123); });
         print_row(ndim, L, name, dofs, "compute_force_and_kick", t_fk);
     }
 }
@@ -122,8 +104,7 @@ void bench_wilson(char const* name,
     double const t_sfull = time_per_call([&] { consume(action.s_full(phi)); });
     print_row(ndim, L, name, dofs, "s_full", t_sfull);
 
-    double const t_force =
-        time_per_call([&] { action.compute_force(phi, force); });
+    double const t_force = time_per_call([&] { action.compute_force(phi, force); });
     print_row(ndim, L, name, dofs, "compute_force", t_force);
 }
 
@@ -188,21 +169,16 @@ void run_all() {
         if (c.ndim >= 3) {
             Lattice<std::complex<double>> phi{shape_s};
             hot_init(phi, rng);
-            act::BoseGas<double> const action{
-                .mass = 1.0, .lambda = 1.0, .mu = 0.9};
+            act::BoseGas<double> const action{.mass = 1.0, .lambda = 1.0, .mu = 0.9};
             std::size_t const dofs = phi.nsites();
             Lattice<std::complex<double>> force{phi.indexing()};
-            double const t_sfull =
-                time_per_call([&] { consume(action.s_full(phi)); });
+            double const t_sfull = time_per_call([&] { consume(action.s_full(phi)); });
             print_row(c.ndim, c.L, "BoseGas", dofs, "s_full", t_sfull);
-            double const t_force =
-                time_per_call([&] { action.compute_force(phi, force); });
+            double const t_force = time_per_call([&] { action.compute_force(phi, force); });
             print_row(c.ndim, c.L, "BoseGas", dofs, "compute_force", t_force);
-            double const t_simag =
-                time_per_call([&] { consume(action.s_imag(phi)); });
+            double const t_simag = time_per_call([&] { consume(action.s_imag(phi)); });
             print_row(c.ndim, c.L, "BoseGas", dofs, "s_imag", t_simag);
-            double const t_fimag = time_per_call(
-                [&] { action.compute_force_imag(phi, force); });
+            double const t_fimag = time_per_call([&] { action.compute_force_imag(phi, force); });
             print_row(c.ndim, c.L, "BoseGas", dofs, "compute_force_imag", t_fimag);
         }
         // CompactU1 (hand-tuned U(1) gauge)
@@ -244,8 +220,7 @@ void run_all() {
 }  // namespace
 
 int main() {
-    std::printf(
-        "ACTIONS — kernel throughput on hot random fields\n"
-        "(kernels called in isolation, no MD loop)\n\n");
+    std::printf("ACTIONS — kernel throughput on hot random fields\n"
+                "(kernels called in isolation, no MD loop)\n\n");
     run_all();
 }

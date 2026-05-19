@@ -156,8 +156,7 @@ TEST_CASE("SU(2) (A·B)·C = A·(B·C)", "[unit][gauge][su2]") {
     }
 }
 
-TEST_CASE("SU(2) mul_adj_2x2(A, A) is identity for SU(2) inputs",
-          "[unit][gauge][su2]") {
+TEST_CASE("SU(2) mul_adj_2x2(A, A) is identity for SU(2) inputs", "[unit][gauge][su2]") {
     FastRng rng{271828};
     for (int trial = 0; trial < 32; ++trial) {
         std::array<double, k_n_real> p{};
@@ -171,8 +170,7 @@ TEST_CASE("SU(2) mul_adj_2x2(A, A) is identity for SU(2) inputs",
     }
 }
 
-TEST_CASE("SU(2) expi_lmul_slab: U ← exp(0)·U leaves U unchanged",
-          "[unit][gauge][su2]") {
+TEST_CASE("SU(2) expi_lmul_slab: U ← exp(0)·U leaves U unchanged", "[unit][gauge][su2]") {
     FastRng rng{99173};
     constexpr std::size_t n = 7;
     std::array<double, k_n_real * n> u{};

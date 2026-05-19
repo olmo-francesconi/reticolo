@@ -185,13 +185,13 @@ private:
         requires(F f) { std::norm(f); } && !std::is_arithmetic_v<F>;
 
     A const& action_;
-    Field&   field_;
-    R&       rng_;
-    Field    mom_;
-    Field    force_;
-    Field    old_field_;
-    double   tau_;
-    int      n_md_;
+    Field& field_;
+    R& rng_;
+    Field mom_;
+    Field force_;
+    Field old_field_;
+    double tau_;
+    int n_md_;
 };
 
 }  // namespace reticolo::alg

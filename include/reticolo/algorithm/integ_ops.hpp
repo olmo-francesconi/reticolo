@@ -23,21 +23,19 @@ namespace reticolo::alg::integ {
 // =============================================================================
 
 template <class Field, class Mom>
-[[gnu::always_inline]] inline void
-drift_field(Field& field, Mom const& mom, double cdt) noexcept {
-    using F              = typename Field::value_type;
-    F* const f           = field.data();
-    auto const* const p  = mom.data();
-    std::size_t const n  = flat_size(field);
-    F const c            = static_cast<F>(cdt);
+[[gnu::always_inline]] inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
+    using F             = typename Field::value_type;
+    F* const f          = field.data();
+    auto const* const p = mom.data();
+    std::size_t const n = flat_size(field);
+    F const c           = static_cast<F>(cdt);
     for (std::size_t i = 0; i < n; ++i) {
         f[i] += c * p[i];
     }
 }
 
 template <class Mom, class Force>
-[[gnu::always_inline]] inline void
-kick_add(Mom& mom, Force const& force, double kdt) noexcept {
+[[gnu::always_inline]] inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
     using F              = typename Mom::value_type;
     F* const m           = mom.data();
     auto const* const fp = force.data();

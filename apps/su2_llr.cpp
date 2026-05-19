@@ -34,9 +34,8 @@ int main(int argc, char** argv) {
     auto const& beta  = p.req<double>("beta", "Wilson coupling");
     auto const& e_min = p.req<double>("E_min", "lower window centre");
     auto const& e_max = p.req<double>("E_max", "upper window centre");
-    auto const& delta = p.req<double>(
-        "delta",
-        "single LLR tuning knob: Gaussian half-width AND replica spacing.");
+    auto const& delta =
+        p.req<double>("delta", "single LLR tuning knob: Gaussian half-width AND replica spacing.");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md = p.opt<int>("n_md", 20, "MD steps per trajectory");
     auto const& n_nr = p.opt<int>("n_nr", 6, "Newton-Raphson warm-up iterations");
@@ -56,8 +55,8 @@ int main(int argc, char** argv) {
     Field::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Action const base{.beta = beta};
 
-    int const n_rep            = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e           = delta;
+    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
+    double const d_e = delta;
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
     double const a_init        = 0.0;
 
@@ -75,7 +74,7 @@ int main(int argc, char** argv) {
                                        alg::HmcSpec{.tau = tau, .n_md = n_md}));
         // Cold-start each replica's field to SU(2) identity (Re U_{00} =
         // Re U_{11} = 1, all else 0).
-        Field& phi          = reps.back()->phi();
+        Field& phi           = reps.back()->phi();
         std::size_t const ns = phi.nsites();
         for (std::size_t mu = 0; mu < static_cast<std::size_t>(ndim); ++mu) {
             double* const blk = phi.mu_block_data(mu);

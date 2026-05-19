@@ -35,9 +35,7 @@ public:
         has_cached_normal_ = false;
     }
 
-    [[nodiscard]] state_type uniform_u64() noexcept {
-        return static_cast<state_type>(engine_());
-    }
+    [[nodiscard]] state_type uniform_u64() noexcept { return static_cast<state_type>(engine_()); }
 
     [[nodiscard]] double uniform() noexcept {
         constexpr double k_scale = 1.0 / static_cast<double>(1ULL << 53U);

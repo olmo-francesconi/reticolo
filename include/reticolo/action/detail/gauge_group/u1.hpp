@@ -32,13 +32,12 @@ struct U1 {
     // `stride` is unused for U(1) (the single component lives directly under
     // the base pointer at offset s).
     template <class T>
-    [[gnu::always_inline]] static inline double
-    plaq_re_tr(T const* mb,
-               T const* nb,
-               std::size_t s,
-               std::size_t s_pmu,
-               std::size_t s_pnu,
-               std::size_t /*stride*/) noexcept {
+    [[gnu::always_inline]] static inline double plaq_re_tr(T const* mb,
+                                                           T const* nb,
+                                                           std::size_t s,
+                                                           std::size_t s_pmu,
+                                                           std::size_t s_pnu,
+                                                           std::size_t /*stride*/) noexcept {
         T const theta_p = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
         return static_cast<double>(std::cos(theta_p));
     }
@@ -47,16 +46,15 @@ struct U1 {
     //   F_μ(s) += −(β/N)·∂S/∂θ = (β/N)·∂(Re Tr U_p)/∂θ = −(β/N)·sin(θ_p)
     // and its sign flips on the two "minus" links (μ at s+ν̂ and ν at s).
     template <class T>
-    [[gnu::always_inline]] static inline void
-    plaq_force_accum(T const* mb,
-                     T const* nb,
-                     T* fmu,
-                     T* fnu,
-                     std::size_t s,
-                     std::size_t s_pmu,
-                     std::size_t s_pnu,
-                     std::size_t /*stride*/,
-                     double beta_over_n) noexcept {
+    [[gnu::always_inline]] static inline void plaq_force_accum(T const* mb,
+                                                               T const* nb,
+                                                               T* fmu,
+                                                               T* fnu,
+                                                               std::size_t s,
+                                                               std::size_t s_pmu,
+                                                               std::size_t s_pnu,
+                                                               std::size_t /*stride*/,
+                                                               double beta_over_n) noexcept {
         T const theta_p = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
         T const c       = static_cast<T>(-beta_over_n) * std::sin(theta_p);
         fmu[s] += c;
@@ -77,8 +75,8 @@ struct U1 {
         }
     }
 
-    [[gnu::always_inline]] static inline double
-    kinetic_slab(double const* p_blk, std::size_t n) noexcept {
+    [[gnu::always_inline]] static inline double kinetic_slab(double const* p_blk,
+                                                             std::size_t n) noexcept {
         double k = 0.0;
         for (std::size_t s = 0; s < n; ++s) {
             k += p_blk[s] * p_blk[s];

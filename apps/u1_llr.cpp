@@ -22,7 +22,7 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action   = action::CompactU1<double>;
+    using Action = action::CompactU1<double>;
     using ReplicaT =
         llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, LinkLattice<double>>;
 

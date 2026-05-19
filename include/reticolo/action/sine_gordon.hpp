@@ -1,7 +1,6 @@
 #pragma once
 
 #include <reticolo/action/detail/helpers.hpp>
-#include <reticolo/action/detail/helpers.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/math/vec_libm.hpp>

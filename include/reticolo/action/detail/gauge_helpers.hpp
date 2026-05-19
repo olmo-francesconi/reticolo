@@ -28,10 +28,8 @@ namespace reticolo::action::detail {
 // =============================================================================
 
 template <class Field, class Body>
-inline void visit_plane_fallback_(Field const& l,
-                                  std::size_t mu,
-                                  std::size_t nu,
-                                  Body const& body) noexcept {
+inline void
+visit_plane_fallback_(Field const& l, std::size_t mu, std::size_t nu, Body const& body) noexcept {
     Indexing const& idx                = l.indexing_ref();
     Site::value_type const* next_table = idx.next_data();
     std::size_t const ns               = l.nsites();
@@ -48,10 +46,8 @@ inline void visit_plane_fallback_(Field const& l,
 // stride-1. If 0 in {mu, nu} the inner loop has a wrap slab at x = L0 - 1;
 // otherwise the inner loop is wrap-free (all bulk).
 template <class Field, class Body>
-inline void visit_plane_3d_(Field const& l,
-                            std::size_t mu,
-                            std::size_t nu,
-                            Body const& body) noexcept {
+inline void
+visit_plane_3d_(Field const& l, std::size_t mu, std::size_t nu, Body const& body) noexcept {
     auto const& sh       = l.shape();
     std::size_t const L0 = sh[0];
     std::size_t const L1 = sh[1];
@@ -132,10 +128,8 @@ inline void visit_plane_3d_(Field const& l,
 }
 
 template <class Field, class Body>
-inline void visit_plane_4d_(Field const& l,
-                            std::size_t mu,
-                            std::size_t nu,
-                            Body const& body) noexcept {
+inline void
+visit_plane_4d_(Field const& l, std::size_t mu, std::size_t nu, Body const& body) noexcept {
     auto const& sh       = l.shape();
     std::size_t const L0 = sh[0];
     std::size_t const L1 = sh[1];
@@ -245,8 +239,7 @@ inline void visit_plane_4d_(Field const& l,
 }
 
 template <class Field, class Body>
-inline void
-visit_plane(Field const& l, std::size_t mu, std::size_t nu, Body const& body) noexcept {
+inline void visit_plane(Field const& l, std::size_t mu, std::size_t nu, Body const& body) noexcept {
     switch (l.ndims()) {
         case 3:
             visit_plane_3d_(l, mu, nu, body);

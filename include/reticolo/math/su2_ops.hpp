@@ -50,15 +50,15 @@ cmul_acc(double& acc_re, double& acc_im, double ar, double ai, double br, double
 }
 
 // (acc_re, acc_im) += (ar+iai) * conj(br+ibi) = (ar+iai)(br-ibi)
-[[gnu::always_inline]] inline void
-cmul_acc_b_conj(double& acc_re, double& acc_im, double ar, double ai, double br, double bi) noexcept {
+[[gnu::always_inline]] inline void cmul_acc_b_conj(
+    double& acc_re, double& acc_im, double ar, double ai, double br, double bi) noexcept {
     acc_re += (ar * br) + (ai * bi);
     acc_im += (ai * br) - (ar * bi);
 }
 
 // (acc_re, acc_im) += conj(ar+iai) * (br+ibi) = (ar-iai)(br+ibi)
-[[gnu::always_inline]] inline void
-cmul_acc_a_conj(double& acc_re, double& acc_im, double ar, double ai, double br, double bi) noexcept {
+[[gnu::always_inline]] inline void cmul_acc_a_conj(
+    double& acc_re, double& acc_im, double ar, double ai, double br, double bi) noexcept {
     acc_re += (ar * br) + (ai * bi);
     acc_im += (ar * bi) - (ai * br);
 }
@@ -145,8 +145,7 @@ adj_mul_2x2(double* out, double const* a, double const* b) noexcept {
 // TA(M) = (M − M†)/2 − (1/N)·Tr((M−M†)/2)·I. For SU(2) the diagonals become
 // ±i·(Im M_{00} − Im M_{11})/2 and the off-diagonals are the anti-hermitian
 // completion of M_{01}, M_{10} (already trace-zero after the diagonal fix).
-[[gnu::always_inline]] inline void
-traceless_antiherm_2x2(double* out, double const* in) noexcept {
+[[gnu::always_inline]] inline void traceless_antiherm_2x2(double* out, double const* in) noexcept {
     double const im00    = in[1];
     double const im11    = in[7];
     double const re01    = in[2];
@@ -180,16 +179,15 @@ traceless_antiherm_2x2(double* out, double const* in) noexcept {
     // gamma = sin(beta)/h, well-defined at h=0 via Taylor (gamma → dt).
     // The "if h tiny" branch keeps gamma finite; when h is exactly 0 all h_a
     // are 0 so gamma·h_a = 0 in the formulas below regardless.
-    double const gamma = (h > 1.0e-12) ? (std::sin(beta) / h)
-                                       : (dt - ((dt * beta * beta) / 6.0));
-    v[0] = c;
-    v[1] = gamma * h3;
-    v[2] = gamma * h2;
-    v[3] = gamma * h1;
-    v[4] = -gamma * h2;
-    v[5] = gamma * h1;
-    v[6] = c;
-    v[7] = -gamma * h3;
+    double const gamma = (h > 1.0e-12) ? (std::sin(beta) / h) : (dt - ((dt * beta * beta) / 6.0));
+    v[0]               = c;
+    v[1]               = gamma * h3;
+    v[2]               = gamma * h2;
+    v[3]               = gamma * h1;
+    v[4]               = -gamma * h2;
+    v[5]               = gamma * h1;
+    v[6]               = c;
+    v[7]               = -gamma * h3;
 }
 
 // Project a near-SU(2) 2×2 matrix M = [[A,B],[C,D]] onto SU(2) via the
@@ -206,14 +204,14 @@ traceless_antiherm_2x2(double* out, double const* in) noexcept {
     double const ai   = a_im * inv;
     double const br   = b_re * inv;
     double const bi   = b_im * inv;
-    m[0] = ar;
-    m[1] = ai;
-    m[2] = br;
-    m[3] = bi;
-    m[4] = -br;
-    m[5] = bi;
-    m[6] = ar;
-    m[7] = -ai;
+    m[0]              = ar;
+    m[1]              = ai;
+    m[2]              = br;
+    m[3]              = bi;
+    m[4]              = -br;
+    m[5]              = bi;
+    m[6]              = ar;
+    m[7]              = -ai;
 }
 
 // ---------- slab driver: walk n sites, call per-site kernel inline ----------

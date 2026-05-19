@@ -5,9 +5,9 @@
 // RanluxRng, Mt19937Rng) all satisfy the same `Rng` concept and plug in
 // at every existing call site.
 
-#include "_bench/timing.hpp"
-
 #include <reticolo/reticolo.hpp>
+
+#include "_bench/timing.hpp"
 
 #include <array>
 #include <complex>
@@ -22,31 +22,15 @@ using reticolo::bench::time_per_call;
 constexpr int k_sigma_n = 3;
 
 void print_header() {
-    std::printf("%-30s %-12s %-12s %-12s %-14s\n",
-                "field",
-                "rng",
-                "doubles",
-                "wall [s]",
-                "doubles/s");
-    std::printf("%-30s %-12s %-12s %-12s %-14s\n",
-                "-----",
-                "---",
-                "-------",
-                "--------",
-                "---------");
+    std::printf(
+        "%-30s %-12s %-12s %-12s %-14s\n", "field", "rng", "doubles", "wall [s]", "doubles/s");
+    std::printf(
+        "%-30s %-12s %-12s %-12s %-14s\n", "-----", "---", "-------", "--------", "---------");
 }
 
-void print_row(char const* field,
-               char const* rng,
-               std::size_t doubles,
-               double wall_s) {
+void print_row(char const* field, char const* rng, std::size_t doubles, double wall_s) {
     double const per_s = static_cast<double>(doubles) / wall_s;
-    std::printf("%-30s %-12s %-12zu %-12.3e %-12.3e\n",
-                field,
-                rng,
-                doubles,
-                wall_s,
-                per_s);
+    std::printf("%-30s %-12s %-12zu %-12.3e %-12.3e\n", field, rng, doubles, wall_s, per_s);
 }
 
 // Field-agnostic batched fill: same path the HMC sample_momenta_ takes for
@@ -77,8 +61,7 @@ void bench_rng_for(char const* rng_name) {
                       "Lattice<double> %dD L=%zu",
                       static_cast<int>(shape.size()),
                       shape[0]);
-        double const t =
-            time_per_call([&] { rng.normal_fill(buf.data(), buf.size()); });
+        double const t = time_per_call([&] { rng.normal_fill(buf.data(), buf.size()); });
         print_row(field_name, rng_name, buf.size(), t);
     }
 
@@ -96,9 +79,8 @@ void bench_rng_for(char const* rng_name) {
                       "Lattice<complex> %dD L=%zu",
                       static_cast<int>(shape.size()),
                       shape[0]);
-        double const t = time_per_call([&] {
-            rng.normal_fill(reinterpret_cast<double*>(buf.data()), 2 * buf.size());
-        });
+        double const t = time_per_call(
+            [&] { rng.normal_fill(reinterpret_cast<double*>(buf.data()), 2 * buf.size()); });
         print_row(field_name, rng_name, 2 * buf.size(), t);
     }
 
@@ -106,9 +88,7 @@ void bench_rng_for(char const* rng_name) {
     {
         std::vector<std::array<double, k_sigma_n>> buf(16ULL * 16ULL * 16ULL);
         char field_name[64];
-        std::snprintf(field_name,
-                      sizeof(field_name),
-                      "Lattice<array<3>> 3D L=16");
+        std::snprintf(field_name, sizeof(field_name), "Lattice<array<3>> 3D L=16");
         double const t = time_per_call([&] {
             for (auto& v : buf) {
                 for (auto& x : v) {
@@ -134,8 +114,7 @@ void bench_rng_for(char const* rng_name) {
                       "LinkLattice<double> %dD L=%zu",
                       static_cast<int>(shape.size()),
                       shape[0]);
-        double const t =
-            time_per_call([&] { rng.normal_fill(buf.data(), buf.size()); });
+        double const t = time_per_call([&] { rng.normal_fill(buf.data(), buf.size()); });
         print_row(field_name, rng_name, buf.size(), t);
     }
 
@@ -144,9 +123,8 @@ void bench_rng_for(char const* rng_name) {
         MatrixLinkLattice<gauge_group::SU2, double>::SizeVec shape{8, 8, 8, 8};
         MatrixLinkLattice<gauge_group::SU2, double> mom{shape};
         std::size_t const ns      = mom.nsites();
-        std::size_t const doubles = mom.ndims() *
-                                    gauge_group::SU2::n_real_components * ns;
-        double const t = time_per_call([&] {
+        std::size_t const doubles = mom.ndims() * gauge_group::SU2::n_real_components * ns;
+        double const t            = time_per_call([&] {
             for (std::size_t mu = 0; mu < mom.ndims(); ++mu) {
                 math::su2::sample_algebra_slab(mom.mu_block_data(mu), rng, ns);
             }
@@ -159,9 +137,8 @@ void bench_rng_for(char const* rng_name) {
         MatrixLinkLattice<gauge_group::SU3, double>::SizeVec shape{8, 8, 8, 8};
         MatrixLinkLattice<gauge_group::SU3, double> mom{shape};
         std::size_t const ns      = mom.nsites();
-        std::size_t const doubles = mom.ndims() *
-                                    gauge_group::SU3::n_real_components * ns;
-        double const t = time_per_call([&] {
+        std::size_t const doubles = mom.ndims() * gauge_group::SU3::n_real_components * ns;
+        double const t            = time_per_call([&] {
             for (std::size_t mu = 0; mu < mom.ndims(); ++mu) {
                 math::su3::sample_algebra_slab(mom.mu_block_data(mu), rng, ns);
             }

@@ -1,6 +1,6 @@
+#include <reticolo/action/detail/concepts.hpp>
 #include <reticolo/action/on_sigma.hpp>
 #include <reticolo/action/xy.hpp>
-#include <reticolo/action/detail/concepts.hpp>
 #include <reticolo/algorithm/wolff.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng.hpp>

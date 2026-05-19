@@ -78,8 +78,7 @@ TEST_CASE("SU(3) exp(0) = identity (Taylor branch)", "[unit][gauge][su3]") {
     REQUIRE(frob_diff(u, identity()) < 1.0e-15);
 }
 
-TEST_CASE("SU(3) exp on tiny P matches Taylor expansion to 1e-12",
-          "[unit][gauge][su3]") {
+TEST_CASE("SU(3) exp on tiny P matches Taylor expansion to 1e-12", "[unit][gauge][su3]") {
     FastRng rng{27182};
     std::array<double, k_n> p{};
     fill_random_anti_hermitian(p, rng);
@@ -94,8 +93,7 @@ TEST_CASE("SU(3) exp on tiny P matches Taylor expansion to 1e-12",
     REQUIRE(frob_diff(u_small, u_linear) < 1.0e-9);
 }
 
-TEST_CASE("SU(3) project_su3 is idempotent on unitary matrices",
-          "[unit][gauge][su3]") {
+TEST_CASE("SU(3) project_su3 is idempotent on unitary matrices", "[unit][gauge][su3]") {
     FastRng rng{16180};
     for (int trial = 0; trial < 32; ++trial) {
         std::array<double, k_n> p{};
@@ -111,8 +109,7 @@ TEST_CASE("SU(3) project_su3 is idempotent on unitary matrices",
     }
 }
 
-TEST_CASE("SU(3) project_su3 cleans a perturbed SU(3) matrix",
-          "[unit][gauge][su3]") {
+TEST_CASE("SU(3) project_su3 cleans a perturbed SU(3) matrix", "[unit][gauge][su3]") {
     FastRng rng{11235};
     std::array<double, k_n> p{};
     fill_random_anti_hermitian(p, rng);
@@ -128,8 +125,7 @@ TEST_CASE("SU(3) project_su3 cleans a perturbed SU(3) matrix",
     REQUIRE(frob_diff(uu, identity()) < 1.0e-11);
 }
 
-TEST_CASE("SU(3) (A·B)·C = A·(B·C) (3×3 matmul associativity)",
-          "[unit][gauge][su3]") {
+TEST_CASE("SU(3) (A·B)·C = A·(B·C) (3×3 matmul associativity)", "[unit][gauge][su3]") {
     FastRng rng{271828};
     for (int trial = 0; trial < 16; ++trial) {
         std::array<double, k_n> pa{};
@@ -157,8 +153,7 @@ TEST_CASE("SU(3) (A·B)·C = A·(B·C) (3×3 matmul associativity)",
     }
 }
 
-TEST_CASE("SU(3) traceless_antiherm_3x3 on already-AH input is identity",
-          "[unit][gauge][su3]") {
+TEST_CASE("SU(3) traceless_antiherm_3x3 on already-AH input is identity", "[unit][gauge][su3]") {
     FastRng rng{99173};
     std::array<double, k_n> p{};
     fill_random_anti_hermitian(p, rng);
@@ -167,8 +162,7 @@ TEST_CASE("SU(3) traceless_antiherm_3x3 on already-AH input is identity",
     REQUIRE(frob_diff(p, ta) < 1.0e-15);
 }
 
-TEST_CASE("SU(3) expi_lmul_slab: U ← exp(0)·U leaves U unchanged",
-          "[unit][gauge][su3]") {
+TEST_CASE("SU(3) expi_lmul_slab: U ← exp(0)·U leaves U unchanged", "[unit][gauge][su3]") {
     FastRng rng{55555};
     constexpr std::size_t n = 5;
     std::array<double, k_n * n> u{};

@@ -40,10 +40,7 @@ struct MetropolisSweep {
 //       matching arity.
 // =============================================================================
 
-template <class A,
-          class R,
-          class F     = typename A::value_type,
-          class Field = Lattice<F>>
+template <class A, class R, class F = typename A::value_type, class Field = Lattice<F>>
     requires(action::LocalAction<A, F> || gauge::LinkLocalAction<A, F>) && Rng<R>
 class Metropolis {
 public:
@@ -117,9 +114,9 @@ private:
     }
 
     A const& action_;
-    Field&   field_;
-    R&       rng_;
-    double   sigma_;
+    Field& field_;
+    R& rng_;
+    double sigma_;
 };
 
 }  // namespace reticolo::alg

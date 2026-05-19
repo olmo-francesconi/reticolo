@@ -120,8 +120,7 @@ adj_mul_3x3(double* out, double const* a, double const* b) noexcept {
 // ---------- traceless anti-hermitian projection (su(3) algebra) -------------
 // TA(M) = (M − M†)/2 − (1/3)·Tr((M−M†)/2)·I. Diagonal becomes
 // pure imag (Im_{ii} − T/3); off-diag is the anti-hermitian completion.
-[[gnu::always_inline]] inline void
-traceless_antiherm_3x3(double* out, double const* in) noexcept {
+[[gnu::always_inline]] inline void traceless_antiherm_3x3(double* out, double const* in) noexcept {
     double const im00     = in[idx_im(0, 0)];
     double const im11     = in[idx_im(1, 1)];
     double const im22     = in[idx_im(2, 2)];
@@ -218,15 +217,15 @@ traceless_antiherm_3x3(double* out, double const* in) noexcept {
     // For hermitian Q, c0 is real. Compute via Q² · Q diagonal trace.
     double q2[18];
     mul_3x3(q2, q, q);
-    double const tr_q3 = (q2[idx_re(0, 0)] * q[idx_re(0, 0)] - q2[idx_im(0, 0)] * q[idx_im(0, 0)])
-                      + (q2[idx_re(0, 1)] * q[idx_re(1, 0)] - q2[idx_im(0, 1)] * q[idx_im(1, 0)])
-                      + (q2[idx_re(0, 2)] * q[idx_re(2, 0)] - q2[idx_im(0, 2)] * q[idx_im(2, 0)])
-                      + (q2[idx_re(1, 0)] * q[idx_re(0, 1)] - q2[idx_im(1, 0)] * q[idx_im(0, 1)])
-                      + (q2[idx_re(1, 1)] * q[idx_re(1, 1)] - q2[idx_im(1, 1)] * q[idx_im(1, 1)])
-                      + (q2[idx_re(1, 2)] * q[idx_re(2, 1)] - q2[idx_im(1, 2)] * q[idx_im(2, 1)])
-                      + (q2[idx_re(2, 0)] * q[idx_re(0, 2)] - q2[idx_im(2, 0)] * q[idx_im(0, 2)])
-                      + (q2[idx_re(2, 1)] * q[idx_re(1, 2)] - q2[idx_im(2, 1)] * q[idx_im(1, 2)])
-                      + (q2[idx_re(2, 2)] * q[idx_re(2, 2)] - q2[idx_im(2, 2)] * q[idx_im(2, 2)]);
+    double const tr_q3 = (q2[idx_re(0, 0)] * q[idx_re(0, 0)] - q2[idx_im(0, 0)] * q[idx_im(0, 0)]) +
+                         (q2[idx_re(0, 1)] * q[idx_re(1, 0)] - q2[idx_im(0, 1)] * q[idx_im(1, 0)]) +
+                         (q2[idx_re(0, 2)] * q[idx_re(2, 0)] - q2[idx_im(0, 2)] * q[idx_im(2, 0)]) +
+                         (q2[idx_re(1, 0)] * q[idx_re(0, 1)] - q2[idx_im(1, 0)] * q[idx_im(0, 1)]) +
+                         (q2[idx_re(1, 1)] * q[idx_re(1, 1)] - q2[idx_im(1, 1)] * q[idx_im(1, 1)]) +
+                         (q2[idx_re(1, 2)] * q[idx_re(2, 1)] - q2[idx_im(1, 2)] * q[idx_im(2, 1)]) +
+                         (q2[idx_re(2, 0)] * q[idx_re(0, 2)] - q2[idx_im(2, 0)] * q[idx_im(0, 2)]) +
+                         (q2[idx_re(2, 1)] * q[idx_re(1, 2)] - q2[idx_im(2, 1)] * q[idx_im(1, 2)]) +
+                         (q2[idx_re(2, 2)] * q[idx_re(2, 2)] - q2[idx_im(2, 2)] * q[idx_im(2, 2)]);
     double const c0 = tr_q3 / 3.0;
 
     double const c1_over_3 = c1 / 3.0;
@@ -246,8 +245,8 @@ traceless_antiherm_3x3(double* out, double const* in) noexcept {
     double const s2u = std::sin(2.0 * u);
     double const xi  = (std::abs(w) > 1.0e-10) ? (std::sin(w) / w) : 1.0;
 
-    double const u2 = u * u;
-    double const w2 = w * w;
+    double const u2  = u * u;
+    double const w2  = w * w;
     double const den = (9.0 * u2) - w2;
 
     // h_n (complex): h_n = h_n_re + i h_n_im.
@@ -260,8 +259,8 @@ traceless_antiherm_3x3(double* out, double const* in) noexcept {
     double const h0_im  = t0a_im + t0b_im;
 
     // h_1 = 2u e^{2iu} − e^{-iu} · [2 u cw − i (3u² − w²) ξ]
-    double const t1a_re = 2.0 * u * c2u;
-    double const t1a_im = 2.0 * u * s2u;
+    double const t1a_re    = 2.0 * u * c2u;
+    double const t1a_im    = 2.0 * u * s2u;
     double const inner1_re = 2.0 * u * cw;
     double const inner1_im = -((3.0 * u2) - w2) * xi;
     // e^{-iu} · inner1 = (cu - i·su) · (inner_re + i·inner_im)
@@ -360,9 +359,16 @@ traceless_antiherm_3x3(double* out, double const* in) noexcept {
 
     // Row 2 = conj(r0 × r1) so that det = +1.
     // (a × b)_k = ε_{kij}·a_i·b_j. For k=0: a_1·b_2 - a_2·b_1, etc.
-    auto cmul_sub = [](double ar, double ai, double br, double bi,
-                       double cr, double ci, double dr, double di,
-                       double& out_re, double& out_im) noexcept {
+    auto cmul_sub = [](double ar,
+                       double ai,
+                       double br,
+                       double bi,
+                       double cr,
+                       double ci,
+                       double dr,
+                       double di,
+                       double& out_re,
+                       double& out_im) noexcept {
         out_re = (ar * br) - (ai * bi) - ((cr * dr) - (ci * di));
         out_im = (ar * bi) + (ai * br) - ((cr * di) + (ci * dr));
     };
@@ -482,14 +488,14 @@ sample_algebra_slab(double* p, Rng& rng, std::size_t n) noexcept {
     constexpr double k_inv_sqrt2 = 0.70710678118654752440;
     constexpr double k_inv_sqrt3 = 0.57735026918962576451;
     for (std::size_t s = 0; s < n; ++s) {
-        double const h1 = rng.normal() * k_inv_sqrt2;
-        double const h2 = rng.normal() * k_inv_sqrt2;
-        double const h3 = rng.normal() * k_inv_sqrt2;
-        double const h4 = rng.normal() * k_inv_sqrt2;
-        double const h5 = rng.normal() * k_inv_sqrt2;
-        double const h6 = rng.normal() * k_inv_sqrt2;
-        double const h7 = rng.normal() * k_inv_sqrt2;
-        double const h8 = rng.normal() * k_inv_sqrt2;
+        double const h1            = rng.normal() * k_inv_sqrt2;
+        double const h2            = rng.normal() * k_inv_sqrt2;
+        double const h3            = rng.normal() * k_inv_sqrt2;
+        double const h4            = rng.normal() * k_inv_sqrt2;
+        double const h5            = rng.normal() * k_inv_sqrt2;
+        double const h6            = rng.normal() * k_inv_sqrt2;
+        double const h7            = rng.normal() * k_inv_sqrt2;
+        double const h8            = rng.normal() * k_inv_sqrt2;
         double const h8_over_sqrt3 = h8 * k_inv_sqrt3;
         // Diagonal: 00 = i·(h3 + h8/√3), 11 = i·(-h3 + h8/√3), 22 = i·(-2 h8/√3)
         p[(idx_re(0, 0) * n) + s] = 0.0;

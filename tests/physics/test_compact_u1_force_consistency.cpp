@@ -1,8 +1,8 @@
+#include <reticolo/action/compact_u1.hpp>
+#include <reticolo/action/detail/concepts.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
-#include <reticolo/action/compact_u1.hpp>
-#include <reticolo/action/detail/concepts.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -12,11 +12,11 @@
 using reticolo::FastRng;
 using reticolo::LinkLattice;
 using reticolo::Site;
+using reticolo::action::CompactU1;
 using reticolo::gauge::HasLinkForce;
 using reticolo::gauge::HasLinkFusedKick;
 using reticolo::gauge::HasLinkSEff;
 using reticolo::gauge::LinkLocalAction;
-using reticolo::action::CompactU1;
 
 static_assert(LinkLocalAction<CompactU1<double>, double>);
 static_assert(HasLinkSEff<CompactU1<double>, double>);
@@ -117,8 +117,7 @@ TEST_CASE("CompactU1: compute_force_and_kick matches compute_force + manual kick
     }
 }
 
-TEST_CASE("CompactU1: aligned plaquette config (all theta=0) has S = 0",
-          "[physics][u1]") {
+TEST_CASE("CompactU1: aligned plaquette config (all theta=0) has S = 0", "[physics][u1]") {
     // Standard Wilson convention: S = beta * sum (1 - cos theta_p). With all
     // theta=0, every plaquette contributes 0.
     constexpr double k_beta = 2.7;

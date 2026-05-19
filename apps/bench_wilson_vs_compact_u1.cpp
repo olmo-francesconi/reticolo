@@ -27,11 +27,11 @@ int main() {
     using namespace reticolo;
     using Integ = alg::integ::Omelyan2;
 
-    constexpr int k_n_md     = 20;
-    constexpr double k_tau   = 1.0;
-    constexpr double k_beta  = 1.01;
-    constexpr int k_warmup   = 30;
-    constexpr int k_n_traj   = 200;
+    constexpr int k_n_md    = 20;
+    constexpr double k_tau  = 1.0;
+    constexpr double k_beta = 1.01;
+    constexpr int k_warmup  = 30;
+    constexpr int k_n_traj  = 200;
 
     struct Case {
         int ndim;
@@ -43,18 +43,10 @@ int main() {
         {.ndim = 4, .L = 8},
     };
 
-    std::printf("%-12s %-12s %-14s %-14s %-10s\n",
-                "ndim x L",
-                "action",
-                "traj [s]",
-                "dof upd/s",
-                "accept");
-    std::printf("%-12s %-12s %-14s %-14s %-10s\n",
-                "--------",
-                "------",
-                "--------",
-                "---------",
-                "------");
+    std::printf(
+        "%-12s %-12s %-14s %-14s %-10s\n", "ndim x L", "action", "traj [s]", "dof upd/s", "accept");
+    std::printf(
+        "%-12s %-12s %-14s %-14s %-10s\n", "--------", "------", "--------", "---------", "------");
 
     for (auto const& c : cases) {
         std::size_t const nd = static_cast<std::size_t>(c.ndim);

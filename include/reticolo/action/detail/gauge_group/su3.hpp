@@ -30,13 +30,12 @@ struct SU3 {
     // Same identity as SU(2): Re Tr (X · Y†) = sum_{ij} [Re X_{ij}·Re Y_{ij}
     // + Im X_{ij}·Im Y_{ij}] = 18-component inner product of X and Y.
     template <class T>
-    [[gnu::always_inline]] static inline double
-    plaq_re_tr(T const* mb,
-               T const* nb,
-               std::size_t s,
-               std::size_t s_pmu,
-               std::size_t s_pnu,
-               std::size_t stride) noexcept {
+    [[gnu::always_inline]] static inline double plaq_re_tr(T const* mb,
+                                                           T const* nb,
+                                                           std::size_t s,
+                                                           std::size_t s_pmu,
+                                                           std::size_t s_pnu,
+                                                           std::size_t stride) noexcept {
         double a_mat[18];
         double b_mat[18];
         double c_mat[18];
@@ -66,8 +65,8 @@ struct SU3 {
         math::su3::sample_algebra_slab(p_blk, rng, n);
     }
 
-    [[gnu::always_inline]] static inline double
-    kinetic_slab(double const* p_blk, std::size_t n) noexcept {
+    [[gnu::always_inline]] static inline double kinetic_slab(double const* p_blk,
+                                                             std::size_t n) noexcept {
         return math::su3::kinetic_slab(p_blk, n);
     }
 
@@ -106,9 +105,9 @@ struct SU3 {
                     if (nu == mu) {
                         continue;
                     }
-                    T const* const u_nu_blk = u.mu_block_data(nu);
-                    std::size_t const s_pnu = idx.next(x, nu).value();
-                    std::size_t const s_mnu = idx.prev(x, nu).value();
+                    T const* const u_nu_blk     = u.mu_block_data(nu);
+                    std::size_t const s_pnu     = idx.next(x, nu).value();
+                    std::size_t const s_mnu     = idx.prev(x, nu).value();
                     std::size_t const s_pmu_mnu = idx.prev(Site{s_pmu}, nu).value();
 
                     // Forward staple: U_ν(s+μ) · U_μ(s+ν)† · U_ν(s)†

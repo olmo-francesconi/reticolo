@@ -1,9 +1,9 @@
 #pragma once
 
+#include <reticolo/action/detail/gauge_helpers.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/site.hpp>
-#include <reticolo/action/detail/gauge_helpers.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
 #include <algorithm>
