@@ -1,11 +1,10 @@
 #pragma once
 
-#include <reticolo/action/concepts.hpp>
+#include <reticolo/action/detail/concepts.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/site.hpp>
-#include <reticolo/gauge/concepts.hpp>
 
 #include <complex>
 #include <cstddef>

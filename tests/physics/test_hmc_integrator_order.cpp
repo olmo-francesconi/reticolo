@@ -1,4 +1,4 @@
-#include <reticolo/action/builtins/phi4.hpp>
+#include <reticolo/action/phi4.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/lattice.hpp>

@@ -1,4 +1,4 @@
-#include <reticolo/action/hot_loop.hpp>
+#include <reticolo/action/detail/helpers.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>

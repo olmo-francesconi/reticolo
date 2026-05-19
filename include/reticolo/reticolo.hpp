@@ -5,14 +5,14 @@
 // types: lattice + indexing + site + bc + rng + log.
 
 // NOLINTBEGIN(misc-include-cleaner): re-exports are the whole point of the umbrella.
-#include <reticolo/action/builtins/bose_gas.hpp>
-#include <reticolo/action/builtins/on_sigma.hpp>
-#include <reticolo/action/builtins/phi4.hpp>
-#include <reticolo/action/builtins/phi6.hpp>
-#include <reticolo/action/builtins/sine_gordon.hpp>
-#include <reticolo/action/builtins/xy.hpp>
-#include <reticolo/action/concepts.hpp>
-#include <reticolo/action/helpers.hpp>
+#include <reticolo/action/bose_gas.hpp>
+#include <reticolo/action/on_sigma.hpp>
+#include <reticolo/action/phi4.hpp>
+#include <reticolo/action/phi6.hpp>
+#include <reticolo/action/sine_gordon.hpp>
+#include <reticolo/action/xy.hpp>
+#include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/action/detail/helpers.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/algorithm/metropolis.hpp>
@@ -25,8 +25,7 @@
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/gauge/algorithm/hmc.hpp>
-#include <reticolo/gauge/builtins/compact_u1.hpp>
-#include <reticolo/gauge/concepts.hpp>
+#include <reticolo/action/compact_u1.hpp>
 #include <reticolo/gauge/llr/replica.hpp>
 #include <reticolo/gauge/llr/windowed_action.hpp>
 #include <reticolo/io/writer.hpp>

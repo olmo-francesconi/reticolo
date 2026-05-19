@@ -3,7 +3,7 @@
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/gauge/algorithm/hmc.hpp>
-#include <reticolo/gauge/builtins/compact_u1.hpp>
+#include <reticolo/action/compact_u1.hpp>
 
 #include <algorithm>
 #include <cmath>

@@ -1,12 +1,11 @@
 #pragma once
 
-#include <reticolo/action/concepts.hpp>
-#include <reticolo/action/hot_loop.hpp>
+#include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/action/detail/helpers.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
-#include <reticolo/gauge/concepts.hpp>
 
 #include <cmath>
 #include <cstddef>

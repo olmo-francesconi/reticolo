@@ -1,10 +1,12 @@
 #pragma once
 
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <concepts>
+#include <cstddef>
 
 namespace reticolo::action {
 
@@ -105,3 +107,38 @@ concept WolffEmbeddable =
     };
 
 }  // namespace reticolo::action
+
+// =============================================================================
+//  Gauge (link-field) concept lattice. Mirrors the scalar concepts above on
+//  `LinkLattice<F>` and on a (Site, mu) elementary update. Same shape, same
+//  refinement chain; the only reason these need different concept names is
+//  the elementary-update arity (Site vs (Site, mu)).
+// =============================================================================
+
+namespace reticolo::gauge {
+
+template <class A, class F>
+concept LinkLocalAction =
+    requires(A const& a, LinkLattice<F> const& l, Site x, std::size_t mu, F nv) {
+        { a.s_local(l, x, mu) } -> std::convertible_to<double>;
+        { a.ds_local(l, x, mu, nv) } -> std::convertible_to<double>;
+    };
+
+template <class A, class F>
+concept HasLinkSEff = LinkLocalAction<A, F> && requires(A const& a, LinkLattice<F> const& l) {
+    { a.s_full(l) } -> std::convertible_to<double>;
+};
+
+template <class A, class F>
+concept HasLinkForce =
+    LinkLocalAction<A, F> && requires(A const& a, LinkLattice<F> const& l, LinkLattice<F>& force) {
+        { a.compute_force(l, force) };
+    };
+
+template <class A, class F>
+concept HasLinkFusedKick =
+    HasLinkForce<A, F> && requires(A const& a, LinkLattice<F> const& l, LinkLattice<F>& mom, F k) {
+        { a.compute_force_and_kick(l, mom, k) };
+    };
+
+}  // namespace reticolo::gauge
