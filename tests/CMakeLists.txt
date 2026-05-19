@@ -84,4 +84,6 @@ if(RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS)
         U1_HMC_BINARY              apps/test_u1_hmc_smoke.cpp)
     reticolo_add_app_smoke(test_u1_llr_smoke              u1_llr
         U1_LLR_BINARY              apps/test_u1_llr_smoke.cpp)
+    reticolo_add_app_smoke(test_su2_llr_smoke             su2_llr
+        SU2_LLR_BINARY             apps/test_su2_llr_smoke.cpp)
 endif()
