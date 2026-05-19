@@ -61,6 +61,12 @@ target_n_rep=${TARGET_N_REP:-30}
 seed=${SEED:-20260518}
 jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 
+# LLR uses OpenMP internally over replicas. Run llr_jobs parameter values in
+# parallel, each with omp_threads threads, so the total ≤ jobs cores.
+omp_threads=${OMP_THREADS:-4}
+llr_jobs=${LLR_JOBS:-$(( jobs / omp_threads > 0 ? jobs / omp_threads : 1 ))}
+export OMP_NUM_THREADS=$omp_threads
+
 # Five μ values bracketing the silver-blaze region for λ = m = 1.
 mus=(${MUS:-0.6 0.9 1.1 1.3 1.6})
 
@@ -126,8 +132,8 @@ echo "stage 1: HMC for ${#mus[@]} mu values ($jobs at a time)"
 printf '%s\n' "${mus[@]}" | xargs -L 1 -P "$jobs" bash -c 'stage1_hmc "$@"' _
 
 echo
-echo "stage 2: LLR for ${#mus[@]} mu values ($jobs at a time)"
-printf '%s\n' "${mus[@]}" | xargs -L 1 -P "$jobs" bash -c 'stage2_llr "$@"' _
+echo "stage 2: LLR for ${#mus[@]} mu values ($llr_jobs at a time, $omp_threads threads each)"
+printf '%s\n' "${mus[@]}" | xargs -L 1 -P "$llr_jobs" bash -c 'stage2_llr "$@"' _
 
 echo
 echo "Done. Now run:  python3 $here/analyze.py"

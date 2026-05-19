@@ -22,3 +22,11 @@ reticolo_add_app(bench_scalars       bench_scalars.cpp)
 reticolo_add_app(bench_gauge_vs_scalar bench_gauge_vs_scalar.cpp)
 reticolo_add_app(bench_phase_quenched  bench_phase_quenched.cpp)
 reticolo_add_app(tune_phi4           tune_phi4.cpp)
+
+# Apps that parallelise over LLR replicas opt into OpenMP. Pragmas in the
+# .cpp files are no-ops when reticolo_openmp is not built.
+if(TARGET reticolo_openmp)
+    target_link_libraries(u1_llr       PRIVATE reticolo::openmp)
+    target_link_libraries(phi4_llr     PRIVATE reticolo::openmp)
+    target_link_libraries(bose_gas_llr PRIVATE reticolo::openmp)
+endif()

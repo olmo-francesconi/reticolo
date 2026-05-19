@@ -57,7 +57,10 @@ struct WindowedAction {
     using value_type = T;
     using scalar_t   = scalar_of_t<T>;
 
-    Base const& base;
+    // Owned by value (not reference): each Replica carries its own base so any
+    // mutable scratch on the action stays per-replica. Required for OpenMP
+    // parallelism over replicas.
+    Base base;
     scalar_t a = scalar_t{0};
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention E_n = window centre
     scalar_t E_n   = scalar_t{0};

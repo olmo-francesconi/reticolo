@@ -15,10 +15,10 @@ struct ReplicaStats {
 };
 
 // =============================================================================
-//  Single LLR replica: owns its phi, its RNG, its WindowedAction wrapper, and
-//  its HMC kernel. The base action is taken by reference and is expected to
-//  outlive the replica (typically one base action instance shared by all
-//  replicas — they differ only by E_n).
+//  Single LLR replica: owns its phi, its RNG, its WindowedAction wrapper (and
+//  through it, its own copy of the base action), and its HMC kernel. The base
+//  is copied at construction so any mutable per-action state stays
+//  per-replica — required for OpenMP parallelism over replicas.
 //
 //  Non-moveable / non-copyable: the HMC inside holds references into the
 //  replica's own members. Use `std::vector<std::unique_ptr<Replica<...>>>`

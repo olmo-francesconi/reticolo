@@ -35,7 +35,10 @@ struct WindowedAction {
     using value_type = T;
     using field_type = typename Base::field_type;
 
-    Base const& base;
+    // Owned by value (not reference): each Replica carries its own base so any
+    // mutable scratch on the action (e.g. CompactU1::scratch) is per-replica.
+    // Required for OpenMP parallelism over replicas.
+    Base base;
     T a = T{0};
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention E_n = window centre
     T E_n   = T{0};

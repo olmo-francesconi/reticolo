@@ -12,7 +12,8 @@
 # Two-stage pipeline identical to run.sh: plain HMC -> empirical S range ->
 # LLR over that range with auto-delta.
 #
-# Approx wall time on 3 cores at the defaults: ~1.5 h.
+# Approx wall time on 8 cores at the defaults (OMP_THREADS=4, two LLR jobs
+# in parallel × 4 threads each): ~25 min.
 
 set -euo pipefail
 
@@ -60,6 +61,12 @@ target_n_rep=${TARGET_N_REP:-30}
 
 seed=${SEED:-20260518}
 jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
+
+# LLR uses OpenMP internally over replicas. Run llr_jobs parameter values in
+# parallel, each with omp_threads threads, so the total ≤ jobs cores.
+omp_threads=${OMP_THREADS:-4}
+llr_jobs=${LLR_JOBS:-$(( jobs / omp_threads > 0 ? jobs / omp_threads : 1 ))}
+export OMP_NUM_THREADS=$omp_threads
 
 # Three betas tightly bracketing beta_c ~= 1.0106:
 #   * 0.998  — Coulomb side, dilute monopoles, smooth ρ(S).
@@ -124,8 +131,8 @@ echo "stage 1: HMC for ${#betas[@]} betas ($jobs at a time)"
 printf '%s\n' "${betas[@]}" | xargs -L 1 -P "$jobs" bash -c 'stage1_hmc "$@"' _
 
 echo
-echo "stage 2: LLR for ${#betas[@]} betas ($jobs at a time)"
-printf '%s\n' "${betas[@]}" | xargs -L 1 -P "$jobs" bash -c 'stage2_llr "$@"' _
+echo "stage 2: LLR for ${#betas[@]} betas ($llr_jobs at a time, $omp_threads threads each)"
+printf '%s\n' "${betas[@]}" | xargs -L 1 -P "$llr_jobs" bash -c 'stage2_llr "$@"' _
 
 echo
 echo "Done. Now run:  python3 $here/analyze.py"

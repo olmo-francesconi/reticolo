@@ -19,6 +19,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(RETICOLO_BUILD_APPS         "Build reference apps"                ON)
 option(RETICOLO_BUILD_TESTS        "Build test suite"                    ON)
 option(RETICOLO_BUILD_IO           "Build the HDF5-backed io subsystem"  ON)
+option(RETICOLO_ENABLE_OPENMP      "Enable OpenMP threading in apps"     ON)
 option(RETICOLO_WARNINGS_AS_ERRORS "Treat warnings as errors"            OFF)
 option(RETICOLO_TUNE_NATIVE        "Build with -march=native"            ON)
 
@@ -27,6 +28,15 @@ include(ReticoloWarnings)
 
 if(RETICOLO_BUILD_IO)
     find_package(HDF5 REQUIRED COMPONENTS C)
+endif()
+
+# Optional OpenMP. Exposed as an INTERFACE target so apps that opt in just
+# link `reticolo_openmp`. Pragmas in core headers are inert without -fopenmp.
+if(RETICOLO_ENABLE_OPENMP)
+    find_package(OpenMP REQUIRED COMPONENTS CXX)
+    add_library(reticolo_openmp INTERFACE)
+    add_library(reticolo::openmp ALIAS reticolo_openmp)
+    target_link_libraries(reticolo_openmp INTERFACE OpenMP::OpenMP_CXX)
 endif()
 
 include(FetchContent)
@@ -167,4 +177,7 @@ message(STATUS "reticolo: C++ standard  ${CMAKE_CXX_STANDARD}")
 message(STATUS "reticolo: native tuning ${RETICOLO_TUNE_NATIVE}")
 if(RETICOLO_BUILD_IO)
     message(STATUS "reticolo: HDF5          ${HDF5_VERSION}")
+endif()
+if(RETICOLO_ENABLE_OPENMP)
+    message(STATUS "reticolo: OpenMP        ${OpenMP_CXX_VERSION}")
 endif()

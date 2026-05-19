@@ -163,11 +163,20 @@ int main(int argc, char** argv) {
         }
     };
 
+    // Replicas are independent (each owns its own field / RNG / base action
+    // copy via WindowedAction-by-value); the `base` captured by the lambdas
+    // above is read-only and BoseGas has no mutable per-action state, so all
+    // per-replica loops below are clean OpenMP parallel-for. HDF5 writes
+    // are not thread-safe — stage into per-iteration buffers, drain serially.
+    std::vector<double> de_buf(n_rep_u);
+    std::vector<double> a_buf(n_rep_u);
+
     // Hot-start every replica with an independent random field, then
     // Metropolis-thermalize each into its E_n window. Generous sweep
     // count because Metropolis is small-step and the tail windows can be
     // sqrt(V)–O(V) away from the random start in S_I.
     int const n_metro_sweeps = std::max(n_therm_nr, 200);
+#pragma omp parallel for schedule(dynamic, 1)
     for (std::size_t n = 0; n < n_rep_u; ++n) {
         hot_start_field(reps[n]->phi(), metro_rng[n], k_hot_sigma);
         metropolis_window(reps[n]->phi(),
@@ -181,28 +190,37 @@ int main(int argc, char** argv) {
 
     // Newton-Raphson warm-up.
     for (int k = 0; k < n_nr; ++k) {
+#pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
             auto& r = *reps[n];
             r.thermalize(n_therm_nr);
-            double const m_de  = r.sample(n_meas_nr);
-            double const a_new = llr::nr_update(r.a(), m_de, delta);
-            r.set_a(a_new);
-            a_series[n].append(a_new);
-            de_series[n].append(m_de);
+            de_buf[n] = r.sample(n_meas_nr);
+            a_buf[n]  = llr::nr_update(r.a(), de_buf[n], delta);
+            r.set_a(a_buf[n]);
+        }
+        for (std::size_t n = 0; n < n_rep_u; ++n) {
+            a_series[n].append(a_buf[n]);
+            de_series[n].append(de_buf[n]);
         }
     }
 
     // Robbins-Monro with replica exchange. k restarts at 0 after the NR phase.
     for (int s = 0; s < n_rm; ++s) {
+#pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
             auto& r = *reps[n];
             r.thermalize(n_therm_rm);
-            double const m_de  = r.sample(n_meas_rm);
-            double const a_new = llr::rm_update(r.a(), m_de, delta, s);
-            r.set_a(a_new);
-            a_series[n].append(a_new);
-            de_series[n].append(m_de);
+            de_buf[n] = r.sample(n_meas_rm);
+            a_buf[n]  = llr::rm_update(r.a(), de_buf[n], delta, s);
+            r.set_a(a_buf[n]);
         }
+        for (std::size_t n = 0; n < n_rep_u; ++n) {
+            a_series[n].append(a_buf[n]);
+            de_series[n].append(de_buf[n]);
+        }
+
+        // Even/odd alternating nearest-neighbour exchange — serial: touches
+        // pairs of replicas and a single shared exchange RNG.
         std::size_t const off = static_cast<std::size_t>(s & 1);
         int accepted          = 0;
         for (std::size_t i = off; i + 1 < reps.size(); i += 2) {
