@@ -65,6 +65,35 @@ struct U1 {
         fnu[s] -= c;
     }
 
+    // -------- HMC slab hooks --------------------------------------------------
+    // U(1) is abelian: P ∈ iℝ stored as the real angle-velocity p; the group
+    // exp degenerates to addition. Convention matches scalar HMC — sample
+    // p ~ N(0, 1) so K = (1/2)·sum p² gives detailed balance.
+    template <class Rng>
+    [[gnu::always_inline]] static inline void
+    sample_algebra_slab(double* p_blk, Rng& rng, std::size_t n) noexcept {
+        for (std::size_t s = 0; s < n; ++s) {
+            p_blk[s] = rng.normal();
+        }
+    }
+
+    [[gnu::always_inline]] static inline double
+    kinetic_slab(double const* p_blk, std::size_t n) noexcept {
+        double k = 0.0;
+        for (std::size_t s = 0; s < n; ++s) {
+            k += p_blk[s] * p_blk[s];
+        }
+        return 0.5 * k;
+    }
+
+    // U(1) drift: U_new = exp(i·dt·p)·U_old reduces to θ_new = θ_old + dt·p.
+    [[gnu::always_inline]] static inline void
+    expi_lmul_slab(double* u_blk, double const* p_blk, double dt, std::size_t n) noexcept {
+        for (std::size_t s = 0; s < n; ++s) {
+            u_blk[s] += dt * p_blk[s];
+        }
+    }
+
     // Plaquette-centric Wilson force scatter — same shape as the legacy
     // `CompactU1::compute_force` per-plaquette path. For U(1) the force on a
     // link is just −β·sin(θ_p) added/subtracted into the 4 links of every
