@@ -6,15 +6,16 @@
 // (group exp) is comparable to one force eval, so the L : O2 : O4 ratio
 // deviates from the naive 1 : 2 : 4 that scalar actions show.
 
-#include "_bench/flops.hpp"
 #include "_bench/hot_init.hpp"
 #include "_bench/timing.hpp"
 
 #include <reticolo/reticolo.hpp>
 
 #include <array>
+#include <complex>
 #include <cstddef>
 #include <cstdio>
+#include <type_traits>
 
 namespace {
 
@@ -24,23 +25,25 @@ using reticolo::bench::time_per_call;
 constexpr double k_tau = 1.0;
 constexpr int k_n_md   = 20;
 
+constexpr int k_leapfrog_force_evals_per_traj = k_n_md + 1;
+constexpr int k_omelyan2_force_evals_per_traj = (2 * k_n_md) + 1;
+constexpr int k_omelyan4_force_evals_per_traj = (4 * k_n_md) + 1;
+
 void print_header() {
-    std::printf("%-12s %-16s %-12s %-10s %-12s %-14s %-10s\n",
+    std::printf("%-12s %-16s %-12s %-10s %-12s %-14s\n",
                 "ndim x L",
                 "action",
                 "integrator",
                 "dofs",
                 "wall/traj",
-                "force evals/s",
-                "MFLOPS");
-    std::printf("%-12s %-16s %-12s %-10s %-12s %-14s %-10s\n",
+                "force evals/s");
+    std::printf("%-12s %-16s %-12s %-10s %-12s %-14s\n",
                 "--------",
                 "------",
                 "----------",
                 "----",
                 "---------",
-                "-------------",
-                "------");
+                "-------------");
 }
 
 void print_row(int ndim,
@@ -49,21 +52,17 @@ void print_row(int ndim,
                char const* integ,
                std::size_t dofs,
                double wall_s,
-               double force_evals_per_traj,
-               double flops_per_dof) {
-    double const force_evals_per_s = force_evals_per_traj / wall_s;
-    double const flops_per_traj =
-        static_cast<double>(dofs) * force_evals_per_traj * flops_per_dof;
-    double const mflops = flops_per_traj / wall_s / 1e6;
-    std::printf("%dD L=%-3d   %-16s %-12s %-10zu %-12.3e %-14.1f %-10.1f\n",
+               int force_evals_per_traj) {
+    double const force_evals_per_s =
+        static_cast<double>(force_evals_per_traj) / wall_s;
+    std::printf("%dD L=%-3d   %-16s %-12s %-10zu %-12.3e %-14.1f\n",
                 ndim,
                 L,
                 action,
                 integ,
                 dofs,
                 wall_s,
-                force_evals_per_s,
-                mflops);
+                force_evals_per_s);
 }
 
 template <class Action, class Field>
@@ -72,8 +71,7 @@ void bench_one(int ndim,
                char const* action_name,
                Action const& action,
                Field& phi,
-               std::size_t dofs,
-               double flops_per_dof) {
+               std::size_t dofs) {
     using namespace reticolo;
     Field mom{phi.indexing()};
     Field force{phi.indexing()};
@@ -101,40 +99,22 @@ void bench_one(int ndim,
         double const t = time_per_call([&] {
             Leapfrog::run(action, phi, mom, force, k_tau, k_n_md);
         });
-        print_row(ndim,
-                  L,
-                  action_name,
-                  "Leapfrog",
-                  dofs,
-                  t,
-                  reticolo::bench::leapfrog_force_evals(k_n_md),
-                  flops_per_dof);
+        print_row(ndim, L, action_name, "Leapfrog", dofs, t,
+                  k_leapfrog_force_evals_per_traj);
     }
     {
         double const t = time_per_call([&] {
             Omelyan2::run(action, phi, mom, force, k_tau, k_n_md);
         });
-        print_row(ndim,
-                  L,
-                  action_name,
-                  "Omelyan2",
-                  dofs,
-                  t,
-                  reticolo::bench::omelyan2_force_evals(k_n_md),
-                  flops_per_dof);
+        print_row(ndim, L, action_name, "Omelyan2", dofs, t,
+                  k_omelyan2_force_evals_per_traj);
     }
     {
         double const t = time_per_call([&] {
             Omelyan4::run(action, phi, mom, force, k_tau, k_n_md);
         });
-        print_row(ndim,
-                  L,
-                  action_name,
-                  "Omelyan4",
-                  dofs,
-                  t,
-                  reticolo::bench::omelyan4_force_evals(k_n_md),
-                  flops_per_dof);
+        print_row(ndim, L, action_name, "Omelyan4", dofs, t,
+                  k_omelyan4_force_evals_per_traj);
     }
 }
 
@@ -169,66 +149,36 @@ void run_all() {
             Lattice<double> phi{shape_s};
             hot_init(phi, init_rng);
             act::Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
-            bench_one(c.ndim,
-                      c.L,
-                      "Phi4",
-                      action,
-                      phi,
-                      phi.nsites(),
-                      bench::phi4_flops_per_force(c.ndim));
+            bench_one(c.ndim, c.L, "Phi4", action, phi, phi.nsites());
         }
         // Phi6
         {
             Lattice<double> phi{shape_s};
             hot_init(phi, init_rng);
             act::Phi6<double> const action{.kappa = 0.18, .lambda = 1.0, .g6 = 0.5};
-            bench_one(c.ndim,
-                      c.L,
-                      "Phi6",
-                      action,
-                      phi,
-                      phi.nsites(),
-                      bench::phi6_flops_per_force(c.ndim));
+            bench_one(c.ndim, c.L, "Phi6", action, phi, phi.nsites());
         }
         // SineGordon
         {
             Lattice<double> phi{shape_s};
             hot_init(phi, init_rng);
             act::SineGordon<double> const action{.kappa = 0.18, .alpha = 1.0};
-            bench_one(c.ndim,
-                      c.L,
-                      "SineGordon",
-                      action,
-                      phi,
-                      phi.nsites(),
-                      bench::sg_flops_per_force(c.ndim));
+            bench_one(c.ndim, c.L, "SineGordon", action, phi, phi.nsites());
         }
-        // BoseGas (complex) — only 3D+ because the action needs ≥ 1 hopping dir
+        // BoseGas (complex)
         {
             Lattice<std::complex<double>> phi{shape_s};
             hot_init(phi, init_rng);
             act::BoseGas<double> const action{
                 .mass = 1.0, .lambda = 1.0, .mu = 0.9};
-            bench_one(c.ndim,
-                      c.L,
-                      "BoseGas",
-                      action,
-                      phi,
-                      phi.nsites(),
-                      bench::bose_gas_flops_per_force(c.ndim));
+            bench_one(c.ndim, c.L, "BoseGas", action, phi, phi.nsites());
         }
         // CompactU1 (LinkLattice<double>)
         {
             LinkLattice<double> theta{shape_l, 0.0};
             hot_init(theta, init_rng);
             action::CompactU1<double> const action{.beta = 1.0};
-            bench_one(c.ndim,
-                      c.L,
-                      "CompactU1",
-                      action,
-                      theta,
-                      theta.nlinks(),
-                      bench::u1_flops_per_force_per_link(c.ndim));
+            bench_one(c.ndim, c.L, "CompactU1", action, theta, theta.nlinks());
         }
         // Wilson<SU2>
         {
@@ -237,13 +187,8 @@ void run_all() {
             F theta{shape_m};
             hot_init(theta, init_rng);
             action::Wilson<gauge_group::SU2, double> const action{.beta = 2.4};
-            bench_one(c.ndim,
-                      c.L,
-                      "Wilson<SU2>",
-                      action,
-                      theta,
-                      theta.ndims() * theta.nsites(),
-                      bench::su2_flops_per_force_per_link(c.ndim));
+            bench_one(c.ndim, c.L, "Wilson<SU2>", action, theta,
+                      theta.ndims() * theta.nsites());
         }
         // Wilson<SU3>
         {
@@ -252,13 +197,8 @@ void run_all() {
             F theta{shape_m};
             hot_init(theta, init_rng);
             action::Wilson<gauge_group::SU3, double> const action{.beta = 6.0};
-            bench_one(c.ndim,
-                      c.L,
-                      "Wilson<SU3>",
-                      action,
-                      theta,
-                      theta.ndims() * theta.nsites(),
-                      bench::su3_flops_per_force_per_link(c.ndim));
+            bench_one(c.ndim, c.L, "Wilson<SU3>", action, theta,
+                      theta.ndims() * theta.nsites());
         }
         std::printf("\n");
     }
@@ -269,8 +209,7 @@ void run_all() {
 int main() {
     std::printf(
         "INTEGRATORS — full MD-trajectory throughput at tau=%.2f, n_md=%d\n"
-        "Each row times one back-to-back call to `Integrator::run` (no\n"
-        "Metropolis, no momentum resampling between trajectories).\n\n",
+        "(no Metropolis, no momentum resampling between trajectories)\n\n",
         k_tau,
         k_n_md);
     run_all();

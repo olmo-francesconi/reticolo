@@ -2,11 +2,9 @@
 //
 // Calls `s_full`, `compute_force`, and (where available)
 // `compute_force_and_kick` in tight loops with no HMC integrator, no
-// Metropolis, no I/O. Reports per-call wall time, dofs/s (sites for
-// scalar, links for link/matrix-link), and an estimated MFLOPS from
-// the per-action flop constants in `_bench/flops.hpp`.
+// Metropolis, no I/O. Reports per-call wall time and dofs/s (sites for
+// scalar, links for link/matrix-link).
 
-#include "_bench/flops.hpp"
 #include "_bench/hot_init.hpp"
 #include "_bench/timing.hpp"
 
@@ -16,7 +14,6 @@
 #include <complex>
 #include <cstddef>
 #include <cstdio>
-#include <string>
 
 namespace {
 
@@ -24,25 +21,21 @@ using reticolo::bench::consume;
 using reticolo::bench::hot_init;
 using reticolo::bench::time_per_call;
 
-constexpr int k_sigma_n = 3;
-
 void print_header() {
-    std::printf("%-12s %-16s %-10s %-22s %-12s %-14s %-10s\n",
+    std::printf("%-12s %-16s %-10s %-22s %-12s %-14s\n",
                 "ndim x L",
                 "action",
                 "dofs",
                 "kernel",
                 "wall [s]",
-                "dof upd/s",
-                "MFLOPS");
-    std::printf("%-12s %-16s %-10s %-22s %-12s %-14s %-10s\n",
+                "dof upd/s");
+    std::printf("%-12s %-16s %-10s %-22s %-12s %-14s\n",
                 "--------",
                 "------",
                 "----",
                 "------",
                 "--------",
-                "---------",
-                "------");
+                "---------");
 }
 
 void print_row(int ndim,
@@ -50,19 +43,16 @@ void print_row(int ndim,
                char const* action_name,
                std::size_t dofs,
                char const* kernel,
-               double wall_s,
-               double flops_per_dof) {
-    double const dof_per_s   = static_cast<double>(dofs) / wall_s;
-    double const flops_per_s = dof_per_s * flops_per_dof;
-    std::printf("%dD L=%-3d   %-16s %-10zu %-22s %-12.3e %-12.2f M %-10.1f\n",
+               double wall_s) {
+    double const dof_per_s = static_cast<double>(dofs) / wall_s;
+    std::printf("%dD L=%-3d   %-16s %-10zu %-22s %-12.3e %-12.2f M\n",
                 ndim,
                 L,
                 action_name,
                 dofs,
                 kernel,
                 wall_s,
-                dof_per_s / 1e6,
-                flops_per_s / 1e6);
+                dof_per_s / 1e6);
 }
 
 template <class Action, class Field>
@@ -70,17 +60,16 @@ void bench_scalar_action(char const* name,
                          int ndim,
                          int L,
                          Action const& action,
-                         Field& phi,
-                         double flops_per_dof) {
+                         Field& phi) {
     Field force{phi.indexing()};
     std::size_t const dofs = phi.nsites();
 
     double const t_sfull = time_per_call([&] { consume(action.s_full(phi)); });
-    print_row(ndim, L, name, dofs, "s_full", t_sfull, flops_per_dof);
+    print_row(ndim, L, name, dofs, "s_full", t_sfull);
 
     double const t_force =
         time_per_call([&] { action.compute_force(phi, force); });
-    print_row(ndim, L, name, dofs, "compute_force", t_force, flops_per_dof);
+    print_row(ndim, L, name, dofs, "compute_force", t_force);
 
     if constexpr (requires {
                       action.compute_force_and_kick(
@@ -90,66 +79,52 @@ void bench_scalar_action(char const* name,
             action.compute_force_and_kick(
                 phi, force, typename Action::value_type{0.123});
         });
-        print_row(
-            ndim, L, name, dofs, "compute_force_and_kick", t_fk, flops_per_dof);
+        print_row(ndim, L, name, dofs, "compute_force_and_kick", t_fk);
     }
 }
 
-// Specialised dispatch for actions on LinkLattice<double> (CompactU1) — dofs
-// is nlinks instead of nsites.
 template <class Action>
 void bench_link_action(char const* name,
                        int ndim,
                        int L,
                        Action const& action,
-                       reticolo::LinkLattice<double>& phi,
-                       double flops_per_dof_per_link) {
+                       reticolo::LinkLattice<double>& phi) {
     reticolo::LinkLattice<double> force{phi.indexing()};
     std::size_t const dofs = phi.nlinks();
 
     double const t_sfull = time_per_call([&] { consume(action.s_full(phi)); });
-    print_row(ndim, L, name, dofs, "s_full", t_sfull, flops_per_dof_per_link);
+    print_row(ndim, L, name, dofs, "s_full", t_sfull);
 
     double const t_force =
         time_per_call([&] { action.compute_force(phi, force); });
-    print_row(
-        ndim, L, name, dofs, "compute_force", t_force, flops_per_dof_per_link);
+    print_row(ndim, L, name, dofs, "compute_force", t_force);
 
     if constexpr (requires {
                       action.compute_force_and_kick(phi, force, 0.123);
                   }) {
         double const t_fk = time_per_call(
             [&] { action.compute_force_and_kick(phi, force, 0.123); });
-        print_row(ndim,
-                  L,
-                  name,
-                  dofs,
-                  "compute_force_and_kick",
-                  t_fk,
-                  flops_per_dof_per_link);
+        print_row(ndim, L, name, dofs, "compute_force_and_kick", t_fk);
     }
 }
 
-// Wilson<G> on MatrixLinkLattice — same shape but dofs = nlinks.
 template <class Group>
 void bench_wilson(char const* name,
                   int ndim,
                   int L,
                   double beta,
-                  reticolo::MatrixLinkLattice<Group, double>& phi,
-                  double flops_per_dof_per_link) {
+                  reticolo::MatrixLinkLattice<Group, double>& phi) {
     using Action = reticolo::action::Wilson<Group, double>;
     Action const action{.beta = beta};
     reticolo::MatrixLinkLattice<Group, double> force{phi.indexing()};
     std::size_t const dofs = phi.ndims() * phi.nsites();
 
     double const t_sfull = time_per_call([&] { consume(action.s_full(phi)); });
-    print_row(ndim, L, name, dofs, "s_full", t_sfull, flops_per_dof_per_link);
+    print_row(ndim, L, name, dofs, "s_full", t_sfull);
 
     double const t_force =
         time_per_call([&] { action.compute_force(phi, force); });
-    print_row(
-        ndim, L, name, dofs, "compute_force", t_force, flops_per_dof_per_link);
+    print_row(ndim, L, name, dofs, "compute_force", t_force);
 }
 
 struct Case {
@@ -186,68 +161,28 @@ void run_all() {
             Lattice<double> phi{shape_s};
             hot_init(phi, rng);
             act::Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
-            bench_scalar_action("Phi4",
-                                c.ndim,
-                                c.L,
-                                action,
-                                phi,
-                                bench::phi4_flops_per_force(c.ndim));
+            bench_scalar_action("Phi4", c.ndim, c.L, action, phi);
         }
         // Phi6
         {
             Lattice<double> phi{shape_s};
             hot_init(phi, rng);
             act::Phi6<double> const action{.kappa = 0.18, .lambda = 1.0, .g6 = 0.5};
-            bench_scalar_action("Phi6",
-                                c.ndim,
-                                c.L,
-                                action,
-                                phi,
-                                bench::phi6_flops_per_force(c.ndim));
+            bench_scalar_action("Phi6", c.ndim, c.L, action, phi);
         }
         // SineGordon
         {
             Lattice<double> phi{shape_s};
             hot_init(phi, rng);
             act::SineGordon<double> const action{.kappa = 0.18, .alpha = 1.0};
-            bench_scalar_action("SineGordon",
-                                c.ndim,
-                                c.L,
-                                action,
-                                phi,
-                                bench::sg_flops_per_force(c.ndim));
+            bench_scalar_action("SineGordon", c.ndim, c.L, action, phi);
         }
-        // Xy — note: no fused-kick; bench will skip that row automatically.
+        // Xy
         {
             Lattice<double> phi{shape_s};
             hot_init(phi, rng);
             act::Xy<double> const action{.beta = 1.0};
-            bench_scalar_action("Xy",
-                                c.ndim,
-                                c.L,
-                                action,
-                                phi,
-                                bench::xy_flops_per_force(c.ndim));
-        }
-        // OnSigma<3> — Metropolis-only (no force/s_full at the concept level).
-        // We just bench `s_local` over a random site to expose the per-site
-        // cost on the array-valued field.
-        if (c.ndim >= 3) {
-            using Field = Lattice<std::array<double, k_sigma_n>>;
-            Field phi{shape_s};
-            hot_init(phi, rng);
-            act::OnSigma<k_sigma_n> const action{.beta = 1.0};
-            std::size_t const dofs = phi.nsites();
-            double const t = time_per_call([&] {
-                consume(action.s_local(phi, Site{0}));
-            });
-            print_row(c.ndim,
-                      c.L,
-                      "OnSigma<3>",
-                      dofs,
-                      "s_local (one site)",
-                      t,
-                      bench::on_sigma_flops_per_force(c.ndim, k_sigma_n));
+            bench_scalar_action("Xy", c.ndim, c.L, action, phi);
         }
         // BoseGas (complex)
         if (c.ndim >= 3) {
@@ -257,32 +192,25 @@ void run_all() {
                 .mass = 1.0, .lambda = 1.0, .mu = 0.9};
             std::size_t const dofs = phi.nsites();
             Lattice<std::complex<double>> force{phi.indexing()};
-            double const flops = bench::bose_gas_flops_per_force(c.ndim);
             double const t_sfull =
                 time_per_call([&] { consume(action.s_full(phi)); });
-            print_row(c.ndim, c.L, "BoseGas", dofs, "s_full", t_sfull, flops);
+            print_row(c.ndim, c.L, "BoseGas", dofs, "s_full", t_sfull);
             double const t_force =
                 time_per_call([&] { action.compute_force(phi, force); });
-            print_row(c.ndim, c.L, "BoseGas", dofs, "compute_force", t_force, flops);
+            print_row(c.ndim, c.L, "BoseGas", dofs, "compute_force", t_force);
             double const t_simag =
                 time_per_call([&] { consume(action.s_imag(phi)); });
-            print_row(c.ndim, c.L, "BoseGas", dofs, "s_imag", t_simag, flops);
+            print_row(c.ndim, c.L, "BoseGas", dofs, "s_imag", t_simag);
             double const t_fimag = time_per_call(
                 [&] { action.compute_force_imag(phi, force); });
-            print_row(
-                c.ndim, c.L, "BoseGas", dofs, "compute_force_imag", t_fimag, flops);
+            print_row(c.ndim, c.L, "BoseGas", dofs, "compute_force_imag", t_fimag);
         }
         // CompactU1 (hand-tuned U(1) gauge)
         {
             LinkLattice<double> theta{shape_l, 0.0};
             hot_init(theta, rng);
             action::CompactU1<double> const action{.beta = 1.0};
-            bench_link_action("CompactU1",
-                              c.ndim,
-                              c.L,
-                              action,
-                              theta,
-                              bench::u1_flops_per_force_per_link(c.ndim));
+            bench_link_action("CompactU1", c.ndim, c.L, action, theta);
         }
         // Wilson<U1>
         {
@@ -290,13 +218,7 @@ void run_all() {
             F::SizeVec const shape_m(nd, L_);
             F theta{shape_m};
             hot_init(theta, rng);
-            bench_wilson<gauge_group::U1>(
-                "Wilson<U1>",
-                c.ndim,
-                c.L,
-                1.0,
-                theta,
-                bench::u1_flops_per_force_per_link(c.ndim));
+            bench_wilson<gauge_group::U1>("Wilson<U1>", c.ndim, c.L, 1.0, theta);
         }
         // Wilson<SU2>
         {
@@ -304,13 +226,7 @@ void run_all() {
             F::SizeVec const shape_m(nd, L_);
             F theta{shape_m};
             hot_init(theta, rng);
-            bench_wilson<gauge_group::SU2>(
-                "Wilson<SU2>",
-                c.ndim,
-                c.L,
-                2.4,
-                theta,
-                bench::su2_flops_per_force_per_link(c.ndim));
+            bench_wilson<gauge_group::SU2>("Wilson<SU2>", c.ndim, c.L, 2.4, theta);
         }
         // Wilson<SU3>
         {
@@ -318,13 +234,7 @@ void run_all() {
             F::SizeVec const shape_m(nd, L_);
             F theta{shape_m};
             hot_init(theta, rng);
-            bench_wilson<gauge_group::SU3>(
-                "Wilson<SU3>",
-                c.ndim,
-                c.L,
-                6.0,
-                theta,
-                bench::su3_flops_per_force_per_link(c.ndim));
+            bench_wilson<gauge_group::SU3>("Wilson<SU3>", c.ndim, c.L, 6.0, theta);
         }
 
         std::printf("\n");
@@ -336,8 +246,6 @@ void run_all() {
 int main() {
     std::printf(
         "ACTIONS — kernel throughput on hot random fields\n"
-        "Integrator: NONE (kernels called in isolation, no MD loop)\n"
-        "Flop accounting: k_sin ≈ %.1f ops per sin/cos call\n\n",
-        reticolo::bench::k_sin_flops);
+        "(kernels called in isolation, no MD loop)\n\n");
     run_all();
 }
