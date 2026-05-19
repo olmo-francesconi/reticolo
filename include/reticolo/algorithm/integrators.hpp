@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/algorithm/integ_ops.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
@@ -36,25 +37,13 @@ kick_(A const& action, Field& field, Field& mom, Field& force, double k_dt) noex
         action.compute_force_and_kick(field, mom, static_cast<F>(k_dt));
     } else {
         action.compute_force(field, force);
-        F* const m          = mom.data();
-        F const* const fp   = force.data();
-        std::size_t const n = flat_size(mom);
-        F const kdt         = static_cast<F>(k_dt);
-        for (std::size_t i = 0; i < n; ++i) {
-            m[i] += kdt * fp[i];
-        }
+        kick_add(mom, force, k_dt);
     }
 }
 
-template <class Field, class F = typename Field::value_type>
+template <class Field>
 [[gnu::always_inline]] inline void drift_(Field& field, Field const& mom, double c_dt) noexcept {
-    F* const f          = field.data();
-    F const* const p    = mom.data();
-    std::size_t const n = flat_size(field);
-    F const cdt         = static_cast<F>(c_dt);
-    for (std::size_t i = 0; i < n; ++i) {
-        f[i] += cdt * p[i];
-    }
+    drift_field(field, mom, c_dt);
 }
 
 }  // namespace detail
