@@ -1,3 +1,5 @@
+#include <reticolo/core/mt19937_rng.hpp>
+#include <reticolo/core/ranlux_rng.hpp>
 #include <reticolo/core/rng.hpp>
 
 #include <algorithm>
@@ -5,23 +7,36 @@
 #include <cmath>
 #include <vector>
 
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 using reticolo::FastRng;
+using reticolo::Mt19937Rng;
+using reticolo::RanluxRng;
 using reticolo::Rng;
 
 static_assert(Rng<FastRng>, "FastRng must satisfy the Rng concept");
+static_assert(Rng<RanluxRng>, "RanluxRng must satisfy the Rng concept");
+static_assert(Rng<Mt19937Rng>, "Mt19937Rng must satisfy the Rng concept");
 
-TEST_CASE("FastRng is deterministic for a given seed", "[rng]") {
-    FastRng a{42};
-    FastRng b{42};
+// Library-wide RNG correctness suite. The same checks apply to every RNG
+// that satisfies the Rng concept; TEMPLATE_TEST_CASE expands one set of
+// asserts per (test, RNG) pair so a future fourth RNG just needs adding
+// to the type list. Statistical thresholds are loose enough to clear any
+// well-mixed engine.
+
+TEMPLATE_TEST_CASE("Rng is deterministic for a given seed", "[rng]",
+                   FastRng, RanluxRng, Mt19937Rng) {
+    TestType a{42};
+    TestType b{42};
     for (int i = 0; i < 1024; ++i) {
         REQUIRE(a.uniform_u64() == b.uniform_u64());
     }
 }
 
-TEST_CASE("FastRng reseed restarts the sequence", "[rng]") {
-    FastRng r{1};
+TEMPLATE_TEST_CASE("Rng reseed restarts the sequence", "[rng]",
+                   FastRng, RanluxRng, Mt19937Rng) {
+    TestType r{1};
     std::array<std::uint64_t, 8> first{};
     for (auto& v : first) {
         v = r.uniform_u64();
@@ -32,14 +47,16 @@ TEST_CASE("FastRng reseed restarts the sequence", "[rng]") {
     }
 }
 
-TEST_CASE("Different seeds produce different first words", "[rng]") {
-    FastRng a{0};
-    FastRng b{1};
+TEMPLATE_TEST_CASE("Different seeds produce different first words", "[rng]",
+                   FastRng, RanluxRng, Mt19937Rng) {
+    TestType a{0};
+    TestType b{1};
     REQUIRE(a.uniform_u64() != b.uniform_u64());
 }
 
-TEST_CASE("FastRng::uniform() stays in the unit interval", "[rng]") {
-    FastRng r{7};
+TEMPLATE_TEST_CASE("Rng::uniform() stays in the unit interval", "[rng]",
+                   FastRng, RanluxRng, Mt19937Rng) {
+    TestType r{7};
     for (int i = 0; i < 200'000; ++i) {
         double const u = r.uniform();
         REQUIRE(u >= 0.0);
@@ -47,8 +64,9 @@ TEST_CASE("FastRng::uniform() stays in the unit interval", "[rng]") {
     }
 }
 
-TEST_CASE("FastRng::uniform_int(n) stays in range and handles edges", "[rng]") {
-    FastRng r{13};
+TEMPLATE_TEST_CASE("Rng::uniform_int(n) stays in range and handles edges", "[rng]",
+                   FastRng, RanluxRng, Mt19937Rng) {
+    TestType r{13};
     REQUIRE(r.uniform_int(0) == 0);
     REQUIRE(r.uniform_int(1) == 0);
     for (std::uint64_t n : {2ULL, 5ULL, 1024ULL, 1'000'000ULL}) {
@@ -58,26 +76,26 @@ TEST_CASE("FastRng::uniform_int(n) stays in range and handles edges", "[rng]") {
     }
 }
 
-TEST_CASE("FastRng::uniform_int distributes roughly uniformly", "[rng]") {
+TEMPLATE_TEST_CASE("Rng::uniform_int distributes roughly uniformly", "[rng]",
+                   FastRng, RanluxRng, Mt19937Rng) {
     constexpr int k_bins        = 16;
     constexpr int k_samples     = 320'000;
     constexpr double k_expected = static_cast<double>(k_samples) / k_bins;
     std::array<int, k_bins> counts{};
 
-    FastRng r{2025};
+    TestType r{2025};
     for (int i = 0; i < k_samples; ++i) {
         ++counts[r.uniform_int(k_bins)];
     }
-
-    // Each bin should land within ~3% of the expected count.
     for (int c : counts) {
         REQUIRE(std::abs(static_cast<double>(c) - k_expected) < 0.03 * k_expected);
     }
 }
 
-TEST_CASE("FastRng::normal mean and stddev match standard normal", "[rng]") {
+TEMPLATE_TEST_CASE("Rng::normal mean and stddev match standard normal", "[rng]",
+                   FastRng, RanluxRng, Mt19937Rng) {
     constexpr int k_samples = 200'000;
-    FastRng r{99};
+    TestType r{99};
     double sum = 0.0;
     double sq  = 0.0;
     for (int i = 0; i < k_samples; ++i) {
@@ -88,24 +106,33 @@ TEST_CASE("FastRng::normal mean and stddev match standard normal", "[rng]") {
     double const mean   = sum / k_samples;
     double const var    = (sq / k_samples) - (mean * mean);
     double const stddev = std::sqrt(var);
-
     REQUIRE(std::abs(mean) < 0.02);
     REQUIRE(std::abs(stddev - 1.0) < 0.02);
 }
 
-TEST_CASE("Copying FastRng snapshots state and diverges after reseed", "[rng]") {
-    FastRng a{55};
+TEMPLATE_TEST_CASE("Rng::normal_fill agrees with sequential normal() calls",
+                   "[rng]", FastRng, RanluxRng, Mt19937Rng) {
+    constexpr std::size_t n = 1024;
+    TestType a{123};
+    TestType b{123};
+    std::vector<double> fill_buf(n);
+    a.normal_fill(fill_buf.data(), n);
+    for (std::size_t i = 0; i < n; ++i) {
+        double const expected = b.normal();
+        REQUIRE(fill_buf[i] == expected);
+    }
+}
+
+TEMPLATE_TEST_CASE("Copying Rng snapshots state and diverges after reseed",
+                   "[rng]", FastRng, RanluxRng, Mt19937Rng) {
+    TestType a{55};
     (void)a.uniform_u64();
     (void)a.uniform_u64();
 
-    FastRng b = a;  // snapshot at this point
+    TestType b = a;
     for (int i = 0; i < 4; ++i) {
         REQUIRE(a.uniform_u64() == b.uniform_u64());
     }
-    // After 4 synchronised draws they remain in lockstep — both got the same
-    // state and the algorithm is deterministic.
-
-    // Re-seed one independently; sequences must diverge.
     b.reseed(99);
     bool diverged = false;
     for (int i = 0; i < 8; ++i) {
