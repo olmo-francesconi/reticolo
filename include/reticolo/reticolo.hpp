@@ -15,6 +15,7 @@
 #include <reticolo/action/detail/helpers.hpp>
 #include <reticolo/action/compact_u1.hpp>
 #include <reticolo/action/detail/gauge_group/base.hpp>
+#include <reticolo/action/detail/gauge_group/su2.hpp>
 #include <reticolo/action/detail/gauge_group/u1.hpp>
 #include <reticolo/action/wilson.hpp>
 #include <reticolo/algorithm/hmc.hpp>
