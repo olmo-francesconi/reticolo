@@ -54,15 +54,16 @@ def reconstruct_log_rho(e_n, a_final):
     """Reconstruct ln rho_natural at each window centre E_n via the trapezoidal
     rule.
 
-    Paper convention: a_n = d ln g/dS at E_n, where g is the *bare* density of
-    states. The natural Boltzmann distribution is rho_natural(S) = g(S)*exp(+S),
-    so ln rho_natural has slope (1 + a_n) in S. Integrating that slope over the
-    grid (and using continuity between adjacent piecewise-exponential windows)
-    gives the trapezoid sum below.
+    Standard Wilson convention, mode-A LLR: S_LLR = (1+a)*S + window, so
+    weight ∝ exp(-S) * exp(-a*S - window) = natural * tilt * window. The
+    saddle of <S - E_n> = 0 puts a* = d ln Omega/dE - 1, equivalent to
+    d ln rho_natural/dE. Trapezoidal integration of a(E_n) therefore
+    reconstructs ln rho_natural directly — same formula as the scalar twin
+    (examples/04_phi4_llr).
     """
     log_rho = np.zeros_like(e_n)
     for i in range(1, len(e_n)):
-        slope = 0.5 * ((1.0 + a_final[i - 1]) + (1.0 + a_final[i]))
+        slope = 0.5 * (a_final[i - 1] + a_final[i])
         log_rho[i] = log_rho[i - 1] + slope * (e_n[i] - e_n[i - 1])
     return log_rho
 
@@ -71,14 +72,14 @@ def piecewise_log_rho(e_n, a_final, log_rho, delta, n_per_window=16):
     """Finely-sampled piecewise-exponential reconstruction of ln rho_natural.
 
     Inside each window the local model is
-        rho_natural(S) = rho_natural(E_n) * exp((1 + a_n) * (S - E_n))
-    (slope 1 + a_n in log space — same `+1` as `reconstruct_log_rho`).
+        rho_natural(S) = rho_natural(E_n) * exp(a_n * (S - E_n))
+    (slope a_n in log space — same convention as `reconstruct_log_rho`).
     """
     xs, ys = [], []
     half = 0.5 * delta
     for n in range(len(e_n)):
         seg_x = np.linspace(e_n[n] - half, e_n[n] + half, n_per_window)
-        seg_y = log_rho[n] + (1.0 + a_final[n]) * (seg_x - e_n[n])
+        seg_y = log_rho[n] + a_final[n] * (seg_x - e_n[n])
         xs.append(seg_x)
         ys.append(seg_y)
     return np.concatenate(xs), np.concatenate(ys)
@@ -218,25 +219,25 @@ def main():
                     label=f"$e_p$={e_n[n]:.3f}" if show_label else None)
         ax.axvline(llr["n_nr"] - 0.5, color="0.4", linewidth=0.8, linestyle="--",
                    label="NR → RM")
-        ax.axhline(-1.0, color="0.8", linewidth=0.8)
+        ax.axhline(0.0, color="0.8", linewidth=0.8)
         ax.set_xlabel("iteration (NR then RM)")
         ax.set_ylabel(r"$a_n$")
         ax.set_title(r"$a_n$ convergence per replica")
         ax.legend(loc="best", fontsize=7, ncol=2)
 
         # a_n vs E_n/(6V): the converged LLR slope as a function of the
-        # intensive plaquette variable. Paper-convention `a* = d ln g/dS`,
-        # so at any natural peak a* = -1; bulk first-order transitions show
-        # up as a slope-1 stretch where d ln g/dS sweeps through the
-        # metastable region between the two phases.
+        # intensive plaquette variable. Standard convention: a* = d ln
+        # rho_natural/dS, so at any natural peak a* = 0; bulk first-order
+        # transitions show up as a stretch where d ln rho_natural/dS
+        # sweeps through the metastable region between the two phases.
         ax = axes[3, col]
         ax.plot(e_n_plot, a_final, "o-", color="C2", markersize=4,
                 linewidth=0.7, label=r"$a_n$ (LLR final)")
-        ax.axhline(-1.0, color="0.6", linewidth=0.8, linestyle="--",
-                   label=r"$a = -1$ (natural peak)")
+        ax.axhline(0.0, color="0.6", linewidth=0.8, linestyle="--",
+                   label=r"$a = 0$ (natural peak)")
         ax.axvline(peak_s, color="0.7", linewidth=0.8, linestyle="--")
-        ax.set_xlabel(r"$\langle \cos\theta_p\rangle = S / (\beta\, 6 V)$")
-        ax.set_ylabel(r"$a_n = d \ln g / dS$")
+        ax.set_xlabel(r"$\langle 1 - \cos\theta_p\rangle = S / (\beta\, 6 V)$")
+        ax.set_ylabel(r"$a_n = d \ln \rho_{\rm natural} / dS$")
         ax.legend(loc="best", fontsize=8)
 
     out = HERE / "rho_hmc_vs_llr.pdf"

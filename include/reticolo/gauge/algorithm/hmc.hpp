@@ -34,9 +34,11 @@ struct HmcStep {
 //  Kinetic term: H_kin = (1/2) sum_{(x, mu)} mom_mu(x)^2 — straight sum over
 //  the flat link buffer. Gaussian momenta are sampled fresh each trajectory.
 //
-//  Sign convention follows the gauge action: weight ∝ exp(+S) (paper
-//  convention), so the full Hamiltonian is H = K - S and the integrator
-//  kick uses +dS/dtheta (returned by compute_force).
+//  Standard Wilson convention: weight ∝ exp(-S), Hamiltonian H = K + S.
+//  `compute_force` returns the force F = -dS/dtheta; the integrator kick is
+//  `mom += k_dt * F`. Matches the scalar HMC sign convention exactly — this
+//  twin file exists only because the field type differs (LinkLattice vs
+//  Lattice). The next refactor will collapse the two.
 // =============================================================================
 
 template <class A, class R, class Integrator = integ::Leapfrog, class F = typename A::value_type>
@@ -117,8 +119,7 @@ private:
             kin += pi * pi;
         }
         kin *= 0.5;
-        // Paper convention: weight ∝ exp(+S), so H = K - S.
-        return kin - static_cast<double>(action_.s_full(field_));
+        return kin + static_cast<double>(action_.s_full(field_));
     }
 
     A const& action_;

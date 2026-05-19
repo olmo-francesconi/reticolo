@@ -9,25 +9,23 @@
 namespace reticolo::gauge::llr {
 
 // =============================================================================
-//  LLR-tilted action with Gaussian-penalty window for link-field gauge actions,
-//  in the paper convention (Langfeld-Lucini-Pellegrini-Rago, arxiv:1509.08391).
+//  LLR-tilted action with Gaussian-penalty window for link-field gauge
+//  actions. Standard Wilson convention (weight ∝ exp(-S_W)) — identical
+//  formula to the scalar real-LLR mode A:
 //
-//      Base action:        S(phi) = beta * sum_p cos(theta_p)
-//      Natural Boltzmann:  exp(+S)
-//      LLR target measure: exp(-a * S) * exp(-(S - E_n)^2 / (2 delta^2))
+//      S_LLR    = (1 + a) * S_base + (S_base - E_n)^2 / (2 * delta^2)
+//      F_LLR(x) = -(1 + a + (S_base - E_n) / delta^2) * dS_base/dtheta
+//               = +(1 + a + (S_base - E_n) / delta^2) * F_base(x)
 //
-//  Note: at a = 0 the LLR fictitious ensemble is uniform-on-window (NOT the
-//  natural HMC measure) — this is the standard paper convention.
+//  where F_base = -dS_base/dtheta is what `base.compute_force` returns.
+//  Boltzmann factor exp(-(1+a)*S - window) = exp(-S) * exp(-a*S - window) =
+//  natural * tilt * window. At a = 0 the LLR ensemble is the natural
+//  Boltzmann restricted to the window — matches the scalar twin.
 //
-//  Fixed-point condition <S - E_n> = 0 gives
-//      a* = d ln g/dS |_{E_n}
-//  where g(S) is the pure (Boltzmann-free) density of states. Integrating
-//  the a_n's reconstructs ln g (not ln rho_natural).
-//
-//  To turn this into a Hamiltonian for our gauge HMC (which uses
-//  weight ∝ exp(-K + s_full)) we set
-//      s_full(LLR)  = -a * S(phi) - (S(phi) - E_n)^2 / (2 delta^2)
-//      F(LLR)       = +ds_full/dtheta = -(a + (S - E_n)/delta^2) * F_base
+//  Fixed-point <S - E_n> = 0 gives a* = d ln Ω/dE |_{E_n} - 1 where Ω is
+//  the microcanonical density of states. Then d ln rho_natural/dE = a*, so
+//  trapezoidal integration of a(E_n) reconstructs ln rho_natural directly.
+//  Initialise a = 0 at the natural peak.
 // =============================================================================
 
 template <class Base, class T = typename Base::value_type>
@@ -56,15 +54,14 @@ struct WindowedAction {
         T const s   = base.s_full(l);
         T const ds  = s - E_n;
         T const inv = T{1} / (T{2} * delta * delta);
-        // s_full(LLR) = -a*S - (S-E_n)^2/(2*delta^2)
-        // so that exp(-K + s_full) reproduces the LLR target above.
-        return (-a * s) - (ds * ds * inv);
+        // S_LLR = (1+a)*S + (S-E_n)^2/(2*delta^2).
+        return ((T{1} + a) * s) + (ds * ds * inv);
     }
 
     void compute_force(field_type const& l, field_type& force) const noexcept {
         base.compute_force(l, force);
         T const s           = base.s_full(l);
-        T const scale       = -(a + ((s - E_n) / (delta * delta)));
+        T const scale       = T{1} + a + ((s - E_n) / (delta * delta));
         T* const fp         = force.data();
         std::size_t const n = force.nlinks();
         for (std::size_t i = 0; i < n; ++i) {
@@ -76,7 +73,7 @@ struct WindowedAction {
         requires gauge::HasLinkFusedKick<Base, T>
     {
         T const s     = base.s_full(l);
-        T const scale = -(a + ((s - E_n) / (delta * delta)));
+        T const scale = T{1} + a + ((s - E_n) / (delta * delta));
         base.compute_force_and_kick(l, mom, k_dt * scale);
     }
 };

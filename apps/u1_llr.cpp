@@ -58,15 +58,10 @@ int main(int argc, char** argv) {
     double const d_e = delta;
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
 
-    // Paper convention: LLR weight = exp(-a*S) * w_window. The natural
-    // Boltzmann factor exp(+S) is NOT folded in. The fixed point is
-    // a* = d ln g/dS |_{E_n}; at any natural peak (any beta) this evaluates
-    // to -1, so -1 is the correct neutral starting value for the slope.
-    // Initialising a=0 instead forces NR to make a single step of size 1
-    // after the first thermalisation, which displaces the system by ~delta^2
-    // in S between iterations — too large for the HMC to follow, and the
-    // replica gets stuck.
-    double const a_init = -1.0;
+    // Standard Wilson convention (matches the scalar LLR): weight ∝ exp(-S),
+    // S_LLR = (1+a)*S + window. At a = 0 the LLR ensemble is the natural
+    // Boltzmann restricted to the window — neutral starting point for NR.
+    double const a_init = 0.0;
 
     std::vector<std::unique_ptr<ReplicaT>> reps;
     reps.reserve(static_cast<std::size_t>(n_rep));

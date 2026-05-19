@@ -23,9 +23,10 @@ struct LinkMetropolisSweep {
 //  Link Metropolis sweep over a `LinkLocalAction`.
 //
 //  Per (site, mu): propose theta_new = theta_old + sigma * N(0,1); accept with
-//  min(1, exp(-ds_local)). Visit order is contiguous flat (site-major, then
-//  mu) — order is irrelevant for ergodicity on a single thread, and
-//  contiguous access keeps the link buffer resident in L1.
+//  min(1, exp(-ds_local)). Standard Wilson convention (weight ∝ exp(-S)) —
+//  identical to the scalar Metropolis. Visit order is contiguous flat
+//  (site-major, then mu) — order is irrelevant for ergodicity on a single
+//  thread, and contiguous access keeps the link buffer resident in L1.
 //
 //  No parity colouring needed for U(1) since two link updates never share
 //  state directly (only indirectly through plaquettes — and the staple at
@@ -50,8 +51,7 @@ public:
                 F const theta_new = theta_old + static_cast<F>(sigma_ * rng_.normal());
                 auto const ds     = static_cast<double>(action_.ds_local(field_, x, mu, theta_new));
                 ++stats.attempts;
-                // Paper convention: weight ∝ exp(+S), accept moves that increase S.
-                if (ds >= 0.0 || rng_.uniform() < std::exp(ds)) {
+                if (ds <= 0.0 || rng_.uniform() < std::exp(-ds)) {
                     field_(x, mu) = theta_new;
                     ++stats.accepted;
                 }

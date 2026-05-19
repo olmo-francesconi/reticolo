@@ -81,11 +81,12 @@ TEST_CASE("CompactU1: compute_force matches central finite difference of s_full"
 
         links(x, mu) = old;
 
-        // Paper convention: compute_force returns +dS/dtheta.
+        // Standard convention: compute_force returns the force F = -dS/dtheta.
         double const grad_numeric    = (s_plus - s_minus) / (2.0 * k_eps);
         double const force_predicted = force(x, mu);
+        double const force_numeric   = -grad_numeric;
 
-        REQUIRE(std::abs(force_predicted - grad_numeric) < k_tol);
+        REQUIRE(std::abs(force_predicted - force_numeric) < k_tol);
     }
 }
 
@@ -116,15 +117,12 @@ TEST_CASE("CompactU1: compute_force_and_kick matches compute_force + manual kick
     }
 }
 
-TEST_CASE("CompactU1: aligned plaquette config (all theta=0) has S = beta * n_plaq",
+TEST_CASE("CompactU1: aligned plaquette config (all theta=0) has S = 0",
           "[physics][u1]") {
-    // Paper convention: S = beta * sum cos(theta_p). With all theta=0, every
-    // plaquette contributes 1.
+    // Standard Wilson convention: S = beta * sum (1 - cos theta_p). With all
+    // theta=0, every plaquette contributes 0.
     constexpr double k_beta = 2.7;
     CompactU1<double> const action{.beta = k_beta};
     LinkLattice<double> links{{6, 6, 6}, 0.0};
-    std::size_t const d      = links.ndims();
-    std::size_t const n_plaq = (d * (d - 1) / 2) * links.nsites();
-    double const expected    = k_beta * static_cast<double>(n_plaq);
-    REQUIRE(std::abs(action.s_full(links) - expected) < 1e-9);
+    REQUIRE(std::abs(action.s_full(links)) < 1e-9);
 }
