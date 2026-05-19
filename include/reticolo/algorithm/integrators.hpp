@@ -33,7 +33,14 @@ namespace detail {
 template <class A, class Field, class F = typename Field::value_type>
 [[gnu::always_inline]] inline void
 kick_(A const& action, Field& field, Field& mom, Field& force, double k_dt) noexcept {
-    if constexpr (action::HasFusedKick<A, F> || gauge::HasLinkFusedKick<A, F>) {
+    // Generic fused-kick dispatch — accepts whatever Field type the action
+    // actually operates on (Lattice<F>, LinkLattice<F>, MatrixLinkLattice<G,T>).
+    // The legacy scalar/link concepts are intentionally subsumed by this
+    // requires-expression so adding a new field type doesn't require touching
+    // every integrator concept.
+    if constexpr (requires(A const& a, Field const& cf, Field& mf, F k) {
+                      a.compute_force_and_kick(cf, mf, k);
+                  }) {
         action.compute_force_and_kick(field, mom, static_cast<F>(k_dt));
     } else {
         action.compute_force(field, force);
