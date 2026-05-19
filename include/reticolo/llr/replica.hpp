@@ -3,6 +3,7 @@
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/llr/windowed_action.hpp>
 
 #include <utility>
@@ -20,6 +21,11 @@ struct ReplicaStats {
 //  is copied at construction so any mutable per-action state stays
 //  per-replica — required for OpenMP parallelism over replicas.
 //
+//  One template for both scalar and gauge LLR: `Field` defaults to
+//  `Lattice<T>` so existing scalar callers compile unchanged; gauge users
+//  pass `LinkLattice<T>` explicitly. Window/tilt math lives in
+//  WindowedAction; HMC handles the field-type dispatch via flat_size.
+//
 //  Non-moveable / non-copyable: the HMC inside holds references into the
 //  replica's own members. Use `std::vector<std::unique_ptr<Replica<...>>>`
 //  in the driver code.
@@ -28,13 +34,16 @@ struct ReplicaStats {
 template <class Base,
           class Rng,
           class Integrator = alg::integ::Leapfrog,
-          class T          = Base::value_type>
+          class T          = typename Base::value_type,
+          class Field      = Lattice<T>>
 class Replica {
 public:
     using value_type = T;
+    using field_type = Field;
     using scalar_t   = scalar_of_t<T>;
+    using SizeVec    = typename Field::SizeVec;
 
-    Replica(Lattice<T>::SizeVec shape,
+    Replica(SizeVec shape,
             Base const& base,
             Rng rng_init,
             scalar_t e_n_init,
@@ -90,16 +99,18 @@ public:
     void set_E_n(scalar_t v) noexcept { windowed_.E_n = v; }
     void set_delta(scalar_t v) noexcept { windowed_.delta = v; }
 
-    [[nodiscard]] Lattice<T>& phi() noexcept { return phi_; }
-    [[nodiscard]] Lattice<T> const& phi() const noexcept { return phi_; }
+    [[nodiscard]] Field& phi() noexcept { return phi_; }
+    [[nodiscard]] Field const& phi() const noexcept { return phi_; }
 
     [[nodiscard]] ReplicaStats const& stats() const noexcept { return stats_; }
 
 private:
-    Lattice<T> phi_;
+    using Windowed = WindowedAction<Base, T, Field>;
+
+    Field phi_;
     Rng rng_;
-    WindowedAction<Base, T> windowed_;
-    alg::Hmc<WindowedAction<Base, T>, Rng, Integrator> hmc_;
+    Windowed windowed_;
+    alg::Hmc<Windowed, Rng, Integrator, Field, T> hmc_;
     ReplicaStats stats_{};
 };
 
