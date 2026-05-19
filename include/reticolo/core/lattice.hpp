@@ -57,15 +57,15 @@ public:
     }
 
     // Visit every elementary update slot — one DOF per site for a scalar
-    // field. Body is called as `body(Site x, T& ref)`. Driver for the
-    // unified Metropolis sweep (twin signature on LinkLattice yields an
-    // extra mu arg via parameter-pack expansion in the body).
+    // field. Body is called as `body(T& ref, Site x)`. ref-first is required
+    // so the twin call on LinkLattice can append a `mu` arg captured by a
+    // trailing parameter pack in the body (`auto... loc` after `T& ref`).
     template <class Body>
     void for_each_update(Body&& body) {
         T* const d          = data_.data();
         std::size_t const n = idx_->nsites();
         for (std::size_t i = 0; i < n; ++i) {
-            body(Site{i}, d[i]);
+            body(d[i], Site{i});
         }
     }
     [[nodiscard]] std::span<Site const> even_sites() const noexcept { return idx_->even_sites(); }

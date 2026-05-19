@@ -3,8 +3,10 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/hot_loop.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
+#include <reticolo/gauge/concepts.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -21,33 +23,43 @@ struct MetropolisSweep {
 };
 
 // =============================================================================
-//  Metropolis sweep over a `LocalAction`.
+//  Metropolis sweep — one class for both site fields (Lattice<F>) and link
+//  fields (LinkLattice<F>). Three code paths picked at compile time:
 //
-//  Per site:
-//    * Propose new_v. If the action satisfies `HasProposal`, the action's
-//      `propose(field, x, rng)` is used. Otherwise we fall back to a Gaussian
-//      increment of width `sigma`.
-//    * Accept with probability min(1, exp(-ds_local)).
+//    1. HasDsLocalFromNbrs (scalar action with NN-only ds_local):
+//       visit_nn fast path with direct-stride neighbour reads; the
+//       acceptance body reuses the in-register `phi` instead of re-reading.
 //
-//  Visit order: contiguous flat-index iota — order is irrelevant for
-//  ergodicity on a single thread, and contiguous access keeps the field
-//  resident in L1.
+//    2. HasProposal (action provides its own proposal kernel):
+//       proposal comes from action_.propose(field, loc..., rng); fallback
+//       is Gaussian. Hooked into both the fast and generic paths.
+//
+//    3. Generic field.for_each_update visit (works for Lattice via
+//       (T&, Site) and LinkLattice via (T&, Site, mu)). The body's
+//       parameter pack `loc...` absorbs whichever extra coords the field
+//       yields, and `action_.ds_local(field, loc..., new_v)` unpacks the
+//       matching arity.
 // =============================================================================
-template <class A, class R, class F = typename A::value_type>
-    requires action::LocalAction<A, F> && Rng<R>
+
+template <class A,
+          class R,
+          class F     = typename A::value_type,
+          class Field = Lattice<F>>
+    requires(action::LocalAction<A, F> || gauge::LinkLocalAction<A, F>) && Rng<R>
 class Metropolis {
 public:
     using value_type = F;
 
-    Metropolis(A const& action, Lattice<F>& field, R& rng, double sigma) noexcept
+    Metropolis(A const& action, Field& field, R& rng, double sigma) noexcept
         : action_{action}, field_{field}, rng_{rng}, sigma_{sigma} {}
 
     MetropolisSweep sweep() {
         MetropolisSweep stats{};
+
         if constexpr (action::HasDsLocalFromNbrs<A, F>) {
-            // Fast path: visit_nn computes nbrs with direct stride offsets and
-            // hands (phi, nbrs) to the body. The body is sequential — each
-            // accepted write is visible to the next site's neighbour sum.
+            // Scalar fast path: visit_nn precomputes the NN sum and the body
+            // accepts (phi, nbrs) directly. Bit-stable order, vectorised
+            // neighbour sum.
             F* const fdata = field_.data();
             action::detail::visit_nn<F>(
                 field_, [this, fdata, &stats](std::size_t i, F phi, F nbrs) {
@@ -60,17 +72,24 @@ public:
                         ++stats.accepted;
                     }
                 });
-        } else {
-            for (Site x : field_.sites()) {
-                F const new_v = propose_(x);
-                auto const ds = static_cast<double>(action_.ds_local(field_, x, new_v));
-                ++stats.attempts;
-                if (ds <= 0.0 || rng_.uniform() < std::exp(-ds)) {
-                    field_[x] = new_v;
-                    ++stats.accepted;
-                }
-            }
+            return stats;
         }
+
+        // Generic path. The trailing `auto... loc` pack captures the field's
+        // location coords: () empty for Lattice (already absorbed by ref) — wait,
+        // not quite: Lattice yields (ref, Site), so loc = (Site). LinkLattice
+        // yields (ref, Site, mu), so loc = (Site, mu). Either way the action's
+        // existing ds_local signature unpacks the right arity.
+        field_.for_each_update([&](F& ref, auto... loc) {
+            F const old   = ref;
+            F const new_v = propose_(old, loc...);
+            auto const ds = static_cast<double>(action_.ds_local(field_, loc..., new_v));
+            ++stats.attempts;
+            if (ds <= 0.0 || rng_.uniform() < std::exp(-ds)) {
+                ref = new_v;
+                ++stats.accepted;
+            }
+        });
         return stats;
     }
 
@@ -78,16 +97,18 @@ public:
     void set_sigma(double s) noexcept { sigma_ = s; }
 
 private:
-    [[nodiscard]] F propose_(Site x) {
+    template <class... Loc>
+    [[nodiscard]] F propose_(F old, Loc... loc) {
         if constexpr (action::HasProposal<A, F, R>) {
-            return action_.propose(field_, x, rng_);
+            return action_.propose(field_, loc..., rng_);
         } else {
-            return field_[x] + static_cast<F>(sigma_ * rng_.normal());
+            return old + static_cast<F>(sigma_ * rng_.normal());
         }
     }
 
-    // Variant for the fast path that already has phi in a register and so can skip
-    // re-reading from the lattice. Custom proposals still go through the action.
+    // Variant for the visit_nn fast path that already has phi in a register
+    // and so can skip re-reading from the lattice. Custom proposals still
+    // route through the action.
     [[nodiscard]] F propose_local_(F phi, std::size_t i) {
         if constexpr (action::HasProposal<A, F, R>) {
             return action_.propose(field_, Site{i}, rng_);
@@ -97,9 +118,9 @@ private:
     }
 
     A const& action_;
-    Lattice<F>& field_;
-    R& rng_;
-    double sigma_;
+    Field&   field_;
+    R&       rng_;
+    double   sigma_;
 };
 
 }  // namespace reticolo::alg

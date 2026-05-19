@@ -89,9 +89,11 @@ public:
     }
 
     // Visit every elementary update slot — one DOF per (site, mu) pair.
-    // Body is called as `body(Site x, std::size_t mu, T& ref)`. Order
-    // (site outer, mu inner) matches the existing LinkMetropolis sweep
-    // so RNG consumption is bit-stable. Driver for the unified Metropolis.
+    // Body is called as `body(T& ref, Site x, std::size_t mu)`. ref-first
+    // mirrors Lattice::for_each_update so the same generic-lambda body
+    // (`[&](T& ref, auto... loc) { ... }`) consumes both via parameter
+    // pack expansion. Visit order (site outer, mu inner) matches the
+    // pre-unification LinkMetropolis so RNG consumption is bit-stable.
     template <class Body>
     void for_each_update(Body&& body) {
         T* const d           = data_.data();
@@ -99,7 +101,7 @@ public:
         std::size_t const nd = idx_->ndims();
         for (std::size_t i = 0; i < ns; ++i) {
             for (std::size_t mu = 0; mu < nd; ++mu) {
-                body(Site{i}, mu, d[(mu * ns) + i]);
+                body(d[(mu * ns) + i], Site{i}, mu);
             }
         }
     }

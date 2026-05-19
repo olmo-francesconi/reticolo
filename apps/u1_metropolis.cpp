@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
     auto s_prod  = out.series<double>("/prod/obs/s");
     auto plaq    = out.series<double>("/prod/obs/plaq");
 
-    gauge::alg::LinkMetropolis<Action, FastRng> metro{action, links, rng, sigma};
+    alg::Metropolis<Action, FastRng, double, LinkLattice<double>> metro{action, links, rng, sigma};
 
     // n_plaq = ndim*(ndim-1)/2 * V    where V = nsites
     std::size_t const v_sites = links.nsites();
