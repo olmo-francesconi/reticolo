@@ -92,16 +92,22 @@ public:
     // Body is called as `body(T& ref, Site x, std::size_t mu)`. ref-first
     // mirrors Lattice::for_each_update so the same generic-lambda body
     // (`[&](T& ref, auto... loc) { ... }`) consumes both via parameter
-    // pack expansion. Visit order (site outer, mu inner) matches the
-    // pre-unification LinkMetropolis so RNG consumption is bit-stable.
+    // pack expansion.
+    //
+    // Visit order is direction-outer, site-inner so the updated link is
+    // streamed contiguously through one direction-major block before the
+    // next μ — stride-1 instead of the previous stride-nsites jump per μ.
+    // No production test pins the RNG sequence to the old (site-outer)
+    // order.
     template <class Body>
     void for_each_update(Body&& body) {
         T* const d           = data_.data();
         std::size_t const ns = idx_->nsites();
         std::size_t const nd = idx_->ndims();
-        for (std::size_t i = 0; i < ns; ++i) {
-            for (std::size_t mu = 0; mu < nd; ++mu) {
-                body(d[(mu * ns) + i], Site{i}, mu);
+        for (std::size_t mu = 0; mu < nd; ++mu) {
+            T* const blk = d + (mu * ns);
+            for (std::size_t i = 0; i < ns; ++i) {
+                body(blk[i], Site{i}, mu);
             }
         }
     }
