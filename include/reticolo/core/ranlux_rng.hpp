@@ -37,9 +37,13 @@ public:
         has_cached_normal_ = false;
     }
 
+    // engine_() returns std::ranlux48::result_type (= std::uint_fast64_t,
+    // which is std::uint64_t on every supported target). Use `auto` and a
+    // single result cast to keep GCC's -Wuseless-cast quiet on platforms
+    // where result_type already == state_type.
     [[nodiscard]] state_type uniform_u64() noexcept {
-        state_type const r1 = static_cast<state_type>(engine_());
-        state_type const r2 = static_cast<state_type>(engine_());
+        auto const r1 = engine_();
+        auto const r2 = engine_();
         return (r1 << 16U) ^ r2;
     }
 

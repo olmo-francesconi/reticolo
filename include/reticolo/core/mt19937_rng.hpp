@@ -35,7 +35,10 @@ public:
         has_cached_normal_ = false;
     }
 
-    [[nodiscard]] state_type uniform_u64() noexcept { return static_cast<state_type>(engine_()); }
+    // engine_() returns std::mt19937_64::result_type (= std::uint_fast64_t,
+    // which is std::uint64_t on every supported target). Implicit conversion
+    // keeps GCC's -Wuseless-cast quiet where the types collapse.
+    [[nodiscard]] state_type uniform_u64() noexcept { return engine_(); }
 
     [[nodiscard]] double uniform() noexcept {
         constexpr double k_scale = 1.0 / static_cast<double>(1ULL << 53U);

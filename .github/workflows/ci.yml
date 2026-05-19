@@ -38,7 +38,7 @@ jobs:
 
       - name: install tools (linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build ccache libhdf5-dev
+        run: sudo apt-get update && sudo apt-get install -y ninja-build ccache libhdf5-dev libomp-dev
 
       - name: install tools (macos)
         if: runner.os == 'macOS'
@@ -70,11 +70,15 @@ jobs:
         # runners with different CPUs; -march=native bakes per-CPU
         # instructions into the cached object and crashes on a different
         # runner with SIGILL. Local dev still defaults to ON via the preset.
+        #
+        # RETICOLO_ENABLE_OPENMP=OFF for macos-appleclang: the preset
+        # description is "no OpenMP" (AppleClang ships without libomp).
         run: >
           cmake --preset ${{ matrix.preset }}
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DRETICOLO_TUNE_NATIVE=OFF
+          ${{ matrix.preset == 'macos-appleclang' && '-DRETICOLO_ENABLE_OPENMP=OFF' || '' }}
 
       - name: build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -116,7 +120,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: install
-        run: sudo apt-get update && sudo apt-get install -y clang-tidy clang ninja-build libhdf5-dev
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy clang ninja-build libhdf5-dev libomp-dev
 
       - name: configure
         run: cmake --preset linux-clang
