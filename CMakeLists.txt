@@ -103,6 +103,11 @@ target_include_directories(reticolo_core SYSTEM INTERFACE
     $<BUILD_INTERFACE:${sleef_BINARY_DIR}/include>
 )
 target_link_libraries(reticolo_core INTERFACE sleef)
+# OpenMP propagates through the umbrella, so any app linking reticolo::core
+# picks up `-fopenmp` and libomp without having to opt in per-app.
+if(RETICOLO_ENABLE_OPENMP)
+    target_link_libraries(reticolo_core INTERFACE reticolo::openmp)
+endif()
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" _reticolo_build_type_upper)
 set(_reticolo_compile_flags "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_reticolo_build_type_upper}}")
