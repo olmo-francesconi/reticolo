@@ -1,8 +1,8 @@
 #pragma once
 
+#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/gauge/algorithm/hmc.hpp>
-#include <reticolo/gauge/algorithm/integrators.hpp>
 #include <reticolo/gauge/llr/windowed_action.hpp>
 #include <reticolo/llr/replica.hpp>  // for ReplicaStats reuse
 

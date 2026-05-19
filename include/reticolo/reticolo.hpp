@@ -25,7 +25,6 @@
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/gauge/algorithm/hmc.hpp>
-#include <reticolo/gauge/algorithm/integrators.hpp>
 #include <reticolo/gauge/builtins/compact_u1.hpp>
 #include <reticolo/gauge/concepts.hpp>
 #include <reticolo/gauge/llr/replica.hpp>

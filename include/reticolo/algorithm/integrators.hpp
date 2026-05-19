@@ -1,8 +1,10 @@
 #pragma once
 
 #include <reticolo/action/concepts.hpp>
+#include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/link_lattice.hpp>
+#include <reticolo/gauge/concepts.hpp>
 
 #include <cstddef>
 
@@ -16,36 +18,28 @@ namespace reticolo::alg::integ {
 //  the integrator type — there is no runtime switch in the trajectory loop,
 //  so the optimiser can inline the integrator body alongside the action force.
 //
+//  Field-generic: works for scalar `Lattice<F>` and link `LinkLattice<F>`
+//  unchanged. `flat_size(field)` overloads on the field type to give the
+//  right element count; the fused-kick concept check covers both
+//  `HasFusedKick` (scalar) and `HasLinkFusedKick` (gauge).
+//
 //  Convention: tau = total trajectory time, n_md = number of MD steps,
 //  dt = tau / n_md. `force` is scratch storage owned by the HMC driver; the
 //  integrator writes through it and leaves it in an unspecified state on exit.
 // =============================================================================
 
-// Velocity-Verlet (leapfrog) — second-order symplectic.
-//
-//   p_{1/2}   = p_0     + (dt/2) F(q_0)
-//   q_{i+1}   = q_i     + dt p_{i+1/2}
-//   p_{i+3/2} = p_{i+1/2} + dt F(q_{i+1})        for i = 0 .. n_md-2
-//   p_n       = p_{n-1/2} + (dt/2) F(q_n)
-//
-// Total cost: n_md + 1 force evaluations.
-// Shared kick / drift building blocks used by every integrator below.
-// kick(k_dt) advances momentum by k_dt * F(q); fused into one pass when the
-// action exposes compute_force_and_kick (HasFusedKick), otherwise falls back
-// to compute_force + an explicit add. drift(c_dt) advances the field by
-// c_dt * p — pure stride-1, autovectorised on every target.
 namespace detail {
 
-template <class A, class F>
-[[gnu::always_inline]] inline void kick_(
-    A const& action, Lattice<F>& field, Lattice<F>& mom, Lattice<F>& force, double k_dt) noexcept {
-    if constexpr (action::HasFusedKick<A, F>) {
+template <class A, class Field, class F = typename Field::value_type>
+[[gnu::always_inline]] inline void
+kick_(A const& action, Field& field, Field& mom, Field& force, double k_dt) noexcept {
+    if constexpr (action::HasFusedKick<A, F> || gauge::HasLinkFusedKick<A, F>) {
         action.compute_force_and_kick(field, mom, static_cast<F>(k_dt));
     } else {
         action.compute_force(field, force);
         F* const m          = mom.data();
         F const* const fp   = force.data();
-        std::size_t const n = mom.nsites();
+        std::size_t const n = flat_size(mom);
         F const kdt         = static_cast<F>(k_dt);
         for (std::size_t i = 0; i < n; ++i) {
             m[i] += kdt * fp[i];
@@ -53,12 +47,11 @@ template <class A, class F>
     }
 }
 
-template <class F>
-[[gnu::always_inline]] inline void
-drift_(Lattice<F>& field, Lattice<F> const& mom, double c_dt) noexcept {
+template <class Field, class F = typename Field::value_type>
+[[gnu::always_inline]] inline void drift_(Field& field, Field const& mom, double c_dt) noexcept {
     F* const f          = field.data();
     F const* const p    = mom.data();
-    std::size_t const n = field.nsites();
+    std::size_t const n = flat_size(field);
     F const cdt         = static_cast<F>(c_dt);
     for (std::size_t i = 0; i < n; ++i) {
         f[i] += cdt * p[i];
@@ -73,11 +66,11 @@ drift_(Lattice<F>& field, Lattice<F> const& mom, double c_dt) noexcept {
 // step, but acceptance falls off quickly as dt grows so trajectories at a
 // given tau need many small steps.
 struct Leapfrog {
-    template <class A, class F>
+    template <class A, class Field>
     static void run(A const& action,
-                    Lattice<F>& field,
-                    Lattice<F>& mom,
-                    Lattice<F>& force,
+                    Field& field,
+                    Field& mom,
+                    Field& force,
                     double const tau,
                     int const n_md) noexcept {
         double const dt      = tau / static_cast<double>(n_md);
@@ -107,11 +100,11 @@ struct Leapfrog {
 struct Omelyan2 {
     static constexpr double k_lambda = 0.1931833275037836;
 
-    template <class A, class F>
+    template <class A, class Field>
     static void run(A const& action,
-                    Lattice<F>& field,
-                    Lattice<F>& mom,
-                    Lattice<F>& force,
+                    Field& field,
+                    Field& mom,
+                    Field& force,
                     double const tau,
                     int const n_md) noexcept {
         double const dt      = tau / static_cast<double>(n_md);
@@ -153,11 +146,11 @@ struct Omelyan4 {
     static constexpr double k_mu     = 0.5 - k_theta;
     static constexpr double k_mid    = 1.0 - (2.0 * k_rho) - (2.0 * k_lambda);
 
-    template <class A, class F>
+    template <class A, class Field>
     static void run(A const& action,
-                    Lattice<F>& field,
-                    Lattice<F>& mom,
-                    Lattice<F>& force,
+                    Field& field,
+                    Field& mom,
+                    Field& force,
                     double const tau,
                     int const n_md) noexcept {
         double const dt       = tau / static_cast<double>(n_md);
