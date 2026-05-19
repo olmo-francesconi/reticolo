@@ -10,7 +10,9 @@ namespace reticolo::action::detail {
 
 // =============================================================================
 //  Plaquette-plane bulk-vs-slab hot-loop helper for direction-major
-//  LinkLattice<T>. Each call iterates one (mu, nu) plane and invokes the body
+//  link-style fields (LinkLattice<T>, MatrixLinkLattice<G,T> — anything
+//  exposing shape()/ndims()/nsites()/indexing_ref()). Each call iterates
+//  one (mu, nu) plane and invokes the body
 //  on every site s with the precomputed neighbour indices
 //      body(s, s_pmu, s_pnu)
 //  where  s_pmu = next(s, mu),  s_pnu = next(s, nu)  (both periodic).
@@ -25,8 +27,8 @@ namespace reticolo::action::detail {
 //  Specialisations: 2D, 3D, 4D. Fallback uses `next[]` for every access.
 // =============================================================================
 
-template <class T, class Body>
-inline void visit_plane_fallback_(LinkLattice<T> const& l,
+template <class Field, class Body>
+inline void visit_plane_fallback_(Field const& l,
                                   std::size_t mu,
                                   std::size_t nu,
                                   Body const& body) noexcept {
@@ -45,8 +47,8 @@ inline void visit_plane_fallback_(LinkLattice<T> const& l,
 // over the two coordinates that are *not* coord[0]. Inner loop runs coord[0]
 // stride-1. If 0 in {mu, nu} the inner loop has a wrap slab at x = L0 - 1;
 // otherwise the inner loop is wrap-free (all bulk).
-template <class T, class Body>
-inline void visit_plane_3d_(LinkLattice<T> const& l,
+template <class Field, class Body>
+inline void visit_plane_3d_(Field const& l,
                             std::size_t mu,
                             std::size_t nu,
                             Body const& body) noexcept {
@@ -129,8 +131,8 @@ inline void visit_plane_3d_(LinkLattice<T> const& l,
     visit_plane_fallback_(l, mu, nu, body);
 }
 
-template <class T, class Body>
-inline void visit_plane_4d_(LinkLattice<T> const& l,
+template <class Field, class Body>
+inline void visit_plane_4d_(Field const& l,
                             std::size_t mu,
                             std::size_t nu,
                             Body const& body) noexcept {
@@ -242,9 +244,9 @@ inline void visit_plane_4d_(LinkLattice<T> const& l,
     visit_plane_fallback_(l, mu, nu, body);
 }
 
-template <class T, class Body>
+template <class Field, class Body>
 inline void
-visit_plane(LinkLattice<T> const& l, std::size_t mu, std::size_t nu, Body const& body) noexcept {
+visit_plane(Field const& l, std::size_t mu, std::size_t nu, Body const& body) noexcept {
     switch (l.ndims()) {
         case 3:
             visit_plane_3d_(l, mu, nu, body);

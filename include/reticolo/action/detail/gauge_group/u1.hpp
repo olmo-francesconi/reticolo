@@ -1,0 +1,68 @@
+#pragma once
+
+#include <reticolo/action/detail/gauge_group/base.hpp>
+
+#include <cmath>
+#include <cstddef>
+
+namespace reticolo::gauge_group {
+
+// =============================================================================
+//  U(1) gauge group model. Each link element is a phase U = exp(iθ) stored
+//  as a single real angle θ ∈ ℝ — so n_real_components = 1. The group is
+//  abelian, so the plaquette product reduces to a sum of four signed angles
+//  and Re Tr U_p = cos(θ_p). All "matrix" math collapses to scalar math.
+//
+//  The plaquette-action / plaquette-force kernels here are bitwise-identical
+//  to the per-site fallback path in `action::CompactU1`. The vector-libm
+//  batched path (Sleef cos/sin on scratch slabs) lives in CompactU1; once
+//  Wilson<U1> ships an equivalent batched primitive we can retire CompactU1
+//  (the M8 commit).
+// =============================================================================
+
+struct U1 {
+    using scalar_t                                 = double;
+    static constexpr std::size_t n_real_components = 1;
+    static constexpr std::size_t n_color           = 1;
+
+    // Re Tr U_p = cos(theta_mu(s) + theta_nu(s+pmu) − theta_mu(s+pnu) − theta_nu(s)).
+    // `stride` is unused for U(1) (the single component lives directly under
+    // the base pointer at offset s).
+    template <class T>
+    [[gnu::always_inline]] static inline double
+    plaq_re_tr(T const* mb,
+               T const* nb,
+               std::size_t s,
+               std::size_t s_pmu,
+               std::size_t s_pnu,
+               std::size_t /*stride*/) noexcept {
+        T const theta_p = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+        return static_cast<double>(std::cos(theta_p));
+    }
+
+    // ∂(Re Tr U_p)/∂θ_μ(s) = −sin(θ_p); the Wilson force is
+    //   F_μ(s) += −(β/N)·∂S/∂θ = (β/N)·∂(Re Tr U_p)/∂θ = −(β/N)·sin(θ_p)
+    // and its sign flips on the two "minus" links (μ at s+ν̂ and ν at s).
+    template <class T>
+    [[gnu::always_inline]] static inline void
+    plaq_force_accum(T const* mb,
+                     T const* nb,
+                     T* fmu,
+                     T* fnu,
+                     std::size_t s,
+                     std::size_t s_pmu,
+                     std::size_t s_pnu,
+                     std::size_t /*stride*/,
+                     double beta_over_n) noexcept {
+        T const theta_p = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+        T const c       = static_cast<T>(-beta_over_n) * std::sin(theta_p);
+        fmu[s] += c;
+        fnu[s_pmu] += c;
+        fmu[s_pnu] -= c;
+        fnu[s] -= c;
+    }
+};
+
+static_assert(GaugeGroup<U1>);
+
+}  // namespace reticolo::gauge_group

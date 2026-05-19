@@ -1,0 +1,123 @@
+#pragma once
+
+#include <reticolo/action/detail/gauge_group/base.hpp>
+#include <reticolo/action/detail/gauge_helpers.hpp>
+#include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/site.hpp>
+
+#include <algorithm>
+#include <cstddef>
+
+namespace reticolo::action {
+
+// =============================================================================
+//  Generic Wilson plaquette action for any SU(N) (and U(1)) gauge group
+//  conforming to the `gauge_group::GaugeGroup` concept.
+//
+//      S_W = (β/N) · Σ_x Σ_{μ<ν} ( N − Re Tr U_{μν}(x) )
+//          = β · n_plaq − (β/N) · Σ_p Re Tr U_p
+//
+//  The hot loops walk one plaquette plane (μ, ν) at a time via the existing
+//  `detail::visit_plane` driver (bulk-vs-slab, stride-1 in the inner site
+//  loop, peeled wrap boundaries). The per-plaquette math — Re Tr U_p and
+//  the staple force scatter — is delegated to the group model G, which
+//  receives base pointers to the nc-component link blocks for the two
+//  directions in the plane plus the three site indices `(s, s_pmu, s_pnu)`
+//  and the per-direction stride (= nsites). Models with `n_real_components
+//  = 1` (U(1)) ignore the stride; matrix groups index per component as
+//      block_ptr[k * stride + s].
+//
+//  At N=1 with U=exp(iθ) this reduces line-for-line to `CompactU1` — the
+//  bit-identity is the design point of M3 and lets the gauge group concept
+//  be validated on a known-correct path before the SU(2)/SU(3) instances
+//  arrive in M5/M7.
+// =============================================================================
+
+template <gauge_group::GaugeGroup G, class T = double>
+struct Wilson {
+    using value_type = T;
+    using group_type = G;
+    using field_type = MatrixLinkLattice<G, T>;
+
+    T beta = T{0};
+
+    // ---- HasLinkSEff equivalent ----------------------------------------------
+
+    [[nodiscard]] T s_full(field_type const& U) const noexcept {
+        std::size_t const d      = U.ndims();
+        std::size_t const ns     = U.nsites();
+        std::size_t const n_plaq = (d * (d - 1) / 2) * ns;
+        double accum_re_tr       = 0.0;
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            T const* mb = U.mu_block_data(mu);
+            for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                T const* nb = U.mu_block_data(nu);
+                detail::visit_plane(
+                    U, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                        accum_re_tr += G::plaq_re_tr(mb, nb, s, s_pmu, s_pnu, ns);
+                    });
+            }
+        }
+        T const N_re        = static_cast<T>(G::n_color);
+        T const beta_over_n = beta / N_re;
+        return (beta * static_cast<T>(n_plaq)) - (beta_over_n * static_cast<T>(accum_re_tr));
+    }
+
+    // ---- HasLinkForce equivalent ---------------------------------------------
+
+    void compute_force(field_type const& U, field_type& force) const noexcept {
+        std::fill(force.begin(), force.end(), T{0});
+        std::size_t const d           = U.ndims();
+        std::size_t const ns          = U.nsites();
+        T const N_re                  = static_cast<T>(G::n_color);
+        T const beta_over_n           = beta / N_re;
+        double const beta_over_n_dbl  = static_cast<double>(beta_over_n);
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            T const* mb = U.mu_block_data(mu);
+            T* const fmu_blk = force.mu_block_data(mu);
+            for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                T const* nb       = U.mu_block_data(nu);
+                T* const fnu_blk  = force.mu_block_data(nu);
+                detail::visit_plane(
+                    U, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                        G::plaq_force_accum(
+                            mb, nb, fmu_blk, fnu_blk, s, s_pmu, s_pnu, ns, beta_over_n_dbl);
+                    });
+            }
+        }
+    }
+
+    // ---- LinkLocalAction equivalent ------------------------------------------
+    //
+    // Sum of Re Tr U_p over the 2(d−1) plaquettes through link (x, μ),
+    // wrapped into the Wilson constant offset so the returned value is
+    // non-negative for the cold config (theta = 0 → cos(0) = 1 → S_local = 0).
+
+    [[nodiscard]] T s_local(field_type const& U, Site x, std::size_t mu) const noexcept {
+        std::size_t const d  = U.ndims();
+        std::size_t const ns = U.nsites();
+        T const* mb          = U.mu_block_data(mu);
+        double cos_sum       = 0.0;
+        for (std::size_t nu = 0; nu < d; ++nu) {
+            if (nu == mu) {
+                continue;
+            }
+            T const* nb              = U.mu_block_data(nu);
+            std::size_t const x_v    = x.value();
+            std::size_t const x_pmu  = U.next(x, mu).value();
+            std::size_t const x_pnu  = U.next(x, nu).value();
+            std::size_t const x_mnu  = U.prev(x, nu).value();
+            std::size_t const x_mnup = U.next(U.prev(x, nu), mu).value();
+            // Forward plaquette anchored at x.
+            cos_sum += G::plaq_re_tr(mb, nb, x_v, x_pmu, x_pnu, ns);
+            // Backward plaquette anchored at x − ν̂.
+            cos_sum += G::plaq_re_tr(mb, nb, x_mnu, x_mnup, x_v, ns);
+        }
+        T const n_plaq_per_link = T{2} * static_cast<T>(d - 1);
+        T const N_re            = static_cast<T>(G::n_color);
+        T const beta_over_n     = beta / N_re;
+        return (beta * n_plaq_per_link) - (beta_over_n * static_cast<T>(cos_sum));
+    }
+};
+
+}  // namespace reticolo::action
