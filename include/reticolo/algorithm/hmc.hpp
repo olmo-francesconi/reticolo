@@ -11,6 +11,7 @@
 #include <cmath>
 #include <complex>
 #include <cstddef>
+#include <limits>
 #include <type_traits>
 
 namespace reticolo::alg {
@@ -89,11 +90,15 @@ public:
         for (std::size_t i = 0; i < n; ++i) {
             old[i] = fp[i];
         }
-        double const h0 = hamiltonian_();
+        double const kin0 = kinetic_();
+        double const s0   = static_cast<double>(action_.s_full(field_));
+        double const h0   = kin0 + s0;
 
         Integrator::run(action_, field_, mom_, force_, tau_, n_md_);
 
-        double const h1 = hamiltonian_();
+        double const kin1 = kinetic_();
+        double const s1   = static_cast<double>(action_.s_full(field_));
+        double const h1   = kin1 + s1;
         // NOLINTNEXTLINE(readability-identifier-naming) physics convention
         double const dH = h1 - h0;
 
@@ -104,8 +109,21 @@ public:
             for (std::size_t i = 0; i < n; ++i) {
                 fmut[i] = oldp[i];
             }
+            // s_full now reflects the field BEFORE the trajectory — restore to s0.
+            last_s_full_ = s0;
+        } else {
+            last_s_full_ = s1;
         }
         return {.dH = dH, .accepted = accepted};
+    }
+
+    // The s_full value of the action on the current field, as computed at the
+    // end of the most recent trajectory (== s_full before the rejected step,
+    // or after the accepted step). Avoids one re-sweep at the call site.
+    // -∞ if no trajectory has run yet.
+    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
+    [[nodiscard]] bool has_last_s_full() const noexcept {
+        return last_s_full_ == last_s_full_;  // not NaN sentinel
     }
 
     [[nodiscard]] HmcSpec spec() const noexcept { return {.tau = tau_, .n_md = n_md_}; }
@@ -150,7 +168,7 @@ private:
         }
     }
 
-    [[nodiscard]] double hamiltonian_() const {
+    [[nodiscard]] double kinetic_() const {
         double kin = 0.0;
         if constexpr (MatrixLinkField<Field>) {
             // K = (1/2)·Tr(P†P) = ‖h‖² for SU(N) with P = i·(h·σ). Hamilton's
@@ -178,7 +196,7 @@ private:
             }
             kin *= 0.5;
         }
-        return kin + static_cast<double>(action_.s_full(field_));
+        return kin;
     }
 
     static constexpr bool is_complex_v_ =
@@ -192,6 +210,10 @@ private:
     Field old_field_;
     double tau_;
     int n_md_;
+    // last s_full of `field_` after the most recent trajectory. NaN until the
+    // first trajectory runs. Used by Replica / Exchange so they can read the
+    // current action without re-sweeping.
+    double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 };
 
 }  // namespace reticolo::alg

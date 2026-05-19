@@ -88,6 +88,15 @@ public:
 
     [[nodiscard]] scalar_t energy() const noexcept { return windowed_.base.s_full(phi_); }
 
+    // Value of the windowed (LLR-tilted) action at the current field state,
+    // taken from HMC's post-trajectory cache. NaN before the first
+    // trajectory. Used by Exchange::energy() to skip an extra s_full sweep
+    // when comparing two replicas — the unwindowed `base.s_full` is what
+    // Replica::energy() returns; this is its windowed sibling.
+    [[nodiscard]] scalar_t last_windowed_action() const noexcept {
+        return static_cast<scalar_t>(hmc_.last_s_full());
+    }
+
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
     [[nodiscard]] scalar_t a() const noexcept { return windowed_.a; }
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention E_n
