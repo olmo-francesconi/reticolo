@@ -37,11 +37,14 @@ int main(int argc, char** argv) {
     if (!p.parse(argc, argv))
         return 0;
 
+    log::start(outpath);
+
     Lattice<std::array<double, k_n>>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                     static_cast<std::size_t>(L));
     Lattice<std::array<double, k_n>> phi{shape};
     FastRng rng{seed};
     act::OnSigma<k_n> on{.beta = beta};
+    log::act(on);
 
     for (Site const x : phi.sites()) {
         phi[x] = {1.0, 0.0, 0.0};
@@ -56,12 +59,15 @@ int main(int argc, char** argv) {
     auto m2_prod       = out.series<double>("/prod/obs/m2");
 
     alg::Wolff<act::OnSigma<k_n>, FastRng> wolff{on, phi, rng};
+    log::algo(wolff);
 
+    log::info("wolf", "therm  {} measurements × {} clusters", n_therm, n_cluster);
     for (int i = 0; i < n_therm; ++i) {
         for (int k = 0; k < n_cluster; ++k) {
-            cluster_therm.append(wolff.update().cluster_size);
+            cluster_therm.append(wolff.update(log::Mode::silent).cluster_size);
         }
     }
+    log::info("wolf", "prod   {} measurements × {} clusters", n_prod, n_cluster);
     for (int i = 0; i < n_prod; ++i) {
         for (int k = 0; k < n_cluster; ++k) {
             cluster_prod.append(wolff.update().cluster_size);

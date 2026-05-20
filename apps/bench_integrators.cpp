@@ -192,6 +192,7 @@ void run_all() {
 }  // namespace
 
 int main() {
+    reticolo::log::off();
     std::printf("INTEGRATORS — full MD-trajectory throughput at tau=%.2f, n_md=%d\n"
                 "(no Metropolis, no momentum resampling between trajectories)\n\n",
                 k_tau,

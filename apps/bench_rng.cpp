@@ -151,6 +151,7 @@ void bench_rng_for(char const* rng_name) {
 
 int main() {
     using namespace reticolo;
+    log::off();
     std::printf("RNG — momentum-sampling throughput\n\n");
     print_header();
     bench_rng_for<FastRng>("FastRng");

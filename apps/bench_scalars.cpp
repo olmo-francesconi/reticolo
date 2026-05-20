@@ -98,6 +98,7 @@ void run_one(std::string const& name,
 
 int main() {
     using namespace reticolo;
+    log::off();
 
     std::vector<Case> const cases = {
         {.ndim = 3, .L = 8, .n_mc = 500, .n_hmc = 200},

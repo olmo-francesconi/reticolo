@@ -2,10 +2,15 @@
 
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
+#include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
+#include <reticolo/core/log.hpp>
+#include <reticolo/core/log_helpers.hpp>
 #include <reticolo/llr/windowed_action.hpp>
 
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace reticolo::llr {
@@ -43,16 +48,25 @@ public:
     using scalar_t   = scalar_of_t<T>;
     using SizeVec    = typename Field::SizeVec;
 
-    Replica(SizeVec shape,
+    static constexpr std::string_view log_tag = "repl";
+
+    Replica(std::string id,
+            SizeVec shape,
             Base const& base,
             Rng rng_init,
             scalar_t e_n_init,
             scalar_t delta_init,
             scalar_t a_init,
             alg::HmcSpec const& spec)
-        : phi_{std::move(shape)}, rng_{std::move(rng_init)},
+        : id_{std::move(id)}, phi_{std::move(shape)}, rng_{std::move(rng_init)},
           windowed_{.base = base, .a = a_init, .E_n = e_n_init, .delta = delta_init},
-          hmc_{windowed_, phi_, rng_, spec} {}
+          hmc_{windowed_, phi_, rng_, spec} {
+        // Self-announce with our run id bound as scope so the line carries
+        // `r0NN` automatically — apps don't have to wrap construction in
+        // `log::scope` themselves.
+        auto _ = log::scope(id_);
+        log::algo(*this);
+    }
 
     Replica(Replica const&)            = delete;
     Replica& operator=(Replica const&) = delete;
@@ -60,13 +74,29 @@ public:
     Replica& operator=(Replica&&)      = delete;
     ~Replica()                         = default;
 
-    void thermalize(int n) {
+    [[nodiscard]] std::string_view id() const noexcept { return id_; }
+
+    void describe(log::Entry& e) const {
+        e.line("Replica<{}>", scalar_name<scalar_t>());
+        e.param("E_n={:+.3f}", static_cast<double>(windowed_.E_n));
+        e.param("a={:+.3f}", static_cast<double>(windowed_.a));
+        e.param("δ={:.3f}", static_cast<double>(windowed_.delta));
+    }
+
+    void thermalize(int n, log::Mode log_mode = log::Mode::normal) {
+        int local_accepted = 0;
         for (int i = 0; i < n; ++i) {
-            auto const step = hmc_.trajectory();
+            auto const step = hmc_.trajectory(log::Mode::silent);
             ++stats_.n_traj;
             if (step.accepted) {
                 ++stats_.n_accepted;
+                ++local_accepted;
             }
+        }
+        if (log_mode == log::Mode::normal) {
+            double const acc =
+                n > 0 ? static_cast<double>(local_accepted) / static_cast<double>(n) : 0.0;
+            log::info("repl", "thermalize n={}  acc={:.3f}", n, acc);
         }
     }
 
@@ -76,10 +106,10 @@ public:
     // the base action's post-trajectory raw-scalar cache instead of a fresh
     // sweep — HMC's s_full call at h1 already populated it, and a reject
     // would have rolled it back to the h0 value.
-    [[nodiscard]] scalar_t sample(int n) {
+    [[nodiscard]] scalar_t sample(int n, log::Mode log_mode = log::Mode::normal) {
         scalar_t sum = scalar_t{0};
         for (int i = 0; i < n; ++i) {
-            auto const step = hmc_.trajectory();
+            auto const step = hmc_.trajectory(log::Mode::silent);
             ++stats_.n_traj;
             if (step.accepted) {
                 ++stats_.n_accepted;
@@ -90,7 +120,14 @@ public:
                 sum += windowed_.base.last_s_full() - windowed_.E_n;
             }
         }
-        return sum / static_cast<scalar_t>(n);
+        scalar_t const dE = sum / static_cast<scalar_t>(n);
+        if (log_mode == log::Mode::normal) {
+            double const dE_d  = static_cast<double>(dE);
+            double const delta = static_cast<double>(windowed_.delta);
+            double const ratio = (delta != 0.0) ? (dE_d / delta) : 0.0;
+            log::info("repl", "sample n={}  ⟨dE⟩={:+.3e}  ⟨dE⟩/δ={:+.3f}", n, dE_d, ratio);
+        }
+        return dE;
     }
 
     [[nodiscard]] scalar_t energy() const noexcept { return windowed_.base.s_full(phi_); }
@@ -114,6 +151,7 @@ public:
 private:
     using Windowed = WindowedAction<Base, T, Field>;
 
+    std::string id_;
     Field phi_;
     Rng rng_;
     Windowed windowed_;

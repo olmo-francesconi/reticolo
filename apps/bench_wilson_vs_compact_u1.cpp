@@ -25,6 +25,7 @@ double seconds(bench_clock::duration d) {
 
 int main() {
     using namespace reticolo;
+    log::off();
     using Integ = alg::integ::Omelyan2;
 
     constexpr int k_n_md    = 20;

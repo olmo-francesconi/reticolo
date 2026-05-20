@@ -33,11 +33,14 @@ int main(int argc, char** argv) {
     if (!p.parse(argc, argv))
         return 0;
 
+    log::start(outpath);
+
     Lattice<std::array<double, k_n>>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                     static_cast<std::size_t>(L));
     Lattice<std::array<double, k_n>> phi{shape};
     FastRng rng{seed};
     act::OnSigma<k_n> on{.beta = beta};
+    log::act(on);
 
     // Cold start: every spin aligned along the first axis. The thermalisation
     // sweeps below decorrelate from this configuration before measurement.
@@ -54,10 +57,13 @@ int main(int argc, char** argv) {
     auto m2_prod      = out.series<double>("/prod/obs/m2");
 
     alg::Metropolis<act::OnSigma<k_n>, FastRng> mc{on, phi, rng, /*sigma=*/0.0};
+    log::algo(mc);
 
+    log::info("metr", "therm  {} sweeps", n_therm);
     for (int i = 0; i < n_therm; ++i) {
-        accept_therm.append(mc.sweep().acceptance());
+        accept_therm.append(mc.sweep(log::Mode::silent).acceptance());
     }
+    log::info("metr", "prod   {} sweeps", n_prod);
     for (int i = 0; i < n_prod; ++i) {
         accept_prod.append(mc.sweep().acceptance());
         s_prod.append(on.s_full(phi));

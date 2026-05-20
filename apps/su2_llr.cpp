@@ -52,8 +52,11 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    log::start(outpath);
+
     Field::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Action const base{.beta = beta};
+    log::act(base);
 
     int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
     double const d_e = delta;
@@ -65,13 +68,16 @@ int main(int argc, char** argv) {
     for (int n = 0; n < n_rep; ++n) {
         double const e_n = e_min + (static_cast<double>(n) * d_e);
         reps.push_back(
-            std::make_unique<ReplicaT>(shape,
+            std::make_unique<ReplicaT>(std::format("r{:03}", n),
+                                       shape,
                                        base,
                                        FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
                                        e_n,
                                        delta,
                                        a_init,
                                        alg::HmcSpec{.tau = tau, .n_md = n_md}));
+        // Replica's ctor self-announces with its id bound.
+        //
         // Cold-start each replica's field to SU(2) identity (Re U_{00} =
         // Re U_{11} = 1, all else 0).
         Field& phi           = reps.back()->phi();
@@ -116,10 +122,11 @@ int main(int argc, char** argv) {
     std::vector<double> de_buf(n_rep_u);
     std::vector<double> a_buf(n_rep_u);
 
-    // Newton-Raphson warm-up.
+    log::info("llr", "NR phase  {} iters × {} replicas", n_nr, n_rep_u);
     for (int k = 0; k < n_nr; ++k) {
 #pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
+            auto _  = log::scope(std::string{reps[n]->id()});
             auto& r = *reps[n];
             r.thermalize(n_therm_nr);
             de_buf[n] = r.sample(n_meas_nr);
@@ -130,17 +137,26 @@ int main(int argc, char** argv) {
             a_series[n].append(a_buf[n]);
             de_series[n].append(de_buf[n]);
         }
+        log::info("llr", "NR iter  {:>3}/{}  done", k + 1, n_nr);
     }
 
-    // Robbins-Monro with replica exchange.
+    log::info("llr", "RM phase  {} iters × {} replicas", n_rm, n_rep_u);
     for (int s = 0; s < n_rm; ++s) {
 #pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
+            auto _  = log::scope(std::string{reps[n]->id()});
             auto& r = *reps[n];
-            r.thermalize(n_therm_rm);
-            de_buf[n] = r.sample(n_meas_rm);
+            r.thermalize(n_therm_rm, log::Mode::silent);
+            de_buf[n] = r.sample(n_meas_rm, log::Mode::silent);
             a_buf[n]  = llr::rm_update(r.a(), de_buf[n], delta, s);
             r.set_a(a_buf[n]);
+            log::info("repl",
+                      "RM {:>3}/{}  a={:+.3f}  ⟨dE⟩={:+.3e}  ⟨dE⟩/δ={:+.3f}",
+                      s + 1,
+                      n_rm,
+                      a_buf[n],
+                      de_buf[n],
+                      de_buf[n] / delta);
         }
         for (std::size_t n = 0; n < n_rep_u; ++n) {
             a_series[n].append(a_buf[n]);
@@ -149,11 +165,15 @@ int main(int argc, char** argv) {
 
         std::size_t const off = static_cast<std::size_t>(s & 1);
         int accepted          = 0;
+        int attempts          = 0;
         for (std::size_t i = off; i + 1 < reps.size(); i += 2) {
+            ++attempts;
             if (llr::try_exchange(*reps[i], *reps[i + 1], exch_rng)) {
                 ++accepted;
             }
         }
         exch_series.append(accepted);
+        log::info("exch", "step  {:>3}  accepted  {}/{}", s + 1, accepted, attempts);
+        log::info("llr", "RM iter  {:>3}/{}  done", s + 1, n_rm);
     }
 }

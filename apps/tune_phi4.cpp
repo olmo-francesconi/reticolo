@@ -131,6 +131,10 @@ void run_metropolis(reticolo::act::Phi4<double> const& action,
 int main(int argc, char** argv) {
     using namespace reticolo;
 
+    // Tuning rig: trajectory wall time is the signal — silence per-step
+    // logger output so the format work doesn't pollute the measurement.
+    log::off();
+
     cli::Parser p{"tune_phi4", "Algorithm-tuning rig for Phi4 (autocorrelation vs wall time)"};
     auto const& L          = p.req<int>("L,size", "linear lattice extent");
     auto const& kappa      = p.req<double>("kappa", "hopping parameter");

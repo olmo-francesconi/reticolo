@@ -32,6 +32,7 @@ struct Case {
 
 int main() {
     using namespace reticolo;
+    log::off();
     using Integ = alg::integ::Omelyan2;
 
     std::vector<Case> const cases = {

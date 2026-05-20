@@ -24,10 +24,13 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    log::start(outpath);
+
     LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     LinkLattice<double> links{shape, 0.0};
     FastRng rng{seed};
     Action const action{.beta = beta};
+    log::act(action);
 
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
@@ -40,16 +43,19 @@ int main(int argc, char** argv) {
 
     alg::Hmc<Action, FastRng, alg::integ::Omelyan2, LinkLattice<double>> hmc{
         action, links, rng, {.tau = tau, .n_md = n_md}};
+    log::algo(hmc);
 
     std::size_t const v_sites = links.nsites();
     std::size_t const n_plaq =
         (static_cast<std::size_t>(ndim) * static_cast<std::size_t>(ndim - 1) / 2U) * v_sites;
     double const plaq_norm = (beta == 0.0) ? 1.0 : (beta * static_cast<double>(n_plaq));
 
+    log::info("hmc", "therm  {} trajectories", n_therm);
     for (int i = 0; i < n_therm; ++i) {
-        (void)hmc.trajectory();
+        (void)hmc.trajectory(log::Mode::silent);
         s_therm.append(action.s_full(links));
     }
+    log::info("hmc", "prod   {} trajectories", n_prod);
     for (int i = 0; i < n_prod; ++i) {
         auto const step = hmc.trajectory();
         d_h.append(step.dH);

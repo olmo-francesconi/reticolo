@@ -112,6 +112,7 @@ void print_row(Row const& r, int ndim, int L, int n_md) {
 
 int main() {
     using namespace reticolo;
+    log::off();
     using Integ      = alg::integ::Omelyan2;
     using GaugeInteg = alg::integ::Omelyan2;
 

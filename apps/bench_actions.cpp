@@ -220,6 +220,7 @@ void run_all() {
 }  // namespace
 
 int main() {
+    reticolo::log::off();
     std::printf("ACTIONS — kernel throughput on hot random fields\n"
                 "(kernels called in isolation, no MD loop)\n\n");
     run_all();

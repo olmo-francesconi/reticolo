@@ -32,11 +32,14 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    log::start(outpath);
+
     Lattice<std::complex<double>>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                  static_cast<std::size_t>(L));
     Lattice<std::complex<double>> phi{shape};
     FastRng rng{seed};
     Action const action{.mass = mass, .lambda = lambda, .mu = mu};
+    log::act(action);
 
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
@@ -49,11 +52,14 @@ int main(int argc, char** argv) {
 
     alg::Hmc<Action, FastRng, alg::integ::Omelyan2> hmc{
         action, phi, rng, {.tau = tau, .n_md = n_md}};
+    log::algo(hmc);
 
+    log::info("hmc", "therm  {} trajectories", n_therm);
     for (int i = 0; i < n_therm; ++i) {
-        (void)hmc.trajectory();
+        (void)hmc.trajectory(log::Mode::silent);
         s_r_therm.append(action.s_full(phi));
     }
+    log::info("hmc", "prod   {} trajectories", n_prod);
     for (int i = 0; i < n_prod; ++i) {
         auto const step = hmc.trajectory();
         d_h.append(step.dH);

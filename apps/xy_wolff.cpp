@@ -36,6 +36,8 @@ int main(int argc, char** argv) {
     if (!p.parse(argc, argv))
         return 0;
 
+    log::start(outpath);
+
     auto const l_sz = static_cast<std::size_t>(L);
     Lattice<double> theta{{l_sz, l_sz}};
     FastRng rng{seed};
@@ -43,6 +45,7 @@ int main(int argc, char** argv) {
         theta[x] = 2.0 * std::numbers::pi * rng.uniform();
     }
     act::Xy<double> xy{.beta = beta};
+    log::act(xy);
 
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
@@ -54,14 +57,18 @@ int main(int argc, char** argv) {
     auto m2_prod       = out.series<double>("/prod/obs/m2");
 
     alg::Wolff<act::Xy<double>, FastRng> wolff{xy, theta, rng};
+    log::algo(wolff);
     alg::Metropolis<act::Xy<double>, FastRng> mc{xy, theta, rng, sigma};
+    log::algo(mc);
 
+    log::info("wolf", "therm  {} measurements × {} clusters + 1 sweep", n_therm, n_cluster);
     for (int i = 0; i < n_therm; ++i) {
         for (int k = 0; k < n_cluster; ++k) {
-            cluster_therm.append(wolff.update().cluster_size);
+            cluster_therm.append(wolff.update(log::Mode::silent).cluster_size);
         }
-        (void)mc.sweep();
+        (void)mc.sweep(log::Mode::silent);
     }
+    log::info("wolf", "prod   {} measurements × {} clusters + 1 sweep", n_prod, n_cluster);
     for (int i = 0; i < n_prod; ++i) {
         for (int k = 0; k < n_cluster; ++k) {
             cluster_prod.append(wolff.update().cluster_size);

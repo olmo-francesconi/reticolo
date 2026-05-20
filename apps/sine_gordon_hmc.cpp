@@ -37,10 +37,13 @@ int main(int argc, char** argv) {
     if (!p.parse(argc, argv))
         return 0;
 
+    log::start(outpath);
+
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Lattice<double> phi{shape};
     FastRng rng{seed};
     act::SineGordon<double> sg{.kappa = kappa, .alpha = alpha};
+    log::act(sg);
 
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
@@ -53,6 +56,7 @@ int main(int argc, char** argv) {
     auto cos_phi  = out.series<double>("/prod/obs/cos_phi");
 
     alg::Hmc<act::SineGordon<double>, FastRng> hmc{sg, phi, rng, {.tau = tau, .n_md = n_md}};
+    log::algo(hmc);
 
     auto cos_avg = [&phi]() {
         double sum = 0.0;
@@ -62,10 +66,12 @@ int main(int argc, char** argv) {
         return sum / static_cast<double>(phi.nsites());
     };
 
+    log::info("hmc", "therm  {} trajectories", n_therm);
     for (int i = 0; i < n_therm; ++i) {
-        (void)hmc.trajectory();
+        (void)hmc.trajectory(log::Mode::silent);
         s_therm.append(sg.s_full(phi));
     }
+    log::info("hmc", "prod   {} trajectories", n_prod);
     for (int i = 0; i < n_prod; ++i) {
         auto const step = hmc.trajectory();
         d_h.append(step.dH);

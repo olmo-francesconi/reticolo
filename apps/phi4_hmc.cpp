@@ -35,10 +35,13 @@ int main(int argc, char** argv) {
     if (!p.parse(argc, argv))
         return 0;
 
+    log::start(outpath);
+
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Lattice<double> phi{shape};
     FastRng rng{seed};
     act::Phi4<double> phi4{.kappa = kappa, .lambda = lambda};
+    log::act(phi4);
 
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
@@ -52,11 +55,14 @@ int main(int argc, char** argv) {
     auto m_sq     = out.series<double>("/prod/obs/m2");
 
     alg::Hmc<act::Phi4<double>, FastRng> hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
+    log::algo(hmc);
 
+    log::info("hmc", "therm  {} trajectories", n_therm);
     for (int i = 0; i < n_therm; ++i) {
-        (void)hmc.trajectory();
+        (void)hmc.trajectory(log::Mode::silent);
         s_therm.append(phi4.s_full(phi));
     }
+    log::info("hmc", "prod   {} trajectories", n_prod);
     for (int i = 0; i < n_prod; ++i) {
         auto const step = hmc.trajectory();
         d_h.append(step.dH);
