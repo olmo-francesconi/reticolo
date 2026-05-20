@@ -36,6 +36,7 @@
 #include <reticolo/core/site.hpp>
 #include <reticolo/io/writer.hpp>
 #include <reticolo/llr/exchange.hpp>
+#include <reticolo/llr/log.hpp>
 #include <reticolo/llr/replica.hpp>
 #include <reticolo/llr/update_a.hpp>
 #include <reticolo/llr/windowed_action.hpp>

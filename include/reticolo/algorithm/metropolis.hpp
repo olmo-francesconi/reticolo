@@ -14,6 +14,10 @@
 
 namespace reticolo::alg {
 
+struct MetropolisSpec {
+    double sigma = 1.0;
+};
+
 struct MetropolisSweep {
     std::size_t accepted = 0;
     std::size_t attempts = 0;
@@ -50,8 +54,16 @@ public:
 
     static constexpr std::string_view log_tag = "metr";
 
-    Metropolis(A const& action, Field& field, R& rng, double sigma) noexcept
-        : action_{action}, field_{field}, rng_{rng}, sigma_{sigma} {}
+    Metropolis(A const& action,
+               Field& field,
+               R& rng,
+               MetropolisSpec const& spec,
+               log::Mode announce = log::Mode::normal)
+        : action_{action}, field_{field}, rng_{rng}, sigma_{spec.sigma} {
+        if (announce == log::Mode::normal) {
+            log::algo(*this);
+        }
+    }
 
     void describe(log::Entry& e) const {
         e.line("Metropolis");

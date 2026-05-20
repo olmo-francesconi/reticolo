@@ -21,11 +21,11 @@ TEST_CASE("obs::mean and obs::sq on a constant configuration", "[obs]") {
     REQUIRE(std::abs(obs::sq(phi) - 0.49) < 1e-14);
 }
 
-TEST_CASE("obs::magnetization is |<phi>| (sign-independent)", "[obs]") {
+TEST_CASE("obs::mag::abs is |<phi>| (sign-independent)", "[obs]") {
     Lattice<double> pos{{4, 4}, 0.3};
     Lattice<double> neg{{4, 4}, -0.3};
-    REQUIRE(std::abs(obs::magnetization(pos) - 0.3) < 1e-14);
-    REQUIRE(std::abs(obs::magnetization(neg) - 0.3) < 1e-14);
+    REQUIRE(std::abs(obs::mag::abs(pos) - 0.3) < 1e-14);
+    REQUIRE(std::abs(obs::mag::abs(neg) - 0.3) < 1e-14);
 }
 
 TEST_CASE("obs::mean of antiparity-flipped field is zero", "[obs]") {
@@ -37,14 +37,14 @@ TEST_CASE("obs::mean of antiparity-flipped field is zero", "[obs]") {
     REQUIRE(obs::sq(phi) == 1.0);
 }
 
-TEST_CASE("obs::m2 equals obs::sq", "[obs]") {
-    Lattice<double> phi{{4, 4, 4}, 0.5};
-    REQUIRE(obs::m2(phi) == obs::sq(phi));
+TEST_CASE("obs::quartic on a uniform field is phi^4", "[obs]") {
+    Lattice<double> phi{{4, 4}, 2.0};
+    REQUIRE(obs::quartic(phi) == 16.0);
 }
 
-TEST_CASE("obs::m4 on a uniform field is phi^4", "[obs]") {
-    Lattice<double> phi{{4, 4}, 2.0};
-    REQUIRE(obs::m4(phi) == 16.0);
+TEST_CASE("obs::sq_of_mean is <phi>^2", "[obs]") {
+    Lattice<double> phi{{4, 4, 4}, 0.5};
+    REQUIRE(std::abs(obs::sq_of_mean(phi) - 0.25) < 1e-14);
 }
 
 TEST_CASE("obs::two_point at r=0 reduces to obs::sq", "[obs][two_point]") {

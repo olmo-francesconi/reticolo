@@ -22,9 +22,9 @@ int main(int argc, char** argv) {
     using namespace reticolo;
 
     cli::Parser p{"sine_gordon_hmc", "HMC for the sine-Gordon scalar field"};
-    auto const& L          = p.req<int>("L,size", "linear lattice extent");
-    auto const& kappa      = p.req<double>("kappa", "hopping parameter");
-    auto const& alpha      = p.req<double>("alpha", "cosine-potential strength");
+    auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
+    auto const& kappa      = p.opt<double>("kappa", 1.0, "hopping parameter");
+    auto const& alpha      = p.opt<double>("alpha", 1.0, "cosine-potential strength");
     auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
     auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md       = p.opt<int>("n_md", 20, "MD steps per trajectory");
@@ -56,7 +56,6 @@ int main(int argc, char** argv) {
     auto cos_phi  = out.series<double>("/prod/obs/cos_phi");
 
     alg::Hmc<act::SineGordon<double>, FastRng> hmc{sg, phi, rng, {.tau = tau, .n_md = n_md}};
-    log::algo(hmc);
 
     auto cos_avg = [&phi]() {
         double sum = 0.0;
@@ -78,7 +77,7 @@ int main(int argc, char** argv) {
         accepted.append(step.accepted ? 1 : 0);
         if (i % meas_every == 0) {
             s_prod.append(sg.s_full(phi));
-            mag.append(obs::magnetization(phi));
+            mag.append(obs::mag::abs(phi));
             cos_phi.append(cos_avg());
         }
     }

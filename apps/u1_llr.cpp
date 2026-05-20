@@ -27,13 +27,14 @@ int main(int argc, char** argv) {
         llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, LinkLattice<double>>;
 
     cli::Parser p{"u1_llr", "LLR with replica exchange for compact U(1) Wilson action"};
-    auto const& L     = p.req<int>("L,size", "linear lattice extent");
+    auto const& L     = p.opt<int>("L,size", 4, "linear lattice extent");
     auto const& ndim  = p.opt<int>("ndim", 4, "spatial dimensions");
-    auto const& beta  = p.req<double>("beta", "Wilson coupling");
-    auto const& e_min = p.req<double>("E_min", "lower window centre");
-    auto const& e_max = p.req<double>("E_max", "upper window centre");
-    auto const& delta = p.req<double>(
+    auto const& beta  = p.opt<double>("beta", 1.0, "Wilson coupling");
+    auto const& e_min = p.opt<double>("E_min", 200.0, "lower window centre");
+    auto const& e_max = p.opt<double>("E_max", 1400.0, "upper window centre");
+    auto const& delta = p.opt<double>(
         "delta",
+        200.0,
         "single LLR tuning knob: Gaussian half-width AND replica spacing. "
         "n_rep is derived so that adjacent window centres are exactly `delta` apart.");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
@@ -72,13 +73,13 @@ int main(int argc, char** argv) {
     for (int n = 0; n < n_rep; ++n) {
         double const e_n = e_min + (static_cast<double>(n) * d_e);
         reps.push_back(
-            std::make_unique<ReplicaT>(std::format("r{:03}", n),
-                                       shape,
-                                       base,
+            std::make_unique<ReplicaT>(base,
                                        FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
-                                       e_n,
-                                       delta,
-                                       a_init,
+                                       ReplicaT::Spec{.id     = std::format("r{:03}", n),
+                                                      .shape  = shape,
+                                                      .e_n    = e_n,
+                                                      .delta  = delta,
+                                                      .a_init = a_init},
                                        alg::HmcSpec{.tau = tau, .n_md = n_md}));
     }
 
@@ -123,7 +124,7 @@ int main(int argc, char** argv) {
     for (int k = 0; k < n_nr; ++k) {
 #pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto _  = log::scope(std::string{reps[n]->id()});
+            auto _  = log::scope(reps[n]->id());
             auto& r = *reps[n];
             r.thermalize(n_therm_nr);
             de_buf[n] = r.sample(n_meas_nr);
@@ -141,19 +142,18 @@ int main(int argc, char** argv) {
     for (int s = 0; s < n_rm; ++s) {
 #pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto _  = log::scope(std::string{reps[n]->id()});
+            auto _  = log::scope(reps[n]->id());
             auto& r = *reps[n];
             r.thermalize(n_therm_rm, log::Mode::silent);
             de_buf[n] = r.sample(n_meas_rm, log::Mode::silent);
             a_buf[n]  = llr::rm_update(r.a(), de_buf[n], delta, s);
             r.set_a(a_buf[n]);
-            log::info("repl",
-                      "RM {:>3}/{}  a={:+.3f}  ⟨dE⟩={:+.3e}  ⟨dE⟩/δ={:+.3f}",
-                      s + 1,
-                      n_rm,
+            llr::iter("RM",
+                      static_cast<std::size_t>(s + 1),
+                      static_cast<std::size_t>(n_rm),
                       a_buf[n],
                       de_buf[n],
-                      de_buf[n] / delta);
+                      delta);
         }
         for (std::size_t n = 0; n < n_rep_u; ++n) {
             a_series[n].append(a_buf[n]);

@@ -19,9 +19,9 @@ int main(int argc, char** argv) {
     using Field  = MatrixLinkLattice<Group, double>;
 
     cli::Parser p{"su2_hmc", "SU(2) Wilson action, HMC (matrix-link field)"};
-    auto const& L          = p.req<int>("L,size", "linear lattice extent");
+    auto const& L          = p.opt<int>("L,size", 4, "linear lattice extent");
     auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
-    auto const& beta       = p.req<double>("beta", "Wilson coupling");
+    auto const& beta       = p.opt<double>("beta", 2.3, "Wilson coupling");
     auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md       = p.opt<int>("n_md", 20, "MD steps per trajectory");
     auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation trajectories");
@@ -61,7 +61,6 @@ int main(int argc, char** argv) {
 
     alg::Hmc<Action, FastRng, alg::integ::Omelyan2, Field> hmc{
         action, links, rng, {.tau = tau, .n_md = n_md}};
-    log::algo(hmc);
 
     std::size_t const n_plaq =
         (static_cast<std::size_t>(ndim) * static_cast<std::size_t>(ndim - 1) / 2U) * ns;

@@ -50,22 +50,25 @@ public:
 
     static constexpr std::string_view log_tag = "repl";
 
-    Replica(std::string id,
-            SizeVec shape,
-            Base const& base,
-            Rng rng_init,
-            scalar_t e_n_init,
-            scalar_t delta_init,
-            scalar_t a_init,
-            alg::HmcSpec const& spec)
-        : id_{std::move(id)}, phi_{std::move(shape)}, rng_{std::move(rng_init)},
-          windowed_{.base = base, .a = a_init, .E_n = e_n_init, .delta = delta_init},
-          hmc_{windowed_, phi_, rng_, spec} {
+    struct Spec {
+        std::string id;
+        SizeVec shape;
+        scalar_t e_n{};
+        scalar_t delta{};
+        scalar_t a_init = scalar_t{0};
+    };
+
+    Replica(Base const& base, Rng rng_init, Spec spec, alg::HmcSpec const& hmc_spec)
+        : id_{std::move(spec.id)}, phi_{std::move(spec.shape)}, rng_{std::move(rng_init)},
+          windowed_{.base = base, .a = spec.a_init, .E_n = spec.e_n, .delta = spec.delta},
+          hmc_{windowed_, phi_, rng_, hmc_spec, log::Mode::silent} {
         // Self-announce with our run id bound as scope so the line carries
         // `r0NN` automatically — apps don't have to wrap construction in
-        // `log::scope` themselves.
+        // `log::scope` themselves. Announce the nested HMC too so its tau /
+        // n_md params land under the same scope.
         auto _ = log::scope(id_);
         log::algo(*this);
+        log::algo(hmc_);
     }
 
     Replica(Replica const&)            = delete;

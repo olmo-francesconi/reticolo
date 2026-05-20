@@ -63,7 +63,7 @@ void run_one(std::string const& name,
         }
 
         // MC.
-        alg::Metropolis<Action, FastRng> mc{action, phi, rng, sigma};
+        alg::Metropolis<Action, FastRng> mc{action, phi, rng, alg::MetropolisSpec{.sigma = sigma}};
         auto const t0 = bench_clock::now();
         for (int i = 0; i < c.n_mc; ++i) {
             (void)mc.sweep();

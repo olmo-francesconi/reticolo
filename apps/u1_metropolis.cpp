@@ -18,9 +18,9 @@ int main(int argc, char** argv) {
     using Action = action::CompactU1<double>;
 
     cli::Parser p{"u1_metropolis", "Compact U(1) Wilson action, link Metropolis"};
-    auto const& L          = p.req<int>("L,size", "linear lattice extent");
+    auto const& L          = p.opt<int>("L,size", 4, "linear lattice extent");
     auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
-    auto const& beta       = p.req<double>("beta", "Wilson coupling");
+    auto const& beta       = p.opt<double>("beta", 1.0, "Wilson coupling");
     auto const& sigma      = p.opt<double>("sigma", 1.0, "Metropolis proposal stdev");
     auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation sweeps");
     auto const& n_prod     = p.opt<int>("n_prod", 2000, "production sweeps");
@@ -48,8 +48,8 @@ int main(int argc, char** argv) {
     auto s_prod  = out.series<double>("/prod/obs/s");
     auto plaq    = out.series<double>("/prod/obs/plaq");
 
-    alg::Metropolis<Action, FastRng, double, LinkLattice<double>> metro{action, links, rng, sigma};
-    log::algo(metro);
+    alg::Metropolis<Action, FastRng, double, LinkLattice<double>> metro{
+        action, links, rng, alg::MetropolisSpec{.sigma = sigma}};
 
     // n_plaq = ndim*(ndim-1)/2 * V    where V = nsites
     std::size_t const v_sites = links.nsites();

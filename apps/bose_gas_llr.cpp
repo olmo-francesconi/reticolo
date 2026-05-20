@@ -32,15 +32,16 @@ int main(int argc, char** argv) {
     using ReplicaT = llr::Replica<Action, FastRng, alg::integ::Omelyan2>;
 
     cli::Parser p{"bose_gas_llr", "LLR for the 4D Bose gas at finite chemical potential"};
-    auto const& L      = p.req<int>("L,size", "linear lattice extent");
+    auto const& L      = p.opt<int>("L,size", 4, "linear lattice extent");
     auto const& ndim   = p.opt<int>("ndim", 4, "spacetime dimensions (4 in paper)");
     auto const& mass   = p.opt<double>("mass", 1.0, "bare mass m");
     auto const& lambda = p.opt<double>("lambda", 1.0, "quartic coupling lambda");
-    auto const& mu     = p.req<double>("mu", "chemical potential mu");
-    auto const& e_min  = p.req<double>("E_min", "lower S_I window centre");
-    auto const& e_max  = p.req<double>("E_max", "upper S_I window centre");
+    auto const& mu     = p.opt<double>("mu", 1.0, "chemical potential mu");
+    auto const& e_min  = p.opt<double>("E_min", -10.0, "lower S_I window centre");
+    auto const& e_max  = p.opt<double>("E_max", 10.0, "upper S_I window centre");
     auto const& delta =
-        p.req<double>("delta",
+        p.opt<double>("delta",
+                      2.0,
                       "single LLR tuning knob: Gaussian half-width AND replica spacing in S_I. "
                       "n_rep is derived so adjacent window centres are exactly `delta` apart.");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
@@ -74,15 +75,12 @@ int main(int argc, char** argv) {
     reps.reserve(static_cast<std::size_t>(n_rep));
     for (int n = 0; n < n_rep; ++n) {
         double const e_n = e_min + (static_cast<double>(n) * d_e);
-        reps.push_back(
-            std::make_unique<ReplicaT>(std::format("r{:03}", n),
-                                       shape,
-                                       base,
-                                       FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
-                                       e_n,
-                                       delta,
-                                       0.0,
-                                       alg::HmcSpec{.tau = tau, .n_md = n_md}));
+        reps.push_back(std::make_unique<ReplicaT>(
+            base,
+            FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
+            ReplicaT::Spec{
+                .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
+            alg::HmcSpec{.tau = tau, .n_md = n_md}));
     }
 
     FastRng exch_rng{seed};
@@ -196,7 +194,7 @@ int main(int argc, char** argv) {
     for (int k = 0; k < n_nr; ++k) {
 #pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto _  = log::scope(std::string{reps[n]->id()});
+            auto _  = log::scope(reps[n]->id());
             auto& r = *reps[n];
             r.thermalize(n_therm_nr);
             de_buf[n] = r.sample(n_meas_nr);
@@ -214,19 +212,18 @@ int main(int argc, char** argv) {
     for (int s = 0; s < n_rm; ++s) {
 #pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto _  = log::scope(std::string{reps[n]->id()});
+            auto _  = log::scope(reps[n]->id());
             auto& r = *reps[n];
             r.thermalize(n_therm_rm, log::Mode::silent);
             de_buf[n] = r.sample(n_meas_rm, log::Mode::silent);
             a_buf[n]  = llr::rm_update(r.a(), de_buf[n], delta, s);
             r.set_a(a_buf[n]);
-            log::info("repl",
-                      "RM {:>3}/{}  a={:+.3f}  ⟨dE⟩={:+.3e}  ⟨dE⟩/δ={:+.3f}",
-                      s + 1,
-                      n_rm,
+            llr::iter("RM",
+                      static_cast<std::size_t>(s + 1),
+                      static_cast<std::size_t>(n_rm),
                       a_buf[n],
                       de_buf[n],
-                      de_buf[n] / delta);
+                      delta);
         }
         for (std::size_t n = 0; n < n_rep_u; ++n) {
             a_series[n].append(a_buf[n]);

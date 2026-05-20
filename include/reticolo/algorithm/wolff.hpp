@@ -15,6 +15,8 @@
 
 namespace reticolo::alg {
 
+struct WolffSpec {};
+
 struct WolffStep {
     std::size_t cluster_size = 0;
 };
@@ -50,10 +52,17 @@ public:
 
     static constexpr std::string_view log_tag = "wolf";
 
-    Wolff(A const& action, Lattice<F>& field, R& rng)
+    Wolff(A const& action,
+          Lattice<F>& field,
+          R& rng,
+          WolffSpec const& /*spec*/ = {},
+          log::Mode announce        = log::Mode::normal)
         : action_{action}, field_{field}, rng_{rng}, mark_(field.nsites(), 0) {
         stack_.reserve(field.nsites());
         cluster_sites_.reserve(field.nsites());
+        if (announce == log::Mode::normal) {
+            log::algo(*this);
+        }
     }
 
     void describe(log::Entry& e) const { e.line("Wolff"); }

@@ -15,11 +15,11 @@ int main(int argc, char** argv) {
     using Action = act::BoseGas<double>;
 
     cli::Parser p{"bose_gas_hmc", "Phase-quenched HMC for the 4D Bose gas (records S_R + S_I)"};
-    auto const& L          = p.req<int>("L,size", "linear lattice extent");
+    auto const& L          = p.opt<int>("L,size", 4, "linear lattice extent");
     auto const& ndim       = p.opt<int>("ndim", 4, "spacetime dimensions");
     auto const& mass       = p.opt<double>("mass", 1.0, "bare mass m");
     auto const& lambda     = p.opt<double>("lambda", 1.0, "quartic coupling lambda");
-    auto const& mu         = p.req<double>("mu", "chemical potential mu");
+    auto const& mu         = p.opt<double>("mu", 1.0, "chemical potential mu");
     auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md       = p.opt<int>("n_md", 10, "MD steps per trajectory");
     auto const& n_therm    = p.opt<int>("n_therm", 500, "thermalisation trajectories");
@@ -52,7 +52,6 @@ int main(int argc, char** argv) {
 
     alg::Hmc<Action, FastRng, alg::integ::Omelyan2> hmc{
         action, phi, rng, {.tau = tau, .n_md = n_md}};
-    log::algo(hmc);
 
     log::info("hmc", "therm  {} trajectories", n_therm);
     for (int i = 0; i < n_therm; ++i) {

@@ -25,8 +25,8 @@ int main(int argc, char** argv) {
     using namespace reticolo;
 
     cli::Parser p{"xy_wolff", "Wolff cluster + Metropolis hybrid for the XY model"};
-    auto const& L         = p.req<int>("L,size", "linear lattice extent (2D)");
-    auto const& beta      = p.req<double>("beta", "inverse temperature");
+    auto const& L         = p.opt<int>("L,size", 16, "linear lattice extent (2D)");
+    auto const& beta      = p.opt<double>("beta", 1.12, "inverse temperature");
     auto const& sigma     = p.opt<double>("sigma", 0.5, "Metropolis Gaussian step width");
     auto const& n_cluster = p.opt<int>("n_cluster", 4, "Wolff updates per measurement");
     auto const& n_therm   = p.opt<int>("n_therm", 200, "thermalisation measurements");
@@ -57,9 +57,8 @@ int main(int argc, char** argv) {
     auto m2_prod       = out.series<double>("/prod/obs/m2");
 
     alg::Wolff<act::Xy<double>, FastRng> wolff{xy, theta, rng};
-    log::algo(wolff);
-    alg::Metropolis<act::Xy<double>, FastRng> mc{xy, theta, rng, sigma};
-    log::algo(mc);
+    alg::Metropolis<act::Xy<double>, FastRng> mc{
+        xy, theta, rng, alg::MetropolisSpec{.sigma = sigma}};
 
     log::info("wolf", "therm  {} measurements × {} clusters + 1 sweep", n_therm, n_cluster);
     for (int i = 0; i < n_therm; ++i) {
@@ -76,6 +75,6 @@ int main(int argc, char** argv) {
         auto const stats = mc.sweep();
         accept_prod.append(stats.acceptance());
         s_prod.append(xy.s_full(theta));
-        m2_prod.append(obs::xy_magnetization_sq(theta));
+        m2_prod.append(obs::mag::xy_sq(theta));
     }
 }

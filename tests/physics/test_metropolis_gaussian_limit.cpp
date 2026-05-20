@@ -33,7 +33,8 @@ TEST_CASE("Metropolis on decoupled action reproduces N(0, 1/sqrt(2))",
         phi[x] = rng.normal();
     }
 
-    Metropolis<Phi4<double>, FastRng> mc{action, phi, rng, /*sigma=*/1.0};
+    Metropolis<Phi4<double>, FastRng> mc{
+        action, phi, rng, reticolo::alg::MetropolisSpec{.sigma = 1.0}};
 
     // Thermalise (decoupled => fast).
     for (int s = 0; s < 200; ++s) {

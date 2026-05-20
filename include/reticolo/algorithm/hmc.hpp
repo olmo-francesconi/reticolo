@@ -89,18 +89,25 @@ template <class A,
           class R,
           class Integrator = integ::Leapfrog,
           class Field      = Lattice<typename A::value_type>,
-          class F          = typename A::value_type>
+          class Scalar     = typename A::value_type>
     requires HmcAction<A, Field> && Rng<R>
 class Hmc {
 public:
-    using value_type = F;
+    using value_type = Scalar;
     using integrator = Integrator;
 
     static constexpr std::string_view log_tag = "hmc";
 
-    Hmc(A const& action, Field& field, R& rng, HmcSpec const& spec)
+    Hmc(A const& action,
+        Field& field,
+        R& rng,
+        HmcSpec const& spec,
+        log::Mode announce = log::Mode::normal)
         : action_{action}, field_{field}, rng_{rng}, mom_{field.indexing()},
           force_{field.indexing()}, old_field_{field.indexing()}, tau_{spec.tau}, n_md_{spec.n_md} {
+        if (announce == log::Mode::normal) {
+            log::algo(*this);
+        }
     }
 
     void describe(log::Entry& e) const {
@@ -113,9 +120,9 @@ public:
         sample_momenta_();
 
         // Snapshot for rejection rollback — flat-buffer copy.
-        std::size_t const n = flat_size(field_);
-        F* const old        = old_field_.data();
-        F const* const fp   = field_.data();
+        std::size_t const n    = flat_size(field_);
+        Scalar* const old      = old_field_.data();
+        Scalar const* const fp = field_.data();
         for (std::size_t i = 0; i < n; ++i) {
             old[i] = fp[i];
         }
@@ -135,10 +142,16 @@ public:
         // NOLINTNEXTLINE(readability-identifier-naming) physics convention
         double const dH = h1 - h0;
 
+        if (std::isnan(dH)) {
+            log::warn("hmc",
+                      "ΔH=NaN on trajectory {} — integrator unstable, forcing reject",
+                      step_count_ + 1);
+        }
+
         bool const accepted = (dH <= 0.0) || (rng_.uniform() < std::exp(-dH));
         if (!accepted) {
-            F* const fmut       = field_.data();
-            F const* const oldp = old_field_.data();
+            Scalar* const fmut       = field_.data();
+            Scalar const* const oldp = old_field_.data();
             for (std::size_t i = 0; i < n; ++i) {
                 fmut[i] = oldp[i];
             }
@@ -193,16 +206,16 @@ private:
             for (std::size_t mu = 0; mu < d; ++mu) {
                 Group::sample_algebra_slab(mom_.mu_block_data(mu), rng_, ns);
             }
-        } else if constexpr (std::is_same_v<F, double>) {
+        } else if constexpr (std::is_same_v<Scalar, double>) {
             rng_.normal_fill(mom_.data(), flat_size(mom_));
-        } else if constexpr (std::is_same_v<F, std::complex<double>>) {
+        } else if constexpr (std::is_same_v<Scalar, std::complex<double>>) {
             std::size_t const n = flat_size(mom_);
             rng_.normal_fill(reinterpret_cast<double*>(mom_.data()), 2 * n);
         } else {
-            F* const m          = mom_.data();
+            Scalar* const m     = mom_.data();
             std::size_t const n = flat_size(mom_);
             for (std::size_t i = 0; i < n; ++i) {
-                m[i] = static_cast<F>(rng_.normal());
+                m[i] = static_cast<Scalar>(rng_.normal());
             }
         }
     }
@@ -221,8 +234,8 @@ private:
                 kin += Group::kinetic_slab(mom_.mu_block_data(mu), ns);
             }
         } else {
-            F const* const p    = mom_.data();
-            std::size_t const n = flat_size(mom_);
+            Scalar const* const p = mom_.data();
+            std::size_t const n   = flat_size(mom_);
             if constexpr (is_complex_v_) {
                 for (std::size_t i = 0; i < n; ++i) {
                     kin += std::norm(p[i]);
@@ -239,7 +252,7 @@ private:
     }
 
     static constexpr bool is_complex_v_ =
-        requires(F f) { std::norm(f); } && !std::is_arithmetic_v<F>;
+        requires(Scalar f) { std::norm(f); } && !std::is_arithmetic_v<Scalar>;
 
     // Capture-and-restore for the action's raw-scalar caches across a reject.
     // The snapshot type collapses to an empty struct when the action has no

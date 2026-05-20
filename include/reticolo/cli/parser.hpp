@@ -1,5 +1,6 @@
 #pragma once
 
+#include <reticolo/core/log.hpp>
 #include <reticolo/io/writer.hpp>
 
 #include <concepts>
@@ -161,15 +162,26 @@ public:
             s->add_to(opts);
         }
 
-        cxxopts::ParseResult const result = opts.parse(argc, argv);
+        cxxopts::ParseResult result;
+        try {
+            result = opts.parse(argc, argv);
+        } catch (cxxopts::exceptions::exception const& e) {
+            log::error("cli", "{}", e.what());
+            throw;
+        }
 
         if (result.count("help") > 0) {
             out << opts.help() << '\n';
             return false;
         }
 
-        for (auto& s : slots_) {
-            s->read_from(result);
+        try {
+            for (auto& s : slots_) {
+                s->read_from(result);
+            }
+        } catch (std::exception const& e) {
+            log::error("cli", "{}", e.what());
+            throw;
         }
         parsed_ = true;
         return true;

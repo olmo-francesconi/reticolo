@@ -116,7 +116,8 @@ TEST_CASE("Xy at large beta: Metropolis equilibrates near aligned phase",
         theta[x] = 0.1 * rng.normal();
     }
 
-    Metropolis<Xy<double>, FastRng> mc{action, theta, rng, /*sigma=*/0.3};
+    Metropolis<Xy<double>, FastRng> mc{
+        action, theta, rng, reticolo::alg::MetropolisSpec{.sigma = 0.3}};
     for (int s = 0; s < 800; ++s) {
         (void)mc.sweep();
     }

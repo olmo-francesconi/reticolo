@@ -21,9 +21,9 @@ int main(int argc, char** argv) {
     using namespace reticolo;
 
     cli::Parser p{"phi4_hmc", "Hybrid Monte Carlo for the phi^4 scalar field"};
-    auto const& L          = p.req<int>("L,size", "linear lattice extent");
-    auto const& kappa      = p.req<double>("kappa", "hopping parameter");
-    auto const& lambda     = p.req<double>("lambda", "quartic coupling");
+    auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
+    auto const& kappa      = p.opt<double>("kappa", 0.18, "hopping parameter");
+    auto const& lambda     = p.opt<double>("lambda", 1.0, "quartic coupling");
     auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
     auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md       = p.opt<int>("n_md", 20, "MD steps per trajectory");
@@ -55,7 +55,6 @@ int main(int argc, char** argv) {
     auto m_sq     = out.series<double>("/prod/obs/m2");
 
     alg::Hmc<act::Phi4<double>, FastRng> hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
-    log::algo(hmc);
 
     log::info("hmc", "therm  {} trajectories", n_therm);
     for (int i = 0; i < n_therm; ++i) {
@@ -69,9 +68,9 @@ int main(int argc, char** argv) {
         accepted.append(step.accepted ? 1 : 0);
         if (i % meas_every == 0) {
             s_prod.append(phi4.s_full(phi));
-            mag.append(obs::magnetization(phi));
-            mag_sq.append(obs::mean_sq(phi));
-            m_sq.append(obs::m2(phi));
+            mag.append(obs::mag::abs(phi));
+            mag_sq.append(obs::sq_of_mean(phi));
+            m_sq.append(obs::sq(phi));
         }
     }
 }

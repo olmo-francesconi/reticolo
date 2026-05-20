@@ -5,7 +5,7 @@
 //   --algo hmc_omelyan2   --tau <τ> --n_md <n>
 //   --algo hmc_omelyan4   --tau <τ> --n_md <n>
 //
-// Dumps per-update time series of S and Σφ² (obs::mean_sq) to HDF5, with the
+// Dumps per-update time series of S and Σφ² (obs::sq_of_mean) to HDF5, with the
 // wall-time of the production loop stamped as /prod@wall_seconds so the
 // Python autocorrelation analysis can report τ_int in actual seconds rather
 // than algorithm-internal "steps".
@@ -64,7 +64,7 @@ void run_hmc(reticolo::act::Phi4<double> const& action,
 
         auto const oa = bench_clock::now();
         s.append(action.s_full(field));
-        mean_sq.append(obs::mean_sq(field));
+        mean_sq.append(obs::sq_of_mean(field));
         auto const ob = bench_clock::now();
         obs_s += std::chrono::duration<double>(ob - oa).count();
     }
@@ -87,7 +87,8 @@ void run_metropolis(reticolo::act::Phi4<double> const& action,
                     reticolo::io::Writer& out) {
     using namespace reticolo;
 
-    alg::Metropolis<act::Phi4<double>, FastRng> mc{action, field, rng, sigma};
+    alg::Metropolis<act::Phi4<double>, FastRng> mc{
+        action, field, rng, alg::MetropolisSpec{.sigma = sigma}};
 
     for (int i = 0; i < n_therm; ++i) {
         (void)mc.sweep();
@@ -111,7 +112,7 @@ void run_metropolis(reticolo::act::Phi4<double> const& action,
 
         auto const oa = bench_clock::now();
         s.append(action.s_full(field));
-        mean_sq.append(obs::mean_sq(field));
+        mean_sq.append(obs::sq_of_mean(field));
         auto const ob = bench_clock::now();
         obs_s += std::chrono::duration<double>(ob - oa).count();
     }
@@ -136,11 +137,12 @@ int main(int argc, char** argv) {
     log::off();
 
     cli::Parser p{"tune_phi4", "Algorithm-tuning rig for Phi4 (autocorrelation vs wall time)"};
-    auto const& L          = p.req<int>("L,size", "linear lattice extent");
-    auto const& kappa      = p.req<double>("kappa", "hopping parameter");
-    auto const& lambda     = p.req<double>("lambda", "quartic coupling");
+    auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
+    auto const& kappa      = p.opt<double>("kappa", 0.18, "hopping parameter");
+    auto const& lambda     = p.opt<double>("lambda", 1.0, "quartic coupling");
     auto const& ndim       = p.opt<int>("ndim", 3, "spatial dimensions");
-    auto const& algo       = p.req<std::string>("algo",
+    auto const& algo       = p.opt<std::string>("algo",
+                                          std::string{"hmc_leapfrog"},
                                           "one of: metropolis, hmc_leapfrog, "
                                                 "hmc_omelyan2, hmc_omelyan4");
     auto const& sigma      = p.opt<double>("sigma", 0.4, "Metropolis proposal width");

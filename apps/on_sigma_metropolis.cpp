@@ -23,8 +23,8 @@ int main(int argc, char** argv) {
     constexpr std::size_t k_n = 3;
 
     cli::Parser p{"on_sigma_metropolis", "Metropolis for the O(3) sigma model"};
-    auto const& L       = p.req<int>("L,size", "linear lattice extent");
-    auto const& beta    = p.req<double>("beta", "inverse temperature");
+    auto const& L       = p.opt<int>("L,size", 8, "linear lattice extent");
+    auto const& beta    = p.opt<double>("beta", 0.7, "inverse temperature");
     auto const& ndim    = p.opt<int>("ndim", 3, "spatial dimensions (2 or 3)");
     auto const& n_therm = p.opt<int>("n_therm", 400, "thermalisation sweeps");
     auto const& n_prod  = p.opt<int>("n_prod", 2000, "production sweeps");
@@ -56,8 +56,7 @@ int main(int argc, char** argv) {
     auto s_prod       = out.series<double>("/prod/obs/s");
     auto m2_prod      = out.series<double>("/prod/obs/m2");
 
-    alg::Metropolis<act::OnSigma<k_n>, FastRng> mc{on, phi, rng, /*sigma=*/0.0};
-    log::algo(mc);
+    alg::Metropolis<act::OnSigma<k_n>, FastRng> mc{on, phi, rng, alg::MetropolisSpec{.sigma = 0.0}};
 
     log::info("metr", "therm  {} sweeps", n_therm);
     for (int i = 0; i < n_therm; ++i) {
@@ -67,6 +66,6 @@ int main(int argc, char** argv) {
     for (int i = 0; i < n_prod; ++i) {
         accept_prod.append(mc.sweep().acceptance());
         s_prod.append(on.s_full(phi));
-        m2_prod.append(obs::vector_magnetization_sq<k_n>(phi));
+        m2_prod.append(obs::mag::on_sq<k_n>(phi));
     }
 }

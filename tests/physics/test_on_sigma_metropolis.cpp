@@ -85,7 +85,8 @@ TEST_CASE("OnSigma at beta=0: Metropolis reaches isotropic distribution",
     seed_aligned(phi);
     FastRng rng{12345};
 
-    Metropolis<O3, FastRng, O3Field> mc{action, phi, rng, /*sigma=*/1.0};
+    Metropolis<O3, FastRng, O3Field> mc{
+        action, phi, rng, reticolo::alg::MetropolisSpec{.sigma = 1.0}};
 
     // beta=0 means every proposal is accepted; one sweep already randomises.
     for (int s = 0; s < 20; ++s) {
@@ -124,7 +125,8 @@ TEST_CASE("OnSigma at large beta: NN dot product approaches 1", "[physics][on_si
     seed_aligned(phi);
     FastRng rng{99};
 
-    Metropolis<O3, FastRng, O3Field> mc{action, phi, rng, /*sigma=*/1.0};
+    Metropolis<O3, FastRng, O3Field> mc{
+        action, phi, rng, reticolo::alg::MetropolisSpec{.sigma = 1.0}};
     for (int s = 0; s < 800; ++s) {
         (void)mc.sweep();
     }

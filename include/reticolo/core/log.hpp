@@ -392,8 +392,8 @@ public:
     Scope& operator=(Scope&&)      = delete;
 };
 
-[[nodiscard]] inline Scope scope(std::string run_id) {
-    return Scope{std::move(run_id)};
+[[nodiscard]] inline Scope scope(std::string_view run_id) {
+    return Scope{std::string{run_id}};
 }
 
 // Init / config -------------------------------------------------------------
