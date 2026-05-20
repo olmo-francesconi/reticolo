@@ -2,17 +2,55 @@
 
 #include <reticolo/core/site.hpp>
 
+#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace reticolo {
+
+// Render a SizeVec (or any range of integral) as "L0×L1×L2…" for log lines.
+// Uses Unicode × (multiplication sign), not 'x'.
+template <class R>
+[[nodiscard]] inline std::string shape_str(R const& shape) {
+    std::string out;
+    for (std::size_t i = 0; auto v : shape) {
+        if (i++ != 0) {
+            out.append("×");
+        }
+        out.append(std::to_string(v));
+    }
+    return out;
+}
+
+// Compact human-readable name for the scalar value type used by an action /
+// field. Used in log lines so apps don't need to spell it out by hand.
+// (Defined here rather than in field_traits.hpp so headers that *describe*
+// themselves — Lattice, LinkLattice, … — can use it without pulling in
+// field_traits, which would create a circular include.)
+template <class T>
+[[nodiscard]] consteval std::string_view scalar_name() noexcept {
+    if constexpr (std::is_same_v<T, double>) {
+        return "double";
+    } else if constexpr (std::is_same_v<T, float>) {
+        return "float";
+    } else if constexpr (std::is_same_v<T, std::complex<double>>) {
+        return "cdouble";
+    } else if constexpr (std::is_same_v<T, std::complex<float>>) {
+        return "cfloat";
+    } else {
+        return "?";
+    }
+}
 
 // =============================================================================
 //  Periodic-only neighbour table for a hypercubic lattice. The library does

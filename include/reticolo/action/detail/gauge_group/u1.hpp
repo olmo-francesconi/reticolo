@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -41,6 +42,7 @@ struct U1 {
     using scalar_t                                 = double;
     static constexpr std::size_t n_real_components = 1;
     static constexpr std::size_t n_color           = 1;
+    static constexpr std::string_view name         = "U1";
 
     // Re Tr U_p = cos(theta_mu(s) + theta_nu(s+pmu) − theta_mu(s+pnu) − theta_nu(s)).
     // `stride` is unused for U(1) (the single component lives directly under

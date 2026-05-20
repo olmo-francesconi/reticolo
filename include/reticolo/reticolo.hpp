@@ -29,6 +29,7 @@
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/log.hpp>
+#include <reticolo/core/log_helpers.hpp>
 #include <reticolo/core/mt19937_rng.hpp>
 #include <reticolo/core/ranlux_rng.hpp>
 #include <reticolo/core/rng.hpp>

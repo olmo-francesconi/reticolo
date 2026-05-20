@@ -2,6 +2,7 @@
 
 #include <reticolo/action/detail/gauge_group/base.hpp>
 #include <reticolo/action/detail/gauge_helpers.hpp>
+#include <reticolo/core/log.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/site.hpp>
 
@@ -41,6 +42,13 @@ struct Wilson {
     using field_type = MatrixLinkLattice<G, T>;
 
     T beta = T{0};
+
+    // Uniform announce hook (called by reticolo::log::act): concept name +
+    // gauge group, then the coupling on its own indented line.
+    void describe(log::Entry& e) const {
+        e.line("Wilson<{}>", G::name);
+        e.param("β={:.3f}", beta);
+    }
 
     // ---- HasLinkSEff equivalent ----------------------------------------------
 

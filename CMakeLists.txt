@@ -113,9 +113,21 @@ string(TOUPPER "${CMAKE_BUILD_TYPE}" _reticolo_build_type_upper)
 set(_reticolo_compile_flags "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_reticolo_build_type_upper}}")
 string(STRIP "${_reticolo_compile_flags}" _reticolo_compile_flags)
 
+execute_process(
+    COMMAND git rev-parse --abbrev-ref HEAD
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_VARIABLE RETICOLO_GIT_BRANCH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT RETICOLO_GIT_BRANCH)
+    set(RETICOLO_GIT_BRANCH "unknown")
+endif()
+
 target_compile_definitions(reticolo_core INTERFACE
     RETICOLO_VERSION="${PROJECT_VERSION}"
     RETICOLO_GIT_COMMIT="${RETICOLO_GIT_COMMIT}"
+    RETICOLO_GIT_BRANCH="${RETICOLO_GIT_BRANCH}"
     RETICOLO_COMPILE_FLAGS="${_reticolo_compile_flags}"
 )
 

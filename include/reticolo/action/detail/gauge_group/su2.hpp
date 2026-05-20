@@ -7,6 +7,7 @@
 #include <reticolo/math/su2_ops.hpp>
 
 #include <cstddef>
+#include <string_view>
 #include <type_traits>
 
 namespace reticolo::gauge_group {
@@ -28,6 +29,7 @@ struct SU2 {
     using scalar_t                                 = double;
     static constexpr std::size_t n_real_components = 8;
     static constexpr std::size_t n_color           = 2;
+    static constexpr std::string_view name         = "SU2";
 
     // Re Tr (U_mu(s) · U_nu(s+pmu) · U_mu(s+pnu)† · U_nu(s)†)
     // = Re Tr (AB · DC†) where AB = U_mu(s)·U_nu(s+pmu) and DC = U_nu(s)·U_mu(s+pnu).
