@@ -31,6 +31,43 @@
 
 namespace reticolo::math {
 
+namespace detail {
+
+// =============================================================================
+//  Sleef dispatch warm-up
+//
+//  Sleef's public scalar entry points (e.g. `Sleef_sin_u10`) read a function
+//  pointer from a per-symbol dispatch table and tail-call it. On the *first*
+//  call the slot resolves through `disp_<name>`, which calls an internal
+//  `cpuSupportsExt` that probes CPU support using process-global
+//  `signal(SIGILL, ...)` + `sigsetjmp()`. If two OpenMP worker threads enter
+//  this probe concurrently they trash each other's signal disposition and
+//  jmp_buf — one thread's `siglongjmp` lands on a stack frame that no longer
+//  exists on its current thread and the indirect branch goes to whatever
+//  address happens to live in the corrupted dispatch slot (observed:
+//  KERN_PROTECTION_FAILURE inside `disp_sincosd1_u10+20`, the return from
+//  `bl _cpuSupportsExt`).
+//
+//  Force the probe to run once before main, single-threaded, by calling each
+//  dispatched scalar symbol we use. `SLEEF_CONST` lets the optimizer elide
+//  unused return values, so we sink them through a `volatile` to keep the
+//  calls live. The `inline` variable guarantees a single definition across
+//  translation units.
+// =============================================================================
+inline auto const sleef_dispatch_warmup = [] {
+    volatile double sink{};
+    sink                   = Sleef_sin_u10(0.0);
+    sink                   = Sleef_cos_u10(0.0);
+    sink                   = Sleef_log_u10(1.0);
+    sink                   = Sleef_sqrt_u05(1.0);
+    sink                   = Sleef_acos_u10(1.0);
+    Sleef_double2 const sc = Sleef_sincos_u10(0.0);
+    sink                   = sc.x + sc.y;
+    return static_cast<double>(sink);
+}();
+
+}  // namespace detail
+
 // Width of the vector path picked at compile time, in doubles per vector.
 // Used by callers that want to size their row scratch buffer to a multiple
 // of the vector width — not required for correctness (the helpers handle
