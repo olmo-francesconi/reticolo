@@ -20,6 +20,19 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(cd "$here/../.." && pwd)
 preset=${RETICOLO_PRESET:-macos-appleclang}
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --preset)   preset="$2";      shift 2 ;;
+        --preset=*) preset="${1#*=}"; shift   ;;
+        -h|--help)
+            echo "Usage: $(basename "$0") [--preset <name>]"
+            echo "  --preset <name>   CMake build preset whose apps/ dir holds the"
+            echo "                    binaries (default: \$RETICOLO_PRESET or"
+            echo "                    macos-appleclang). Use macos-llvm for OpenMP."
+            exit 0 ;;
+        *) echo "unknown argument: $1" >&2; exit 1 ;;
+    esac
+done
 hmc_bin="$root/build/$preset/apps/su2_hmc"
 llr_bin="$root/build/$preset/apps/su2_llr"
 
@@ -144,4 +157,5 @@ echo "stage 2: LLR for ${#betas[@]} betas ($llr_jobs at a time, $omp_threads thr
 printf '%s\n' "${betas[@]}" | xargs -L 1 -P "$llr_jobs" bash -c 'stage2_llr "$@"' _
 
 echo
-echo "Done. Now run:  python3 $here/analyze.py"
+echo "running analysis: $here/analyze.py"
+python3 "$here/analyze.py"
