@@ -71,14 +71,13 @@ jobs:
         # instructions into the cached object and crashes on a different
         # runner with SIGILL. Local dev still defaults to ON via the preset.
         #
-        # RETICOLO_ENABLE_OPENMP=OFF for macos-appleclang: the preset
-        # description is "no OpenMP" (AppleClang ships without libomp).
+        # The macos-appleclang preset bakes RETICOLO_ENABLE_OPENMP=OFF in
+        # itself (AppleClang ships without libomp) — no per-matrix flag here.
         run: >
           cmake --preset ${{ matrix.preset }}
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DRETICOLO_TUNE_NATIVE=OFF
-          ${{ matrix.preset == 'macos-appleclang' && '-DRETICOLO_ENABLE_OPENMP=OFF' || '' }}
 
       - name: build
         run: cmake --build --preset ${{ matrix.preset }}
