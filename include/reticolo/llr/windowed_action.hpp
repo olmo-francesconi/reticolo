@@ -117,6 +117,24 @@ struct WindowedAction {
         }
     }
 
+    // Raw-action cache pass-through to the base. The LLR Replica reads these
+    // after a trajectory to skip the post-trajectory constraint sweep; HMC
+    // snapshots and restores them across reject rollbacks. See
+    // `HasCacheRollback` in `algorithm/hmc.hpp`.
+    [[nodiscard]] scalar_t last_s_full() const noexcept { return base.last_s_full(); }
+    void restore_last_s_full(scalar_t v) const noexcept { base.restore_last_s_full(v); }
+
+    [[nodiscard]] scalar_t last_s_imag() const noexcept
+        requires action::HasImagPart<Base, T>
+    {
+        return base.last_s_imag();
+    }
+    void restore_last_s_imag(scalar_t v) const noexcept
+        requires action::HasImagPart<Base, T>
+    {
+        base.restore_last_s_imag(v);
+    }
+
     void compute_force(Field const& l, Field& force) const noexcept {
         if constexpr (k_complex) {
             // Combined: F_R + (a + (S_I - E_n)/delta^2) * F_I.

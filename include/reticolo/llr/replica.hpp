@@ -72,7 +72,10 @@ public:
 
     // Running mean of `Q(phi) - E_n` over `n` trajectories, measured at the
     // end of each trajectory (accepted or not). Q = base.s_full when the
-    // base is a real action, Q = base.s_imag in the complex-LLR case.
+    // base is a real action, Q = base.s_imag in the complex-LLR case. Reads
+    // the base action's post-trajectory raw-scalar cache instead of a fresh
+    // sweep — HMC's s_full call at h1 already populated it, and a reject
+    // would have rolled it back to the h0 value.
     [[nodiscard]] scalar_t sample(int n) {
         scalar_t sum = scalar_t{0};
         for (int i = 0; i < n; ++i) {
@@ -81,21 +84,16 @@ public:
             if (step.accepted) {
                 ++stats_.n_accepted;
             }
-            sum += windowed_.constraint_value(phi_) - windowed_.E_n;
+            if constexpr (Windowed::k_complex) {
+                sum += windowed_.base.last_s_imag() - windowed_.E_n;
+            } else {
+                sum += windowed_.base.last_s_full() - windowed_.E_n;
+            }
         }
         return sum / static_cast<scalar_t>(n);
     }
 
     [[nodiscard]] scalar_t energy() const noexcept { return windowed_.base.s_full(phi_); }
-
-    // Value of the windowed (LLR-tilted) action at the current field state,
-    // taken from HMC's post-trajectory cache. NaN before the first
-    // trajectory. Used by Exchange::energy() to skip an extra s_full sweep
-    // when comparing two replicas — the unwindowed `base.s_full` is what
-    // Replica::energy() returns; this is its windowed sibling.
-    [[nodiscard]] scalar_t last_windowed_action() const noexcept {
-        return static_cast<scalar_t>(hmc_.last_s_full());
-    }
 
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
     [[nodiscard]] scalar_t a() const noexcept { return windowed_.a; }

@@ -9,6 +9,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 
 namespace reticolo::action {
 
@@ -78,8 +79,13 @@ struct OnSigma {
                 total += dot(phi, data[next[base + mu]]);
             }
         }
-        return -beta * total;
+        T const s    = -beta * total;
+        last_s_full_ = s;
+        return s;
     }
+
+    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
 
     // Uniform-on-sphere proposal via N-dim Gaussian normalisation. Independent
     // of the current value at x — global proposal works fine for O(N) at all
@@ -129,6 +135,8 @@ struct OnSigma {
         }
         return 1.0 - std::exp(w);
     }
+
+    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
 
 private:
     template <class R>

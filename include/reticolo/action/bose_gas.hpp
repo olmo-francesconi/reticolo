@@ -8,6 +8,7 @@
 #include <cmath>
 #include <complex>
 #include <cstddef>
+#include <limits>
 
 namespace reticolo::action {
 
@@ -103,8 +104,13 @@ struct BoseGas {
                 T const hop              = std::real(std::conj(phi) * weighted);
                 return complex_t{(coef_mass * abs2) + (lam * abs2 * abs2) - (T{2} * hop), T{0}};
             });
-        return std::real(total);
+        T const s    = std::real(total);
+        last_s_full_ = s;
+        return s;
     }
+
+    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
 
     // ---------- HasForce: F_R = -dS_R/dphi* --------------------------------
 
@@ -189,8 +195,13 @@ struct BoseGas {
                 acc += std::imag(std::conj(in[base + k]) * in[base_p + k]);
             }
         }
-        return T{2} * acc;
+        T const s    = T{2} * acc;
+        last_s_imag_ = s;
+        return s;
     }
+
+    [[nodiscard]] T last_s_imag() const noexcept { return last_s_imag_; }
+    void restore_last_s_imag(T v) const noexcept { last_s_imag_ = v; }
 
     void compute_force_imag(Lattice<complex_t> const& l, Lattice<complex_t>& force) const noexcept {
         // F_I(x) = 2i ( phi_{x+tau_hat} - phi_{x-tau_hat} ) — only the
@@ -270,6 +281,9 @@ struct BoseGas {
             }
         }
     }
+
+    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
+    mutable T last_s_imag_ = std::numeric_limits<T>::quiet_NaN();
 };
 
 }  // namespace reticolo::action

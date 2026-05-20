@@ -10,9 +10,12 @@
 
 #include <cmath>
 #include <complex>
+#include <concepts>
 #include <cstddef>
 #include <limits>
 #include <type_traits>
+#include <utility>
+#include <variant>
 
 namespace reticolo::alg {
 
@@ -60,6 +63,22 @@ concept HmcAction = requires(A const& a, Field const& l, Field& f) {
     { a.compute_force(l, f) };
 };
 
+// Optional: action caches its last `s_full` evaluation and exposes a
+// restore-from-snapshot hook so HMC can roll the cache back on a rejected
+// trajectory. Mirrored separately on `s_imag` for complex-LLR actions whose
+// imaginary part is the LLR constraint observable.
+template <class A>
+concept HasSFullCache = requires(A const& a) {
+    { a.last_s_full() } noexcept;
+    { a.restore_last_s_full(a.last_s_full()) } noexcept;
+};
+
+template <class A>
+concept HasSImagCache = requires(A const& a) {
+    { a.last_s_imag() } noexcept;
+    { a.restore_last_s_imag(a.last_s_imag()) } noexcept;
+};
+
 // Compile-time tag: Field is a MatrixLinkLattice (carries a Group type alias).
 template <class Field>
 concept MatrixLinkField = requires { typename Field::group_type; };
@@ -92,7 +111,11 @@ public:
         }
         double const kin0 = kinetic_();
         double const s0   = static_cast<double>(action_.s_full(field_));
-        double const h0   = kin0 + s0;
+        // Snapshot the action's raw-scalar cache(s) at h0 so a reject can
+        // roll them back to match the restored phi0 field. No-op for
+        // actions that don't satisfy the cache concepts.
+        auto const cache_snap = capture_action_cache_();
+        double const h0       = kin0 + s0;
 
         Integrator::run(action_, field_, mom_, force_, tau_, n_md_);
 
@@ -111,6 +134,7 @@ public:
             }
             // s_full now reflects the field BEFORE the trajectory — restore to s0.
             last_s_full_ = s0;
+            restore_action_cache_(cache_snap);
         } else {
             last_s_full_ = s1;
         }
@@ -120,11 +144,8 @@ public:
     // The s_full value of the action on the current field, as computed at the
     // end of the most recent trajectory (== s_full before the rejected step,
     // or after the accepted step). Avoids one re-sweep at the call site.
-    // -∞ if no trajectory has run yet.
+    // NaN if no trajectory has run yet.
     [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
-    [[nodiscard]] bool has_last_s_full() const noexcept {
-        return last_s_full_ == last_s_full_;  // not NaN sentinel
-    }
 
     [[nodiscard]] HmcSpec spec() const noexcept { return {.tau = tau_, .n_md = n_md_}; }
     void set_spec(HmcSpec const& s) noexcept {
@@ -201,6 +222,54 @@ private:
 
     static constexpr bool is_complex_v_ =
         requires(F f) { std::norm(f); } && !std::is_arithmetic_v<F>;
+
+    // Capture-and-restore for the action's raw-scalar caches across a reject.
+    // The snapshot type collapses to an empty struct when the action has no
+    // caches (no overhead). For LLR actions, the cache lives on the base
+    // action; `WindowedAction` forwards through. Two-stage trait dispatch so
+    // the `decltype(... last_s_imag())` instantiation is gated on the action
+    // actually having that member.
+    template <class A2, bool>
+    struct SFullSlot_ {
+        using type = std::monostate;
+    };
+    template <class A2>
+    struct SFullSlot_<A2, true> {
+        using type = decltype(std::declval<A2 const&>().last_s_full());
+    };
+    template <class A2, bool>
+    struct SImagSlot_ {
+        using type = std::monostate;
+    };
+    template <class A2>
+    struct SImagSlot_<A2, true> {
+        using type = decltype(std::declval<A2 const&>().last_s_imag());
+    };
+
+    struct CacheSnap_ {
+        [[no_unique_address]] typename SFullSlot_<A, HasSFullCache<A>>::type s_full{};
+        [[no_unique_address]] typename SImagSlot_<A, HasSImagCache<A>>::type s_imag{};
+    };
+
+    [[nodiscard]] CacheSnap_ capture_action_cache_() const noexcept {
+        CacheSnap_ snap{};
+        if constexpr (HasSFullCache<A>) {
+            snap.s_full = action_.last_s_full();
+        }
+        if constexpr (HasSImagCache<A>) {
+            snap.s_imag = action_.last_s_imag();
+        }
+        return snap;
+    }
+
+    void restore_action_cache_(CacheSnap_ const& snap) const noexcept {
+        if constexpr (HasSFullCache<A>) {
+            action_.restore_last_s_full(snap.s_full);
+        }
+        if constexpr (HasSImagCache<A>) {
+            action_.restore_last_s_imag(snap.s_imag);
+        }
+    }
 
     A const& action_;
     Field& field_;

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <numbers>
 
 namespace reticolo::action {
@@ -65,8 +66,13 @@ struct Xy {
                 total += std::cos(theta - data[next[base + mu]]);
             }
         }
-        return -beta * total;
+        T const s    = -beta * total;
+        last_s_full_ = s;
+        return s;
     }
+
+    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
 
     // force(x) = -dS/dtheta(x) = -beta * sum_{mu, +-} sin(theta(x) - theta(x+mu)).
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
@@ -124,6 +130,8 @@ struct Xy {
         }
         return 1.0 - std::exp(w);
     }
+
+    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
 };
 
 }  // namespace reticolo::action

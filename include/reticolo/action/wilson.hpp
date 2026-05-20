@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <limits>
 
 namespace reticolo::action {
 
@@ -70,8 +71,16 @@ struct Wilson {
         }
         T const N_re        = static_cast<T>(G::n_color);
         T const beta_over_n = beta / N_re;
-        return (beta * static_cast<T>(n_plaq)) - (beta_over_n * static_cast<T>(accum_re_tr));
+        T const s = (beta * static_cast<T>(n_plaq)) - (beta_over_n * static_cast<T>(accum_re_tr));
+        last_s_full_ = s;
+        return s;
     }
+
+    // Raw-action cache: last `s_full` evaluated on the field. NaN before the
+    // first call. The LLR Replica reads this after a trajectory instead of
+    // re-sweeping; HMC snapshots and restores it across reject rollbacks.
+    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
 
     // ---- HasLinkForce equivalent ---------------------------------------------
     //
@@ -101,6 +110,9 @@ struct Wilson {
         double const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
         G::compute_force_and_kick(U, mom, beta_over_n_dbl, static_cast<double>(k_dt));
     }
+
+    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
+
 
     // ---- LinkLocalAction equivalent ------------------------------------------
     //

@@ -7,6 +7,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <type_traits>
 #include <vector>
 
@@ -46,6 +47,7 @@ struct SineGordon {
     }
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
+        T s{};
         if constexpr (std::is_same_v<T, double>) {
             std::size_t const n = l.nsites();
             ensure_scratch_(n);
@@ -62,15 +64,20 @@ struct SineGordon {
             }
             T const hopping = detail::reduce_fwd<T>(
                 l, [k](T phi, T fwd_sum) { return (T{-2} * k * phi * fwd_sum) + (phi * phi); });
-            return hopping - (alp * cos_sum);
+            s = hopping - (alp * cos_sum);
         } else {
             T const k   = kappa;
             T const alp = alpha;
-            return detail::reduce_fwd<T>(l, [k, alp](T phi, T fwd_sum) {
+            s           = detail::reduce_fwd<T>(l, [k, alp](T phi, T fwd_sum) {
                 return (T{-2} * k * phi * fwd_sum) + (phi * phi) - (alp * std::cos(phi));
             });
         }
+        last_s_full_ = s;
+        return s;
     }
+
+    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
 
     // force(x) = -dS/dphi(x)
     //         = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x) - alpha sin(phi(x))
@@ -119,6 +126,8 @@ struct SineGordon {
     // of each force / s_full call and reused across MD steps. `mutable` so
     // the public force/s_full methods can stay const.
     mutable std::vector<T> scratch{};
+
+    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
 
 private:
     void ensure_scratch_(std::size_t n) const noexcept {

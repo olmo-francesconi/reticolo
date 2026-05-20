@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <type_traits>
 #include <vector>
 
@@ -150,8 +151,13 @@ struct CompactU1 {
             }
         }
         // Standard Wilson form: S = beta * sum (1 - cos theta_p).
-        return beta * (static_cast<T>(n_plaq) - accum);
+        T const s    = beta * (static_cast<T>(n_plaq) - accum);
+        last_s_full_ = s;
+        return s;
     }
+
+    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
 
     // ---------- HasLinkForce — plaquette-centric scatter -------------------
 
@@ -260,6 +266,8 @@ struct CompactU1 {
     // Per-plane plaquette / sin-plaq / cos-plaq scratch — populated by
     // vector libm at the start of each plane's loop. Sized lazily to nsites.
     mutable std::vector<double> scratch{};
+
+    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
 
 private:
     void ensure_scratch_(std::size_t n) const noexcept {

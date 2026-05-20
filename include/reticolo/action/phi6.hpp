@@ -5,6 +5,7 @@
 #include <reticolo/core/site.hpp>
 
 #include <cstddef>
+#include <limits>
 
 namespace reticolo::action {
 
@@ -54,13 +55,18 @@ struct Phi6 {
         T const k   = kappa;
         T const lam = lambda;
         T const g   = g6;
-        return detail::reduce_fwd<T>(l, [k, lam, g](T phi, T fwd_sum) {
+        T const s   = detail::reduce_fwd<T>(l, [k, lam, g](T phi, T fwd_sum) {
             T const phi2 = phi * phi;
             T const dev  = phi2 - T{1};
             T const phi6 = phi2 * phi2 * phi2;
             return (T{-2} * k * phi * fwd_sum) + phi2 + (lam * dev * dev) + (g * phi6);
         });
+        last_s_full_ = s;
+        return s;
     }
+
+    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
 
     // force(x) = -dS/dphi(x)
     //         = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x)
@@ -92,6 +98,8 @@ struct Phi6 {
             m[i] += k_dt * F;
         });
     }
+
+    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
 
 private:
     [[nodiscard]] T ds_baseline_(T phi, T nbrs) const noexcept {
