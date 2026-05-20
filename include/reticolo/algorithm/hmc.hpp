@@ -5,6 +5,8 @@
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
+#include <reticolo/core/log.hpp>
+#include <reticolo/core/log_helpers.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 
@@ -94,12 +96,20 @@ public:
     using value_type = F;
     using integrator = Integrator;
 
+    static constexpr std::string_view log_tag = "hmc";
+
     Hmc(A const& action, Field& field, R& rng, HmcSpec const& spec)
         : action_{action}, field_{field}, rng_{rng}, mom_{field.indexing()},
           force_{field.indexing()}, old_field_{field.indexing()}, tau_{spec.tau}, n_md_{spec.n_md} {
     }
 
-    HmcStep trajectory() {
+    void describe(log::Entry& e) const {
+        e.line("HMC<{}>", Integrator::name);
+        e.param("τ={:.3f}", tau_);
+        e.param("n_md={}", n_md_);
+    }
+
+    HmcStep trajectory(log::Mode log_mode = log::Mode::normal) {
         sample_momenta_();
 
         // Snapshot for rejection rollback — flat-buffer copy.
@@ -137,6 +147,14 @@ public:
             restore_action_cache_(cache_snap);
         } else {
             last_s_full_ = s1;
+        }
+        ++step_count_;
+        if (log_mode == log::Mode::normal) {
+            log::info("hmc",
+                      "traj {:>6}  ΔH={:+.3e}  {}",
+                      step_count_,
+                      dH,
+                      accepted ? "accept" : "reject");
         }
         return {.dH = dH, .accepted = accepted};
     }
@@ -283,6 +301,11 @@ private:
     // first trajectory runs. Used by Replica / Exchange so they can read the
     // current action without re-sweeping.
     double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
+
+    // Monotonically advanced on every trajectory (silent or not). Reflects
+    // cumulative work, not lines printed — so therm + prod trajectories
+    // share one numbering. Used by the in-method log line.
+    std::size_t step_count_ = 0;
 };
 
 }  // namespace reticolo::alg

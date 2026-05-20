@@ -1,8 +1,10 @@
 #pragma once
 
 #include <reticolo/action/detail/helpers.hpp>
+#include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/log.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <cmath>
@@ -54,6 +56,13 @@ struct BoseGas {
     T mass   = T{1};
     T lambda = T{1};
     T mu     = T{0};
+
+    void describe(log::Entry& e) const {
+        e.line("BoseGas<{}>", scalar_name<value_type>());
+        e.param("m={:.3f}", mass);
+        e.param("λ={:.3f}", lambda);
+        e.param("μ={:+.3f}", mu);
+    }
 
     // ---------- LocalAction (Metropolis would need these) ------------------
 

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <reticolo/action/detail/gauge_helpers.hpp>
+#include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/link_lattice.hpp>
+#include <reticolo/core/log.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
@@ -53,6 +55,11 @@ struct CompactU1 {
     using field_type = LinkLattice<T>;
 
     T beta = T{0};
+
+    void describe(log::Entry& e) const {
+        e.line("CompactU1<{}>", scalar_name<T>());
+        e.param("β={:.3f}", beta);
+    }
 
     // ---------- helpers ----------
 

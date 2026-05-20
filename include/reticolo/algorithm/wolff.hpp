@@ -2,6 +2,8 @@
 
 #include <reticolo/action/detail/concepts.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/log.hpp>
+#include <reticolo/core/log_helpers.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 
@@ -46,13 +48,17 @@ public:
     using axis_type  = typename A::axis_type;
     using mark_type  = std::uint32_t;
 
+    static constexpr std::string_view log_tag = "wolf";
+
     Wolff(A const& action, Lattice<F>& field, R& rng)
         : action_{action}, field_{field}, rng_{rng}, mark_(field.nsites(), 0) {
         stack_.reserve(field.nsites());
         cluster_sites_.reserve(field.nsites());
     }
 
-    WolffStep update() {
+    void describe(log::Entry& e) const { e.line("Wolff"); }
+
+    WolffStep update(log::Mode log_mode = log::Mode::normal) {
         std::size_t const n_sites = field_.nsites();
         Site const seed{rng_.uniform_int(n_sites)};
         axis_type const axis = action_.wolff_random_axis(rng_);
@@ -77,6 +83,10 @@ public:
             field_[s] = action_.wolff_reflect(field_[s], axis);
         }
 
+        ++step_count_;
+        if (log_mode == log::Mode::normal) {
+            log::info("wolf", "update {:>6}  cluster={}", step_count_, cluster_sites_.size());
+        }
         return {.cluster_size = cluster_sites_.size()};
     }
 
@@ -108,6 +118,9 @@ private:
     std::vector<Site> stack_;
     std::vector<Site> cluster_sites_;
     mark_type gen_ = 0;
+
+    // Cumulative update counter — advances on every call, silent or not.
+    std::size_t step_count_ = 0;
 };
 
 }  // namespace reticolo::alg

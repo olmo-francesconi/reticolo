@@ -1,7 +1,9 @@
 #pragma once
 
 #include <reticolo/action/detail/helpers.hpp>
+#include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/log.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
@@ -28,6 +30,12 @@ struct SineGordon {
 
     T kappa = T{0};
     T alpha = T{0};
+
+    void describe(log::Entry& e) const {
+        e.line("SineGordon<{}>", scalar_name<T>());
+        e.param("κ={:.3f}", kappa);
+        e.param("α={:.3f}", alpha);
+    }
 
     [[nodiscard]] T s_local(Lattice<T> const& l, Site x) const noexcept {
         T const phi  = l[x];

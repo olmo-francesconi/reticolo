@@ -1,7 +1,9 @@
 #pragma once
 
 #include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/log.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 
@@ -32,6 +34,11 @@ struct OnSigma {
     using value_type = std::array<T, N>;
 
     T beta = T{0};
+
+    void describe(log::Entry& e) const {
+        e.line("OnSigma<N={}, {}>", N, scalar_name<T>());
+        e.param("β={:.3f}", beta);
+    }
 
     [[nodiscard]] static T dot(value_type const& a, value_type const& b) noexcept {
         T s = T{0};

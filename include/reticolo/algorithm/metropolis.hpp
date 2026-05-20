@@ -4,6 +4,8 @@
 #include <reticolo/action/detail/helpers.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
+#include <reticolo/core/log.hpp>
+#include <reticolo/core/log_helpers.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 
@@ -46,10 +48,17 @@ class Metropolis {
 public:
     using value_type = F;
 
+    static constexpr std::string_view log_tag = "metr";
+
     Metropolis(A const& action, Field& field, R& rng, double sigma) noexcept
         : action_{action}, field_{field}, rng_{rng}, sigma_{sigma} {}
 
-    MetropolisSweep sweep() {
+    void describe(log::Entry& e) const {
+        e.line("Metropolis");
+        e.param("σ={:.3f}", sigma_);
+    }
+
+    MetropolisSweep sweep(log::Mode log_mode = log::Mode::normal) {
         MetropolisSweep stats{};
 
         if constexpr (action::HasDsLocalFromNbrs<A, F>) {
@@ -68,6 +77,10 @@ public:
                         ++stats.accepted;
                     }
                 });
+            ++step_count_;
+            if (log_mode == log::Mode::normal) {
+                log::info("metr", "sweep {:>6}  acc={:.3f}", step_count_, stats.acceptance());
+            }
             return stats;
         }
 
@@ -86,6 +99,10 @@ public:
                 ++stats.accepted;
             }
         });
+        ++step_count_;
+        if (log_mode == log::Mode::normal) {
+            log::info("metr", "sweep {:>6}  acc={:.3f}", step_count_, stats.acceptance());
+        }
         return stats;
     }
 
@@ -117,6 +134,9 @@ private:
     Field& field_;
     R& rng_;
     double sigma_;
+
+    // Cumulative sweep counter — advances on every call, silent or not.
+    std::size_t step_count_ = 0;
 };
 
 }  // namespace reticolo::alg

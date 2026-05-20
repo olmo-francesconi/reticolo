@@ -7,6 +7,7 @@
 #include <reticolo/core/link_lattice.hpp>
 
 #include <cstddef>
+#include <string_view>
 
 namespace reticolo::alg::integ {
 
@@ -61,6 +62,8 @@ template <class Field>
 // step, but acceptance falls off quickly as dt grows so trajectories at a
 // given tau need many small steps.
 struct Leapfrog {
+    static constexpr std::string_view name = "Leapfrog";
+
     template <class A, class Field>
     static void run(A const& action,
                     Field& field,
@@ -93,6 +96,8 @@ struct Leapfrog {
 // Leapfrog's, so dt can be ~1.4× larger — net ~1.4× speedup at the same
 // trajectory length.
 struct Omelyan2 {
+    static constexpr std::string_view name = "Omelyan2";
+
     static constexpr double k_lambda = 0.1931833275037836;
 
     template <class A, class Field>
@@ -135,6 +140,8 @@ struct Omelyan2 {
 // Coefficients minimise the leading-error norm (Omelyan, Mryglod, Folk 2003,
 // "Symplectic analytically integrable decomposition algorithms").
 struct Omelyan4 {
+    static constexpr std::string_view name = "Omelyan4";
+
     static constexpr double k_rho    = 0.1786178958448091;
     static constexpr double k_lambda = -0.06626458266981843;
     static constexpr double k_theta  = 0.7123418310626054;

@@ -1,7 +1,9 @@
 #pragma once
 
 #include <reticolo/action/detail/helpers.hpp>
+#include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/log.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <cstddef>
@@ -28,6 +30,13 @@ struct Phi6 {
     T kappa  = T{0};
     T lambda = T{0};
     T g6     = T{0};
+
+    void describe(log::Entry& e) const {
+        e.line("Phi6<{}>", scalar_name<T>());
+        e.param("κ={:.3f}", kappa);
+        e.param("λ={:.3f}", lambda);
+        e.param("g₆={:.3f}", g6);
+    }
 
     [[nodiscard]] T s_local(Lattice<T> const& l, Site x) const noexcept {
         return ds_baseline_(l[x], nn_neighbour_sum(l, x));
