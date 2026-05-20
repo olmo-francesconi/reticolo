@@ -229,7 +229,7 @@ adj_mul_3x3(double* out, double const* a, double const* b) noexcept {
                          (q2[idx_re(2, 0)] * q[idx_re(0, 2)] - q2[idx_im(2, 0)] * q[idx_im(0, 2)]) +
                          (q2[idx_re(2, 1)] * q[idx_re(1, 2)] - q2[idx_im(2, 1)] * q[idx_im(1, 2)]) +
                          (q2[idx_re(2, 2)] * q[idx_re(2, 2)] - q2[idx_im(2, 2)] * q[idx_im(2, 2)]);
-    double const c0    = tr_q3 / 3.0;
+    double const c0 = tr_q3 / 3.0;
 
     double const c1_over_3 = c1 / 3.0;
     double const c0_max    = 2.0 * c1_over_3 * std::sqrt(c1_over_3);

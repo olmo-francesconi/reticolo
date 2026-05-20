@@ -59,9 +59,9 @@ struct Phi4 {
     }
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T const k   = kappa;
-        T const lam = lambda;
-        T const s   = detail::reduce_fwd<T>(l, [k, lam](T phi, T fwd_sum) {
+        T const k    = kappa;
+        T const lam  = lambda;
+        T const s    = detail::reduce_fwd<T>(l, [k, lam](T phi, T fwd_sum) {
             T const phi2 = phi * phi;
             T const dev  = phi2 - T{1};
             return (T{-2} * k * phi * fwd_sum) + phi2 + (lam * dev * dev);

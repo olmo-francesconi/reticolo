@@ -113,7 +113,6 @@ struct Wilson {
 
     mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
 
-
     // ---- LinkLocalAction equivalent ------------------------------------------
     //
     // Sum of Re Tr U_p over the 2(d−1) plaquettes through link (x, μ),

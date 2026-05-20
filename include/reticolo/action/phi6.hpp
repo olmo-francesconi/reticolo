@@ -52,10 +52,10 @@ struct Phi6 {
     }
 
     [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T const k   = kappa;
-        T const lam = lambda;
-        T const g   = g6;
-        T const s   = detail::reduce_fwd<T>(l, [k, lam, g](T phi, T fwd_sum) {
+        T const k    = kappa;
+        T const lam  = lambda;
+        T const g    = g6;
+        T const s    = detail::reduce_fwd<T>(l, [k, lam, g](T phi, T fwd_sum) {
             T const phi2 = phi * phi;
             T const dev  = phi2 - T{1};
             T const phi6 = phi2 * phi2 * phi2;
