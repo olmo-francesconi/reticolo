@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <vector>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 using reticolo::FastRng;
@@ -75,8 +76,13 @@ TEST_CASE("reduce_fwd dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_lo
         double const a = reduce_fwd<double>(l, body);
         double const b = reduce_fwd_fallback_<double>(l, body);
 
+        // Both paths visit every (site, mu) pair with the same body; the
+        // dispatch path accumulates in vector lanes and the fallback in a
+        // single scalar accumulator, so the reduction order differs and the
+        // sums can disagree in the last ULP across ISAs. Match at machine
+        // precision instead of bit identity.
         INFO("ndims=" << shape.size());
-        REQUIRE(a == b);
+        REQUIRE(a == Catch::Approx(b).margin(1e-12));
     }
 }
 

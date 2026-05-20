@@ -7,6 +7,7 @@
 #include <cmath>
 #include <vector>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -117,14 +118,20 @@ TEMPLATE_TEST_CASE("Rng::normal_fill agrees with sequential normal() calls",
                    FastRng,
                    RanluxRng,
                    Mt19937Rng) {
-    constexpr std::size_t n = 1024;
+    // Same seed → same statistical stream from both paths, but the SIMD
+    // Sleef-batched `normal_fill` path differs from sequential scalar
+    // `normal()` in the last ULP across ISAs (NEON vs SSE2/AVX2/AVX512).
+    // The contract is statistical equivalence at machine precision, not
+    // bit identity — see the comment on `Rng::normal_fill`.
+    constexpr std::size_t n   = 1024;
+    constexpr double k_margin = 1e-12;
     TestType a{123};
     TestType b{123};
     std::vector<double> fill_buf(n);
     a.normal_fill(fill_buf.data(), n);
     for (std::size_t i = 0; i < n; ++i) {
         double const expected = b.normal();
-        REQUIRE(fill_buf[i] == expected);
+        REQUIRE(fill_buf[i] == Catch::Approx(expected).margin(k_margin));
     }
 }
 

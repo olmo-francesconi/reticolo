@@ -88,9 +88,10 @@ public:
     // The polar form has data-dependent rejection that defeats vectorisation
     // in `normal_fill`; classical form has fixed cost (2 uniforms, 1 sqrt,
     // 1 log, 1 sincos per pair) and batches cleanly through Sleef. Uses
-    // Sleef's scalar `Sleef_sincos_u10` so the single-call path is bit-
-    // identical to the batched `normal_fill` path (which uses Sleef
-    // `sincos_batch`) — the test suite enforces this agreement.
+    // Sleef's scalar `Sleef_sincos_u10` here; `normal_fill` uses the SIMD
+    // sincos. Same algorithm, same seed → same stream to machine precision,
+    // not bit-identical across ISAs (the SIMD reduction inside Sleef gives
+    // different last-ULP results than the scalar path on x86 vs NEON).
     [[nodiscard]] double normal() noexcept {
         if (has_cached_normal_) {
             has_cached_normal_ = false;
