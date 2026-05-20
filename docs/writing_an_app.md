@@ -128,9 +128,17 @@ alg::Hmc<act::Phi4<double>, FastRng> hmc{phi4, phi, rng, {.tau = tau, .n_md = n_
 ```
 
 The class template parameters are the action type and the RNG type. The
-fourth (defaulted) parameter is the integrator — `integ::Leapfrog` is the
-only one shipping today; swap in `integ::Yoshida4` later by extending the
-type, no other change.
+third (defaulted) parameter is the integrator — three ship today:
+`alg::integ::Leapfrog` (default), `alg::integ::Omelyan2`,
+`alg::integ::Omelyan4`. Swap is a type, not a flag:
+
+```cpp
+alg::Hmc<act::Phi4<double>, FastRng, alg::integ::Omelyan2> hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
+```
+
+Adding a new integrator is a struct with a static `run(...)` method — no
+registry, no `switch`. See `apps/bench_integrators.cpp` for a wall-time
+comparison at fixed acceptance.
 
 The `Hmc` constructor pre-allocates the momentum, force, and rollback
 lattices as **siblings** of `phi` (same `Indexing`). One neighbour table,
@@ -209,10 +217,26 @@ of them, different updaters or different observables, hand-written.
 
 ## What's *not* in the app
 
-- **No** logging library beyond `log::Section` (RAII timer / banner).
-- **No** error recovery beyond what the standard library does. If
-  `s_full` returns NaN you'll see NaN; debug the integrator step size.
 - **No** result post-processing: that's Python's job downstream. The app
   writes raw per-trajectory time series; reductions happen later.
+- **No** error recovery beyond what the standard library does. If
+  `s_full` returns NaN you'll see NaN; debug the integrator step size.
+
+## Logging — automatic
+
+The snippet above doesn't show any `log::` calls. That's deliberate — the
+library does the announcing for you. Action / algorithm / Replica
+constructors emit their own `init`, `act`, `hmc`, etc. lines; `trajectory()`
+logs each completed step. To enable it, add one line at the top of `main`:
+
+```cpp
+log::start(outpath);   // init_parallel + banner — call once
+```
+
+That's the entire logger surface a typical app needs. Suppress everything
+with `log::off()`; opt out of a single algorithm step with
+`log::Mode::silent` (e.g. `hmc.trajectory(log::Mode::silent)` for
+thermalisation). The full surface is documented in
+[`docs/logging.md`](logging.md).
 
 That's the whole framework.

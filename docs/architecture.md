@@ -62,7 +62,7 @@ all in scope.
 Value semantics: copy = deep-copy the field, share the `Indexing`. Move is
 cheap. The element type `T` is whatever the action needs — `double` for
 real scalar fields, `std::array<double, N>` for O(N) sigma models,
-`std::complex<double>` for charged scalars (not yet shipped).
+`std::complex<double>` for charged scalars (used by `act::BoseGas`).
 
 ```cpp
 Lattice<double>            phi{{16, 16, 16}};        // 3D, fresh Indexing from pool
@@ -144,11 +144,13 @@ matching at the updater instantiation site picks the right code path.
 | `alg::Hmc<A,R,Integ>`   | `HasSEff` + `HasForce`                            | `<reticolo/algorithm/hmc.hpp>`        |
 | `alg::Wolff<A,R>`       | `WolffEmbeddable`                                 | `<reticolo/algorithm/wolff.hpp>`      |
 
-The HMC integrator is a **type parameter**, not a runtime switch. Currently
-only `integ::Leapfrog` ships, but adding a higher-order integrator means
-writing a struct with a static `run(...)` method and instantiating
-`Hmc<A, R, integ::Yoshida4>` — no central registry, no per-trajectory
-`switch`.
+The HMC integrator is a **type parameter**, not a runtime switch. Three
+ship: `alg::integ::Leapfrog` (2nd-order, the cheap default),
+`alg::integ::Omelyan2` (2nd-order minimum-norm, ~1.4× speedup at the same
+acceptance), `alg::integ::Omelyan4` (4th-order, large τ regime). Adding a
+new one means writing a struct with a static `run(...)` method and
+instantiating `Hmc<A, R, NewInteg>` — no central registry, no
+per-trajectory `switch`.
 
 The HMC also keeps its momentum, force, and rollback buffers as **sibling
 lattices** (three `Lattice<F>` constructed from the field's
@@ -221,6 +223,42 @@ Two namespaces in [`<reticolo/obs/*.hpp>`](../include/reticolo/obs/):
 Apps call the per-configuration observers in the trajectory loop and stash
 the results in a `Series<double>`. Reductions live downstream (post-process
 in Python, or in C++ over a span if you prefer).
+
+## Logger
+
+`reticolo::log` is a threadsafe, OpenMP-aware logger sitting on top of a
+single mutex around `std::cout` / `std::cerr`. The surface:
+
+- Severity = sigil — `·` debug, `┃` info, `⚠` warn, `✖` error. Each line
+  carries elapsed time (`HHH:MM:SS.mmm`), a 4-char tag, and the message.
+- Run column — `r000`, `r001`, … inside a `log::scope("rNNN")` (RAII);
+  `main` outside any scope. LLR apps bind the scope per replica inside the
+  parallel-for body; everything called transitively from there picks up the
+  tag automatically via a thread-local stack.
+- Auto-announce — `Lattice`, `RNG`, `Writer`, action, algorithm, and
+  `llr::Replica` constructors emit their own descriptor lines, so most apps
+  don't call `log::info` at all.
+- Global off switch — `log::off()` short-circuits before any formatting.
+  Tests link a shared `tests/test_main.cpp` that calls it; benches and
+  `tune_phi4` call it too.
+
+See [`docs/logging.md`](logging.md) for the full surface.
+
+## LLR replicas
+
+LLR (Logarithmic Linear Relaxation) is an alternative sampling strategy
+that reconstructs the density of states ρ(S) by running N replicas, each
+pinned by a Gaussian window penalty to a different region of action space.
+The replicas are sampled in parallel (OpenMP), each by its own HMC kernel,
+and a Newton-Raphson + Robbins-Monro loop adapts a per-replica reweighting
+parameter `a` so each replica sits centered on its window. Periodic
+even/odd replica exchange improves mixing.
+
+`llr::Replica` wraps a `Base` action in `llr::WindowedAction` (which adds
+the `a·S + (S − E_n)²/2δ²` shift) and holds its own RNG / lattice / HMC.
+LLR is the one place in the library where OpenMP shows up.
+
+See [`docs/llr.md`](llr.md) for theory + an annotated app walkthrough.
 
 ## Tests
 
