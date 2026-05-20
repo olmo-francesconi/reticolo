@@ -28,7 +28,9 @@ class Mt19937Rng {
 public:
     using state_type = std::uint64_t;
 
-    explicit Mt19937Rng(state_type seed = 0xC0FFEEULL) noexcept : engine_{seed} {}
+    explicit Mt19937Rng(state_type seed = 0xC0FFEEULL) noexcept : engine_{seed} {
+        log::info("rng", "Mt19937Rng  seed={:#x}", seed);
+    }
 
     void reseed(state_type seed) noexcept {
         engine_.seed(seed);

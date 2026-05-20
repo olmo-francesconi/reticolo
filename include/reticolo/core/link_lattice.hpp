@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/core/indexing.hpp>
+#include <reticolo/core/log.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <cstddef>
@@ -34,11 +35,15 @@ public:
     using SizeVec    = Indexing::SizeVec;
 
     explicit LinkLattice(SizeVec shape)
-        : idx_{Indexing::acquire(std::move(shape))}, data_(idx_->ndims() * idx_->nsites(), T{}) {}
+        : idx_{Indexing::acquire(std::move(shape))}, data_(idx_->ndims() * idx_->nsites(), T{}) {
+        log_construct_();
+    }
 
     LinkLattice(SizeVec shape, T fill)
         : idx_{Indexing::acquire(std::move(shape))},
-          data_(idx_->ndims() * idx_->nsites(), std::move(fill)) {}
+          data_(idx_->ndims() * idx_->nsites(), std::move(fill)) {
+        log_construct_();
+    }
 
     explicit LinkLattice(std::shared_ptr<Indexing const> idx)
         : idx_{std::move(idx)}, data_(idx_->ndims() * idx_->nsites(), T{}) {}
@@ -116,6 +121,14 @@ public:
     [[nodiscard]] Indexing const& indexing_ref() const noexcept { return *idx_; }
 
 private:
+    void log_construct_() const {
+        log::info("init",
+                  "LinkLattice<{}>  shape={}  links={}",
+                  scalar_name<T>(),
+                  shape_str(idx_->shape()),
+                  idx_->ndims() * idx_->nsites());
+    }
+
     std::shared_ptr<Indexing const> idx_;
     std::vector<T> data_;
 };

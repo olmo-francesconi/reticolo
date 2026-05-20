@@ -1,4 +1,5 @@
 #include <reticolo/cli/parser.hpp>
+#include <reticolo/core/log.hpp>
 #include <reticolo/io/writer.hpp>
 
 #include <algorithm>
@@ -408,6 +409,7 @@ Writer::Writer(std::filesystem::path const& path,
     if (params != nullptr) {
         params->stamp_into(*this);
     }
+    log::info("io", "opened {}", path.string());
 }
 
 Writer::~Writer()                            = default;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <reticolo/core/log.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
 #include <algorithm>
@@ -30,7 +31,10 @@ class FastRng {
 public:
     using state_type = std::uint64_t;
 
-    explicit FastRng(state_type seed = 0xC0FFEEULL) noexcept { reseed(seed); }
+    explicit FastRng(state_type seed = 0xC0FFEEULL) noexcept {
+        reseed(seed);
+        log::info("rng", "FastRng  seed={:#x}", seed);
+    }
 
     void reseed(state_type seed) noexcept {
         state_type sm = seed;

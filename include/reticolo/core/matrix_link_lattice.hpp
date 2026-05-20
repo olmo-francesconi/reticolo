@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/core/indexing.hpp>
+#include <reticolo/core/log.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <cstddef>
@@ -44,7 +45,14 @@ public:
 
     explicit MatrixLinkLattice(SizeVec shape)
         : idx_{Indexing::acquire(std::move(shape))},
-          data_(idx_->ndims() * n_real_components * idx_->nsites(), T{}) {}
+          data_(idx_->ndims() * n_real_components * idx_->nsites(), T{}) {
+        log::info("init",
+                  "MatrixLinkLattice<{}, {}>  shape={}  links={}",
+                  G::name,
+                  scalar_name<T>(),
+                  shape_str(idx_->shape()),
+                  idx_->ndims() * idx_->nsites());
+    }
 
     explicit MatrixLinkLattice(std::shared_ptr<Indexing const> idx)
         : idx_{std::move(idx)}, data_(idx_->ndims() * n_real_components * idx_->nsites(), T{}) {}

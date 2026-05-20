@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/core/indexing.hpp>
+#include <reticolo/core/log.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <cstddef>
@@ -12,6 +13,29 @@
 
 namespace reticolo {
 
+// =============================================================================
+//  Lattice<T> — owning value-semantic field container on a periodic hypercubic
+//  lattice. One value of type `T` per site, stored in a flat std::vector.
+//
+//  Value semantics with one twist:
+//
+//      Lattice<double> a{{16, 16, 16}};
+//      Lattice<double> b = a;       // ← deep-copies the FIELD DATA
+//                                   //   but SHARES the Indexing neighbour table
+//      b[Site{0}] = 42;             //   modifies only b's data
+//
+//  The Indexing (neighbour pointers, parity labels) is immutable and pooled by
+//  shape, so sharing it costs only a shared_ptr increment. Two lattices of the
+//  same shape automatically share — `Lattice<T> mom{phi.indexing()}` (the
+//  "sibling" ctor) constructs a fresh field without rebuilding the topology.
+//  HMC uses this for its mom/force/old_field buffers: one neighbour table,
+//  four lattices.
+//
+//  If you ever need a fully independent copy whose Indexing is its own object
+//  (rare — you'd be paying for nothing), construct from a fresh shape:
+//      Lattice<double> b{a.shape()};
+//      std::ranges::copy(a, b.begin());
+// =============================================================================
 template <class T>
 class Lattice {
 public:
@@ -20,10 +44,14 @@ public:
 
     // Default-fill a fresh lattice on a new shape (always periodic).
     explicit Lattice(SizeVec shape)
-        : idx_{Indexing::acquire(std::move(shape))}, data_(idx_->nsites(), T{}) {}
+        : idx_{Indexing::acquire(std::move(shape))}, data_(idx_->nsites(), T{}) {
+        log_construct_();
+    }
 
     Lattice(SizeVec shape, T fill)
-        : idx_{Indexing::acquire(std::move(shape))}, data_(idx_->nsites(), std::move(fill)) {}
+        : idx_{Indexing::acquire(std::move(shape))}, data_(idx_->nsites(), std::move(fill)) {
+        log_construct_();
+    }
 
     // Sibling-lattice constructors: reuse an existing Indexing
     // (the HMC pattern — mom, force, old_field share the field's topology).
@@ -87,6 +115,14 @@ public:
     [[nodiscard]] Indexing const& indexing_ref() const noexcept { return *idx_; }
 
 private:
+    void log_construct_() const {
+        log::info("init",
+                  "Lattice<{}>  shape={}  sites={}",
+                  scalar_name<T>(),
+                  shape_str(idx_->shape()),
+                  idx_->nsites());
+    }
+
     std::shared_ptr<Indexing const> idx_;
     std::vector<T> data_;
 };

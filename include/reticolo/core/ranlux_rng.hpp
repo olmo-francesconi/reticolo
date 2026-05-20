@@ -30,7 +30,9 @@ class RanluxRng {
 public:
     using state_type = std::uint64_t;
 
-    explicit RanluxRng(state_type seed = 0xC0FFEEULL) noexcept : engine_{seed} {}
+    explicit RanluxRng(state_type seed = 0xC0FFEEULL) noexcept : engine_{seed} {
+        log::info("rng", "RanluxRng  seed={:#x}", seed);
+    }
 
     void reseed(state_type seed) noexcept {
         engine_.seed(seed);
