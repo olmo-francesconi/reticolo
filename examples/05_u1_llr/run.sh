@@ -74,18 +74,25 @@ export n_therm_nr n_meas_nr n_therm_rm n_meas_rm
 export range_pad range_lo_pct range_hi_pct target_n_rep seed
 
 stage1_hmc() {
+    set -e
     local beta=$1
     local out="$results/hmc_beta${beta}.h5"
+    rc=0
     "$hmc_bin" \
         --size="$size" --ndim="$ndim" --beta="$beta" \
         --tau=1.0 --n_md=20 \
         --n_therm="$n_therm" --n_prod="$n_prod" --meas_every=1 \
-        --seed="$seed" --out="$out" >/dev/null
+        --seed="$seed" --out="$out" >/dev/null || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        printf '[%s] HMC beta=%s FAILED (exit %d)\n' "$(date +%H:%M:%S)" "$beta" "$rc" >&2
+        return "$rc"
+    fi
     printf '[%s] HMC beta=%s done\n' "$(date +%H:%M:%S)" "$beta"
 }
 export -f stage1_hmc
 
 stage2_llr() {
+    set -e
     local beta=$1
     local hmc_out="$results/hmc_beta${beta}.h5"
     local rng_out="$results/range_beta${beta}.txt"
@@ -109,13 +116,19 @@ with open(sys.argv[2], 'w') as out:
     out.write(f"{e_min} {e_max} {delta}\n")
 PY
     read -r e_min e_max d <"$rng_out"
+    rc=0
     "$llr_bin" \
         --size="$size" --ndim="$ndim" --beta="$beta" \
         --E_min="$e_min" --E_max="$e_max" --delta="$d" \
         --tau="$tau" --n_md="$n_md" \
         --n_nr="$n_nr" --n_therm_nr="$n_therm_nr" --n_meas_nr="$n_meas_nr" \
         --n_rm="$n_rm" --n_therm_rm="$n_therm_rm" --n_meas_rm="$n_meas_rm" \
-        --seed="$seed" --out="$llr_out" >/dev/null
+        --seed="$seed" --out="$llr_out" >/dev/null || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        printf '[%s] LLR beta=%s FAILED (exit %d)  range=[%.2f, %.2f]  delta=%.3f\n' \
+            "$(date +%H:%M:%S)" "$beta" "$rc" "$e_min" "$e_max" "$d" >&2
+        return "$rc"
+    fi
     printf '[%s] LLR beta=%s done   range=[%.2f, %.2f]  delta=%.3f\n' \
         "$(date +%H:%M:%S)" "$beta" "$e_min" "$e_max" "$d"
 }

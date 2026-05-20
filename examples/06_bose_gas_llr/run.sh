@@ -76,19 +76,26 @@ export n_md n_nr n_rm n_therm_nr n_meas_nr n_therm_rm n_meas_rm
 export si_over_v_max target_n_rep seed
 
 stage1_hmc() {
+    set -e
     local mu=$1
     local out="$results/hmc_mu${mu}.h5"
+    rc=0
     "$hmc_bin" \
         -L "$size" --ndim="$ndim" \
         --mass="$mass" --lambda="$lambda_" --mu="$mu" \
         --tau=1.0 --n_md=10 \
         --n_therm="$n_therm" --n_prod="$n_prod" --meas_every=1 \
-        --seed="$seed" --out="$out" >/dev/null
+        --seed="$seed" --out="$out" >/dev/null || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        printf '[%s] HMC mu=%s FAILED (exit %d)\n' "$(date +%H:%M:%S)" "$mu" "$rc" >&2
+        return "$rc"
+    fi
     printf '[%s] HMC mu=%s done\n' "$(date +%H:%M:%S)" "$mu"
 }
 export -f stage1_hmc
 
 stage2_llr() {
+    set -e
     local mu=$1
     local rng_out="$results/range_mu${mu}.txt"
     local llr_out="$results/llr_mu${mu}.h5"
@@ -115,6 +122,7 @@ with open(sys.argv[1], 'w') as out:
     out.write(f"{e_min} {e_max} {delta}\n")
 PY
     read -r e_min e_max d <"$rng_out"
+    rc=0
     "$llr_bin" \
         -L "$size" --ndim="$ndim" \
         --mass="$mass" --lambda="$lambda_" --mu="$mu" \
@@ -122,7 +130,12 @@ PY
         --tau=1.0 --n_md="$n_md" \
         --n_nr="$n_nr" --n_therm_nr="$n_therm_nr" --n_meas_nr="$n_meas_nr" \
         --n_rm="$n_rm" --n_therm_rm="$n_therm_rm" --n_meas_rm="$n_meas_rm" \
-        --seed="$seed" --out="$llr_out" >/dev/null
+        --seed="$seed" --out="$llr_out" >/dev/null || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        printf '[%s] LLR mu=%s FAILED (exit %d)  range=[%.2f, %.2f]  delta=%.3f\n' \
+            "$(date +%H:%M:%S)" "$mu" "$rc" "$e_min" "$e_max" "$d" >&2
+        return "$rc"
+    fi
     printf '[%s] LLR mu=%s done   range=[%.2f, %.2f]  delta=%.3f\n' \
         "$(date +%H:%M:%S)" "$mu" "$e_min" "$e_max" "$d"
 }

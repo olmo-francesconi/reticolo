@@ -39,12 +39,18 @@ betas=(0.660 0.670 0.678 0.684 0.688 0.691 0.692 0.6925 0.693 0.6935 0.694 0.694
 export binary results ndim n_cluster n_therm n_prod seed
 
 run_one() {
+    set -e
     local L=$1 beta=$2
     local out="$results/on_sigma_L${L}_beta${beta}.h5"
+    rc=0
     "$binary" \
         --size="$L" --beta="$beta" --ndim="$ndim" \
         --n_cluster="$n_cluster" --n_therm="$n_therm" --n_prod="$n_prod" \
-        --seed="$seed" --out="$out" >/dev/null
+        --seed="$seed" --out="$out" >/dev/null || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        printf '[%s] L=%-3s beta=%s  FAILED (exit %d)\n' "$(date +%H:%M:%S)" "$L" "$beta" "$rc" >&2
+        return "$rc"
+    fi
     printf '[%s] L=%-3s beta=%s  done\n' "$(date +%H:%M:%S)" "$L" "$beta"
 }
 export -f run_one

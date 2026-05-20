@@ -38,12 +38,18 @@ kappas=(0.300 0.315 0.322 0.328 0.330 0.331 0.332 0.333 0.334 0.335 0.336 0.337 
 export binary results ndim lambda n_therm n_prod seed
 
 run_one() {
+    set -e
     local L=$1 kappa=$2
     local out="$results/phi4_L${L}_kappa${kappa}.h5"
+    rc=0
     "$binary" \
         --size="$L" --kappa="$kappa" --lambda="$lambda" --ndim="$ndim" \
         --n_therm="$n_therm" --n_prod="$n_prod" --seed="$seed" \
-        --out="$out" >/dev/null
+        --out="$out" >/dev/null || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        printf '[%s] L=%-3s kappa=%s  FAILED (exit %d)\n' "$(date +%H:%M:%S)" "$L" "$kappa" "$rc" >&2
+        return "$rc"
+    fi
     printf '[%s] L=%-3s kappa=%s  done\n' "$(date +%H:%M:%S)" "$L" "$kappa"
 }
 export -f run_one

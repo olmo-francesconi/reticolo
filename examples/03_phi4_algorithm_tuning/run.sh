@@ -75,28 +75,41 @@ n_mds=(1 2 3 4 6 8 12 16 20 24)
 export binary results ndim L kappa lambda n_prod seed state_path
 
 run_metropolis() {
+    set -e
     local sigma=$1
     local tag=$(printf 'sigma%06.3f' "$sigma")
     local out="$results/metropolis_${tag}.h5"
+    rc=0
     "$binary" \
         --size="$L" --kappa="$kappa" --lambda="$lambda" --ndim="$ndim" \
         --algo=metropolis --sigma="$sigma" \
         --n_therm=0 --n_prod="$n_prod" --seed="$seed" \
         --init_from="$state_path" --out="$out" \
-        >/dev/null
+        >/dev/null || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        printf '[%s] metropolis sigma=%-5s FAILED (exit %d)\n' "$(date +%H:%M:%S)" "$sigma" "$rc" >&2
+        return "$rc"
+    fi
     printf '[%s] metropolis sigma=%-5s done\n' "$(date +%H:%M:%S)" "$sigma"
 }
 
 run_hmc() {
+    set -e
     local algo=$1 tau=$2 n_md=$3
     local tag=$(printf 'tau%05.2f_nmd%03d' "$tau" "$n_md")
     local out="$results/${algo}_${tag}.h5"
+    rc=0
     "$binary" \
         --size="$L" --kappa="$kappa" --lambda="$lambda" --ndim="$ndim" \
         --algo="$algo" --tau="$tau" --n_md="$n_md" \
         --n_therm=0 --n_prod="$n_prod" --seed="$seed" \
         --init_from="$state_path" --out="$out" \
-        >/dev/null
+        >/dev/null || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        printf '[%s] %-13s tau=%-5s n_md=%-3s FAILED (exit %d)\n' \
+            "$(date +%H:%M:%S)" "$algo" "$tau" "$n_md" "$rc" >&2
+        return "$rc"
+    fi
     printf '[%s] %-13s tau=%-5s n_md=%-3s done\n' \
         "$(date +%H:%M:%S)" "$algo" "$tau" "$n_md"
 }
