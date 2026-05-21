@@ -59,14 +59,14 @@ void run_one(std::string const& name,
         // Warmup.
         alg::Hmc<Action, FastRng> warm{action, phi, rng, {.tau = 1.0, .n_md = n_md}};
         for (int i = 0; i < 50; ++i) {
-            (void)warm.trajectory();
+            (void)warm.step();
         }
 
         // MC.
         alg::Metropolis<Action, FastRng> mc{action, phi, rng, alg::MetropolisSpec{.sigma = sigma}};
         auto const t0 = bench_clock::now();
         for (int i = 0; i < c.n_mc; ++i) {
-            (void)mc.sweep();
+            (void)mc.step();
         }
         double const mc_per  = seconds(bench_clock::now() - t0) / c.n_mc;
         double const mc_thru = static_cast<double>(nsites) / mc_per;
@@ -76,7 +76,7 @@ void run_one(std::string const& name,
         int accepted  = 0;
         auto const t1 = bench_clock::now();
         for (int i = 0; i < c.n_hmc; ++i) {
-            accepted += hmc.trajectory().accepted ? 1 : 0;
+            accepted += hmc.step().accepted ? 1 : 0;
         }
         double const h_per  = seconds(bench_clock::now() - t1) / c.n_hmc;
         double const h_thru = (static_cast<double>(nsites) * static_cast<double>(n_md)) / h_per;
@@ -159,13 +159,13 @@ int main() {
         alg::Hmc<act::Phi4<double>, FastRng, Integ> hmc{phi4, phi, rng, {.tau = 1.0, .n_md = n_md}};
         // Warmup.
         for (int i = 0; i < 50; ++i)
-            (void)hmc.trajectory();
+            (void)hmc.step();
 
         constexpr int n_traj = 50;
         int accepted         = 0;
         auto const t0        = bench_clock::now();
         for (int i = 0; i < n_traj; ++i) {
-            accepted += hmc.trajectory().accepted ? 1 : 0;
+            accepted += hmc.step().accepted ? 1 : 0;
         }
         double const traj_s    = seconds(bench_clock::now() - t0) / n_traj;
         double const accept    = static_cast<double>(accepted) / n_traj;

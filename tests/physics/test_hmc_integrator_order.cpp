@@ -32,7 +32,7 @@ static double mean_abs_dh(A const& action,
     Hmc<A, FastRng, Integrator> hmc{action, phi, rng, {.tau = tau, .n_md = n_md}};
     double sum = 0.0;
     for (int t = 0; t < n_traj; ++t) {
-        auto step = hmc.trajectory();
+        auto step = hmc.step();
         sum += std::abs(step.dH);
     }
     return sum / static_cast<double>(n_traj);

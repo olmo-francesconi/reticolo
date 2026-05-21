@@ -58,9 +58,9 @@ absolute start timestamp once.
 | `init` | `Lattice`, `LinkLattice`, `MatrixLinkLattice` ctors |
 | `rng`  | `FastRng`, `Mt19937Rng`, `RanluxRng` ctors      |
 | `act`  | actions (via `log::act(action)`)                 |
-| `hmc`  | `Hmc::trajectory`, plus app phase markers        |
-| `metr` | `Metropolis::sweep`                              |
-| `wolf` | `Wolff::update`                                  |
+| `hmc`  | `Hmc::step`, plus app phase markers              |
+| `metr` | `Metropolis::step`                               |
+| `wolf` | `Wolff::step`                                    |
 | `repl` | `llr::Replica` ctor + `thermalize` + `sample`    |
 | `llr`  | main-thread LLR orchestration                    |
 | `exch` | replica exchange events                          |
@@ -78,8 +78,8 @@ Algorithm methods that log self-emit on each call. The opt-out is
 per-call, via the `log::Mode` enum:
 
 ```cpp
-hmc.trajectory();                          // emits a line per traj
-hmc.trajectory(log::Mode::silent);         // computes the step, skips the log line
+hmc.step();                                // emits a line per traj
+hmc.step(log::Mode::silent);               // computes the step, skips the log line
 ```
 
 `log::Mode::normal` (default) — log on completion.
@@ -110,7 +110,7 @@ Default is `on` — apps that don't touch the logger get full output.
   shouldn't log but the rest of the run should.
 - `log::off()` is *global*. Use it when nothing in the run should log.
 
-They compose: an app that calls `log::off()` then `hmc.trajectory()` gets
+They compose: an app that calls `log::off()` then `hmc.step()` gets
 no output regardless of which Mode you pass.
 
 ## OpenMP — scopes and per-run files
@@ -131,7 +131,7 @@ for (std::size_t n = 0; n < n_rep_u; ++n) {
 `log::scope` is an RAII guard that pushes a string onto a thread-local
 stack. Every subsequent log call from that thread reads the top of the
 stack and emits the tag. Functions called from inside the scope (e.g.
-`Replica::thermalize` → `HMC::trajectory`) inherit the binding without
+`Replica::thermalize` → `Hmc::step`) inherit the binding without
 having to receive a logger as a parameter.
 
 **Per-run files.** `log::start(outpath)` calls `log::init_parallel(parent)`

@@ -59,15 +59,15 @@ int main(int argc, char** argv) {
 
     log::info("metr", "therm  {} sweeps", n_therm);
     for (int i = 0; i < n_therm; ++i) {
-        (void)metro.sweep(log::Mode::silent);
+        (void)metro.step(log::Mode::silent);
         s_therm.append(action.s_full(links));
     }
     log::info("metr", "prod   {} sweeps", n_prod);
     for (int i = 0; i < n_prod; ++i) {
-        auto const sweep_stats = metro.sweep();
+        auto const sweep_stats = metro.step();
+        accept.append(sweep_stats.acceptance());
         if (i % meas_every == 0) {
             double const s = action.s_full(links);
-            accept.append(sweep_stats.acceptance());
             s_prod.append(s);
             // Paper convention: S = beta * sum cos(theta_p), so
             // mean plaquette <cos theta_p> = <S> / (beta * n_plaq).

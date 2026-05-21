@@ -67,12 +67,12 @@ int main(int argc, char** argv) {
 
     log::info("hmc", "therm  {} trajectories", n_therm);
     for (int i = 0; i < n_therm; ++i) {
-        (void)hmc.trajectory(log::Mode::silent);
+        (void)hmc.step(log::Mode::silent);
         s_therm.append(sg.s_full(phi));
     }
     log::info("hmc", "prod   {} trajectories", n_prod);
     for (int i = 0; i < n_prod; ++i) {
-        auto const step = hmc.trajectory();
+        auto const step = hmc.step();
         d_h.append(step.dH);
         accepted.append(step.accepted ? 1 : 0);
         if (i % meas_every == 0) {

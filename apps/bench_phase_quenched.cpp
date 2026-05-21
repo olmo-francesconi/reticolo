@@ -81,12 +81,12 @@ int main() {
         FastRng rng{42};
         alg::Hmc<Phi4, FastRng, Integ> hmc{phi4, phi, rng, {.tau = k_tau, .n_md = k_n_md}};
         for (int i = 0; i < k_warmup; ++i) {
-            (void)hmc.trajectory();
+            (void)hmc.step();
         }
         int acc       = 0;
         auto const t0 = bench_clock::now();
         for (int i = 0; i < c.n_traj; ++i) {
-            acc += hmc.trajectory().accepted ? 1 : 0;
+            acc += hmc.step().accepted ? 1 : 0;
         }
         double const per = seconds(bench_clock::now() - t0) / c.n_traj;
         return {per, static_cast<double>(acc) / c.n_traj};
@@ -100,12 +100,12 @@ int main() {
         FastRng rng{42};
         alg::Hmc<BoseGas, FastRng, Integ> hmc{bg, phi, rng, {.tau = k_tau, .n_md = k_n_md}};
         for (int i = 0; i < k_warmup; ++i) {
-            (void)hmc.trajectory();
+            (void)hmc.step();
         }
         int acc       = 0;
         auto const t0 = bench_clock::now();
         for (int i = 0; i < c.n_traj; ++i) {
-            acc += hmc.trajectory().accepted ? 1 : 0;
+            acc += hmc.step().accepted ? 1 : 0;
         }
         double const per = seconds(bench_clock::now() - t0) / c.n_traj;
         return {per, static_cast<double>(acc) / c.n_traj};

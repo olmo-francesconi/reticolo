@@ -23,12 +23,13 @@ int main(int argc, char** argv) {
     constexpr std::size_t k_n = 3;
 
     cli::Parser p{"on_sigma_metropolis", "Metropolis for the O(3) sigma model"};
-    auto const& L       = p.opt<int>("L,size", 8, "linear lattice extent");
-    auto const& beta    = p.opt<double>("beta", 0.7, "inverse temperature");
-    auto const& ndim    = p.opt<int>("ndim", 3, "spatial dimensions (2 or 3)");
-    auto const& n_therm = p.opt<int>("n_therm", 400, "thermalisation sweeps");
-    auto const& n_prod  = p.opt<int>("n_prod", 2000, "production sweeps");
-    auto const& seed    = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
+    auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
+    auto const& beta       = p.opt<double>("beta", 0.7, "inverse temperature");
+    auto const& ndim       = p.opt<int>("ndim", 3, "spatial dimensions (2 or 3)");
+    auto const& n_therm    = p.opt<int>("n_therm", 400, "thermalisation sweeps");
+    auto const& n_prod     = p.opt<int>("n_prod", 2000, "production sweeps");
+    auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N sweeps");
+    auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
     auto const& outpath = p.opt<std::string>("out", std::string{"on_sigma.h5"}, "HDF5 output path");
     if (!p.parse(argc, argv))
         return 0;
@@ -60,12 +61,14 @@ int main(int argc, char** argv) {
 
     log::info("metr", "therm  {} sweeps", n_therm);
     for (int i = 0; i < n_therm; ++i) {
-        accept_therm.append(mc.sweep(log::Mode::silent).acceptance());
+        accept_therm.append(mc.step(log::Mode::silent).acceptance());
     }
     log::info("metr", "prod   {} sweeps", n_prod);
     for (int i = 0; i < n_prod; ++i) {
-        accept_prod.append(mc.sweep().acceptance());
-        s_prod.append(on.s_full(phi));
-        m2_prod.append(obs::mag::on_sq<k_n>(phi));
+        accept_prod.append(mc.step().acceptance());
+        if (i % meas_every == 0) {
+            s_prod.append(on.s_full(phi));
+            m2_prod.append(obs::mag::on_sq<k_n>(phi));
+        }
     }
 }

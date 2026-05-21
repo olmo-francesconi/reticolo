@@ -25,13 +25,14 @@ int main(int argc, char** argv) {
     constexpr std::size_t k_n = 3;
 
     cli::Parser p{"on_sigma_wolff", "Wolff cluster for the O(3) sigma model"};
-    auto const& L         = p.opt<int>("L,size", 8, "linear lattice extent");
-    auto const& beta      = p.opt<double>("beta", 0.7, "inverse temperature");
-    auto const& ndim      = p.opt<int>("ndim", 3, "spatial dimensions");
-    auto const& n_cluster = p.opt<int>("n_cluster", 4, "Wolff updates per measurement");
-    auto const& n_therm   = p.opt<int>("n_therm", 200, "thermalisation measurements");
-    auto const& n_prod    = p.opt<int>("n_prod", 2000, "production measurements");
-    auto const& seed      = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
+    auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
+    auto const& beta       = p.opt<double>("beta", 0.7, "inverse temperature");
+    auto const& ndim       = p.opt<int>("ndim", 3, "spatial dimensions");
+    auto const& n_cluster  = p.opt<int>("n_cluster", 4, "Wolff updates per measurement");
+    auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation measurements");
+    auto const& n_prod     = p.opt<int>("n_prod", 2000, "production measurements");
+    auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N measurements");
+    auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
     auto const& outpath =
         p.opt<std::string>("out", std::string{"on_sigma_wolff.h5"}, "HDF5 output path");
     if (!p.parse(argc, argv))
@@ -63,15 +64,17 @@ int main(int argc, char** argv) {
     log::info("wolf", "therm  {} measurements × {} clusters", n_therm, n_cluster);
     for (int i = 0; i < n_therm; ++i) {
         for (int k = 0; k < n_cluster; ++k) {
-            cluster_therm.append(wolff.update(log::Mode::silent).cluster_size);
+            cluster_therm.append(wolff.step(log::Mode::silent).cluster_size);
         }
     }
     log::info("wolf", "prod   {} measurements × {} clusters", n_prod, n_cluster);
     for (int i = 0; i < n_prod; ++i) {
         for (int k = 0; k < n_cluster; ++k) {
-            cluster_prod.append(wolff.update().cluster_size);
+            cluster_prod.append(wolff.step().cluster_size);
         }
-        s_prod.append(on.s_full(phi));
-        m2_prod.append(obs::mag::on_sq<k_n>(phi));
+        if (i % meas_every == 0) {
+            s_prod.append(on.s_full(phi));
+            m2_prod.append(obs::mag::on_sq<k_n>(phi));
+        }
     }
 }

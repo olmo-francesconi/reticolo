@@ -18,7 +18,7 @@ struct MetropolisSpec {
     double sigma = 1.0;
 };
 
-struct MetropolisSweep {
+struct MetropolisResult {
     std::size_t accepted = 0;
     std::size_t attempts = 0;
 
@@ -70,8 +70,8 @@ public:
         e.param("σ={:.3f}", sigma_);
     }
 
-    MetropolisSweep sweep(log::Mode log_mode = log::Mode::normal) {
-        MetropolisSweep stats{};
+    MetropolisResult step(log::Mode log_mode = log::Mode::normal) {
+        MetropolisResult stats{};
 
         if constexpr (action::HasDsLocalFromNbrs<A, F>) {
             // Scalar fast path: visit_nn precomputes the NN sum and the body

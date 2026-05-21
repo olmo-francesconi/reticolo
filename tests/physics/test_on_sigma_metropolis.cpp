@@ -90,7 +90,7 @@ TEST_CASE("OnSigma at beta=0: Metropolis reaches isotropic distribution",
 
     // beta=0 means every proposal is accepted; one sweep already randomises.
     for (int s = 0; s < 20; ++s) {
-        auto const stats = mc.sweep();
+        auto const stats = mc.step();
         REQUIRE(stats.accepted == stats.attempts);
     }
 
@@ -99,7 +99,7 @@ TEST_CASE("OnSigma at beta=0: Metropolis reaches isotropic distribution",
     std::array<double, 3> sum_v2{};
     std::size_t samples = 0;
     for (int meas = 0; meas < n_meas; ++meas) {
-        (void)mc.sweep();
+        (void)mc.step();
         for (Site const x : phi.sites()) {
             for (std::size_t i = 0; i < 3; ++i) {
                 sum_v[i] += phi[x][i];
@@ -128,14 +128,14 @@ TEST_CASE("OnSigma at large beta: NN dot product approaches 1", "[physics][on_si
     Metropolis<O3, FastRng, O3Field> mc{
         action, phi, rng, reticolo::alg::MetropolisSpec{.sigma = 1.0}};
     for (int s = 0; s < 800; ++s) {
-        (void)mc.sweep();
+        (void)mc.step();
     }
 
     constexpr int n_meas   = 400;
     double sum_dot         = 0.0;
     std::size_t bond_count = 0;
     for (int meas = 0; meas < n_meas; ++meas) {
-        (void)mc.sweep();
+        (void)mc.step();
         for (Site const x : phi.sites()) {
             for (std::size_t mu = 0; mu < phi.ndims(); ++mu) {
                 sum_dot += O3::dot(phi[x], phi[phi.next(x, mu)]);

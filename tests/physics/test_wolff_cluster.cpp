@@ -67,7 +67,7 @@ TEST_CASE("Xy Wolff at beta=0: cluster is always the seed alone", "[physics][wol
     }
     Wolff<Xy<double>, FastRng> w{action, theta, rng};
     for (int trial = 0; trial < 50; ++trial) {
-        REQUIRE(w.update().cluster_size == 1);
+        REQUIRE(w.step().cluster_size == 1);
     }
 }
 
@@ -82,7 +82,7 @@ TEST_CASE("Xy Wolff at large beta: aligned start grows full-volume clusters",
     constexpr int n_trials   = 20;
     auto const n_sites       = theta.nsites();
     for (int trial = 0; trial < n_trials; ++trial) {
-        auto const step = w.update();
+        auto const step = w.step();
         if (step.cluster_size > (n_sites * 3 / 4)) {
             ++big_clusters;
         }
@@ -107,7 +107,7 @@ TEST_CASE("OnSigma<3> Wolff at large beta: average cluster fills the volume",
     constexpr int n_trials = 50;
     std::size_t total      = 0;
     for (int trial = 0; trial < n_trials; ++trial) {
-        total += w.update().cluster_size;
+        total += w.step().cluster_size;
     }
     double const avg = static_cast<double>(total) / static_cast<double>(n_trials);
     INFO("avg cluster = " << avg << " / " << n_sites);

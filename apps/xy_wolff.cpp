@@ -25,13 +25,14 @@ int main(int argc, char** argv) {
     using namespace reticolo;
 
     cli::Parser p{"xy_wolff", "Wolff cluster + Metropolis hybrid for the XY model"};
-    auto const& L         = p.opt<int>("L,size", 16, "linear lattice extent (2D)");
-    auto const& beta      = p.opt<double>("beta", 1.12, "inverse temperature");
-    auto const& sigma     = p.opt<double>("sigma", 0.5, "Metropolis Gaussian step width");
-    auto const& n_cluster = p.opt<int>("n_cluster", 4, "Wolff updates per measurement");
-    auto const& n_therm   = p.opt<int>("n_therm", 200, "thermalisation measurements");
-    auto const& n_prod    = p.opt<int>("n_prod", 2000, "production measurements");
-    auto const& seed      = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
+    auto const& L          = p.opt<int>("L,size", 16, "linear lattice extent (2D)");
+    auto const& beta       = p.opt<double>("beta", 1.12, "inverse temperature");
+    auto const& sigma      = p.opt<double>("sigma", 0.5, "Metropolis Gaussian step width");
+    auto const& n_cluster  = p.opt<int>("n_cluster", 4, "Wolff updates per measurement");
+    auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation measurements");
+    auto const& n_prod     = p.opt<int>("n_prod", 2000, "production measurements");
+    auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N measurements");
+    auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
     auto const& outpath = p.opt<std::string>("out", std::string{"xy_wolff.h5"}, "HDF5 output path");
     if (!p.parse(argc, argv))
         return 0;
@@ -63,18 +64,20 @@ int main(int argc, char** argv) {
     log::info("wolf", "therm  {} measurements × {} clusters + 1 sweep", n_therm, n_cluster);
     for (int i = 0; i < n_therm; ++i) {
         for (int k = 0; k < n_cluster; ++k) {
-            cluster_therm.append(wolff.update(log::Mode::silent).cluster_size);
+            cluster_therm.append(wolff.step(log::Mode::silent).cluster_size);
         }
-        (void)mc.sweep(log::Mode::silent);
+        (void)mc.step(log::Mode::silent);
     }
     log::info("wolf", "prod   {} measurements × {} clusters + 1 sweep", n_prod, n_cluster);
     for (int i = 0; i < n_prod; ++i) {
         for (int k = 0; k < n_cluster; ++k) {
-            cluster_prod.append(wolff.update().cluster_size);
+            cluster_prod.append(wolff.step().cluster_size);
         }
-        auto const stats = mc.sweep();
+        auto const stats = mc.step();
         accept_prod.append(stats.acceptance());
-        s_prod.append(xy.s_full(theta));
-        m2_prod.append(obs::mag::xy_sq(theta));
+        if (i % meas_every == 0) {
+            s_prod.append(xy.s_full(theta));
+            m2_prod.append(obs::mag::xy_sq(theta));
+        }
     }
 }

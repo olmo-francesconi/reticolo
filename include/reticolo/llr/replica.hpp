@@ -89,7 +89,7 @@ public:
     void thermalize(int n, log::Mode log_mode = log::Mode::normal) {
         int local_accepted = 0;
         for (int i = 0; i < n; ++i) {
-            auto const step = hmc_.trajectory(log::Mode::silent);
+            auto const step = hmc_.step(log::Mode::silent);
             ++stats_.n_traj;
             if (step.accepted) {
                 ++stats_.n_accepted;
@@ -112,7 +112,7 @@ public:
     [[nodiscard]] scalar_t sample(int n, log::Mode log_mode = log::Mode::normal) {
         scalar_t sum = scalar_t{0};
         for (int i = 0; i < n; ++i) {
-            auto const step = hmc_.trajectory(log::Mode::silent);
+            auto const step = hmc_.step(log::Mode::silent);
             ++stats_.n_traj;
             if (step.accepted) {
                 ++stats_.n_accepted;

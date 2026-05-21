@@ -87,7 +87,7 @@ TEST_CASE("HMC trajectory is symplectic: dH small and bounded vs trajectory leng
     // ensemble-wise. The point of this test is "no obvious bug producing big dH".
     double max_abs_dh = 0.0;
     for (int t = 0; t < 32; ++t) {
-        auto step  = hmc.trajectory();
+        auto step  = hmc.step();
         max_abs_dh = std::max(max_abs_dh, std::abs(step.dH));
     }
     REQUIRE(max_abs_dh < 1.0);

@@ -45,7 +45,7 @@ void run_hmc(reticolo::act::Phi4<double> const& action,
         action, field, rng, {.tau = tau, .n_md = n_md}};
 
     for (int i = 0; i < n_therm; ++i) {
-        (void)hmc.trajectory();
+        (void)hmc.step();
     }
 
     auto s       = out.series<double>("/prod/obs/s");
@@ -57,7 +57,7 @@ void run_hmc(reticolo::act::Phi4<double> const& action,
     auto const t_wall0 = bench_clock::now();
     for (int i = 0; i < n_prod; ++i) {
         auto const ta   = bench_clock::now();
-        auto const step = hmc.trajectory();
+        auto const step = hmc.step();
         auto const tb   = bench_clock::now();
         algo_s += std::chrono::duration<double>(tb - ta).count();
         accepted += step.accepted ? 1 : 0;
@@ -91,7 +91,7 @@ void run_metropolis(reticolo::act::Phi4<double> const& action,
         action, field, rng, alg::MetropolisSpec{.sigma = sigma}};
 
     for (int i = 0; i < n_therm; ++i) {
-        (void)mc.sweep();
+        (void)mc.step();
     }
 
     auto s       = out.series<double>("/prod/obs/s");
@@ -104,7 +104,7 @@ void run_metropolis(reticolo::act::Phi4<double> const& action,
     auto const t_wall0   = bench_clock::now();
     for (int i = 0; i < n_prod; ++i) {
         auto const ta    = bench_clock::now();
-        auto const stats = mc.sweep();
+        auto const stats = mc.step();
         auto const tb    = bench_clock::now();
         algo_s += std::chrono::duration<double>(tb - ta).count();
         accepted += stats.accepted;

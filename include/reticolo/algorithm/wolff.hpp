@@ -17,8 +17,13 @@ namespace reticolo::alg {
 
 struct WolffSpec {};
 
-struct WolffStep {
+struct WolffResult {
     std::size_t cluster_size = 0;
+
+    // Uniform with HmcResult / MetropolisResult: every cluster flip is accepted
+    // by construction, so the per-update acceptance is identically 1.
+    // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+    [[nodiscard]] double acceptance() const noexcept { return 1.0; }
 };
 
 // =============================================================================
@@ -67,7 +72,7 @@ public:
 
     void describe(log::Entry& e) const { e.line("Wolff"); }
 
-    WolffStep update(log::Mode log_mode = log::Mode::normal) {
+    WolffResult step(log::Mode log_mode = log::Mode::normal) {
         std::size_t const n_sites = field_.nsites();
         Site const seed{rng_.uniform_int(n_sites)};
         axis_type const axis = action_.wolff_random_axis(rng_);

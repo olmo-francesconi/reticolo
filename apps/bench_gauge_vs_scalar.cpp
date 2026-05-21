@@ -160,12 +160,12 @@ int main() {
             alg::Hmc<ScalarPhi4, FastRng, Integ> hmc{
                 phi4, phi, rng, {.tau = k_tau, .n_md = k_n_md}};
             for (int i = 0; i < k_warmup; ++i) {
-                (void)hmc.trajectory();
+                (void)hmc.step();
             }
             int acc       = 0;
             auto const t0 = bench_clock::now();
             for (int i = 0; i < c.n_traj; ++i) {
-                acc += hmc.trajectory().accepted ? 1 : 0;
+                acc += hmc.step().accepted ? 1 : 0;
             }
             print_row({.label           = "Phi4",
                        .dofs            = phi.nsites(),
@@ -183,12 +183,12 @@ int main() {
             FastRng rng{42};
             alg::Hmc<ScalarSG, FastRng, Integ> hmc{sg, phi, rng, {.tau = k_tau, .n_md = k_n_md}};
             for (int i = 0; i < k_warmup; ++i) {
-                (void)hmc.trajectory();
+                (void)hmc.step();
             }
             int acc       = 0;
             auto const t0 = bench_clock::now();
             for (int i = 0; i < c.n_traj; ++i) {
-                acc += hmc.trajectory().accepted ? 1 : 0;
+                acc += hmc.step().accepted ? 1 : 0;
             }
             print_row({.label           = "SineGordon",
                        .dofs            = phi.nsites(),
@@ -207,12 +207,12 @@ int main() {
             alg::Hmc<GaugeU1, FastRng, GaugeInteg, LinkLattice<double>> hmc{
                 u1, theta, rng, {.tau = k_tau, .n_md = k_n_md}};
             for (int i = 0; i < k_warmup; ++i) {
-                (void)hmc.trajectory();
+                (void)hmc.step();
             }
             int acc       = 0;
             auto const t0 = bench_clock::now();
             for (int i = 0; i < c.n_traj; ++i) {
-                acc += hmc.trajectory().accepted ? 1 : 0;
+                acc += hmc.step().accepted ? 1 : 0;
             }
             print_row({.label           = "CompactU1",
                        .dofs            = theta.nlinks(),

@@ -208,7 +208,7 @@ A few invariants worth flagging:
 
 - **One scope per parallel-for iteration.** The `log::scope(...)` line at
   the top of the body is what makes every nested log call (including
-  inside `Replica::thermalize` → `Hmc::trajectory`) carry the replica's
+  inside `Replica::thermalize` → `Hmc::step`) carry the replica's
   run id. Skip it and you'll see the `⚠ unscoped` warning on every line.
 - **HDF5 serialisation is non-parallel.** All per-iteration appends are
   staged into `de_buf` / `a_buf` arrays inside the parallel-for, then a

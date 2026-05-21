@@ -119,14 +119,14 @@ TEST_CASE("Xy at large beta: Metropolis equilibrates near aligned phase",
     Metropolis<Xy<double>, FastRng> mc{
         action, theta, rng, reticolo::alg::MetropolisSpec{.sigma = 0.3}};
     for (int s = 0; s < 800; ++s) {
-        (void)mc.sweep();
+        (void)mc.step();
     }
 
     constexpr int n_meas = 400;
     double sum_cos       = 0.0;
     std::size_t bonds    = 0;
     for (int meas = 0; meas < n_meas; ++meas) {
-        (void)mc.sweep();
+        (void)mc.step();
         for (Site const x : theta.sites()) {
             for (std::size_t mu = 0; mu < theta.ndims(); ++mu) {
                 sum_cos += std::cos(theta[x] - theta[theta.next(x, mu)]);

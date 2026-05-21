@@ -148,11 +148,11 @@ three lattices.
 
 ```cpp
 for (int i = 0; i < n_therm; ++i) {
-    (void)hmc.trajectory();
+    (void)hmc.step();
     s_therm.append(phi4.s_full(phi));
 }
 for (int i = 0; i < n_prod; ++i) {
-    auto const step = hmc.trajectory();
+    auto const step = hmc.step();
     d_h.append(step.dH);
     accepted.append(step.accepted ? 1 : 0);
     s_prod.append(phi4.s_full(phi));
@@ -166,7 +166,8 @@ driver, no `simulate(action, n_steps)` helper. The trajectory cadence, the
 measurement cadence, the conditional logic about when to write what — it's
 all visible in plain `main`.
 
-`hmc.trajectory()` returns a `HmcStep { dH, accepted }`. Stash both for
+`hmc.step()` returns a `HmcResult { dH, accepted }` (`acceptance()` accessor for
+parity with the Metropolis / Wolff result types). Stash both for
 later diagnostics — the per-trajectory `dH` history is the cheapest
 single check that the integrator step is sized right.
 
@@ -226,8 +227,8 @@ of them, different updaters or different observables, hand-written.
 
 The snippet above doesn't show any `log::` calls. That's deliberate — the
 library does the announcing for you. Action / algorithm / Replica
-constructors emit their own `init`, `act`, `hmc`, etc. lines; `trajectory()`
-logs each completed step. To enable it, add one line at the top of `main`:
+constructors emit their own `init`, `act`, `hmc`, etc. lines; `step()`
+logs each completed update. To enable it, add one line at the top of `main`:
 
 ```cpp
 log::start(outpath);   // init_parallel + banner — call once
@@ -235,7 +236,7 @@ log::start(outpath);   // init_parallel + banner — call once
 
 That's the entire logger surface a typical app needs. Suppress everything
 with `log::off()`; opt out of a single algorithm step with
-`log::Mode::silent` (e.g. `hmc.trajectory(log::Mode::silent)` for
+`log::Mode::silent` (e.g. `hmc.step(log::Mode::silent)` for
 thermalisation). The full surface is documented in
 [`docs/logging.md`](logging.md).
 

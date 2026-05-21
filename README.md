@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
     alg::Hmc<act::Phi4<double>, FastRng> hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
 
     for (int i = 0; i < 1000; ++i) {
-        (void)hmc.trajectory();
+        (void)hmc.step();
         s_series.append(action.s_full(phi));
         m_series.append(obs::magnetization(phi));
     }

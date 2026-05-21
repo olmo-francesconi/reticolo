@@ -44,23 +44,23 @@ int main(int argc, char** argv) {
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
     out.start_phase("prod");
-    auto s_r_therm = out.series<double>("/therm/stats/s_r");
-    auto d_h       = out.series<double>("/prod/stats/dH");
-    auto accepted  = out.series<int>("/prod/stats/accepted");
-    auto s_r       = out.series<double>("/prod/obs/s_r");
-    auto s_i       = out.series<double>("/prod/obs/s_i");
+    auto s_therm  = out.series<double>("/therm/stats/s");
+    auto d_h      = out.series<double>("/prod/stats/dH");
+    auto accepted = out.series<int>("/prod/stats/accepted");
+    auto s_r      = out.series<double>("/prod/obs/s_r");
+    auto s_i      = out.series<double>("/prod/obs/s_i");
 
     alg::Hmc<Action, FastRng, alg::integ::Omelyan2> hmc{
         action, phi, rng, {.tau = tau, .n_md = n_md}};
 
     log::info("hmc", "therm  {} trajectories", n_therm);
     for (int i = 0; i < n_therm; ++i) {
-        (void)hmc.trajectory(log::Mode::silent);
-        s_r_therm.append(action.s_full(phi));
+        (void)hmc.step(log::Mode::silent);
+        s_therm.append(action.s_full(phi));
     }
     log::info("hmc", "prod   {} trajectories", n_prod);
     for (int i = 0; i < n_prod; ++i) {
-        auto const step = hmc.trajectory();
+        auto const step = hmc.step();
         d_h.append(step.dH);
         accepted.append(step.accepted ? 1 : 0);
         if (i % meas_every == 0) {

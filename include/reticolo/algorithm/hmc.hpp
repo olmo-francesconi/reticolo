@@ -26,10 +26,12 @@ struct HmcSpec {
     int n_md   = 20;
 };
 
-struct HmcStep {
+struct HmcResult {
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention for ΔH = H_final - H_initial
     double dH     = 0.0;
     bool accepted = false;
+
+    [[nodiscard]] double acceptance() const noexcept { return accepted ? 1.0 : 0.0; }
 };
 
 // =============================================================================
@@ -116,7 +118,7 @@ public:
         e.param("n_md={}", n_md_);
     }
 
-    HmcStep trajectory(log::Mode log_mode = log::Mode::normal) {
+    HmcResult step(log::Mode log_mode = log::Mode::normal) {
         sample_momenta_();
 
         // Snapshot for rejection rollback — flat-buffer copy.

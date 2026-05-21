@@ -65,12 +65,12 @@ int main() {
             alg::Hmc<Action, FastRng, Integ, LinkLattice<double>> hmc{
                 action, theta, rng, {.tau = k_tau, .n_md = k_n_md}};
             for (int i = 0; i < k_warmup; ++i) {
-                (void)hmc.trajectory();
+                (void)hmc.step();
             }
             int acc       = 0;
             auto const t0 = bench_clock::now();
             for (int i = 0; i < k_n_traj; ++i) {
-                acc += hmc.trajectory().accepted ? 1 : 0;
+                acc += hmc.step().accepted ? 1 : 0;
             }
             compact_seconds_per_traj = seconds(bench_clock::now() - t0) / k_n_traj;
             compact_accept           = static_cast<double>(acc) / k_n_traj;
@@ -90,12 +90,12 @@ int main() {
             alg::Hmc<Action, FastRng, Integ, Field> hmc{
                 action, theta, rng, {.tau = k_tau, .n_md = k_n_md}};
             for (int i = 0; i < k_warmup; ++i) {
-                (void)hmc.trajectory();
+                (void)hmc.step();
             }
             int acc       = 0;
             auto const t0 = bench_clock::now();
             for (int i = 0; i < k_n_traj; ++i) {
-                acc += hmc.trajectory().accepted ? 1 : 0;
+                acc += hmc.step().accepted ? 1 : 0;
             }
             wilson_seconds_per_traj = seconds(bench_clock::now() - t0) / k_n_traj;
             wilson_accept           = static_cast<double>(acc) / k_n_traj;

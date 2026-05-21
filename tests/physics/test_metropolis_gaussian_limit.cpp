@@ -38,7 +38,7 @@ TEST_CASE("Metropolis on decoupled action reproduces N(0, 1/sqrt(2))",
 
     // Thermalise (decoupled => fast).
     for (int s = 0; s < 200; ++s) {
-        (void)mc.sweep();
+        (void)mc.step();
     }
 
     constexpr int n_meas  = 400;
@@ -47,7 +47,7 @@ TEST_CASE("Metropolis on decoupled action reproduces N(0, 1/sqrt(2))",
     std::size_t acc_total = 0;
     std::size_t att_total = 0;
     for (int meas = 0; meas < n_meas; ++meas) {
-        auto stats = mc.sweep();
+        auto stats = mc.step();
         acc_total += stats.accepted;
         att_total += stats.attempts;
         for (Site x : phi.sites()) {
