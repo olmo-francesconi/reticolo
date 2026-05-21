@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 
@@ -45,6 +46,49 @@ constexpr int k_warmup_calls      = 3;
 constexpr int k_min_inner         = 1;
 constexpr int k_max_inner         = 1 << 24;  // safety cap
 constexpr int k_trials            = 5;
+
+// Run `body()` until either `budget.max_dofs` total dof updates are
+// processed (n_calls × dofs_per_call) or `budget.max_seconds` of wall
+// time elapse — whichever comes first. Batch size doubles so clock
+// overhead stays negligible even for sub-µs kernels. Returns per-call
+// wall time and the total number of calls used; reporting both lets the
+// analyser see the sample count behind each timing point.
+struct Budget {
+    double max_dofs;
+    double max_seconds;
+};
+
+struct BudgetedResult {
+    double wall_s;      // total elapsed / n_calls
+    long long n_calls;  // number of body() invocations after warmup
+};
+
+template <class Body>
+BudgetedResult time_per_call_budgeted(Body&& body, std::size_t dofs_per_call, Budget budget) {
+    for (int i = 0; i < k_warmup_calls; ++i) {
+        body();
+    }
+    long long n_calls = 0;
+    long long batch   = 1;
+    auto const t0     = bench_clock::now();
+    double elapsed    = 0.0;
+    auto const dofs_d = static_cast<double>(dofs_per_call);
+    while (true) {
+        for (long long i = 0; i < batch; ++i) {
+            body();
+        }
+        n_calls += batch;
+        elapsed = seconds(bench_clock::now() - t0);
+        if (static_cast<double>(n_calls) * dofs_d >= budget.max_dofs) {
+            break;
+        }
+        if (elapsed >= budget.max_seconds) {
+            break;
+        }
+        batch = std::min<long long>(batch * 2, k_max_inner);
+    }
+    return {.wall_s = elapsed / static_cast<double>(n_calls), .n_calls = n_calls};
+}
 
 template <class Body>
 double time_per_call(Body&& body) {
