@@ -1,31 +1,15 @@
+#include "../test_helpers.hpp"
+
 #include <reticolo/cli/parser.hpp>
 #include <reticolo/io/writer.hpp>
 
 #include <array>
-#include <filesystem>
 #include <string>
 
 #include <catch2/catch_test_macros.hpp>
 #include <hdf5.h>
-#include <unistd.h>
 
 namespace {
-
-struct TempH5 {
-    std::filesystem::path path;
-    explicit TempH5(std::string const& tag) {
-        path = std::filesystem::temp_directory_path() /
-               ("reticolo_" + tag + "_" + std::to_string(::getpid()) + ".h5");
-        std::error_code ec;
-        std::filesystem::remove(path, ec);
-    }
-    ~TempH5() {
-        std::error_code ec;
-        std::filesystem::remove(path, ec);
-    }
-    TempH5(TempH5 const&)            = delete;
-    TempH5& operator=(TempH5 const&) = delete;
-};
 
 double read_double_attr(hid_t obj, char const* name) {
     hid_t a = H5Aopen(obj, name, H5P_DEFAULT);
@@ -66,7 +50,7 @@ namespace cli = reticolo::cli;
 using reticolo::io::Writer;
 
 TEST_CASE("Writer ctor stamps every Parser var at /vars@<name>", "[io][cli][vars]") {
-    TempH5 f{"vars_stamping"};
+    reticolo::test::ScratchH5 f{"vars_stamping"};
 
     cli::Parser p{"phi4_hmc"};
     auto const& L     = p.req<int>("L,size", "linear size");
@@ -82,9 +66,9 @@ TEST_CASE("Writer ctor stamps every Parser var at /vars@<name>", "[io][cli][vars
     REQUIRE(seed == 7UL);
     REQUIRE(note == "default");
 
-    { Writer w{f.path, static_cast<int>(argv.size()), argv.data(), &p}; }
+    { Writer w{f.path(), static_cast<int>(argv.size()), argv.data(), &p}; }
 
-    hid_t file = H5Fopen(f.path.string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file = H5Fopen(f.path().string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     REQUIRE(file >= 0);
     hid_t vars = H5Gopen2(file, "/vars", H5P_DEFAULT);
     REQUIRE(vars >= 0);
@@ -105,11 +89,11 @@ TEST_CASE("Writer ctor stamps every Parser var at /vars@<name>", "[io][cli][vars
 }
 
 TEST_CASE("Writer ctor without a Parser does not create /vars", "[io][cli][vars]") {
-    TempH5 f{"vars_absent"};
+    reticolo::test::ScratchH5 f{"vars_absent"};
 
-    { Writer w{f.path}; }
+    { Writer w{f.path()}; }
 
-    hid_t file = H5Fopen(f.path.string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file = H5Fopen(f.path().string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     REQUIRE(file >= 0);
     REQUIRE(H5Lexists(file, "/vars", H5P_DEFAULT) <= 0);
     H5Fclose(file);

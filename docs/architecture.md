@@ -274,7 +274,7 @@ Over a hundred Catch2 cases live in `tests/`:
   rejection, `/vars` stamping.
 - `tests/apps/` — every reference app smoke-tested end-to-end: run the
   binary on tiny inputs, open the HDF5, assert the schema. Boilerplate is
-  factored into `tests/apps/smoke_helpers.hpp`.
+  factored into `tests/test_helpers.hpp`.
 
 CI matrix: `macos-appleclang`, `macos-llvm`, `linux-gcc`, `linux-clang`,
 plus `clang-format` (pinned 20.1.7 via pip) and `clang-tidy` (scoped to

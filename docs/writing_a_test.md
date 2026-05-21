@@ -205,7 +205,7 @@ For every reference app, there's a smoke test in `tests/apps/` that:
    shape is right, dtype is right).
 3. (Optionally) Checks one or two physics-grounded invariants.
 
-The boilerplate is factored into `tests/apps/smoke_helpers.hpp`. A new
+The boilerplate is factored into `tests/test_helpers.hpp`. A new
 app gets a smoke test by copying
 `tests/apps/test_phi4_hmc_smoke.cpp` and changing the binary name + the
 expected paths. ~30 LOC each.

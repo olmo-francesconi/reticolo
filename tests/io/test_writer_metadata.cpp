@@ -1,30 +1,14 @@
+#include "../test_helpers.hpp"
+
 #include <reticolo/io/writer.hpp>
 
 #include <array>
-#include <filesystem>
 #include <string>
 
 #include <catch2/catch_test_macros.hpp>
 #include <hdf5.h>
-#include <unistd.h>
 
 namespace {
-
-struct TempH5 {
-    std::filesystem::path path;
-    explicit TempH5(std::string const& tag) {
-        path = std::filesystem::temp_directory_path() /
-               ("reticolo_" + tag + "_" + std::to_string(::getpid()) + ".h5");
-        std::error_code ec;
-        std::filesystem::remove(path, ec);
-    }
-    ~TempH5() {
-        std::error_code ec;
-        std::filesystem::remove(path, ec);
-    }
-    TempH5(TempH5 const&)            = delete;
-    TempH5& operator=(TempH5 const&) = delete;
-};
 
 std::string read_string_attr(hid_t obj, char const* name) {
     hid_t a = H5Aopen(obj, name, H5P_DEFAULT);
@@ -46,12 +30,12 @@ std::string read_string_attr(hid_t obj, char const* name) {
 using reticolo::io::Writer;
 
 TEST_CASE("Writer stamps /run with all required attributes", "[io][metadata]") {
-    TempH5 f{"metadata"};
+    reticolo::test::ScratchH5 f{"metadata"};
 
     std::array<char const*, 3> argv{"phi4_hmc", "--L=8", "--kappa=0.18"};
-    { Writer w{f.path, static_cast<int>(argv.size()), argv.data()}; }
+    { Writer w{f.path(), static_cast<int>(argv.size()), argv.data()}; }
 
-    hid_t file = H5Fopen(f.path.string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file = H5Fopen(f.path().string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     REQUIRE(file >= 0);
     hid_t run = H5Gopen2(file, "/run", H5P_DEFAULT);
     REQUIRE(run >= 0);
@@ -91,10 +75,10 @@ TEST_CASE("Writer stamps /run with all required attributes", "[io][metadata]") {
 }
 
 TEST_CASE("Writer leaves empty cmdline when no argv is given", "[io][metadata]") {
-    TempH5 f{"metadata_no_argv"};
-    { Writer w{f.path}; }
+    reticolo::test::ScratchH5 f{"metadata_no_argv"};
+    { Writer w{f.path()}; }
 
-    hid_t file = H5Fopen(f.path.string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file = H5Fopen(f.path().string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     hid_t run  = H5Gopen2(file, "/run", H5P_DEFAULT);
     REQUIRE(read_string_attr(run, "cmdline").empty());
     H5Gclose(run);

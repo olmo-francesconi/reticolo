@@ -86,7 +86,6 @@ struct Wilson {
     [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
     void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
 
-    //
     // Each gauge group owns its force algorithm — U(1) uses the per-plaquette
     // scatter that matches CompactU1 bit-for-bit; SU(N) uses a link-centric
     // staple sum + TA[U·V] step that fits the matrix structure. Wilson<G> is
@@ -98,7 +97,6 @@ struct Wilson {
         G::compute_force(U, force, beta_over_n_dbl);
     }
 
-    //
     // Fused force-and-kick: scatter the per-plaquette force contribution
     // directly into the momentum field with the integrator's scale, skipping
     // the dedicated force buffer the kick_add path would otherwise allocate
@@ -115,7 +113,6 @@ struct Wilson {
 
     mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
 
-    //
     // Sum of Re Tr U_p over the 2(d−1) plaquettes through link (x, μ),
     // wrapped into the Wilson constant offset so the returned value is
     // non-negative for the cold config (theta = 0 → cos(0) = 1 → S_local = 0).
