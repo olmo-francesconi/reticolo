@@ -72,13 +72,13 @@ inline auto const sleef_dispatch_warmup = [] {
 // Used by callers that want to size their row scratch buffer to a multiple
 // of the vector width — not required for correctness (the helpers handle
 // any `n`), only to keep the inner loop free of partial tail iterations.
-#if defined(__AVX512F__)
+#ifdef __AVX512F__
 inline constexpr std::size_t k_vec_width_d = 8;
 #elif defined(__AVX2__) || defined(__AVX__)
 inline constexpr std::size_t k_vec_width_d = 4;
 #elif defined(__ARM_NEON) || defined(__aarch64__)
 inline constexpr std::size_t k_vec_width_d = 2;
-#elif defined(__SSE2__)
+#elifdef __SSE2__
 inline constexpr std::size_t k_vec_width_d = 2;
 #else
 inline constexpr std::size_t k_vec_width_d = 1;
@@ -88,17 +88,17 @@ inline constexpr std::size_t k_vec_width_d = 1;
 
 inline void cos_batch(double* dst, double const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#if defined(__AVX512F__)
+#ifdef __AVX512F__
     for (; i + 8 <= n; i += 8) {
         __m512d const v = _mm512_loadu_pd(src + i);
         _mm512_storeu_pd(dst + i, Sleef_cosd8_u10avx512f(v));
     }
-#elif defined(__AVX2__)
+#elifdef __AVX2__
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_cosd4_u10avx2(v));
     }
-#elif defined(__AVX__)
+#elifdef __AVX__
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_cosd4_u10avx(v));
@@ -109,7 +109,7 @@ inline void cos_batch(double* dst, double const* src, std::size_t n) noexcept {
         float64x2_t const v = vld1q_f64(src + i);
         vst1q_f64(dst + i, Sleef_cosd2_u10advsimd(v));
     }
-#elif defined(__SSE2__)
+#elifdef __SSE2__
     for (; i + 2 <= n; i += 2) {
         __m128d const v = _mm_loadu_pd(src + i);
         _mm_storeu_pd(dst + i, Sleef_cosd2_u10sse2(v));
@@ -124,17 +124,17 @@ inline void cos_batch(double* dst, double const* src, std::size_t n) noexcept {
 
 inline void sin_batch(double* dst, double const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#if defined(__AVX512F__)
+#ifdef __AVX512F__
     for (; i + 8 <= n; i += 8) {
         __m512d const v = _mm512_loadu_pd(src + i);
         _mm512_storeu_pd(dst + i, Sleef_sind8_u10avx512f(v));
     }
-#elif defined(__AVX2__)
+#elifdef __AVX2__
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_sind4_u10avx2(v));
     }
-#elif defined(__AVX__)
+#elifdef __AVX__
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_sind4_u10avx(v));
@@ -145,7 +145,7 @@ inline void sin_batch(double* dst, double const* src, std::size_t n) noexcept {
         float64x2_t const v = vld1q_f64(src + i);
         vst1q_f64(dst + i, Sleef_sind2_u10advsimd(v));
     }
-#elif defined(__SSE2__)
+#elifdef __SSE2__
     for (; i + 2 <= n; i += 2) {
         __m128d const v = _mm_loadu_pd(src + i);
         _mm_storeu_pd(dst + i, Sleef_sind2_u10sse2(v));
@@ -163,17 +163,17 @@ inline void sin_batch(double* dst, double const* src, std::size_t n) noexcept {
 
 inline void acos_batch(double* dst, double const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#if defined(__AVX512F__)
+#ifdef __AVX512F__
     for (; i + 8 <= n; i += 8) {
         __m512d const v = _mm512_loadu_pd(src + i);
         _mm512_storeu_pd(dst + i, Sleef_acosd8_u10avx512f(v));
     }
-#elif defined(__AVX2__)
+#elifdef __AVX2__
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_acosd4_u10avx2(v));
     }
-#elif defined(__AVX__)
+#elifdef __AVX__
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_acosd4_u10avx(v));
@@ -184,7 +184,7 @@ inline void acos_batch(double* dst, double const* src, std::size_t n) noexcept {
         float64x2_t const v = vld1q_f64(src + i);
         vst1q_f64(dst + i, Sleef_acosd2_u10advsimd(v));
     }
-#elif defined(__SSE2__)
+#elifdef __SSE2__
     for (; i + 2 <= n; i += 2) {
         __m128d const v = _mm_loadu_pd(src + i);
         _mm_storeu_pd(dst + i, Sleef_acosd2_u10sse2(v));
@@ -205,21 +205,21 @@ inline void acos_batch(double* dst, double const* src, std::size_t n) noexcept {
 inline void
 sincos_batch(double* dst_sin, double* dst_cos, double const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#if defined(__AVX512F__)
+#ifdef __AVX512F__
     for (; i + 8 <= n; i += 8) {
         __m512d const v          = _mm512_loadu_pd(src + i);
         Sleef___m512d_2 const sc = Sleef_sincosd8_u10avx512f(v);
         _mm512_storeu_pd(dst_sin + i, sc.x);
         _mm512_storeu_pd(dst_cos + i, sc.y);
     }
-#elif defined(__AVX2__)
+#elifdef __AVX2__
     for (; i + 4 <= n; i += 4) {
         __m256d const v          = _mm256_loadu_pd(src + i);
         Sleef___m256d_2 const sc = Sleef_sincosd4_u10avx2(v);
         _mm256_storeu_pd(dst_sin + i, sc.x);
         _mm256_storeu_pd(dst_cos + i, sc.y);
     }
-#elif defined(__AVX__)
+#elifdef __AVX__
     for (; i + 4 <= n; i += 4) {
         __m256d const v          = _mm256_loadu_pd(src + i);
         Sleef___m256d_2 const sc = Sleef_sincosd4_u10avx(v);
@@ -234,7 +234,7 @@ sincos_batch(double* dst_sin, double* dst_cos, double const* src, std::size_t n)
         vst1q_f64(dst_sin + i, sc.x);
         vst1q_f64(dst_cos + i, sc.y);
     }
-#elif defined(__SSE2__)
+#elifdef __SSE2__
     for (; i + 2 <= n; i += 2) {
         __m128d const v          = _mm_loadu_pd(src + i);
         Sleef___m128d_2 const sc = Sleef_sincosd2_u10sse2(v);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 
@@ -61,9 +62,9 @@ namespace reticolo::obs::analysis {
     }
     double sum_m2 = 0.0;
     double sum_m4 = 0.0;
-    for (std::size_t i = 0; i < m2_series.size(); ++i) {
-        sum_m2 += m2_series[i];
-        sum_m4 += m4_series[i];
+    for (auto const [m2, m4] : std::views::zip(m2_series, m4_series)) {
+        sum_m2 += m2;
+        sum_m4 += m4;
     }
     auto const inv_n  = 1.0 / static_cast<double>(m2_series.size());
     auto const avg_m2 = sum_m2 * inv_n;
