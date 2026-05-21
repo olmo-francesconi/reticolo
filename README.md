@@ -161,7 +161,7 @@ themselves stay serial by design.
 
 | binary                                  | what                                                 |
 | --------------------------------------- | ---------------------------------------------------- |
-| `apps/tune_phi4.cpp`                    | algorithm tuning rig (HMC vs Metropolis, integrator choice) |
+| `apps/tune_phi4_{metropolis,hmc_leapfrog,hmc_omelyan2,hmc_omelyan4}.cpp` | algorithm tuning rig (one binary per algorithm) |
 | `apps/bench_actions.cpp`                | per-action kernel throughput                         |
 | `apps/bench_integrators.cpp`            | Leapfrog vs Omelyan2 vs Omelyan4 cost-per-accept    |
 | `apps/bench_scalars.cpp`                | per-scalar-action full-MD bench                      |

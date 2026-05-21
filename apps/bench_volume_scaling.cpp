@@ -17,7 +17,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
-#include <exception>
 #include <fstream>
 #include <iostream>
 #include <ostream>
@@ -97,9 +96,8 @@ void start_progress(
 void end_progress(BudgetedResult const& r, std::size_t dofs) {
     double const mdof_per_s = static_cast<double>(dofs) / r.wall_s / 1e6;
     double const updates    = static_cast<double>(dofs) * static_cast<double>(r.n_calls);
-    // U+2713 CHECK MARK — completes the start line left open with "... ".
     std::fprintf(stderr,
-                 "\xE2\x9C\x93  calls=%-8lld  updates=%.2e  wall=%.3es  thr=%.2f Mdof/s\n",
+                 "ok  calls=%-8lld  updates=%.2e  wall=%.3es  thr=%.2f Mdof/s\n",
                  r.n_calls,
                  updates,
                  r.wall_s,
@@ -139,7 +137,9 @@ void bench_kernels(std::ostream& os,
     }
 }
 
-int main_impl(int argc, char** argv) {
+}  // namespace
+
+int main(int argc, char** argv) {
     using namespace reticolo;
 
     cli::Parser p{"bench_volume_scaling",
@@ -271,7 +271,7 @@ int main_impl(int argc, char** argv) {
     auto const n_cells =
         static_cast<long long>(ndims.size() * sizes.size() * actions.size());
     std::fprintf(stderr,
-                 "[bench] \xE2\x9C\x93 done — %lld cells × 2 kernels in %.2f s\n",
+                 "[bench] done  %lld cells × 2 kernels in %.2f s\n",
                  n_cells,
                  elapsed_s);
     if (!outpath.empty()) {
@@ -279,15 +279,4 @@ int main_impl(int argc, char** argv) {
     }
     std::fflush(stderr);
     return 0;
-}
-
-}  // namespace
-
-int main(int argc, char** argv) {
-    try {
-        return main_impl(argc, argv);
-    } catch (std::exception const& e) {
-        std::fprintf(stderr, "bench_volume_scaling: %s\n", e.what());
-        return 1;
-    }
 }

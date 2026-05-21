@@ -239,8 +239,8 @@ single mutex around `std::cout` / `std::cerr`. The surface:
   `llr::Replica` constructors emit their own descriptor lines, so most apps
   don't call `log::info` at all.
 - Global off switch — `log::off()` short-circuits before any formatting.
-  Tests link a shared `tests/test_main.cpp` that calls it; benches and
-  `tune_phi4` call it too.
+  Tests link a shared `tests/test_main.cpp` that calls it; benches and the
+  `tune_phi4_*` apps call it too.
 
 See [`docs/logging.md`](logging.md) for the full surface.
 

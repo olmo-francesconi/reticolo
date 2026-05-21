@@ -100,7 +100,7 @@ Total kill switch. `log::off()` short-circuits before any formatting; even
   inspect logger output re-enable inside an RAII `StreamCapture` helper.
 - **Benchmarks** — `bench_actions.cpp` etc. call `log::off()` so per-step
   emission doesn't skew the wall-time measurement.
-- **`tune_phi4`** — same.
+- **`tune_phi4_*`** — same.
 
 Default is `on` — apps that don't touch the logger get full output.
 

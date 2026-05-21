@@ -15,13 +15,15 @@
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/../_common/preset.sh" "$@"
-binary="$root/build/$preset/apps/tune_phi4"
+bindir="$root/build/$preset/apps"
 
-if [[ ! -x $binary ]]; then
-    echo "tune_phi4 binary not found at $binary" >&2
-    echo "Build it first: cmake --build --preset $preset --target tune_phi4" >&2
-    exit 1
-fi
+for variant in tune_phi4_metropolis tune_phi4_hmc_leapfrog tune_phi4_hmc_omelyan2 tune_phi4_hmc_omelyan4; do
+    if [[ ! -x $bindir/$variant ]]; then
+        echo "$variant binary not found at $bindir/$variant" >&2
+        echo "Build it first: cmake --build --preset $preset --target $variant" >&2
+        exit 1
+    fi
+done
 
 scenario=${SCENARIO:-easy}
 results="$here/results/$scenario"
@@ -55,9 +57,9 @@ echo
 
 # ---- shared Metropolis thermalisation ----
 echo "[$(date +%H:%M:%S)] thermalising scenario=$scenario (kappa=$kappa, Metropolis sigma=0.4, $n_therm_shared sweeps)"
-"$binary" \
+"$bindir/tune_phi4_metropolis" \
     --size="$L" --kappa="$kappa" --lambda="$lambda" --ndim="$ndim" \
-    --algo=metropolis --sigma=0.4 \
+    --sigma=0.4 \
     --n_therm="$n_therm_shared" --n_prod=0 \
     --seed="$seed" \
     --out="$results/_thermalize.h5" --save_state="$state_path" \
@@ -70,7 +72,7 @@ sigmas=(0.05 0.10 0.20 0.40 0.60 0.80 1.00 1.20 1.40 1.60 1.80 2.00)
 taus=(0.25 0.5 1.0 2.0 4.0 8.0)
 n_mds=(1 2 3 4 6 8 12 16 20 24)
 
-export binary results ndim L kappa lambda n_prod seed state_path
+export bindir results ndim L kappa lambda n_prod seed state_path
 
 run_metropolis() {
     set -e
@@ -78,9 +80,9 @@ run_metropolis() {
     local tag=$(printf 'sigma%06.3f' "$sigma")
     local out="$results/metropolis_${tag}.h5"
     rc=0
-    "$binary" \
+    "$bindir/tune_phi4_metropolis" \
         --size="$L" --kappa="$kappa" --lambda="$lambda" --ndim="$ndim" \
-        --algo=metropolis --sigma="$sigma" \
+        --sigma="$sigma" \
         --n_therm=0 --n_prod="$n_prod" --seed="$seed" \
         --init_from="$state_path" --out="$out" \
         >/dev/null || rc=$?
@@ -97,9 +99,9 @@ run_hmc() {
     local tag=$(printf 'tau%05.2f_nmd%03d' "$tau" "$n_md")
     local out="$results/${algo}_${tag}.h5"
     rc=0
-    "$binary" \
+    "$bindir/tune_phi4_${algo}" \
         --size="$L" --kappa="$kappa" --lambda="$lambda" --ndim="$ndim" \
-        --algo="$algo" --tau="$tau" --n_md="$n_md" \
+        --tau="$tau" --n_md="$n_md" \
         --n_therm=0 --n_prod="$n_prod" --seed="$seed" \
         --init_from="$state_path" --out="$out" \
         >/dev/null || rc=$?
