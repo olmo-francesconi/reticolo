@@ -126,16 +126,7 @@ public:
     void field(std::string_view path, LinkLattice<T> const& lat);
 
     template <class G, class T>
-    void field(std::string_view path, MatrixLinkLattice<G, T> const& lat) {
-        write_field_raw_(path,
-                         lat.data(),
-                         lat.ncomponents(),
-                         scalar_kind_of<T>(),
-                         FieldKind::matrix_link,
-                         lat.shape(),
-                         G::n_real_components,
-                         G::name);
-    }
+    void field(std::string_view path, MatrixLinkLattice<G, T> const& lat);
 
     // Write the RNG's full state (state words + cached normal) under `path`.
     // The corresponding Reader::rng_state restores it bit-exact.
@@ -203,6 +194,18 @@ template <class T>
 void Writer::field(std::string_view path, LinkLattice<T> const& lat) {
     write_field_raw_(
         path, lat.data(), lat.nlinks(), scalar_kind_of<T>(), FieldKind::link, lat.shape(), 1, "");
+}
+
+template <class G, class T>
+void Writer::field(std::string_view path, MatrixLinkLattice<G, T> const& lat) {
+    write_field_raw_(path,
+                     lat.data(),
+                     lat.ncomponents(),
+                     scalar_kind_of<T>(),
+                     FieldKind::matrix_link,
+                     lat.shape(),
+                     G::n_real_components,
+                     G::name);
 }
 
 // Extern template declarations for the supported scalar set. The macro is the
