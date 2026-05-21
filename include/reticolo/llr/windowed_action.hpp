@@ -48,12 +48,15 @@ using scalar_of_t = typename scalar_of<T>::type;
 // loop watches <S_I - E_n>; reconstructing ln rho(S_I) recovers the DoS of
 // the imaginary part in the phase-quenched ensemble.
 //
-// `s_local` / `ds_local` forward to the base action — they are not used on
-// the HMC path; only the local Metropolis path would call them and they
-// would be wrong with the LLR tilt (v1 LLR is HMC-only). Provided as two
-// arities (Site for scalar, (Site, mu) for gauge), each gated on the
-// matching base concept so the LocalAction / LinkLocalAction concept
-// checks resolve duck-typed unambiguously.
+// `s_local` forwards to the base action; `ds_local` returns the full windowed
+// delta. The Metropolis sweep maintains a running constraint value via the
+// `begin_sweep` / `commit_accept` hooks (concept `HasSweepState` /
+// `HasLinkSweepState`) so per-site delta math sees the right S_running
+// without an O(V) recompute per site.
+//
+// Mode A delta: d((1+a)·S + (S-E_n)²/2δ²) = (1+a)·dS + ((S_run-E_n)·dS + dS²/2)/δ²
+// Mode B delta: d(S_R + a·S_I + (S_I-E_n)²/2δ²)
+//             = dS_R + a·dS_I + ((S_I_run-E_n)·dS_I + dS_I²/2)/δ²
 
 template <class Base, class T = typename Base::value_type, class Field = Lattice<T>>
 struct WindowedAction {
@@ -72,7 +75,14 @@ struct WindowedAction {
 
     static constexpr bool k_complex = action::HasImagPart<Base, T>;
 
-    // Site-arity forwarders (Field = Lattice<T>).
+    // Running constraint value during a Metropolis sweep. Refreshed by
+    // `begin_sweep` from the current field; incremented by `commit_accept`
+    // on every accepted local move so subsequent `ds_local` calls in the
+    // same sweep see the correct windowed delta. Mutable because the hooks
+    // are logically const-action operations.
+    mutable scalar_t s_constraint_running_{};
+
+    // Site-arity (Field = Lattice<T>).
     [[nodiscard]] scalar_t s_local(Field const& l, Site x) const noexcept
         requires action::LocalAction<Base, T>
     {
@@ -81,10 +91,45 @@ struct WindowedAction {
     [[nodiscard]] scalar_t ds_local(Field const& l, Site x, T new_v) const noexcept
         requires action::LocalAction<Base, T>
     {
-        return base.ds_local(l, x, new_v);
+        scalar_t const ds_base = base.ds_local(l, x, new_v);
+        scalar_t ds_constraint{};
+        if constexpr (k_complex) {
+            ds_constraint = base.ds_imag_local(l, x, new_v);
+        } else {
+            ds_constraint = ds_base;
+        }
+        scalar_t const inv2 = scalar_t{1} / (delta * delta);
+        scalar_t const half = scalar_t{1} / scalar_t{2};
+        scalar_t const window_ds =
+            (((s_constraint_running_ - E_n) * ds_constraint) +
+             (half * ds_constraint * ds_constraint)) *
+            inv2;
+        if constexpr (k_complex) {
+            return ds_base + (a * ds_constraint) + window_ds;
+        } else {
+            return ((scalar_t{1} + a) * ds_base) + window_ds;
+        }
     }
 
-    // (Site, mu)-arity forwarders (Field = LinkLattice<T>).
+    void begin_sweep(Field const& l) const noexcept
+        requires action::LocalAction<Base, T>
+    {
+        s_constraint_running_ = constraint_value(l);
+    }
+
+    void commit_accept(Field const& l, Site x, T new_v) const noexcept
+        requires action::LocalAction<Base, T>
+    {
+        if constexpr (k_complex) {
+            s_constraint_running_ += base.ds_imag_local(l, x, new_v);
+        } else {
+            s_constraint_running_ += base.ds_local(l, x, new_v);
+        }
+    }
+
+    // (Site, mu)-arity (Field = LinkLattice<T>). Gauge LLR is mode-A only
+    // today (no `HasImagPart` gauge action exists), so the constraint is the
+    // base action itself and `ds_constraint == ds_base`.
     [[nodiscard]] scalar_t s_local(Field const& l, Site x, std::size_t mu) const noexcept
         requires gauge::LinkLocalAction<Base, T>
     {
@@ -93,7 +138,25 @@ struct WindowedAction {
     [[nodiscard]] scalar_t ds_local(Field const& l, Site x, std::size_t mu, T new_v) const noexcept
         requires gauge::LinkLocalAction<Base, T>
     {
-        return base.ds_local(l, x, mu, new_v);
+        scalar_t const ds_base = base.ds_local(l, x, mu, new_v);
+        scalar_t const inv2    = scalar_t{1} / (delta * delta);
+        scalar_t const half    = scalar_t{1} / scalar_t{2};
+        scalar_t const window_ds =
+            (((s_constraint_running_ - E_n) * ds_base) + (half * ds_base * ds_base)) *
+            inv2;
+        return ((scalar_t{1} + a) * ds_base) + window_ds;
+    }
+
+    void begin_sweep(Field const& l) const noexcept
+        requires gauge::LinkLocalAction<Base, T>
+    {
+        s_constraint_running_ = constraint_value(l);
+    }
+
+    void commit_accept(Field const& l, Site x, std::size_t mu, T new_v) const noexcept
+        requires gauge::LinkLocalAction<Base, T>
+    {
+        s_constraint_running_ += base.ds_local(l, x, mu, new_v);
     }
 
     [[nodiscard]] scalar_t constraint_value(Field const& l) const noexcept {

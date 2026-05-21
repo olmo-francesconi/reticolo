@@ -71,6 +71,10 @@ public:
     MetropolisResult step(log::Mode log_mode = log::Mode::normal) {
         MetropolisResult stats{};
 
+        if constexpr (action::HasSweepState<A, F> || gauge::HasLinkSweepState<A, F>) {
+            action_.begin_sweep(field_);
+        }
+
         if constexpr (action::HasDsLocalFromNbrs<A, F>) {
             // Scalar fast path: visit_nn precomputes the NN sum and the body
             // accepts (phi, nbrs) directly. Bit-stable order, vectorised
@@ -83,6 +87,9 @@ public:
                         static_cast<double>(action_.ds_local_from_nbrs(phi, new_v, nbrs));
                     ++stats.attempts;
                     if (ds <= 0.0 || rng_.uniform() < std::exp(-ds)) {
+                        if constexpr (action::HasSweepState<A, F>) {
+                            action_.commit_accept(field_, Site{i}, new_v);
+                        }
                         fdata[i] = new_v;
                         ++stats.accepted;
                     }
@@ -103,6 +110,9 @@ public:
             auto const ds = static_cast<double>(action_.ds_local(field_, loc..., new_v));
             ++stats.attempts;
             if (ds <= 0.0 || rng_.uniform() < std::exp(-ds)) {
+                if constexpr (action::HasSweepState<A, F> || gauge::HasLinkSweepState<A, F>) {
+                    action_.commit_accept(field_, loc..., new_v);
+                }
                 ref = new_v;
                 ++stats.accepted;
             }

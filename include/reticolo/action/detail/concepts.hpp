@@ -82,11 +82,26 @@ concept HasProposal =
 // writes the analog of `compute_force` (the gradient of `s_imag`) into a
 // separate buffer; the LLR window combines them with the right coefficients.
 template <class A, class F>
-concept HasImagPart = HasSEff<A, F> && HasForce<A, F> &&
-                      requires(A const& a, Lattice<F> const& l, Lattice<F>& force) {
-                          { a.s_imag(l) } -> std::convertible_to<double>;
-                          { a.compute_force_imag(l, force) };
-                      };
+concept HasImagPart =
+    HasSEff<A, F> && HasForce<A, F> &&
+    requires(A const& a, Lattice<F> const& l, Lattice<F>& force, Site x, F new_v) {
+        { a.s_imag(l) } -> std::convertible_to<double>;
+        { a.ds_imag_local(l, x, new_v) } -> std::convertible_to<double>;
+        { a.compute_force_imag(l, force) };
+    };
+
+// Refinement: action carries running per-sweep state. The Metropolis sweep
+// calls `begin_sweep` once before the first site update, then `commit_accept`
+// every time a site move is accepted (BEFORE the new value is written to the
+// field — so the action can read the pre-move field to compute the local
+// change). Used by LLR's `WindowedAction` to maintain a running constraint
+// value so its `ds_local` returns the full windowed delta.
+template <class A, class F>
+concept HasSweepState = LocalAction<A, F> &&
+                       requires(A const& a, Lattice<F> const& l, Site x, F new_v) {
+                           { a.begin_sweep(l) };
+                           { a.commit_accept(l, x, new_v) };
+                       };
 
 // Refinement: action admits a Wolff cluster embedding. The cluster updater
 // is action-agnostic; it asks the action for an axis, a reflection, and a
@@ -135,6 +150,17 @@ template <class A, class F>
 concept HasLinkFusedKick =
     HasLinkForce<A, F> && requires(A const& a, LinkLattice<F> const& l, LinkLattice<F>& mom, F k) {
         { a.compute_force_and_kick(l, mom, k) };
+    };
+
+// Link-arity sibling of `action::HasSweepState`. Same contract: begin_sweep
+// resets running state from the current field; commit_accept updates it
+// before the link is overwritten.
+template <class A, class F>
+concept HasLinkSweepState =
+    LinkLocalAction<A, F> &&
+    requires(A const& a, LinkLattice<F> const& l, Site x, std::size_t mu, F new_v) {
+        { a.begin_sweep(l) };
+        { a.commit_accept(l, x, mu, new_v) };
     };
 
 }  // namespace reticolo::gauge

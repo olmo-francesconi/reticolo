@@ -23,7 +23,6 @@
 #include <format>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 int main(int argc, char** argv) {
@@ -113,81 +112,36 @@ int main(int argc, char** argv) {
 
     std::size_t const n_rep_u = static_cast<std::size_t>(n_rep);
 
-    // Hot start + windowed Metropolis cascade thermalization.
-    //
-    // HMC alone can't reliably pull each replica into its E_n window: at the
-    // tail of S_I the windowed force (a + (S_I − E_n)/δ²) · ∂S_I/∂φ* gets
-    // large enough that the integrator goes unstable, dH explodes, accept
-    // collapses, and the system sits forever outside its window. Metropolis
-    // doesn't use forces — it just proposes random Gaussian shifts and
-    // accepts on ΔS, so it stays stable at any window strength. We use it
-    // here for the *initial* migration into each window; once inside, HMC
-    // takes over for the NR + RM phases below.
-    constexpr double k_hot_sigma   = 0.5;
-    constexpr double k_metro_sigma = 0.3;
-    std::vector<FastRng> metro_rng;
-    metro_rng.reserve(n_rep_u);
-    for (std::size_t n = 0; n < n_rep_u; ++n) {
-        metro_rng.emplace_back(seed + 100ULL + static_cast<unsigned long long>(n));
-    }
-
-    auto hot_start_field = [](Lattice<std::complex<double>>& phi, FastRng& rng, double sigma) {
-        auto* data           = phi.data();
-        std::size_t const ns = phi.nsites();
-        for (std::size_t i = 0; i < ns; ++i) {
-            data[i] = {sigma * rng.normal(), sigma * rng.normal()};
-        }
-    };
-
-    auto metropolis_window = [&base](Lattice<std::complex<double>>& phi,
-                                     double a,
-                                     double e_n_local,
-                                     double d_local,
-                                     FastRng& rng,
-                                     int n_sweeps,
-                                     double sigma) {
-        double s_i        = base.s_imag(phi);
-        double const inv2 = 1.0 / (d_local * d_local);
-        for (int sweep = 0; sweep < n_sweeps; ++sweep) {
-            for (Site x : phi.sites()) {
-                std::complex<double> const new_v{std::real(phi[x]) + sigma * rng.normal(),
-                                                 std::imag(phi[x]) + sigma * rng.normal()};
-                double const ds_r = base.ds_local(phi, x, new_v);
-                double const ds_i = base.ds_imag_local(phi, x, new_v);
-                // Windowed energy change: Δ(S_R + a S_I + (S_I − E_n)²/2δ²).
-                double const ds =
-                    ds_r + (a * ds_i) + (((s_i - e_n_local) * ds_i) + (0.5 * ds_i * ds_i)) * inv2;
-                if (ds <= 0.0 || rng.uniform() < std::exp(-ds)) {
-                    phi[x] = new_v;
-                    s_i += ds_i;
-                }
-            }
-        }
-    };
-
     // Replicas are independent (each owns its own field / RNG / base action
-    // copy via WindowedAction-by-value); the `base` captured by the lambdas
-    // above is read-only and BoseGas has no mutable per-action state, so all
-    // per-replica loops below are clean OpenMP parallel-for. HDF5 writes
-    // are not thread-safe — stage into per-iteration buffers, drain serially.
+    // copy via WindowedAction-by-value), so the per-replica loops below are
+    // clean OpenMP parallel-for. HDF5 writes are not thread-safe — stage
+    // into per-iteration buffers, drain serially.
     std::vector<double> de_buf(n_rep_u);
     std::vector<double> a_buf(n_rep_u);
 
-    // Hot-start every replica with an independent random field, then
-    // Metropolis-thermalize each into its E_n window. Generous sweep
-    // count because Metropolis is small-step and the tail windows can be
-    // sqrt(V)–O(V) away from the random start in S_I.
-    int const n_metro_sweeps = std::max(n_therm_nr, 200);
+    // Hot-start every replica with an independent random field, then run
+    // windowed Metropolis until each replica is inside its E_n window.
+    // HMC alone can't reliably pull a replica into the window at the S_I
+    // tail: the windowed force gets large enough that the integrator goes
+    // unstable, dH explodes, accept collapses. Metropolis with a Gaussian-
+    // shift proposal stays stable at any window strength; the LLR tilt is
+    // wired into WindowedAction's ds_local via begin_sweep / commit_accept.
+    constexpr double k_hot_sigma          = 0.5;
+    constexpr double k_metro_sigma        = 0.3;
+    constexpr int k_metro_max_batches     = 50;
+    constexpr int k_metro_batch_size      = 10;
 #pragma omp parallel for schedule(dynamic, 1)
     for (std::size_t n = 0; n < n_rep_u; ++n) {
-        hot_start_field(reps[n]->phi(), metro_rng[n], k_hot_sigma);
-        metropolis_window(reps[n]->phi(),
-                          reps[n]->a(),
-                          reps[n]->E_n(),
-                          reps[n]->delta(),
-                          metro_rng[n],
-                          n_metro_sweeps,
-                          k_metro_sigma);
+        auto _ = log::scope(reps[n]->id());
+        reps[n]->hot_start(k_hot_sigma);
+        alg::Metropolis<llr::WindowedAction<Action>, FastRng> warmup{
+            reps[n]->windowed_action(),
+            reps[n]->phi(),
+            reps[n]->rng(),
+            alg::MetropolisSpec{.sigma = k_metro_sigma},
+            log::Mode::silent};
+        reps[n]->thermalize_until_in_window(
+            warmup, k_metro_max_batches, k_metro_batch_size, 1.0, log::Mode::silent);
     }
 
     log::info("llr", "NR phase  {} iters × {} replicas", n_nr, n_rep_u);

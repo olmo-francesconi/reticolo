@@ -9,8 +9,12 @@
 #include <reticolo/core/log_helpers.hpp>
 #include <reticolo/llr/windowed_action.hpp>
 
+#include <cmath>
+#include <complex>
+#include <cstddef>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 namespace reticolo::llr {
@@ -41,10 +45,11 @@ template <class Base,
           class Field      = Lattice<T>>
 class Replica {
 public:
-    using value_type = T;
-    using field_type = Field;
-    using scalar_t   = scalar_of_t<T>;
-    using SizeVec    = typename Field::SizeVec;
+    using value_type      = T;
+    using field_type      = Field;
+    using scalar_t        = scalar_of_t<T>;
+    using SizeVec         = typename Field::SizeVec;
+    using windowed_action_type = WindowedAction<Base, T, Field>;
 
     static constexpr std::string_view log_tag = "repl";
 
@@ -146,11 +151,68 @@ public:
 
     [[nodiscard]] Field& phi() noexcept { return phi_; }
     [[nodiscard]] Field const& phi() const noexcept { return phi_; }
+    [[nodiscard]] Rng& rng() noexcept { return rng_; }
+    [[nodiscard]] windowed_action_type const& windowed_action() const noexcept {
+        return windowed_;
+    }
+
+    // Random Gaussian-shift seed of the field, sigma per real component.
+    // Complex fields get independent N(0, sigma²) on Re and Im.
+    void hot_start(scalar_t sigma) noexcept {
+        T* const data       = phi_.data();
+        std::size_t const n = phi_.nsites();
+        if constexpr (std::is_same_v<T, std::complex<double>> ||
+                      std::is_same_v<T, std::complex<float>>) {
+            using R = typename T::value_type;
+            for (std::size_t i = 0; i < n; ++i) {
+                data[i] = T{static_cast<R>(static_cast<scalar_t>(rng_.normal()) * sigma),
+                            static_cast<R>(static_cast<scalar_t>(rng_.normal()) * sigma)};
+            }
+        } else {
+            for (std::size_t i = 0; i < n; ++i) {
+                data[i] = static_cast<T>(static_cast<scalar_t>(rng_.normal()) * sigma);
+            }
+        }
+    }
+
+    // Drive `sampler` in batches until |S_constraint − E_n| < threshold_sigmas·δ
+    // or `max_batches` × `batch_size` steps have been taken. The sampler must
+    // operate on this replica's field via this replica's WindowedAction; HMC
+    // works unchanged, Metropolis works via the sweep-state hooks.
+    //
+    // Returns the number of batches consumed. `== max_batches` means budget
+    // exhausted without convergence.
+    template <class Sampler>
+    int thermalize_until_in_window(Sampler& sampler,
+                                    int max_batches,
+                                    int batch_size           = 10,
+                                    double threshold_sigmas  = 1.0,
+                                    log::Mode log_mode       = log::Mode::normal) {
+        for (int b = 0; b < max_batches; ++b) {
+            for (int i = 0; i < batch_size; ++i) {
+                (void)sampler.step(log::Mode::silent);
+            }
+            scalar_t const q   = windowed_.constraint_value(phi_);
+            scalar_t const dev = std::abs(q - windowed_.E_n);
+            scalar_t const ratio =
+                (windowed_.delta != scalar_t{0}) ? (dev / windowed_.delta) : scalar_t{0};
+            if (log_mode == log::Mode::normal) {
+                log::info("repl",
+                          "warm  batch {:>4}  |S-E_n|/δ={:+.3f}",
+                          b + 1,
+                          static_cast<double>(ratio));
+            }
+            if (static_cast<double>(ratio) < threshold_sigmas) {
+                return b + 1;
+            }
+        }
+        return max_batches;
+    }
 
     [[nodiscard]] ReplicaStats const& stats() const noexcept { return stats_; }
 
 private:
-    using Windowed = WindowedAction<Base, T, Field>;
+    using Windowed = windowed_action_type;
 
     std::string id_;
     Field phi_;
