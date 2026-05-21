@@ -30,6 +30,7 @@ int main(int argc, char** argv) {
     using Action   = act::BoseGas<double>;
     using ReplicaT = llr::Replica<Action, FastRng, alg::integ::Omelyan2>;
 
+    // ---- CLI ----
     cli::Parser p{"bose_gas_llr", "LLR for the 4D Bose gas at finite chemical potential"};
     auto const& L      = p.opt<int>("L,size", 4, "linear lattice extent");
     auto const& ndim   = p.opt<int>("ndim", 4, "spacetime dimensions (4 in paper)");
@@ -61,15 +62,18 @@ int main(int argc, char** argv) {
 
     log::start(outpath);
 
+    // ---- Base action ----
     Lattice<std::complex<double>>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                  static_cast<std::size_t>(L));
     Action const base{.mass = mass, .lambda = lambda, .mu = mu};
     log::act(base);
 
+    // ---- Replica geometry ----
     int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
     double const d_e = delta;
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
 
+    // ---- Replicas ----
     std::vector<std::unique_ptr<ReplicaT>> reps;
     reps.reserve(static_cast<std::size_t>(n_rep));
     for (int n = 0; n < n_rep; ++n) {
@@ -82,11 +86,13 @@ int main(int argc, char** argv) {
             alg::HmcSpec{.tau = tau, .n_md = n_md}));
     }
 
+    // ---- Output ----
     FastRng exch_rng{seed};
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
     out.attr<double>("/cfg@mu", mu);
 
+    // ---- Warm-up: Metropolis into S_I window ----
     // Hot-start every replica with an independent random field, then run
     // windowed Metropolis until each replica is inside its E_n window.
     // HMC alone can't reliably pull a replica into the window at the S_I
@@ -112,6 +118,7 @@ int main(int argc, char** argv) {
         reps[n]->thermalize_until_in_window(warmup, k_metro_max_batches, k_metro_batch_size, 1.0);
     }
 
+    // ---- Drive: NR warm-up + RM + exchange ----
     llr::run(reps,
              exch_rng,
              llr::DriverSpec{.n_nr       = n_nr,

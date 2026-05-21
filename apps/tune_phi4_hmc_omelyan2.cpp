@@ -16,6 +16,7 @@ int main(int argc, char** argv) {
 
     log::off();
 
+    // ---- CLI ----
     cli::Parser p{"tune_phi4_hmc_omelyan2", "Phi4 HMC tuning rig (Omelyan2)"};
     auto const& L         = p.opt<int>("L,size", 8, "linear lattice extent");
     auto const& kappa     = p.opt<double>("kappa", 0.18, "hopping parameter");
@@ -35,6 +36,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    // ---- State: lattice, RNG, action (+ optional resume) ----
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Lattice<double> phi{shape};
     FastRng rng{seed};
@@ -44,16 +46,20 @@ int main(int argc, char** argv) {
         tune::load_field_raw(phi, init_from);
     }
 
+    // ---- Output ----
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("prod");
 
+    // ---- Updater ----
     alg::Hmc<act::Phi4<double>, FastRng, Integrator> hmc{
         phi4, phi, rng, {.tau = tau, .n_md = n_md}};
 
+    // ---- Thermalisation ----
     for (int i = 0; i < n_therm; ++i) {
         (void)hmc.step();
     }
 
+    // ---- Production (timed) ----
     auto s_series       = out.series<double>("/prod/obs/s");
     auto mean_sq_series = out.series<double>("/prod/obs/mean_sq");
 
@@ -76,6 +82,7 @@ int main(int argc, char** argv) {
     }
     double const wall_s = std::chrono::duration<double>(bench_clock::now() - t_wall0).count();
 
+    // ---- Stats ----
     out.attr<double>("/prod@wall_seconds", wall_s);
     out.attr<double>("/prod@algo_seconds", algo_s);
     out.attr<double>("/prod@obs_seconds", obs_s);
@@ -83,6 +90,7 @@ int main(int argc, char** argv) {
     out.attr<double>("/prod@accept_rate",
                      static_cast<double>(accepted) / static_cast<double>(n_prod));
 
+    // ---- Optional state snapshot ----
     if (!save_state.empty()) {
         tune::save_field_raw(phi, save_state);
     }

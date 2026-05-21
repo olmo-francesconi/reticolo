@@ -14,6 +14,7 @@ int main(int argc, char** argv) {
     using namespace reticolo;
     using Action = act::BoseGas<double>;
 
+    // ---- CLI ----
     cli::Parser p{"bose_gas_hmc", "Phase-quenched HMC for the 4D Bose gas (records S_R + S_I)"};
     auto const& L          = p.opt<int>("L,size", 4, "linear lattice extent");
     auto const& ndim       = p.opt<int>("ndim", 4, "spacetime dimensions");
@@ -34,6 +35,7 @@ int main(int argc, char** argv) {
 
     log::start(outpath);
 
+    // ---- State: lattice, RNG, action ----
     Lattice<std::complex<double>>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                  static_cast<std::size_t>(L));
     Lattice<std::complex<double>> phi{shape};
@@ -41,6 +43,7 @@ int main(int argc, char** argv) {
     Action const action{.mass = mass, .lambda = lambda, .mu = mu};
     log::act(action);
 
+    // ---- Output: writer + series ----
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
     out.start_phase("prod");
@@ -50,14 +53,18 @@ int main(int argc, char** argv) {
     auto s_r      = out.series<double>("/prod/obs/s_r");
     auto s_i      = out.series<double>("/prod/obs/s_i");
 
+    // ---- Updater ----
     alg::Hmc<Action, FastRng, alg::integ::Omelyan2> hmc{
         action, phi, rng, {.tau = tau, .n_md = n_md}};
 
+    // ---- Thermalisation ----
     log::info("hmc", "therm  {} trajectories", n_therm);
     for (int i = 0; i < n_therm; ++i) {
         (void)hmc.step(log::Mode::silent);
         s_therm.append(action.s_full(phi));
     }
+
+    // ---- Production ----
     log::info("hmc", "prod   {} trajectories", n_prod);
     for (int i = 0; i < n_prod; ++i) {
         auto const step = hmc.step();

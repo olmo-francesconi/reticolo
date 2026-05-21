@@ -24,6 +24,7 @@ int main(int argc, char** argv) {
     using namespace reticolo;
     constexpr std::size_t k_n = 3;
 
+    // ---- CLI ----
     cli::Parser p{"on_sigma_wolff", "Wolff cluster for the O(3) sigma model"};
     auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
     auto const& beta       = p.opt<double>("beta", 0.7, "inverse temperature");
@@ -40,6 +41,7 @@ int main(int argc, char** argv) {
 
     log::start(outpath);
 
+    // ---- State: lattice, RNG, action ----
     Lattice<std::array<double, k_n>>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                     static_cast<std::size_t>(L));
     Lattice<std::array<double, k_n>> phi{shape};
@@ -51,6 +53,7 @@ int main(int argc, char** argv) {
         phi[x] = {1.0, 0.0, 0.0};
     }
 
+    // ---- Output: writer + series ----
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
     out.start_phase("prod");
@@ -59,14 +62,18 @@ int main(int argc, char** argv) {
     auto s_prod        = out.series<double>("/prod/obs/s");
     auto m2_prod       = out.series<double>("/prod/obs/m2");
 
+    // ---- Updater ----
     alg::Wolff<act::OnSigma<k_n>, FastRng> wolff{on, phi, rng};
 
+    // ---- Thermalisation ----
     log::info("wolf", "therm  {} measurements × {} clusters", n_therm, n_cluster);
     for (int i = 0; i < n_therm; ++i) {
         for (int k = 0; k < n_cluster; ++k) {
             cluster_therm.append(wolff.step(log::Mode::silent).cluster_size);
         }
     }
+
+    // ---- Production ----
     log::info("wolf", "prod   {} measurements × {} clusters", n_prod, n_cluster);
     for (int i = 0; i < n_prod; ++i) {
         for (int k = 0; k < n_cluster; ++k) {

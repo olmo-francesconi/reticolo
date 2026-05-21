@@ -24,6 +24,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
 
+    // ---- CLI ----
     cli::Parser p{"xy_wolff", "Wolff cluster + Metropolis hybrid for the XY model"};
     auto const& L          = p.opt<int>("L,size", 16, "linear lattice extent (2D)");
     auto const& beta       = p.opt<double>("beta", 1.12, "inverse temperature");
@@ -39,6 +40,7 @@ int main(int argc, char** argv) {
 
     log::start(outpath);
 
+    // ---- State: lattice (hot-started), RNG, action ----
     auto const l_sz = static_cast<std::size_t>(L);
     Lattice<double> theta{{l_sz, l_sz}};
     FastRng rng{seed};
@@ -48,6 +50,7 @@ int main(int argc, char** argv) {
     act::Xy<double> xy{.beta = beta};
     log::act(xy);
 
+    // ---- Output: writer + series ----
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
     out.start_phase("prod");
@@ -57,10 +60,12 @@ int main(int argc, char** argv) {
     auto s_prod        = out.series<double>("/prod/obs/s");
     auto m2_prod       = out.series<double>("/prod/obs/m2");
 
+    // ---- Updaters ----
     alg::Wolff<act::Xy<double>, FastRng> wolff{xy, theta, rng};
     alg::Metropolis<act::Xy<double>, FastRng> mc{
         xy, theta, rng, alg::MetropolisSpec{.sigma = sigma}};
 
+    // ---- Thermalisation ----
     log::info("wolf", "therm  {} measurements × {} clusters + 1 sweep", n_therm, n_cluster);
     for (int i = 0; i < n_therm; ++i) {
         for (int k = 0; k < n_cluster; ++k) {
@@ -68,6 +73,8 @@ int main(int argc, char** argv) {
         }
         (void)mc.step(log::Mode::silent);
     }
+
+    // ---- Production ----
     log::info("wolf", "prod   {} measurements × {} clusters + 1 sweep", n_prod, n_cluster);
     for (int i = 0; i < n_prod; ++i) {
         for (int k = 0; k < n_cluster; ++k) {

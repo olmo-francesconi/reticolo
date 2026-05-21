@@ -17,6 +17,7 @@ int main(int argc, char** argv) {
     using namespace reticolo;
     using Action = action::CompactU1<double>;
 
+    // ---- CLI ----
     cli::Parser p{"u1_metropolis", "Compact U(1) Wilson action, link Metropolis"};
     auto const& L          = p.opt<int>("L,size", 4, "linear lattice extent");
     auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
@@ -34,12 +35,14 @@ int main(int argc, char** argv) {
 
     log::start(outpath);
 
+    // ---- State: links, RNG, action ----
     LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     LinkLattice<double> links{shape, 0.0};
     FastRng rng{seed};
     Action const action{.beta = beta};
     log::act(action);
 
+    // ---- Output: writer + series ----
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
     out.start_phase("prod");
@@ -48,6 +51,7 @@ int main(int argc, char** argv) {
     auto s_prod  = out.series<double>("/prod/obs/s");
     auto plaq    = out.series<double>("/prod/obs/plaq");
 
+    // ---- Updater ----
     alg::Metropolis<Action, FastRng, double, LinkLattice<double>> metro{
         action, links, rng, alg::MetropolisSpec{.sigma = sigma}};
 
@@ -57,11 +61,14 @@ int main(int argc, char** argv) {
         (static_cast<std::size_t>(ndim) * static_cast<std::size_t>(ndim - 1) / 2U) * v_sites;
     double const plaq_norm = (beta == 0.0) ? 1.0 : (beta * static_cast<double>(n_plaq));
 
+    // ---- Thermalisation ----
     log::info("metr", "therm  {} sweeps", n_therm);
     for (int i = 0; i < n_therm; ++i) {
         (void)metro.step(log::Mode::silent);
         s_therm.append(action.s_full(links));
     }
+
+    // ---- Production ----
     log::info("metr", "prod   {} sweeps", n_prod);
     for (int i = 0; i < n_prod; ++i) {
         auto const sweep_stats = metro.step();

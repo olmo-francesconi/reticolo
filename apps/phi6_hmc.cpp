@@ -17,6 +17,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
 
+    // ---- CLI ----
     cli::Parser p{"phi6_hmc", "Hybrid Monte Carlo for the phi^6 scalar field"};
     auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
     auto const& kappa      = p.opt<double>("kappa", 0.13, "hopping parameter");
@@ -35,12 +36,14 @@ int main(int argc, char** argv) {
 
     log::start(outpath);
 
+    // ---- State: lattice, RNG, action ----
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Lattice<double> phi{shape};
     FastRng rng{seed};
     act::Phi6<double> phi6{.kappa = kappa, .lambda = lambda, .g6 = g6};
     log::act(phi6);
 
+    // ---- Output: writer + series ----
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
     out.start_phase("prod");
@@ -51,13 +54,17 @@ int main(int argc, char** argv) {
     auto mag      = out.series<double>("/prod/obs/mag");
     auto m_sq     = out.series<double>("/prod/obs/m2");
 
+    // ---- Updater ----
     alg::Hmc<act::Phi6<double>, FastRng> hmc{phi6, phi, rng, {.tau = tau, .n_md = n_md}};
 
+    // ---- Thermalisation ----
     log::info("hmc", "therm  {} trajectories", n_therm);
     for (int i = 0; i < n_therm; ++i) {
         (void)hmc.step(log::Mode::silent);
         s_therm.append(phi6.s_full(phi));
     }
+
+    // ---- Production ----
     log::info("hmc", "prod   {} trajectories", n_prod);
     for (int i = 0; i < n_prod; ++i) {
         auto const step = hmc.step();

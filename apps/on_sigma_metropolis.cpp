@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
     using namespace reticolo;
     constexpr std::size_t k_n = 3;
 
+    // ---- CLI ----
     cli::Parser p{"on_sigma_metropolis", "Metropolis for the O(3) sigma model"};
     auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
     auto const& beta       = p.opt<double>("beta", 0.7, "inverse temperature");
@@ -36,6 +37,7 @@ int main(int argc, char** argv) {
 
     log::start(outpath);
 
+    // ---- State: lattice, RNG, action ----
     Lattice<std::array<double, k_n>>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                     static_cast<std::size_t>(L));
     Lattice<std::array<double, k_n>> phi{shape};
@@ -49,6 +51,7 @@ int main(int argc, char** argv) {
         phi[x] = {1.0, 0.0, 0.0};
     }
 
+    // ---- Output: writer + series ----
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
     out.start_phase("prod");
@@ -57,12 +60,16 @@ int main(int argc, char** argv) {
     auto s_prod       = out.series<double>("/prod/obs/s");
     auto m2_prod      = out.series<double>("/prod/obs/m2");
 
+    // ---- Updater ----
     alg::Metropolis<act::OnSigma<k_n>, FastRng> mc{on, phi, rng, alg::MetropolisSpec{.sigma = 0.0}};
 
+    // ---- Thermalisation ----
     log::info("metr", "therm  {} sweeps", n_therm);
     for (int i = 0; i < n_therm; ++i) {
         accept_therm.append(mc.step(log::Mode::silent).acceptance());
     }
+
+    // ---- Production ----
     log::info("metr", "prod   {} sweeps", n_prod);
     for (int i = 0; i < n_prod; ++i) {
         accept_prod.append(mc.step().acceptance());

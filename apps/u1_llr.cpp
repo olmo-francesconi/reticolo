@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
     using ReplicaT =
         llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, LinkLattice<double>>;
 
+    // ---- CLI ----
     cli::Parser p{"u1_llr", "LLR with replica exchange for compact U(1) Wilson action"};
     auto const& L     = p.opt<int>("L,size", 4, "linear lattice extent");
     auto const& ndim  = p.opt<int>("ndim", 4, "spatial dimensions");
@@ -51,14 +52,17 @@ int main(int argc, char** argv) {
 
     log::start(outpath);
 
+    // ---- Base action ----
     LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Action const base{.beta = beta};
     log::act(base);
 
+    // ---- Replica geometry ----
     int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
     double const d_e = delta;
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
 
+    // ---- Replicas ----
     std::vector<std::unique_ptr<ReplicaT>> reps;
     reps.reserve(static_cast<std::size_t>(n_rep));
     for (int n = 0; n < n_rep; ++n) {
@@ -71,10 +75,12 @@ int main(int argc, char** argv) {
             alg::HmcSpec{.tau = tau, .n_md = n_md}));
     }
 
+    // ---- Output ----
     FastRng exch_rng{seed};
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
+    // ---- Drive: NR warm-up + RM + exchange ----
     llr::run(reps,
              exch_rng,
              llr::DriverSpec{.n_nr       = n_nr,
