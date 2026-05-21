@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
             alg::MetropolisSpec{.sigma = k_metro_sigma},
             log::Mode::silent};
         reps[n]->thermalize_until_in_window(
-            warmup, k_metro_max_batches, k_metro_batch_size, 1.0, log::Mode::silent);
+            warmup, k_metro_max_batches, k_metro_batch_size, 1.0);
     }
 
     log::info("llr", "NR phase  {} iters × {} replicas", n_nr, n_rep_u);
