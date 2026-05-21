@@ -18,35 +18,33 @@
 
 namespace reticolo::action::detail {
 
-// =============================================================================
-//  Hot-loop helpers for scalar nearest-neighbour kernels on periodic hypercubic
-//  lattices. Two patterns:
+// Hot-loop helpers for scalar nearest-neighbour kernels on periodic hypercubic
+// lattices. Two patterns:
 //
-//   visit_nn(l, body):    body(i, phi, nbrs_sum) -> void.
-//                         nbrs_sum is the unweighted sum of all 2*ndims nearest
-//                         neighbours of site i. Body owns the write (e.g.
-//                         out[i] = ... or m[i] += ...). Used by compute_force
-//                         and the fused force+kick kernel.
+//  visit_nn(l, body):    body(i, phi, nbrs_sum) -> void.
+//                        nbrs_sum is the unweighted sum of all 2*ndims nearest
+//                        neighbours of site i. Body owns the write (e.g.
+//                        out[i] = ... or m[i] += ...). Used by compute_force
+//                        and the fused force+kick kernel.
 //
-//   reduce_fwd(l, body):  body(phi, fwd_sum) -> T. fwd_sum is the sum of the d
-//                         positive-mu neighbours only (each bond counted once);
-//                         helper accumulates the returned per-site value into a
-//                         scalar total. Used by s_full.
+//  reduce_fwd(l, body):  body(phi, fwd_sum) -> T. fwd_sum is the sum of the d
+//                        positive-mu neighbours only (each bond counted once);
+//                        helper accumulates the returned per-site value into a
+//                        scalar total. Used by s_full.
 //
-//  For ndims in {1, 2, 3, 4}, the inner-most axis loop is split into pure
-//  stride-arithmetic ranges plus an O(1) wrap correction at each end. The
-//  remaining axes' wraps are hoisted out of the inner loop as loop-invariant
-//  offsets. Compilers autovectorise the inner-x range on every architecture
-//  (NEON / SSE / AVX2 / AVX-512 / SVE) — no intrinsics, no architecture
-//  switches.
+// For ndims in {1, 2, 3, 4}, the inner-most axis loop is split into pure
+// stride-arithmetic ranges plus an O(1) wrap correction at each end. The
+// remaining axes' wraps are hoisted out of the inner loop as loop-invariant
+// offsets. Compilers autovectorise the inner-x range on every architecture
+// (NEON / SSE / AVX2 / AVX-512 / SVE) — no intrinsics, no architecture
+// switches.
 //
-//  ndims > 4 falls back to a flat gather through the neighbour table — exact,
-//  just slower. Adding ndim=5/6 is a mechanical extension.
+// ndims > 4 falls back to a flat gather through the neighbour table — exact,
+// just slower. Adding ndim=5/6 is a mechanical extension.
 //
-//  Compile with -DRETICOLO_HOT_LOOP_FORCE_FALLBACK=1 to force every call onto
-//  the gather fallback regardless of ndims. This is the "old hot loop" path
-//  used by `bench_scalars` to produce before/after numbers.
-// =============================================================================
+// Compile with -DRETICOLO_HOT_LOOP_FORCE_FALLBACK=1 to force every call onto
+// the gather fallback regardless of ndims. This is the "old hot loop" path
+// used by `bench_scalars` to produce before/after numbers.
 
 // ---------- visit_nn ---------------------------------------------------------
 
@@ -430,14 +428,14 @@ template <class T, class Body>
 
 // ---------- visit_nn_split_last ---------------------------------------------
 //
-//   visit_nn_split_last(l, body): body(i, phi, nbrs_total, nbrs_last) -> void.
-//   nbrs_total is the unweighted sum of all 2*ndims NN (same as visit_nn).
-//   nbrs_last  is the sum of the 2 NN along the LAST direction only.
+//  visit_nn_split_last(l, body): body(i, phi, nbrs_total, nbrs_last) -> void.
+//  nbrs_total is the unweighted sum of all 2*ndims NN (same as visit_nn).
+//  nbrs_last  is the sum of the 2 NN along the LAST direction only.
 //
-//   Used by actions with an anisotropy on one direction (typically the time
-//   direction at finite chemical potential / temperature). The body composes
-//   the weighted staple as nbrs_total + (c_last - 1) * nbrs_last so the helper
-//   does not need to know the physics weights.
+//  Used by actions with an anisotropy on one direction (typically the time
+//  direction at finite chemical potential / temperature). The body composes
+//  the weighted staple as nbrs_total + (c_last - 1) * nbrs_last so the helper
+//  does not need to know the physics weights.
 
 template <class T, class Body>
 inline void visit_nn_split_last_fallback_(Lattice<T> const& l, Body&& body) noexcept {
@@ -615,8 +613,8 @@ inline void visit_nn_split_last(Lattice<T> const& l, Body&& body) noexcept {
 
 // ---------- reduce_fwd_split_last -------------------------------------------
 //
-//   reduce_fwd_split_last(l, body): body(phi, fwd_total, fwd_last) -> T.
-//   Forward-only twin of visit_nn_split_last for s_full of anisotropic actions.
+//  reduce_fwd_split_last(l, body): body(phi, fwd_total, fwd_last) -> T.
+//  Forward-only twin of visit_nn_split_last for s_full of anisotropic actions.
 
 template <class T, class Body>
 [[nodiscard]] inline T reduce_fwd_split_last_fallback_(Lattice<T> const& l, Body&& body) noexcept {

@@ -15,14 +15,12 @@
 
 namespace reticolo::action {
 
-// =============================================================================
-//  Sine-Gordon scalar action: same NN hopping + on-site mass term as Phi4,
-//  plus a periodic potential -alpha * cos(phi):
+// Sine-Gordon scalar action: same NN hopping + on-site mass term as Phi4,
+// plus a periodic potential -alpha * cos(phi):
 //
-//    S = sum_x [ -2 kappa phi(x) sum_{mu>0} phi(x+mu)
-//                + phi(x)^2
-//                - alpha * cos(phi(x)) ]
-// =============================================================================
+//   S = sum_x [ -2 kappa phi(x) sum_{mu>0} phi(x+mu)
+//               + phi(x)^2
+//               - alpha * cos(phi(x)) ]
 
 template <class T = double>
 struct SineGordon {

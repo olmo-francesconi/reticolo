@@ -13,29 +13,27 @@
 
 namespace reticolo {
 
-// =============================================================================
-//  Lattice<T> — owning value-semantic field container on a periodic hypercubic
-//  lattice. One value of type `T` per site, stored in a flat std::vector.
+// Lattice<T> — owning value-semantic field container on a periodic hypercubic
+// lattice. One value of type `T` per site, stored in a flat std::vector.
 //
-//  Value semantics with one twist:
+// Value semantics with one twist:
 //
-//      Lattice<double> a{{16, 16, 16}};
-//      Lattice<double> b = a;       // ← deep-copies the FIELD DATA
-//                                   //   but SHARES the Indexing neighbour table
-//      b[Site{0}] = 42;             //   modifies only b's data
+//     Lattice<double> a{{16, 16, 16}};
+//     Lattice<double> b = a;       // ← deep-copies the FIELD DATA
+//                                  //   but SHARES the Indexing neighbour table
+//     b[Site{0}] = 42;             //   modifies only b's data
 //
-//  The Indexing (neighbour pointers, parity labels) is immutable and pooled by
-//  shape, so sharing it costs only a shared_ptr increment. Two lattices of the
-//  same shape automatically share — `Lattice<T> mom{phi.indexing()}` (the
-//  "sibling" ctor) constructs a fresh field without rebuilding the topology.
-//  HMC uses this for its mom/force/old_field buffers: one neighbour table,
-//  four lattices.
+// The Indexing (neighbour pointers, parity labels) is immutable and pooled by
+// shape, so sharing it costs only a shared_ptr increment. Two lattices of the
+// same shape automatically share — `Lattice<T> mom{phi.indexing()}` (the
+// "sibling" ctor) constructs a fresh field without rebuilding the topology.
+// HMC uses this for its mom/force/old_field buffers: one neighbour table,
+// four lattices.
 //
-//  If you ever need a fully independent copy whose Indexing is its own object
-//  (rare — you'd be paying for nothing), construct from a fresh shape:
-//      Lattice<double> b{a.shape()};
-//      std::ranges::copy(a, b.begin());
-// =============================================================================
+// If you ever need a fully independent copy whose Indexing is its own object
+// (rare — you'd be paying for nothing), construct from a fresh shape:
+//     Lattice<double> b{a.shape()};
+//     std::ranges::copy(a, b.begin());
 template <class T>
 class Lattice {
 public:

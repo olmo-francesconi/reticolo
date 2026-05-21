@@ -9,6 +9,7 @@
 #include <stdexcept>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 using reticolo::Lattice;
 using reticolo::Site;
@@ -17,15 +18,15 @@ namespace obs = reticolo::obs;
 
 TEST_CASE("obs::mean and obs::sq on a constant configuration", "[obs]") {
     Lattice<double> phi{{4, 4, 4}, 0.7};
-    REQUIRE(std::abs(obs::mean(phi) - 0.7) < 1e-14);
-    REQUIRE(std::abs(obs::sq(phi) - 0.49) < 1e-14);
+    REQUIRE(obs::mean(phi) == Catch::Approx(0.7).margin(1e-14));
+    REQUIRE(obs::sq(phi) == Catch::Approx(0.49).margin(1e-14));
 }
 
 TEST_CASE("obs::mag::abs is |<phi>| (sign-independent)", "[obs]") {
     Lattice<double> pos{{4, 4}, 0.3};
     Lattice<double> neg{{4, 4}, -0.3};
-    REQUIRE(std::abs(obs::mag::abs(pos) - 0.3) < 1e-14);
-    REQUIRE(std::abs(obs::mag::abs(neg) - 0.3) < 1e-14);
+    REQUIRE(obs::mag::abs(pos) == Catch::Approx(0.3).margin(1e-14));
+    REQUIRE(obs::mag::abs(neg) == Catch::Approx(0.3).margin(1e-14));
 }
 
 TEST_CASE("obs::mean of antiparity-flipped field is zero", "[obs]") {
@@ -33,7 +34,7 @@ TEST_CASE("obs::mean of antiparity-flipped field is zero", "[obs]") {
     for (Site const x : phi.sites()) {
         phi[x] = (x.value() % 2 == 0) ? 1.0 : -1.0;
     }
-    REQUIRE(std::abs(obs::mean(phi)) < 1e-15);
+    REQUIRE(obs::mean(phi) == Catch::Approx(0.0).margin(1e-15));
     REQUIRE(obs::sq(phi) == 1.0);
 }
 
@@ -44,7 +45,7 @@ TEST_CASE("obs::quartic on a uniform field is phi^4", "[obs]") {
 
 TEST_CASE("obs::sq_of_mean is <phi>^2", "[obs]") {
     Lattice<double> phi{{4, 4, 4}, 0.5};
-    REQUIRE(std::abs(obs::sq_of_mean(phi) - 0.25) < 1e-14);
+    REQUIRE(obs::sq_of_mean(phi) == Catch::Approx(0.25).margin(1e-14));
 }
 
 TEST_CASE("obs::two_point at r=0 reduces to obs::sq", "[obs][two_point]") {
@@ -53,7 +54,7 @@ TEST_CASE("obs::two_point at r=0 reduces to obs::sq", "[obs][two_point]") {
         phi[x] = 0.1 * static_cast<double>(x.value());
     }
     for (std::size_t mu = 0; mu < phi.ndims(); ++mu) {
-        REQUIRE(std::abs(obs::two_point(phi, 0, mu) - obs::sq(phi)) < 1e-12);
+        REQUIRE(obs::two_point(phi, 0, mu) == Catch::Approx(obs::sq(phi)).margin(1e-12));
     }
 }
 
@@ -61,7 +62,7 @@ TEST_CASE("obs::two_point recovers the squared mean on a constant field", "[obs]
     Lattice<double> phi{{4, 4}, 1.5};
     for (std::size_t mu = 0; mu < 2; ++mu) {
         for (std::size_t r = 0; r <= 3; ++r) {
-            REQUIRE(std::abs(obs::two_point(phi, r, mu) - 1.5 * 1.5) < 1e-12);
+            REQUIRE(obs::two_point(phi, r, mu) == Catch::Approx(1.5 * 1.5).margin(1e-12));
         }
     }
 }
@@ -77,7 +78,7 @@ TEST_CASE("obs::two_point: plane wave along mu=0", "[obs][two_point]") {
     for (std::size_t r = 0; r <= 3; ++r) {
         double const expected =
             0.5 * std::cos(2.0 * std::numbers::pi * static_cast<double>(r) / k_l);
-        REQUIRE(std::abs(obs::two_point(phi, r, 0) - expected) < 1e-12);
+        REQUIRE(obs::two_point(phi, r, 0) == Catch::Approx(expected).margin(1e-12));
     }
 }
 

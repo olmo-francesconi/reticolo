@@ -10,6 +10,7 @@
 #include <cstddef>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 using reticolo::FastRng;
 
@@ -188,6 +189,6 @@ TEST_CASE("SU(2) expi_lmul_slab: U ← exp(0)·U leaves U unchanged", "[unit][ga
     std::array<double, k_n_real * n> p_zero{};
     su2::expi_lmul_slab(u.data(), p_zero.data(), 1.0, n);
     for (std::size_t i = 0; i < k_n_real * n; ++i) {
-        REQUIRE(std::abs(u[i] - u_orig[i]) < 1.0e-15);
+        REQUIRE(u[i] == Catch::Approx(u_orig[i]).margin(1.0e-15));
     }
 }

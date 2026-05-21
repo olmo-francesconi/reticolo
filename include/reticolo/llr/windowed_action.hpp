@@ -26,36 +26,34 @@ struct scalar_of<std::complex<T>> {
 template <class T>
 using scalar_of_t = typename scalar_of<T>::type;
 
-// =============================================================================
-//  LLR-tilted action with Gaussian-penalty window. One template for both
-//  scalar (`Field = Lattice<T>`) and gauge (`Field = LinkLattice<T>`) base
-//  actions. Two modes picked at compile time from the base action's
-//  interface (only the scalar-field BoseGas hits mode B today):
+// LLR-tilted action with Gaussian-penalty window. One template for both
+// scalar (`Field = Lattice<T>`) and gauge (`Field = LinkLattice<T>`) base
+// actions. Two modes picked at compile time from the base action's
+// interface (only the scalar-field BoseGas hits mode B today):
 //
-//  Mode A — real LLR, `Base` does NOT satisfy `HasImagPart`. The window
-//  constrains the base action itself:
+// Mode A — real LLR, `Base` does NOT satisfy `HasImagPart`. The window
+// constrains the base action itself:
 //
-//      S_LLR    = (1 + a) * S_base + (S_base - E_n)^2 / (2 * delta^2)
-//      F_LLR(x) = (1 + a + (S_base - E_n) / delta^2) * F_base(x)
+//     S_LLR    = (1 + a) * S_base + (S_base - E_n)^2 / (2 * delta^2)
+//     F_LLR(x) = (1 + a + (S_base - E_n) / delta^2) * F_base(x)
 //
-//  Mode B — complex LLR, `Base` satisfies `HasImagPart`. HMC samples on the
-//  real (phase-quenched) part S_R and the window constrains the imaginary
-//  observable S_I = `base.s_imag(field)`:
+// Mode B — complex LLR, `Base` satisfies `HasImagPart`. HMC samples on the
+// real (phase-quenched) part S_R and the window constrains the imaginary
+// observable S_I = `base.s_imag(field)`:
 //
-//      S_LLR    = S_R + a * S_I + (S_I - E_n)^2 / (2 * delta^2)
-//      F_LLR(x) = F_R(x) + (a + (S_I - E_n) / delta^2) * F_I(x)
+//     S_LLR    = S_R + a * S_I + (S_I - E_n)^2 / (2 * delta^2)
+//     F_LLR(x) = F_R(x) + (a + (S_I - E_n) / delta^2) * F_I(x)
 //
-//  where F_R = base.compute_force, F_I = base.compute_force_imag. The NR/RM
-//  loop watches <S_I - E_n>; reconstructing ln rho(S_I) recovers the DoS of
-//  the imaginary part in the phase-quenched ensemble.
+// where F_R = base.compute_force, F_I = base.compute_force_imag. The NR/RM
+// loop watches <S_I - E_n>; reconstructing ln rho(S_I) recovers the DoS of
+// the imaginary part in the phase-quenched ensemble.
 //
-//  `s_local` / `ds_local` forward to the base action — they are not used on
-//  the HMC path; only the local Metropolis path would call them and they
-//  would be wrong with the LLR tilt (v1 LLR is HMC-only). Provided as two
-//  arities (Site for scalar, (Site, mu) for gauge), each gated on the
-//  matching base concept so the LocalAction / LinkLocalAction concept
-//  checks resolve duck-typed unambiguously.
-// =============================================================================
+// `s_local` / `ds_local` forward to the base action — they are not used on
+// the HMC path; only the local Metropolis path would call them and they
+// would be wrong with the LLR tilt (v1 LLR is HMC-only). Provided as two
+// arities (Site for scalar, (Site, mu) for gauge), each gated on the
+// matching base concept so the LocalAction / LinkLocalAction concept
+// checks resolve duck-typed unambiguously.
 
 template <class Base, class T = typename Base::value_type, class Field = Lattice<T>>
 struct WindowedAction {

@@ -91,7 +91,7 @@ TEMPLATE_TEST_CASE(
         ++counts[r.uniform_int(k_bins)];
     }
     for (int c : counts) {
-        REQUIRE(std::abs(static_cast<double>(c) - k_expected) < 0.03 * k_expected);
+        REQUIRE(static_cast<double>(c) == Catch::Approx(k_expected).margin(0.03 * k_expected));
     }
 }
 
@@ -109,8 +109,8 @@ TEMPLATE_TEST_CASE(
     double const mean   = sum / k_samples;
     double const var    = (sq / k_samples) - (mean * mean);
     double const stddev = std::sqrt(var);
-    REQUIRE(std::abs(mean) < 0.02);
-    REQUIRE(std::abs(stddev - 1.0) < 0.02);
+    REQUIRE(mean == Catch::Approx(0.0).margin(0.02));
+    REQUIRE(stddev == Catch::Approx(1.0).margin(0.02));
 }
 
 TEMPLATE_TEST_CASE("Rng::normal_fill agrees with sequential normal() calls",

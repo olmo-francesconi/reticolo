@@ -15,38 +15,32 @@
 
 namespace reticolo::alg {
 
-struct WolffSpec {};
-
 struct WolffResult {
     std::size_t cluster_size = 0;
 
-    // Uniform with HmcResult / MetropolisResult: every cluster flip is accepted
-    // by construction, so the per-update acceptance is identically 1.
     // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
     [[nodiscard]] double acceptance() const noexcept { return 1.0; }
 };
 
-// =============================================================================
-//  Single-cluster Wolff updater for any `WolffEmbeddable` action.
+// Single-cluster Wolff updater for any `WolffEmbeddable` action.
 //
-//  Algorithm (Wolff 1989):
-//    1. Pick a uniformly-random seed site and an action-supplied reflection
-//       axis (random unit vector for O(N), random angle for XY).
-//    2. DFS the seed's neighbourhood (LIFO via `stack_`): a candidate link
-//       (x in cluster, y not) is activated with action-supplied probability
-//       `wolff_link_p` computed on the ORIGINAL field values. y is added to
-//       the cluster on activation.
-//    3. Once the walk terminates, reflect every cluster member in-place.
+// Algorithm (Wolff 1989):
+//   1. Pick a uniformly-random seed site and an action-supplied reflection
+//      axis (random unit vector for O(N), random angle for XY).
+//   2. DFS the seed's neighbourhood (LIFO via `stack_`): a candidate link
+//      (x in cluster, y not) is activated with action-supplied probability
+//      `wolff_link_p` computed on the ORIGINAL field values. y is added to
+//      the cluster on activation.
+//   3. Once the walk terminates, reflect every cluster member in-place.
 //
-//  Membership uses a per-call generation tag (`gen_`) compared against
-//  `mark_[i]` — bumping `gen_` is O(1) and effectively clears the membership
-//  set, so the clear cost does not scale with `nsites()` per update. When the
-//  tag is about to wrap, the buffer is zeroed and `gen_` reset.
+// Membership uses a per-call generation tag (`gen_`) compared against
+// `mark_[i]` — bumping `gen_` is O(1) and effectively clears the membership
+// set, so the clear cost does not scale with `nsites()` per update. When the
+// tag is about to wrap, the buffer is zeroed and `gen_` reset.
 //
-//  Deferring the flip to the end keeps link probabilities consistent (every
-//  test sees the same pre-flip field) and avoids the order-dependence trap
-//  of flipping on visit.
-// =============================================================================
+// Deferring the flip to the end keeps link probabilities consistent (every
+// test sees the same pre-flip field) and avoids the order-dependence trap
+// of flipping on visit.
 template <class A, class R, class F = typename A::value_type>
     requires action::WolffEmbeddable<A, F, R>
 class Wolff {
@@ -60,8 +54,7 @@ public:
     Wolff(A const& action,
           Lattice<F>& field,
           R& rng,
-          WolffSpec const& /*spec*/ = {},
-          log::Mode announce        = log::Mode::normal)
+          log::Mode announce = log::Mode::normal)
         : action_{action}, field_{field}, rng_{rng}, mark_(field.nsites(), 0) {
         stack_.reserve(field.nsites());
         cluster_sites_.reserve(field.nsites());

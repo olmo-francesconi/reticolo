@@ -5,11 +5,11 @@
 // llr::WindowedAction.
 //
 // Output schema (HDF5):
-//   /cfg@n_rep, /cfg@delta, /cfg@E_min, /cfg@E_max, /cfg@dE, /cfg@mu
-//   /cfg/E_n              — n_rep values (window centres in S_I)
-//   /replica_NNN/a        — series, one append per NR iter + per RM sweep
-//   /replica_NNN/dE       — series, paired with /a (<S_I − E_n>)
-//   /exchange/accepted    — series, one int per RM sweep
+//  /cfg@n_rep, /cfg@delta, /cfg@E_min, /cfg@E_max, /cfg@dE, /cfg@mu
+//  /cfg/E_n              — n_rep values (window centres in S_I)
+//  /replica_NNN/a        — series, one append per NR iter + per RM sweep
+//  /replica_NNN/dE       — series, paired with /a (<S_I − E_n>)
+//  /exchange/accepted    — series, one int per RM sweep
 //
 // arxiv:1910.11026 reproduces the paper's `<e^{iφ}>_pq(μ)` curve by feeding
 // the per-µ output of this binary through examples/06_bose_gas_llr/analyze.py.

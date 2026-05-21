@@ -10,24 +10,22 @@
 
 namespace reticolo::action {
 
-// =============================================================================
-//  Concept lattice.
+// Concept lattice.
 //
-//  Every action is a plain struct. The minimum interface (`LocalAction`) is
-//  the two members an updater needs to do a Metropolis sweep: the local
-//  contribution to S at a site, and the change in that contribution under a
-//  proposed value. Everything else is an *opt-in refinement*: the action
-//  exposes one additional member function and a corresponding concept matches.
-//  This is how HMC, full-S diagnostics, and Wolff cluster moves are selected
-//  at instantiation without growing `LocalAction` itself.
+// Every action is a plain struct. The minimum interface (`LocalAction`) is
+// the two members an updater needs to do a Metropolis sweep: the local
+// contribution to S at a site, and the change in that contribution under a
+// proposed value. Everything else is an *opt-in refinement*: the action
+// exposes one additional member function and a corresponding concept matches.
+// This is how HMC, full-S diagnostics, and Wolff cluster moves are selected
+// at instantiation without growing `LocalAction` itself.
 //
-//  Every concept takes `Lattice<F> const&`. Actions must not mutate the field.
-//  Force kernels receive a separate `Lattice<F>&` to write into.
+// Every concept takes `Lattice<F> const&`. Actions must not mutate the field.
+// Force kernels receive a separate `Lattice<F>&` to write into.
 //
-//  No preprocessor inside any concept body. If/when parallelism returns,
-//  it lands as a sibling concept (`HasForceInParallel`) and a separate updater
-//  specialisation, never as a macro flip.
-// =============================================================================
+// No preprocessor inside any concept body. If/when parallelism returns,
+// it lands as a sibling concept (`HasForceInParallel`) and a separate updater
+// specialisation, never as a macro flip.
 
 // Baseline: enough to drive a Metropolis sweep with a uniform / external proposal.
 template <class A, class F>
@@ -108,12 +106,10 @@ concept WolffEmbeddable =
 
 }  // namespace reticolo::action
 
-// =============================================================================
-//  Gauge (link-field) concept lattice. Mirrors the scalar concepts above on
-//  `LinkLattice<F>` and on a (Site, mu) elementary update. Same shape, same
-//  refinement chain; the only reason these need different concept names is
-//  the elementary-update arity (Site vs (Site, mu)).
-// =============================================================================
+// Gauge (link-field) concept lattice. Mirrors the scalar concepts above on
+// `LinkLattice<F>` and on a (Site, mu) elementary update. Same shape, same
+// refinement chain; the only reason these need different concept names is
+// the elementary-update arity (Site vs (Site, mu)).
 
 namespace reticolo::gauge {
 

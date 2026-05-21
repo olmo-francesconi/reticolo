@@ -8,26 +8,24 @@
 #include <string>
 #include <string_view>
 
-// =============================================================================
-//  Public-facing HDF5 writer.
+// Public-facing HDF5 writer.
 //
-//  Design:
-//   - <hdf5.h> never enters a TU that #includes this header. The full HDF5
-//     state lives behind PIMPL in src/io/writer.cpp.
-//   - `Writer` opens with truncate-or-fail and stamps `/run@*` metadata so
-//     every output file is self-describing: cmdline, version, commit,
-//     compile_flags, hostname, started_utc, hdf5_complex_schema,
-//     hdf5_library_version. A schema-relevant compile flag must always end
-//     up in `/run@` — that's the "silent data divergence" class the v3
-//     plan calls out.
-//   - `Series<T>` is the only way to write a time series. It owns a buffer
-//     of `chunk` rows and flushes on full / dtor. Returned by value (not by
-//     reference into a map) so writer state mutations can't invalidate it.
-//   - `Series<T>` and the typed `Writer::series<T>` / `Writer::attr<T>` are
-//     extern-templated for the supported scalar set below. Add a type by
-//     editing both this declaration block AND the matching explicit
-//     instantiation in writer.cpp — the linker will tell you if you forget.
-// =============================================================================
+// Design:
+//  - <hdf5.h> never enters a TU that #includes this header. The full HDF5
+//    state lives behind PIMPL in src/io/writer.cpp.
+//  - `Writer` opens with truncate-or-fail and stamps `/run@*` metadata so
+//    every output file is self-describing: cmdline, version, commit,
+//    compile_flags, hostname, started_utc, hdf5_complex_schema,
+//    hdf5_library_version. A schema-relevant compile flag must always end
+//    up in `/run@` — that's the "silent data divergence" class the v3
+//    plan calls out.
+//  - `Series<T>` is the only way to write a time series. It owns a buffer
+//    of `chunk` rows and flushes on full / dtor. Returned by value (not by
+//    reference into a map) so writer state mutations can't invalidate it.
+//  - `Series<T>` and the typed `Writer::series<T>` / `Writer::attr<T>` are
+//    extern-templated for the supported scalar set below. Add a type by
+//    editing both this declaration block AND the matching explicit
+//    instantiation in writer.cpp — the linker will tell you if you forget.
 
 namespace reticolo::cli {
 class Parser;  // forward declaration; Writer accepts a Parser ptr for /vars@*
@@ -116,7 +114,6 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-// -----------------------------------------------------------------------------
 // Extern template declarations for the supported scalar set. The macro is the
 // only sane way to write three correlated extern-template declarations per
 // type; a `constexpr` template helper can't issue declarations.

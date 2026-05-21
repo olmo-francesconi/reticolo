@@ -52,14 +52,12 @@ template <class T>
     }
 }
 
-// =============================================================================
-//  Periodic-only neighbour table for a hypercubic lattice. The library does
-//  not currently support open / antiperiodic boundaries — every `next(s, mu)`
-//  and `prev(s, mu)` wraps around. Hot kernels therefore never need a
-//  validity check in the inner loop. If open BCs are ever needed, they land
-//  as a separate `OpenIndexing` (or a constexpr policy template parameter)
-//  alongside this class, not as a runtime flag inside it.
-// =============================================================================
+// Periodic-only neighbour table for a hypercubic lattice. The library does
+// not currently support open / antiperiodic boundaries — every `next(s, mu)`
+// and `prev(s, mu)` wraps around. Hot kernels therefore never need a
+// validity check in the inner loop. If open BCs are ever needed, they land
+// as a separate `OpenIndexing` (or a constexpr policy template parameter)
+// alongside this class, not as a runtime flag inside it.
 class Indexing {
 public:
     using SizeVec = std::vector<std::size_t>;

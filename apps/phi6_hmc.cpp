@@ -1,14 +1,14 @@
 // HMC for the phi^6 scalar field on a 4D hypercubic lattice.
 //
 // Output schema:
-//   /run@*                — reproducibility metadata stamped by Writer
-//   /vars@*               — every --flag the Parser resolved
-//   /therm/stats/s        — S_full per thermalisation trajectory
-//   /prod/stats/dH        — H_final - H_initial per production trajectory
-//   /prod/stats/accepted  — 0/1 acceptance flag
-//   /prod/obs/s           — S_full
-//   /prod/obs/mag         — |<phi>|
-//   /prod/obs/m2          — <phi^2>
+//  /run@*                — reproducibility metadata stamped by Writer
+//  /vars@*               — every --flag the Parser resolved
+//  /therm/stats/s        — S_full per thermalisation trajectory
+//  /prod/stats/dH        — H_final - H_initial per production trajectory
+//  /prod/stats/accepted  — 0/1 acceptance flag
+//  /prod/obs/s           — S_full
+//  /prod/obs/mag         — |<phi>|
+//  /prod/obs/m2          — <phi^2>
 
 #include <reticolo/reticolo.hpp>
 

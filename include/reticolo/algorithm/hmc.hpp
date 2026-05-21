@@ -15,9 +15,9 @@
 #include <concepts>
 #include <cstddef>
 #include <limits>
+#include <optional>
 #include <type_traits>
 #include <utility>
-#include <variant>
 
 namespace reticolo::alg {
 
@@ -34,28 +34,26 @@ struct HmcResult {
     [[nodiscard]] double acceptance() const noexcept { return accepted ? 1.0 : 0.0; }
 };
 
-// =============================================================================
-//  Hybrid Monte Carlo — one class for both scalar (`Lattice<F>`) and link
-//  (`LinkLattice<F>`) fields. The integrator is a type parameter, the field
-//  type is a type parameter; the trajectory body is field-agnostic via
-//  `flat_size(field)` + raw-pointer iteration.
+// Hybrid Monte Carlo — one class for both scalar (`Lattice<F>`) and link
+// (`LinkLattice<F>`) fields. The integrator is a type parameter, the field
+// type is a type parameter; the trajectory body is field-agnostic via
+// `flat_size(field)` + raw-pointer iteration.
 //
-//  Standard Wilson convention everywhere: weight ∝ exp(-S), H = K + S.
-//  `compute_force` returns the force F = -dS/dfield (matches what the
-//  integrator's `mom += k_dt * F` expects).
+// Standard Wilson convention everywhere: weight ∝ exp(-S), H = K + S.
+// `compute_force` returns the force F = -dS/dfield (matches what the
+// integrator's `mom += k_dt * F` expects).
 //
-//  Kinetic term:
-//    - real F:    H_kin = (1/2) sum_i mom_i^2
-//    - complex F: H_kin = (1/2) sum_i |mom_i|^2  (= (Re^2 + Im^2)/2 per slot)
+// Kinetic term:
+//   - real F:    H_kin = (1/2) sum_i mom_i^2
+//   - complex F: H_kin = (1/2) sum_i |mom_i|^2  (= (Re^2 + Im^2)/2 per slot)
 //
-//  Momentum sampling:
-//    - double:                 one batched normal_fill
-//    - std::complex<double>:   reinterpret-cast to double[2] and batch-fill;
-//                              gives independent N(0,1) on Re and Im, which
-//                              is the correct sampling for the complex
-//                              Gaussian (§29.5.4 guarantees the layout).
-//    - anything else:          per-element static_cast<F>(rng_.normal())
-// =============================================================================
+// Momentum sampling:
+//   - double:                 one batched normal_fill
+//   - std::complex<double>:   reinterpret-cast to double[2] and batch-fill;
+//                             gives independent N(0,1) on Re and Im, which
+//                             is the correct sampling for the complex
+//                             Gaussian (§29.5.4 guarantees the layout).
+//   - anything else:          per-element static_cast<F>(rng_.normal())
 
 // Field-agnostic action gate: any action with `s_full(field)` and
 // `compute_force(field, force)` qualifies. The existing scalar/U(1) actions
@@ -256,36 +254,13 @@ private:
     static constexpr bool is_complex_v_ =
         requires(Scalar f) { std::norm(f); } && !std::is_arithmetic_v<Scalar>;
 
-    // Capture-and-restore for the action's raw-scalar caches across a reject.
-    // The snapshot type collapses to an empty struct when the action has no
-    // caches (no overhead). For LLR actions, the cache lives on the base
-    // action; `WindowedAction` forwards through. Two-stage trait dispatch so
-    // the `decltype(... last_s_imag())` instantiation is gated on the action
-    // actually having that member.
-    template <class A2, bool>
-    struct SFullSlot_ {
-        using type = std::monostate;
-    };
-    template <class A2>
-    struct SFullSlot_<A2, true> {
-        using type = decltype(std::declval<A2 const&>().last_s_full());
-    };
-    template <class A2, bool>
-    struct SImagSlot_ {
-        using type = std::monostate;
-    };
-    template <class A2>
-    struct SImagSlot_<A2, true> {
-        using type = decltype(std::declval<A2 const&>().last_s_imag());
-    };
-
     struct CacheSnap_ {
-        [[no_unique_address]] typename SFullSlot_<A, HasSFullCache<A>>::type s_full{};
-        [[no_unique_address]] typename SImagSlot_<A, HasSImagCache<A>>::type s_imag{};
+        std::optional<double> s_full;
+        std::optional<double> s_imag;
     };
 
     [[nodiscard]] CacheSnap_ capture_action_cache_() const noexcept {
-        CacheSnap_ snap{};
+        CacheSnap_ snap;
         if constexpr (HasSFullCache<A>) {
             snap.s_full = action_.last_s_full();
         }
@@ -297,10 +272,10 @@ private:
 
     void restore_action_cache_(CacheSnap_ const& snap) const noexcept {
         if constexpr (HasSFullCache<A>) {
-            action_.restore_last_s_full(snap.s_full);
+            action_.restore_last_s_full(*snap.s_full);
         }
         if constexpr (HasSImagCache<A>) {
-            action_.restore_last_s_imag(snap.s_imag);
+            action_.restore_last_s_imag(*snap.s_imag);
         }
     }
 

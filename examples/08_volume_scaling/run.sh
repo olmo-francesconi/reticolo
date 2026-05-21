@@ -10,30 +10,7 @@
 
 set -euo pipefail
 
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-root=$(cd "$here/../.." && pwd)
-preset=${RETICOLO_PRESET:-macos-appleclang}
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --preset)   preset="$2";      shift 2 ;;
-        --preset=*) preset="${1#*=}"; shift   ;;
-        -h|--help)
-            echo "Usage: $(basename "$0") [--preset <name>]"
-            echo "  --preset <name>   CMake build preset whose apps/ dir holds the"
-            echo "                    binary (default: \$RETICOLO_PRESET or"
-            echo "                    macos-appleclang)."
-            echo ""
-            echo "Environment knobs:"
-            echo "  NDIMS=2,3,4         spatial dimensions to sweep"
-            echo "  SIZES=4,6,8,12,16   linear lattice extents"
-            echo "  ACTIONS=phi4,...    subset of {phi4,compact_u1,wilson_su2,wilson_su3}"
-            echo "  BUDGET_DOFS=2e9     dof-update budget per kernel"
-            echo "  BUDGET_SECONDS=2.0  wall-time safety cap per kernel"
-            echo "  SEED=42"
-            exit 0 ;;
-        *) echo "unknown argument: $1" >&2; exit 1 ;;
-    esac
-done
+source "$(dirname "${BASH_SOURCE[0]}")/../_common/preset.sh" "$@"
 
 bin="$root/build/$preset/apps/bench_volume_scaling"
 if [[ ! -x $bin ]]; then

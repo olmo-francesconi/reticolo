@@ -1,12 +1,12 @@
 // Compact U(1) Wilson gauge theory — link Metropolis updater.
 //
 // Output schema:
-//   /run@*                — reproducibility metadata stamped by Writer
-//   /vars@*               — every --flag the Parser resolved
-//   /therm/stats/s        — S per thermalisation sweep
-//   /prod/stats/accept    — Metropolis accept rate per sweep
-//   /prod/obs/s           — total Wilson action S per sweep
-//   /prod/obs/plaq        — mean plaquette (S / (beta * n_plaq))
+//  /run@*                — reproducibility metadata stamped by Writer
+//  /vars@*               — every --flag the Parser resolved
+//  /therm/stats/s        — S per thermalisation sweep
+//  /prod/stats/accept    — Metropolis accept rate per sweep
+//  /prod/obs/s           — total Wilson action S per sweep
+//  /prod/obs/plaq        — mean plaquette (S / (beta * n_plaq))
 
 #include <reticolo/reticolo.hpp>
 

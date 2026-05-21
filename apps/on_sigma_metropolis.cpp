@@ -1,17 +1,17 @@
 // Metropolis for the O(3) sigma model on a `ndim`-dimensional cubic lattice.
 //
-//   S = -beta Σ_<x,y> phi(x) · phi(y),   phi(x) ∈ S^2
+//  S = -beta Σ_<x,y> phi(x) · phi(y),   phi(x) ∈ S^2
 //
 // N (= 3) is fixed at compile time because `OnSigma<N>` is templated; clone the
 // app and change one number to study a different group.
 //
 // Output schema:
-//   /run@*                — reproducibility metadata stamped by Writer
-//   /vars@*               — every --flag the Parser resolved
-//   /therm/stats/accept   — Metropolis acceptance per sweep
-//   /prod/stats/accept    — Metropolis acceptance per sweep
-//   /prod/obs/s           — S_full
-//   /prod/obs/m2          — |M|^2 / V^2 (rotation-invariant)
+//  /run@*                — reproducibility metadata stamped by Writer
+//  /vars@*               — every --flag the Parser resolved
+//  /therm/stats/accept   — Metropolis acceptance per sweep
+//  /prod/stats/accept    — Metropolis acceptance per sweep
+//  /prod/obs/s           — S_full
+//  /prod/obs/m2          — |M|^2 / V^2 (rotation-invariant)
 
 #include <reticolo/reticolo.hpp>
 

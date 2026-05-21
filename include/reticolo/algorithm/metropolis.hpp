@@ -27,24 +27,22 @@ struct MetropolisResult {
     }
 };
 
-// =============================================================================
-//  Metropolis sweep — one class for both site fields (Lattice<F>) and link
-//  fields (LinkLattice<F>). Three code paths picked at compile time:
+// Metropolis sweep — one class for both site fields (Lattice<F>) and link
+// fields (LinkLattice<F>). Three code paths picked at compile time:
 //
-//    1. HasDsLocalFromNbrs (scalar action with NN-only ds_local):
-//       visit_nn fast path with direct-stride neighbour reads; the
-//       acceptance body reuses the in-register `phi` instead of re-reading.
+//   1. HasDsLocalFromNbrs (scalar action with NN-only ds_local):
+//      visit_nn fast path with direct-stride neighbour reads; the
+//      acceptance body reuses the in-register `phi` instead of re-reading.
 //
-//    2. HasProposal (action provides its own proposal kernel):
-//       proposal comes from action_.propose(field, loc..., rng); fallback
-//       is Gaussian. Hooked into both the fast and generic paths.
+//   2. HasProposal (action provides its own proposal kernel):
+//      proposal comes from action_.propose(field, loc..., rng); fallback
+//      is Gaussian. Hooked into both the fast and generic paths.
 //
-//    3. Generic field.for_each_update visit (works for Lattice via
-//       (T&, Site) and LinkLattice via (T&, Site, mu)). The body's
-//       parameter pack `loc...` absorbs whichever extra coords the field
-//       yields, and `action_.ds_local(field, loc..., new_v)` unpacks the
-//       matching arity.
-// =============================================================================
+//   3. Generic field.for_each_update visit (works for Lattice via
+//      (T&, Site) and LinkLattice via (T&, Site, mu)). The body's
+//      parameter pack `loc...` absorbs whichever extra coords the field
+//      yields, and `action_.ds_local(field, loc..., new_v)` unpacks the
+//      matching arity.
 
 template <class A, class R, class F = typename A::value_type, class Field = Lattice<F>>
     requires(action::LocalAction<A, F> || gauge::LinkLocalAction<A, F>) && Rng<R>
@@ -96,11 +94,9 @@ public:
             return stats;
         }
 
-        // Generic path. The trailing `auto... loc` pack captures the field's
-        // location coords: () empty for Lattice (already absorbed by ref) — wait,
-        // not quite: Lattice yields (ref, Site), so loc = (Site). LinkLattice
-        // yields (ref, Site, mu), so loc = (Site, mu). Either way the action's
-        // existing ds_local signature unpacks the right arity.
+        // The `auto... loc` pack captures the field's location coords:
+        // Lattice yields (ref, Site) → loc=(Site); LinkLattice yields
+        // (ref, Site, mu) → loc=(Site, mu). Action's ds_local unpacks the arity.
         field_.for_each_update([&](F& ref, auto... loc) {
             F const old   = ref;
             F const new_v = propose_(old, loc...);

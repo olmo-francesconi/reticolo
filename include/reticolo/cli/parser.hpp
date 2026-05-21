@@ -15,22 +15,20 @@
 
 #include <cxxopts.hpp>
 
-// =============================================================================
-//  Command-line parser.
+// Command-line parser.
 //
-//  - `req<T>("name", "desc")` and `opt<T>("name", default, "desc")` register
-//    a variable and return a `T const&` to stable storage owned by the parser.
-//    The reference is valid only AFTER `parse(argc, argv)` returns.
-//  - `parse` is one cxxopts call under the hood. Throws on missing required,
-//    bad value, or unknown flag; prints help and exits on `--help` / `-h`.
-//  - `stamp_into(io::Writer&)` iterates every registered slot and writes its
-//    resolved value to `/vars@<name>`. The `Writer` constructor accepts a
-//    `Parser const*` so apps usually never call this explicitly.
+// - `req<T>("name", "desc")` and `opt<T>("name", default, "desc")` register
+//   a variable and return a `T const&` to stable storage owned by the parser.
+//   The reference is valid only AFTER `parse(argc, argv)` returns.
+// - `parse` is one cxxopts call under the hood. Throws on missing required,
+//   bad value, or unknown flag; prints help and exits on `--help` / `-h`.
+// - `stamp_into(io::Writer&)` iterates every registered slot and writes its
+//   resolved value to `/vars@<name>`. The `Writer` constructor accepts a
+//   `Parser const*` so apps usually never call this explicitly.
 //
-//  Supported value types: int, long, long long, unsigned int, unsigned long,
-//  unsigned long long, float, double, std::string. The set is intersected with
-//  what `io::Writer::attr<T>` instantiates, so every registered var stamps.
-// =============================================================================
+// Supported value types: int, long, long long, unsigned int, unsigned long,
+// unsigned long long, float, double, std::string. The set is intersected with
+// what `io::Writer::attr<T>` instantiates, so every registered var stamps.
 
 namespace reticolo::cli {
 

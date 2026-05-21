@@ -1,4 +1,4 @@
-#include "smoke_helpers.hpp"
+#include "../test_helpers.hpp"
 
 #ifndef XY_WOLFF_BINARY
     #error "XY_WOLFF_BINARY compile definition is required"

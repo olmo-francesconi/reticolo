@@ -1,4 +1,4 @@
-#include "smoke_helpers.hpp"
+#include "../test_helpers.hpp"
 
 #ifndef SU2_LLR_BINARY
     #error "SU2_LLR_BINARY compile definition is required"

@@ -5,11 +5,9 @@
 #include <cstddef>
 #include <string_view>
 
-// =============================================================================
-//  LLR-specific logging helpers. Sits next to <reticolo/core/log_helpers.hpp>
-//  so the core logger stays domain-agnostic — anything that knows about
-//  Robbins-Monro / Newton-Raphson sweeps lives here.
-// =============================================================================
+// LLR-specific logging helpers. Sits next to <reticolo/core/log_helpers.hpp>
+// so the core logger stays domain-agnostic — anything that knows about
+// Robbins-Monro / Newton-Raphson sweeps lives here.
 
 namespace reticolo::llr {
 

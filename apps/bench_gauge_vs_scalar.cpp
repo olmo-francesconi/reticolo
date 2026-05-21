@@ -7,14 +7,14 @@
 //
 // Flop accounting per dof per force evaluation (drift + kick fold in trivially):
 //
-//   Phi4         neighbour sum (2d) + polynomial (~7)             ≈ 2d + 7
-//   SineGordon   neighbour sum (2d) + 1 sin + ~3 polynomial      ≈ 2d + 3 + k_sin
-//   CompactU1    plaquette-centric scatter; each plaquette costs
-//                3 adds (plaq angle) + 1 sin + 1 mul + 4 link
-//                scatters (4 mul-add) and touches 4 links →
-//                amortised per link: (d-1)·(3 + k_sin + 9)/2
+//  Phi4         neighbour sum (2d) + polynomial (~7)             ≈ 2d + 7
+//  SineGordon   neighbour sum (2d) + 1 sin + ~3 polynomial      ≈ 2d + 3 + k_sin
+//  CompactU1    plaquette-centric scatter; each plaquette costs
+//               3 adds (plaq angle) + 1 sin + 1 mul + 4 link
+//               scatters (4 mul-add) and touches 4 links →
+//               amortised per link: (d-1)·(3 + k_sin + 9)/2
 //
-//   where k_sin = approximate libm sin/cos cost (~15 ops on modern hardware).
+//  where k_sin = approximate libm sin/cos cost (~15 ops on modern hardware).
 //
 // Omelyan2 per trajectory: (2*n_md + 1) force evals + 2*n_md drift updates
 // (2 ops/dof each). The constant front matter (momentum sampling, H()

@@ -14,39 +14,37 @@
 
 namespace reticolo::action {
 
-// =============================================================================
-//  Self-interacting relativistic lattice Bose gas at finite chemical potential.
-//  Two-component complex scalar phi_x on a d-dim hypercubic periodic lattice;
-//  the last direction is "time" and carries the chemical potential.
+// Self-interacting relativistic lattice Bose gas at finite chemical potential.
+// Two-component complex scalar phi_x on a d-dim hypercubic periodic lattice;
+// the last direction is "time" and carries the chemical potential.
 //
-//  Action (paper convention, arxiv:1910.11026 eq. 10):
+// Action (paper convention, arxiv:1910.11026 eq. 10):
 //
-//      S[phi] = sum_x [ (2d + m^2) |phi_x|^2  +  lambda |phi_x|^4
-//                       - sum_{nu=1..d} (   phi*_x exp(-mu*delta_{nu,d}) phi_{x+nu}
-//                                         + phi*_{x+nu} exp(+mu*delta_{nu,d}) phi_x ) ]
+//     S[phi] = sum_x [ (2d + m^2) |phi_x|^2  +  lambda |phi_x|^4
+//                      - sum_{nu=1..d} (   phi*_x exp(-mu*delta_{nu,d}) phi_{x+nu}
+//                                        + phi*_{x+nu} exp(+mu*delta_{nu,d}) phi_x ) ]
 //
-//  Splitting phi = phi_1 + i phi_2 and unwrapping the hopping for the time
-//  direction yields S = S_R + i sinh(mu) S_I with
+// Splitting phi = phi_1 + i phi_2 and unwrapping the hopping for the time
+// direction yields S = S_R + i sinh(mu) S_I with
 //
-//      S_R = sum_x [ (2d + m^2) |phi_x|^2  +  lambda |phi_x|^4 ]
-//          - 2 sum_x sum_{i=1..d-1} Re(phi*_x phi_{x+i_hat})
-//          - 2 cosh(mu) sum_x       Re(phi*_x phi_{x+d_hat})
+//     S_R = sum_x [ (2d + m^2) |phi_x|^2  +  lambda |phi_x|^4 ]
+//         - 2 sum_x sum_{i=1..d-1} Re(phi*_x phi_{x+i_hat})
+//         - 2 cosh(mu) sum_x       Re(phi*_x phi_{x+d_hat})
 //
-//      S_I = 2 sum_x  Im(phi*_x phi_{x+d_hat})
+//     S_I = 2 sum_x  Im(phi*_x phi_{x+d_hat})
 //
-//  Notes:
-//   * S_R is what HMC samples (the phase-quenched ensemble). It depends on mu
-//     via the cosh(mu) on the time-direction hopping.
-//   * S_I is mu-independent — the chemical potential enters only as a Fourier
-//     conjugate at reconstruction time (Z(mu) = integral rho(s) exp(-i sinh(mu) s) ds).
-//   * Force convention: the integrator advances (phi_re, phi_im) as two
-//     independent real DOFs, so compute_force writes the combined force
-//     `F.re = -dS/dphi_re,  F.im = -dS/dphi_im` packaged as a single complex
-//     per site. In Wirtinger notation that combination is F = -2 * dS/dphi*,
-//     so all closed-form expressions below carry the factor of 2.
-//   * At mu = 0 the action is O(2)-symmetric in (phi_1, phi_2) and reduces to
-//     a complex-field rewriting of the standard relativistic Bose gas.
-// =============================================================================
+// Notes:
+//  * S_R is what HMC samples (the phase-quenched ensemble). It depends on mu
+//    via the cosh(mu) on the time-direction hopping.
+//  * S_I is mu-independent — the chemical potential enters only as a Fourier
+//    conjugate at reconstruction time (Z(mu) = integral rho(s) exp(-i sinh(mu) s) ds).
+//  * Force convention: the integrator advances (phi_re, phi_im) as two
+//    independent real DOFs, so compute_force writes the combined force
+//    `F.re = -dS/dphi_re,  F.im = -dS/dphi_im` packaged as a single complex
+//    per site. In Wirtinger notation that combination is F = -2 * dS/dphi*,
+//    so all closed-form expressions below carry the factor of 2.
+//  * At mu = 0 the action is O(2)-symmetric in (phi_1, phi_2) and reduces to
+//    a complex-field rewriting of the standard relativistic Bose gas.
 
 template <class T = double>
 struct BoseGas {
@@ -63,8 +61,6 @@ struct BoseGas {
         e.param("λ={:.3f}", lambda);
         e.param("μ={:+.3f}", mu);
     }
-
-    // ---------- LocalAction (Metropolis would need these) ------------------
 
     [[nodiscard]] T s_local(Lattice<complex_t> const& l, Site x) const noexcept {
         std::size_t const d = l.ndims();
@@ -97,8 +93,6 @@ struct BoseGas {
                (T{2} * std::real(std::conj(new_v - phi) * staple));
     }
 
-    // ---------- HasSEff: real (phase-quenched) part ------------------------
-
     [[nodiscard]] T s_full(Lattice<complex_t> const& l) const noexcept {
         std::size_t const d   = l.ndims();
         T const coef_mass     = (T{2} * static_cast<T>(d)) + (mass * mass);
@@ -120,8 +114,6 @@ struct BoseGas {
 
     [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
     void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
-
-    // ---------- HasForce: F_R = -dS_R/dphi* --------------------------------
 
     void compute_force(Lattice<complex_t> const& l, Lattice<complex_t>& force) const noexcept {
         std::size_t const d  = l.ndims();
@@ -163,8 +155,6 @@ struct BoseGas {
                 mp[i] += k_dt * f_r;
             });
     }
-
-    // ---------- HasImagPart: S_I and F_I = -dS_I/dphi* ---------------------
 
     // Local change in S_I when phi_x → new_v. Only the two time-direction
     // hopping terms touching x contribute. Used by the windowed Metropolis
@@ -234,7 +224,6 @@ struct BoseGas {
         }
     }
 
-    // ---------- Fused combined force-and-kick (LLR complex-mode helper) ---
     //
     //   mom[i] += k_dt * ( scale_r * F_R[i] + scale_i * F_I[i] )
     //

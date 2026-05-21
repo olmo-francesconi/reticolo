@@ -7,7 +7,7 @@
 // to stdout or `--out`.
 //
 // CSV columns: ndim, L, nsites, dofs, action, kernel, n_calls, wall_s,
-//              dof_per_s.
+//             dof_per_s.
 
 #include <reticolo/reticolo.hpp>
 

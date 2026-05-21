@@ -12,16 +12,14 @@
 
 namespace reticolo::gauge_group {
 
-// =============================================================================
-//  SU(3) gauge group model. Storage: full 3×3 complex matrix, 18 reals per
-//  link element (see math::su3 for the layout). N = 3, so the Wilson
-//  prefactor is β/3 and the per-link constant in s_full is 3·n_plaq.
+// SU(3) gauge group model. Storage: full 3×3 complex matrix, 18 reals per
+// link element (see math::su3 for the layout). N = 3, so the Wilson
+// prefactor is β/3 and the per-link constant in s_full is 3·n_plaq.
 //
-//  Same surface as `SU2`: GaugeGroup concept members + per-plaquette
-//  `plaq_re_tr` + HMC slab hooks (sample/kinetic/expi_lmul/project) + a
-//  link-centric `compute_force` that walks each (x, μ) and assembles the
-//  full staple sum + TA[U·V] in one pass.
-// =============================================================================
+// Same surface as `SU2`: GaugeGroup concept members + per-plaquette
+// `plaq_re_tr` + HMC slab hooks (sample/kinetic/expi_lmul/project) + a
+// link-centric `compute_force` that walks each (x, μ) and assembles the
+// full staple sum + TA[U·V] in one pass.
 
 struct SU3 {
     using scalar_t                                 = double;

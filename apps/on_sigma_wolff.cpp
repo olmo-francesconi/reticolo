@@ -1,19 +1,19 @@
 // Single-cluster Wolff (+ Metropolis safety sweep) for the O(3) sigma model
 // on a `ndim`-dimensional cubic lattice.
 //
-//   S = -beta Σ_<x,y> phi(x) · phi(y),   phi(x) ∈ S^2
+//  S = -beta Σ_<x,y> phi(x) · phi(y),   phi(x) ∈ S^2
 //
 // At criticality cluster updates beat single-spin Metropolis by orders of
 // magnitude in autocorrelation time — use this app whenever the science
 // question lives near beta_c.
 //
 // Output schema:
-//   /run@*                — reproducibility metadata stamped by Writer
-//   /vars@*               — every --flag the Parser resolved
-//   /therm/stats/cluster  — cluster size per Wolff update
-//   /prod/stats/cluster   — cluster size per Wolff update
-//   /prod/obs/s           — S_full
-//   /prod/obs/m2          — |M|^2 / V^2 (rotation-invariant)
+//  /run@*                — reproducibility metadata stamped by Writer
+//  /vars@*               — every --flag the Parser resolved
+//  /therm/stats/cluster  — cluster size per Wolff update
+//  /prod/stats/cluster   — cluster size per Wolff update
+//  /prod/obs/s           — S_full
+//  /prod/obs/m2          — |M|^2 / V^2 (rotation-invariant)
 
 #include <reticolo/reticolo.hpp>
 

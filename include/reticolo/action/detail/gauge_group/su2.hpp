@@ -12,18 +12,16 @@
 
 namespace reticolo::gauge_group {
 
-// =============================================================================
-//  SU(2) gauge group model. Storage: full 2×2 complex matrix, 8 reals per
-//  link element (see math::su2 for the component layout). N = 2, so the
-//  Wilson prefactor is β/2 and the per-link constant in s_full is 2·n_plaq.
+// SU(2) gauge group model. Storage: full 2×2 complex matrix, 8 reals per
+// link element (see math::su2 for the component layout). N = 2, so the
+// Wilson prefactor is β/2 and the per-link constant in s_full is 2·n_plaq.
 //
-//  This M4 commit ships the GaugeGroup-concept-mandatory members plus the
-//  `plaq_re_tr` primitive that `Wilson<G>::s_full` and `s_local` need —
-//  enough to *compute* the Wilson action on an SU(2) configuration without
-//  yet having an HMC force kernel. `plaq_force_accum` (and therefore
-//  `Wilson<SU2>::compute_force`) arrives in M5 once the staple-scatter
-//  pattern is exercised end-to-end.
-// =============================================================================
+// This M4 commit ships the GaugeGroup-concept-mandatory members plus the
+// `plaq_re_tr` primitive that `Wilson<G>::s_full` and `s_local` need —
+// enough to *compute* the Wilson action on an SU(2) configuration without
+// yet having an HMC force kernel. `plaq_force_accum` (and therefore
+// `Wilson<SU2>::compute_force`) arrives in M5 once the staple-scatter
+// pattern is exercised end-to-end.
 
 struct SU2 {
     using scalar_t                                 = double;

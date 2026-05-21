@@ -17,17 +17,15 @@
 
 namespace reticolo::bench {
 
-// =============================================================================
-//  Hot-start helpers — fill each field type with a non-trivial random
-//  configuration so kernel benches measure real arithmetic instead of
-//  zero-fold shortcuts. Init time is excluded from the timed loop by
-//  construction (callers run this *before* the timing harness).
+// Hot-start helpers — fill each field type with a non-trivial random
+// configuration so kernel benches measure real arithmetic instead of
+// zero-fold shortcuts. Init time is excluded from the timed loop by
+// construction (callers run this *before* the timing harness).
 //
-//  Each overload follows the same pattern: take a freshly-default-
-//  constructed field, fill in place from an Rng. The Rng's state is
-//  advanced; reuse a single rng across multiple init calls if you want
-//  decorrelated fields.
-// =============================================================================
+// Each overload follows the same pattern: take a freshly-default-
+// constructed field, fill in place from an Rng. The Rng's state is
+// advanced; reuse a single rng across multiple init calls if you want
+// decorrelated fields.
 
 // ---- Lattice<double> ---------------------------------------------------------
 template <class Rng>

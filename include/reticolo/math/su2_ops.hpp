@@ -8,40 +8,38 @@
 
 namespace reticolo::math::su2 {
 
-// =============================================================================
-//  Hand-written 2×2 complex matrix kernels for SU(2) lattice gauge fields.
+// Hand-written 2×2 complex matrix kernels for SU(2) lattice gauge fields.
 //
-//  Storage layout (one link element, 8 real doubles):
+// Storage layout (one link element, 8 real doubles):
 //
-//      k=0 : Re U_{00}    k=1 : Im U_{00}
-//      k=2 : Re U_{01}    k=3 : Im U_{01}
-//      k=4 : Re U_{10}    k=5 : Im U_{10}
-//      k=6 : Re U_{11}    k=7 : Im U_{11}
+//     k=0 : Re U_{00}    k=1 : Im U_{00}
+//     k=2 : Re U_{01}    k=3 : Im U_{01}
+//     k=4 : Re U_{10}    k=5 : Im U_{10}
+//     k=6 : Re U_{11}    k=7 : Im U_{11}
 //
-//  When `MatrixLinkLattice<SU2,T>` stores a slab of n sites for direction mu,
-//  component k of the link at site s lives at `mu_block_data(mu)[k*n + s]`.
+// When `MatrixLinkLattice<SU2,T>` stores a slab of n sites for direction mu,
+// component k of the link at site s lives at `mu_block_data(mu)[k*n + s]`.
 //
-//  Per-site kernels load 4 doubles per complex matrix entry into stack
-//  registers, do the small matrix product or projection straight-line, and
-//  store back; the compiler turns the outer `for (s : n)` into an auto-
-//  vectorised loop because every load/store inside is stride-1 in s. No
-//  intrinsics, no Eigen — 2×2 is below any GEMM crossover.
+// Per-site kernels load 4 doubles per complex matrix entry into stack
+// registers, do the small matrix product or projection straight-line, and
+// store back; the compiler turns the outer `for (s : n)` into an auto-
+// vectorised loop because every load/store inside is stride-1 in s. No
+// intrinsics, no Eigen — 2×2 is below any GEMM crossover.
 //
-//  Algebra storage convention (anti-hermitian P with three real params h_a):
+// Algebra storage convention (anti-hermitian P with three real params h_a):
 //
-//      P = i·(h_1·sigma_x + h_2·sigma_y + h_3·sigma_z)
-//        = [  i·h_3            h_2 + i·h_1  ]
-//          [ -h_2 + i·h_1     -i·h_3        ]
+//     P = i·(h_1·sigma_x + h_2·sigma_y + h_3·sigma_z)
+//       = [  i·h_3            h_2 + i·h_1  ]
+//         [ -h_2 + i·h_1     -i·h_3        ]
 //
-//  so on the 8-real storage:
-//      h_1 = Im P_{01} (= Im P_{10})
-//      h_2 = Re P_{01} (= -Re P_{10})
-//      h_3 = Im P_{00} (= -Im P_{11})
-//      Re P_{00} = Re P_{11} = 0
+// so on the 8-real storage:
+//     h_1 = Im P_{01} (= Im P_{10})
+//     h_2 = Re P_{01} (= -Re P_{10})
+//     h_3 = Im P_{00} (= -Im P_{11})
+//     Re P_{00} = Re P_{11} = 0
 //
-//  Sampling: each h_a ~ N(0, 1) i.i.d. (so the kinetic energy per link is
-//  K = ||h||^2 = (1/2) Tr(P† P)). Force code must adopt the same convention.
-// =============================================================================
+// Sampling: each h_a ~ N(0, 1) i.i.d. (so the kinetic energy per link is
+// K = ||h||^2 = (1/2) Tr(P† P)). Force code must adopt the same convention.
 
 // ---------- per-site complex-multiply primitives -----------------------------
 
@@ -359,7 +357,7 @@ expi_lmul_slab(double* u, double const* p, double dt, std::size_t n) noexcept {
 
 // Sample P from the anti-hermitian-traceless Gaussian ensemble. Algebra
 // coordinates h_a (a = 1,2,3) drawn i.i.d. ~ N(0, 1/√2) so that
-//   Q(P) ∝ exp(−‖h‖²) = exp(−K(P))    with    K = (1/2)·Tr(P†P) = ‖h‖²
+//  Q(P) ∝ exp(−‖h‖²) = exp(−K(P))    with    K = (1/2)·Tr(P†P) = ‖h‖²
 // matches the kinetic part of H used by the Metropolis accept (HMC detailed
 // balance). Variance 1/2 is the SU(N) analog of the scalar N(0, 1) sampling
 // against K = (1/2)·p²: in both cases σ² = 1 / (∂²K/∂coord²).

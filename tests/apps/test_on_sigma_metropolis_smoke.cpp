@@ -1,4 +1,4 @@
-#include "smoke_helpers.hpp"
+#include "../test_helpers.hpp"
 
 #ifndef ON_SIGMA_METROPOLIS_BINARY
     #error "ON_SIGMA_METROPOLIS_BINARY compile definition is required"

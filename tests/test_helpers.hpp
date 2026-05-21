@@ -1,11 +1,9 @@
-// Shared helpers for the per-app HDF5 smoke tests. Header-only so the macro
-// `BINARY` and Catch2 macros stay in the test TU.
-
 #pragma once
 
 #include <cstdlib>
 #include <filesystem>
 #include <string>
+#include <system_error>
 
 #include <catch2/catch_test_macros.hpp>
 #include <hdf5.h>
@@ -18,6 +16,31 @@ namespace reticolo::test {
     return std::filesystem::temp_directory_path() /
            ("reticolo_" + tag + "_" + std::to_string(::getpid()) + ".h5");
 }
+
+// RAII scratch HDF5 file: unique per (tag, pid), pre-cleared on construction,
+// removed on destruction. Implicit-converts to filesystem::path for ergonomic
+// passing to Writer / H5Fopen.
+class ScratchH5 {
+public:
+    explicit ScratchH5(std::string const& tag) : path_{scratch_path(tag)} {
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
+    }
+    ~ScratchH5() {
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
+    }
+    ScratchH5(ScratchH5 const&)            = delete;
+    ScratchH5& operator=(ScratchH5 const&) = delete;
+    ScratchH5(ScratchH5&&)                 = delete;
+    ScratchH5& operator=(ScratchH5&&)      = delete;
+
+    [[nodiscard]] std::filesystem::path const& path() const noexcept { return path_; }
+    operator std::filesystem::path const&() const noexcept { return path_; }  // NOLINT(google-explicit-constructor)
+
+private:
+    std::filesystem::path path_;
+};
 
 inline void run_and_require_exit(std::string const& cmd) {
     int const raw_rc = std::system(cmd.c_str());  // NOLINT(concurrency-mt-unsafe)

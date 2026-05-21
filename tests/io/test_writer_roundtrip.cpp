@@ -1,34 +1,16 @@
+#include "../test_helpers.hpp"
+
 #include <reticolo/io/writer.hpp>
 
 #include <complex>
 #include <cstddef>
-#include <filesystem>
 #include <string>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 #include <hdf5.h>
-#include <unistd.h>
 
 namespace {
-
-// Unique-per-process scratch file with auto-cleanup.
-struct TempH5 {
-    std::filesystem::path path;
-
-    explicit TempH5(std::string const& tag) {
-        path = std::filesystem::temp_directory_path() /
-               ("reticolo_" + tag + "_" + std::to_string(::getpid()) + ".h5");
-        std::error_code ec;
-        std::filesystem::remove(path, ec);
-    }
-    ~TempH5() {
-        std::error_code ec;
-        std::filesystem::remove(path, ec);
-    }
-    TempH5(TempH5 const&)            = delete;
-    TempH5& operator=(TempH5 const&) = delete;
-};
 
 // Read a 1D dataset of T from `file` at `path`. Asserts on any HDF5 failure.
 template <class T>
@@ -55,18 +37,18 @@ using reticolo::io::Series;
 using reticolo::io::Writer;
 
 TEST_CASE("Writer round-trips a Series<double> through file close", "[io][roundtrip]") {
-    TempH5 f{"roundtrip_double"};
+    reticolo::test::ScratchH5 f{"roundtrip_double"};
 
     constexpr std::size_t k_n = 5000;
     {
-        Writer w{f.path};
+        Writer w{f.path()};
         auto s = w.series<double>("/prod/obs/s");
         for (std::size_t i = 0; i < k_n; ++i) {
             s.append(static_cast<double>(i) * 0.5);
         }
     }
 
-    hid_t file = H5Fopen(f.path.string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file = H5Fopen(f.path().string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     REQUIRE(file >= 0);
     auto read = read_series<double>(file, "/prod/obs/s", H5T_NATIVE_DOUBLE);
     H5Fclose(file);
@@ -78,17 +60,17 @@ TEST_CASE("Writer round-trips a Series<double> through file close", "[io][roundt
 }
 
 TEST_CASE("Writer round-trips a Series<int>", "[io][roundtrip]") {
-    TempH5 f{"roundtrip_int"};
+    reticolo::test::ScratchH5 f{"roundtrip_int"};
 
     {
-        Writer w{f.path};
+        Writer w{f.path()};
         auto s = w.series<int>("/therm/stats/accept");
         for (int i = 0; i < 100; ++i) {
             s.append(i * 3);
         }
     }
 
-    hid_t file = H5Fopen(f.path.string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file = H5Fopen(f.path().string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     REQUIRE(file >= 0);
     auto read = read_series<int>(file, "/therm/stats/accept", H5T_NATIVE_INT);
     H5Fclose(file);
@@ -100,11 +82,11 @@ TEST_CASE("Writer round-trips a Series<int>", "[io][roundtrip]") {
 }
 
 TEST_CASE("Writer round-trips a Series<complex<double>> via legacy compound", "[io][roundtrip]") {
-    TempH5 f{"roundtrip_complex"};
+    reticolo::test::ScratchH5 f{"roundtrip_complex"};
 
     constexpr std::size_t k_n = 50;
     {
-        Writer w{f.path};
+        Writer w{f.path()};
         auto s = w.series<std::complex<double>>("/prod/obs/z");
         for (std::size_t i = 0; i < k_n; ++i) {
             s.append(std::complex<double>{static_cast<double>(i), -static_cast<double>(i) * 0.1});
@@ -112,7 +94,7 @@ TEST_CASE("Writer round-trips a Series<complex<double>> via legacy compound", "[
     }
 
     // Reopen and rebuild the matching compound type for read-back.
-    hid_t file = H5Fopen(f.path.string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file = H5Fopen(f.path().string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     REQUIRE(file >= 0);
 
     hid_t cid = H5Tcreate(H5T_COMPOUND, sizeof(std::complex<double>));
@@ -132,18 +114,18 @@ TEST_CASE("Writer round-trips a Series<complex<double>> via legacy compound", "[
 
 TEST_CASE("Series flushes buffered rows when destroyed before chunk fills",
           "[io][roundtrip][flush]") {
-    TempH5 f{"flush_partial"};
+    reticolo::test::ScratchH5 f{"flush_partial"};
 
     // Chunk = 1024 rows; we append only 17. Dtor must flush them.
     {
-        Writer w{f.path};
+        Writer w{f.path()};
         auto s = w.series<double>("/probe", /*chunk=*/1024);
         for (int i = 0; i < 17; ++i) {
             s.append(static_cast<double>(i));
         }
     }
 
-    hid_t file = H5Fopen(f.path.string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file = H5Fopen(f.path().string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     REQUIRE(file >= 0);
     auto read = read_series<double>(file, "/probe", H5T_NATIVE_DOUBLE);
     H5Fclose(file);
@@ -155,10 +137,10 @@ TEST_CASE("Series flushes buffered rows when destroyed before chunk fills",
 }
 
 TEST_CASE("Multiple Series in one Writer write independent datasets", "[io][roundtrip]") {
-    TempH5 f{"multi_series"};
+    reticolo::test::ScratchH5 f{"multi_series"};
 
     {
-        Writer w{f.path};
+        Writer w{f.path()};
         auto a = w.series<double>("/a");
         auto b = w.series<int>("/b");
         for (int i = 0; i < 10; ++i) {
@@ -167,7 +149,7 @@ TEST_CASE("Multiple Series in one Writer write independent datasets", "[io][roun
         }
     }
 
-    hid_t file = H5Fopen(f.path.string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file = H5Fopen(f.path().string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     REQUIRE(file >= 0);
     auto a_read = read_series<double>(file, "/a", H5T_NATIVE_DOUBLE);
     auto b_read = read_series<int>(file, "/b", H5T_NATIVE_INT);
@@ -182,16 +164,16 @@ TEST_CASE("Multiple Series in one Writer write independent datasets", "[io][roun
 }
 
 TEST_CASE("Writer::attr round-trips scalar and string attributes", "[io][attr]") {
-    TempH5 f{"attr"};
+    reticolo::test::ScratchH5 f{"attr"};
 
     {
-        Writer w{f.path};
+        Writer w{f.path()};
         w.attr<double>("/vars@kappa", 0.137);
         w.attr<int>("/vars@n_md", 20);
         w.attr<std::string>("/vars@note", std::string{"phi4 hot start"});
     }
 
-    hid_t file = H5Fopen(f.path.string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file = H5Fopen(f.path().string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     REQUIRE(file >= 0);
     hid_t vars = H5Gopen2(file, "/vars", H5P_DEFAULT);
     REQUIRE(vars >= 0);

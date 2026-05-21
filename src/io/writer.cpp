@@ -235,9 +235,7 @@ void write_scalar_attr(hid_t obj, char const* name, T const& value) {
 
 }  // namespace
 
-// ============================================================================
-//  Writer::Impl
-// ============================================================================
+// Writer::Impl
 struct Writer::Impl {
     std::filesystem::path file_path;
     hid_t file = H5I_INVALID_HID;
@@ -286,9 +284,7 @@ struct Writer::Impl {
     }
 };
 
-// ============================================================================
-//  Series<T>::Impl
-// ============================================================================
+// Series<T>::Impl
 template <class T>
 struct Series<T>::Impl {
     std::vector<T> buffer;
@@ -353,9 +349,7 @@ struct Series<T>::Impl {
     }
 };
 
-// ============================================================================
-//  Series<T> definitions
-// ============================================================================
+// Series<T> definitions
 template <class T>
 Series<T>::~Series() = default;
 
@@ -398,9 +392,7 @@ bool Series<T>::valid() const noexcept {
     return impl_ != nullptr;
 }
 
-// ============================================================================
-//  Writer definitions
-// ============================================================================
+// Writer definitions
 Writer::Writer(std::filesystem::path const& path,
                int argc,
                char const* const* argv,
@@ -507,9 +499,7 @@ void Writer::attr(std::string_view path, T const& value) {
     H5Oclose(parent);
 }
 
-// ============================================================================
-//  Explicit instantiations
-// ============================================================================
+// Explicit instantiations
 #define RETICOLO_IO_INSTANTIATE(T)                                                                 \
     template class Series<T>;                                                                      \
     template Series<T> Writer::series<T>(std::string_view, std::size_t);                           \

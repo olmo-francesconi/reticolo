@@ -10,6 +10,7 @@
 #include <cstddef>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 using reticolo::FastRng;
 using reticolo::Lattice;
@@ -49,7 +50,7 @@ TEST_CASE("OnSigma::propose returns unit vectors", "[physics][on_sigma]") {
     FastRng rng{42};
     for (int trial = 0; trial < 256; ++trial) {
         auto const proposal = action.propose(phi, Site{0}, rng);
-        REQUIRE(std::abs(norm(proposal) - 1.0) < 1e-12);
+        REQUIRE(norm(proposal) == Catch::Approx(1.0).margin(1e-12));
     }
 }
 
@@ -74,7 +75,7 @@ TEST_CASE("OnSigma: ds_local matches s_full difference", "[physics][on_sigma]") 
         double const s_new        = action.s_full(phi);
         phi[x]                    = old;
 
-        REQUIRE(std::abs(ds_predicted - (s_new - s_old)) < 1e-10);
+        REQUIRE(ds_predicted == Catch::Approx((s_new - s_old)).margin(1e-10));
     }
 }
 
@@ -114,8 +115,8 @@ TEST_CASE("OnSigma at beta=0: Metropolis reaches isotropic distribution",
     for (std::size_t i = 0; i < 3; ++i) {
         double const mean    = sum_v[i] * inv_n;
         double const mean_sq = sum_v2[i] * inv_n;
-        REQUIRE(std::abs(mean) < 0.02);
-        REQUIRE(std::abs(mean_sq - (1.0 / 3.0)) < 0.02);
+        REQUIRE(mean == Catch::Approx(0.0).margin(0.02));
+        REQUIRE(mean_sq == Catch::Approx((1.0 / 3.0)).margin(0.02));
     }
 }
 

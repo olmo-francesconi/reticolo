@@ -11,28 +11,26 @@
 
 namespace reticolo {
 
-// =============================================================================
-//  Matrix-valued link field on a hypercubic (periodic) lattice. Each link
-//  carries one N×N complex group element (SU(N), or any GaugeGroup model);
-//  storage is split into `n_real_components = 2*N*N` real arrays per
-//  direction, each contiguous over the nsites site axis. The flat buffer
-//  layout is
+// Matrix-valued link field on a hypercubic (periodic) lattice. Each link
+// carries one N×N complex group element (SU(N), or any GaugeGroup model);
+// storage is split into `n_real_components = 2*N*N` real arrays per
+// direction, each contiguous over the nsites site axis. The flat buffer
+// layout is
 //
-//       [ndim][n_real_components][nsites]      (lex order)
-//       flat = ((mu * nc) + k) * nsites + site_index(x)
+//      [ndim][n_real_components][nsites]      (lex order)
+//      flat = ((mu * nc) + k) * nsites + site_index(x)
 //
-//  i.e. the existing direction-major LinkLattice pattern, refined one level
-//  further into per-component SoA slabs. For a fixed direction mu the per-
-//  component array `mu_comp_data(mu, k)` is a plain stride-1 buffer — the
-//  Wilson plaquette plane loops can walk all 2*N*N component streams in
-//  lockstep, giving the compiler clean stride-1 FMA chains across sites
-//  without any intrinsics.
+// i.e. the existing direction-major LinkLattice pattern, refined one level
+// further into per-component SoA slabs. For a fixed direction mu the per-
+// component array `mu_comp_data(mu, k)` is a plain stride-1 buffer — the
+// Wilson plaquette plane loops can walk all 2*N*N component streams in
+// lockstep, giving the compiler clean stride-1 FMA chains across sites
+// without any intrinsics.
 //
-//  The momentum field for matrix-group HMC has the same shape (algebra
-//  elements stored as anti-hermitian traceless N×N matrices), so the same
-//  type doubles as the momentum buffer; the Group concept's `kinetic_slab`
-//  / `sample_algebra_slab` are what interpret the components.
-// =============================================================================
+// The momentum field for matrix-group HMC has the same shape (algebra
+// elements stored as anti-hermitian traceless N×N matrices), so the same
+// type doubles as the momentum buffer; the Group concept's `kinetic_slab`
+// / `sample_algebra_slab` are what interpret the components.
 
 template <class G, class T = double>
 class MatrixLinkLattice {

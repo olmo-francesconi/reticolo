@@ -6,20 +6,18 @@
 
 namespace reticolo::bench {
 
-// =============================================================================
-//  Adaptive-batch timing: call `body()` repeatedly inside a single timed
-//  region, doubling the batch size until total wall time exceeds
-//  `k_target_seconds`. Returns the per-call wall time = total / n. The
-//  batch approach is essential for sub-microsecond kernels where
-//  individual `steady_clock::now()` calls have ~ns overhead and can't
-//  resolve a single body() invocation.
+// Adaptive-batch timing: call `body()` repeatedly inside a single timed
+// region, doubling the batch size until total wall time exceeds
+// `k_target_seconds`. Returns the per-call wall time = total / n. The
+// batch approach is essential for sub-microsecond kernels where
+// individual `steady_clock::now()` calls have ~ns overhead and can't
+// resolve a single body() invocation.
 //
-//  Each measurement is preceded by `k_warmup_calls` warmups to fill
-//  caches; warmup time is excluded. To smooth one-off OS jitter, the
-//  final timed batch is run `k_trials` times and the *minimum* per-call
-//  wall time is returned (best of N — standard microbenchmark practice
-//  since slowdowns are noise, never speedups).
-// =============================================================================
+// Each measurement is preceded by `k_warmup_calls` warmups to fill
+// caches; warmup time is excluded. To smooth one-off OS jitter, the
+// final timed batch is run `k_trials` times and the *minimum* per-call
+// wall time is returned (best of N — standard microbenchmark practice
+// since slowdowns are noise, never speedups).
 
 using bench_clock = std::chrono::steady_clock;
 

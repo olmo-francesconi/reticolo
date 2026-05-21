@@ -108,7 +108,7 @@ def collapse_residual(
     return total
 
 
-def main() -> int:
+def main():
     files = sorted(RESULTS.glob("phi4_L*_kappa*.h5"))
     if not files:
         print(f"no results in {RESULTS}; run ./run.sh first", file=sys.stderr)
@@ -201,8 +201,6 @@ def main() -> int:
     out = HERE / "susceptibility.pdf"
     fig.savefig(out, dpi=150)
     print(f"\nwrote {out}")
-    return 0
-
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

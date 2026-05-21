@@ -1,17 +1,17 @@
 // HMC for the sine-Gordon scalar field on a 4D hypercubic lattice.
 //
-//   S = sum_x [ -2 kappa phi(x) Σ_{mu>0} phi(x+mu)  +  phi(x)^2
-//               - alpha cos(phi(x)) ]
+//  S = sum_x [ -2 kappa phi(x) Σ_{mu>0} phi(x+mu)  +  phi(x)^2
+//              - alpha cos(phi(x)) ]
 //
 // Output schema:
-//   /run@*                — reproducibility metadata stamped by Writer
-//   /vars@*               — every --flag the Parser resolved
-//   /therm/stats/s        — S_full per thermalisation trajectory
-//   /prod/stats/dH        — H_final - H_initial per production trajectory
-//   /prod/stats/accepted  — 0/1 acceptance flag
-//   /prod/obs/s           — S_full
-//   /prod/obs/mag         — |<phi>|
-//   /prod/obs/cos_phi     — <cos(phi)>
+//  /run@*                — reproducibility metadata stamped by Writer
+//  /vars@*               — every --flag the Parser resolved
+//  /therm/stats/s        — S_full per thermalisation trajectory
+//  /prod/stats/dH        — H_final - H_initial per production trajectory
+//  /prod/stats/accepted  — 0/1 acceptance flag
+//  /prod/obs/s           — S_full
+//  /prod/obs/mag         — |<phi>|
+//  /prod/obs/cos_phi     — <cos(phi)>
 
 #include <reticolo/reticolo.hpp>
 

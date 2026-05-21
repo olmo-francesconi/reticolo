@@ -15,19 +15,17 @@
 
 namespace reticolo::action {
 
-// =============================================================================
-//  O(N) sigma model. Each site holds a unit N-vector phi(x) ∈ S^(N-1):
+// O(N) sigma model. Each site holds a unit N-vector phi(x) ∈ S^(N-1):
 //
-//    S = -beta * sum_<x,y>  phi(x) · phi(y)
+//   S = -beta * sum_<x,y>  phi(x) · phi(y)
 //
-//  The unit-norm constraint is preserved by `propose`, which draws a uniform
-//  random vector on the sphere via the Marsaglia normalised-Gaussian trick.
-//  Apps must seed every site to a unit vector before the first sweep.
+// The unit-norm constraint is preserved by `propose`, which draws a uniform
+// random vector on the sphere via the Marsaglia normalised-Gaussian trick.
+// Apps must seed every site to a unit vector before the first sweep.
 //
-//  HMC on a constrained manifold (RATTLE-style) is deferred — at M8 OnSigma
-//  satisfies LocalAction + HasSEff + HasProposal, which is exactly what
-//  `alg::Metropolis` needs to drive it.
-// =============================================================================
+// HMC on a constrained manifold (RATTLE-style) is deferred — at M8 OnSigma
+// satisfies LocalAction + HasSEff + HasProposal, which is exactly what
+// `alg::Metropolis` needs to drive it.
 
 template <std::size_t N, class T = double>
 struct OnSigma {
@@ -151,13 +149,10 @@ private:
     [[nodiscard]] static value_type random_unit_(R& rng) noexcept {
         value_type p{};
         T norm_sq = T{0};
-        do {
-            norm_sq = T{0};
-            for (std::size_t i = 0; i < N; ++i) {
-                p[i] = static_cast<T>(rng.normal());
-                norm_sq += p[i] * p[i];
-            }
-        } while (static_cast<double>(norm_sq) < 1e-30);
+        for (std::size_t i = 0; i < N; ++i) {
+            p[i] = static_cast<T>(rng.normal());
+            norm_sq += p[i] * p[i];
+        }
         T const inv = T{1} / std::sqrt(norm_sq);
         for (std::size_t i = 0; i < N; ++i) {
             p[i] *= inv;

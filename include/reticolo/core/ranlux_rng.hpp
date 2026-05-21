@@ -9,22 +9,20 @@
 
 namespace reticolo {
 
-// =============================================================================
-//  RanluxRng — thin wrapper around std::ranlux48 (subtract-with-carry with
-//  Lüscher's discard).
+// RanluxRng — thin wrapper around std::ranlux48 (subtract-with-carry with
+// Lüscher's discard).
 //
-//  Drop-in for FastRng: same constructor / reseed / uniform_u64 / uniform /
-//  uniform_int / normal / normal_fill surface, same `state_type = uint64_t`,
-//  same Box-Muller polar form for Gaussian sampling. Plug into any existing
-//  templated call site (`Hmc<A, R, Integrator, Field>`, gauge group algebra
-//  samplers, LLR replicas, …) by changing `FastRng` to `RanluxRng`.
+// Drop-in for FastRng: same constructor / reseed / uniform_u64 / uniform /
+// uniform_int / normal / normal_fill surface, same `state_type = uint64_t`,
+// same Box-Muller polar form for Gaussian sampling. Plug into any existing
+// templated call site (`Hmc<A, R, Integrator, Field>`, gauge group algebra
+// samplers, LLR replicas, …) by changing `FastRng` to `RanluxRng`.
 //
-//  Engine produces 48 random bits per call; uniform_u64 combines two calls
-//  via `(r1 << 16) ^ r2` so all 96 source bits feed the 64-bit output (the
-//  high 16 of the result are r1's top 16 bits unmixed; the rest is XORed
-//  with r2). Quality of the discard schedule built into std::ranlux48 is
-//  preserved — we're only repackaging bits, not introducing correlations.
-// =============================================================================
+// Engine produces 48 random bits per call; uniform_u64 combines two calls
+// via `(r1 << 16) ^ r2` so all 96 source bits feed the 64-bit output (the
+// high 16 of the result are r1's top 16 bits unmixed; the rest is XORed
+// with r2). Quality of the discard schedule built into std::ranlux48 is
+// preserved — we're only repackaging bits, not introducing correlations.
 
 class RanluxRng {
 public:

@@ -12,48 +12,44 @@
     #include <immintrin.h>
 #endif
 
-// =============================================================================
-//  Portable vectorised libm wrappers backed by Sleef.
+// Portable vectorised libm wrappers backed by Sleef.
 //
-//  Each function takes a flat double buffer of `n` elements and writes the
-//  per-element sin / cos / sincos into a destination buffer. Internally the
-//  loop processes `V` doubles at a time using the widest Sleef vector
-//  function available for the target ISA, then drops to scalar Sleef for the
-//  tail. Accuracy class is u_lp_10 (1 ULP at 10 digits) — same precision
-//  budget as `std::sin` / `std::cos` for the argument ranges we use
-//  (plaquettes / angles in [-pi, pi] after the lattice-update step).
+// Each function takes a flat double buffer of `n` elements and writes the
+// per-element sin / cos / sincos into a destination buffer. Internally the
+// loop processes `V` doubles at a time using the widest Sleef vector
+// function available for the target ISA, then drops to scalar Sleef for the
+// tail. Accuracy class is u_lp_10 (1 ULP at 10 digits) — same precision
+// budget as `std::sin` / `std::cos` for the argument ranges we use
+// (plaquettes / angles in [-pi, pi] after the lattice-update step).
 //
-//  Target dispatch is compile-time only — there is no runtime CPU detect.
-//  Build with `-march=native` (the project's default Release toolchain) and
-//  you get the best variant the host CPU supports. Cross-compiling to a
-//  smaller ISA falls back to a narrower vector or scalar Sleef.
-// =============================================================================
+// Target dispatch is compile-time only — there is no runtime CPU detect.
+// Build with `-march=native` (the project's default Release toolchain) and
+// you get the best variant the host CPU supports. Cross-compiling to a
+// smaller ISA falls back to a narrower vector or scalar Sleef.
 
 namespace reticolo::math {
 
 namespace detail {
 
-// =============================================================================
-//  Sleef dispatch warm-up
+// Sleef dispatch warm-up
 //
-//  Sleef's public scalar entry points (e.g. `Sleef_sin_u10`) read a function
-//  pointer from a per-symbol dispatch table and tail-call it. On the *first*
-//  call the slot resolves through `disp_<name>`, which calls an internal
-//  `cpuSupportsExt` that probes CPU support using process-global
-//  `signal(SIGILL, ...)` + `sigsetjmp()`. If two OpenMP worker threads enter
-//  this probe concurrently they trash each other's signal disposition and
-//  jmp_buf — one thread's `siglongjmp` lands on a stack frame that no longer
-//  exists on its current thread and the indirect branch goes to whatever
-//  address happens to live in the corrupted dispatch slot (observed:
-//  KERN_PROTECTION_FAILURE inside `disp_sincosd1_u10+20`, the return from
-//  `bl _cpuSupportsExt`).
+// Sleef's public scalar entry points (e.g. `Sleef_sin_u10`) read a function
+// pointer from a per-symbol dispatch table and tail-call it. On the *first*
+// call the slot resolves through `disp_<name>`, which calls an internal
+// `cpuSupportsExt` that probes CPU support using process-global
+// `signal(SIGILL, ...)` + `sigsetjmp()`. If two OpenMP worker threads enter
+// this probe concurrently they trash each other's signal disposition and
+// jmp_buf — one thread's `siglongjmp` lands on a stack frame that no longer
+// exists on its current thread and the indirect branch goes to whatever
+// address happens to live in the corrupted dispatch slot (observed:
+// KERN_PROTECTION_FAILURE inside `disp_sincosd1_u10+20`, the return from
+// `bl _cpuSupportsExt`).
 //
-//  Force the probe to run once before main, single-threaded, by calling each
-//  dispatched scalar symbol we use. `SLEEF_CONST` lets the optimizer elide
-//  unused return values, so we sink them through a `volatile` to keep the
-//  calls live. The `inline` variable guarantees a single definition across
-//  translation units.
-// =============================================================================
+// Force the probe to run once before main, single-threaded, by calling each
+// dispatched scalar symbol we use. `SLEEF_CONST` lets the optimizer elide
+// unused return values, so we sink them through a `volatile` to keep the
+// calls live. The `inline` variable guarantees a single definition across
+// translation units.
 inline auto const sleef_dispatch_warmup = [] {
     volatile double sink{};
     sink                   = Sleef_sin_u10(0.0);

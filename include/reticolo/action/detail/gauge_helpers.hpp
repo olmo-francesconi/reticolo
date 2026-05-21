@@ -8,24 +8,22 @@
 
 namespace reticolo::action::detail {
 
-// =============================================================================
-//  Plaquette-plane bulk-vs-slab hot-loop helper for direction-major
-//  link-style fields (LinkLattice<T>, MatrixLinkLattice<G,T> — anything
-//  exposing shape()/ndims()/nsites()/indexing_ref()). Each call iterates
-//  one (mu, nu) plane and invokes the body
-//  on every site s with the precomputed neighbour indices
-//      body(s, s_pmu, s_pnu)
-//  where  s_pmu = next(s, mu),  s_pnu = next(s, nu)  (both periodic).
+// Plaquette-plane bulk-vs-slab hot-loop helper for direction-major
+// link-style fields (LinkLattice<T>, MatrixLinkLattice<G,T> — anything
+// exposing shape()/ndims()/nsites()/indexing_ref()). Each call iterates
+// one (mu, nu) plane and invokes the body
+// on every site s with the precomputed neighbour indices
+//     body(s, s_pmu, s_pnu)
+// where  s_pmu = next(s, mu),  s_pnu = next(s, nu)  (both periodic).
 //
-//  In the bulk — sites where neither s + mu_hat nor s + nu_hat wraps — the
-//  offsets `s_pmu - s` and `s_pnu - s` are *plane-constants* (the strides of
-//  mu and nu). The inner loop becomes stride-1 in s with fixed offsets, so
-//  reads of `mu_block[s + off_*]` and writes scattered to `mom_*_block[
-//  s + off_*]` autovectorise. The wrap boundaries (a thin slab in each of
-//  mu, nu and the joint corner) are peeled off and handled with `next[]`.
+// In the bulk — sites where neither s + mu_hat nor s + nu_hat wraps — the
+// offsets `s_pmu - s` and `s_pnu - s` are *plane-constants* (the strides of
+// mu and nu). The inner loop becomes stride-1 in s with fixed offsets, so
+// reads of `mu_block[s + off_*]` and writes scattered to `mom_*_block[
+// s + off_*]` autovectorise. The wrap boundaries (a thin slab in each of
+// mu, nu and the joint corner) are peeled off and handled with `next[]`.
 //
-//  Specialisations: 2D, 3D, 4D. Fallback uses `next[]` for every access.
-// =============================================================================
+// Specialisations: 2D, 3D, 4D. Fallback uses `next[]` for every access.
 
 template <class Field, class Body>
 inline void

@@ -12,21 +12,19 @@
 
 namespace reticolo {
 
-// =============================================================================
-//  Link field on a hypercubic (periodic) lattice. Each site x owns `ndim`
-//  outgoing links theta_mu(x), mu = 0..ndim-1, where theta_mu(x) is the
-//  oriented link x -> x + mu_hat.
+// Link field on a hypercubic (periodic) lattice. Each site x owns `ndim`
+// outgoing links theta_mu(x), mu = 0..ndim-1, where theta_mu(x) is the
+// oriented link x -> x + mu_hat.
 //
-//  Storage is **direction-major**: a single flat std::vector<T> of size
-//  `ndim * nsites`, with each direction's links forming a contiguous nsites
-//  block. Indexing is
-//        flat = mu * nsites + site_index(x)
-//  so for a fixed direction mu the per-site array `mu_data(mu)` is a plain
-//  stride-1 buffer — same memory pattern as the sibling site `Lattice<T>`,
-//  which lets the same bulk-vs-slab autovectorisation pattern apply
-//  plane-by-plane in the gauge action hot loops. The pooled Indexing is
-//  shared with any sibling `Lattice<F>` of the same shape (e.g. force, mom).
-// =============================================================================
+// Storage is **direction-major**: a single flat std::vector<T> of size
+// `ndim * nsites`, with each direction's links forming a contiguous nsites
+// block. Indexing is
+//       flat = mu * nsites + site_index(x)
+// so for a fixed direction mu the per-site array `mu_data(mu)` is a plain
+// stride-1 buffer — same memory pattern as the sibling site `Lattice<T>`,
+// which lets the same bulk-vs-slab autovectorisation pattern apply
+// plane-by-plane in the gauge action hot loops. The pooled Indexing is
+// shared with any sibling `Lattice<F>` of the same shape (e.g. force, mom).
 
 template <class T>
 class LinkLattice {

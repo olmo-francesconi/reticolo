@@ -14,18 +14,16 @@
 
 namespace reticolo::gauge_group {
 
-// =============================================================================
-//  U(1) gauge group model. Each link element is a phase U = exp(iθ) stored
-//  as a single real angle θ ∈ ℝ — so n_real_components = 1. The group is
-//  abelian, so the plaquette product reduces to a sum of four signed angles
-//  and Re Tr U_p = cos(θ_p). All "matrix" math collapses to scalar math.
+// U(1) gauge group model. Each link element is a phase U = exp(iθ) stored
+// as a single real angle θ ∈ ℝ — so n_real_components = 1. The group is
+// abelian, so the plaquette product reduces to a sum of four signed angles
+// and Re Tr U_p = cos(θ_p). All "matrix" math collapses to scalar math.
 //
-//  The slab-batched hot paths here use the same Sleef cos/sin scratch
-//  pattern as `action::CompactU1`, so Wilson<U(1)> matches CompactU1
-//  throughput on the HMC bench (M8: retire CompactU1 once verified).
-//  Scratch is owned per call-site via a function-local thread_local —
-//  the gauge group struct itself stays stateless.
-// =============================================================================
+// The slab-batched hot paths here use the same Sleef cos/sin scratch
+// pattern as `action::CompactU1`, so Wilson<U(1)> matches CompactU1
+// throughput on the HMC bench (M8: retire CompactU1 once verified).
+// Scratch is owned per call-site via a function-local thread_local —
+// the gauge group struct itself stays stateless.
 //
 // One nsites-sized scratch shared by all hot paths in this TU.
 namespace u1_detail {
@@ -79,7 +77,6 @@ struct U1 {
         fnu[s] -= c;
     }
 
-    // -------- HMC slab hooks --------------------------------------------------
     // U(1) is abelian: P ∈ iℝ stored as the real angle-velocity p; the group
     // exp degenerates to addition. Convention matches scalar HMC — sample
     // p ~ N(0, 1) so K = (1/2)·sum p² gives detailed balance.

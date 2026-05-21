@@ -3,17 +3,17 @@
 // Energy variable: E(phi) = S_base(phi) (the full action).
 // Sampler:        HMC with a templated integrator (default Omelyan2).
 // Update:         Newton-Raphson warm-up (n_nr iters), then restarted RM
-//                 with counter k reset to 0 after the warm-up.
+//                with counter k reset to 0 after the warm-up.
 // Geometry:       n_rep replicas at E_n = E_min + n * dE,
-//                 dE = (E_max - E_min) / (n_rep - 1).
+//                dE = (E_max - E_min) / (n_rep - 1).
 // Exchange:       even/odd alternating nearest-neighbour swaps after each RM sweep.
 //
 // Output schema (HDF5):
-//   /cfg@n_rep, /cfg@delta, /cfg@E_min, /cfg@E_max, /cfg@dE
-//   /cfg/E_n                  — series, length n_rep
-//   /replica_NNN/a            — series, one append per NR iter + per RM sweep
-//   /replica_NNN/dE           — series, paired with /a
-//   /exchange/accepted        — series, one append per RM sweep (count, 0..n_rep/2)
+//  /cfg@n_rep, /cfg@delta, /cfg@E_min, /cfg@E_max, /cfg@dE
+//  /cfg/E_n                  — series, length n_rep
+//  /replica_NNN/a            — series, one append per NR iter + per RM sweep
+//  /replica_NNN/dE           — series, paired with /a
+//  /exchange/accepted        — series, one append per RM sweep (count, 0..n_rep/2)
 
 #include <reticolo/reticolo.hpp>
 
@@ -64,8 +64,6 @@ int main(int argc, char** argv) {
     Action const base{.kappa = kappa, .lambda = lambda};
     log::act(base);
 
-    // Derive n_rep so that adjacent window centres are exactly `delta` apart.
-    // Snap E_max to land on the grid; the request is treated as an upper bound.
     int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
     double const d_e = delta;
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);

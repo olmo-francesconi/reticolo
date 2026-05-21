@@ -3,15 +3,15 @@
 // 3D Ising universality class).
 //
 // Output schema:
-//   /run@*                — reproducibility metadata stamped by Writer
-//   /vars@*               — every --flag the Parser resolved
-//   /therm/stats/s        — S_full per thermalisation trajectory
-//   /prod/stats/dH        — H_final - H_initial per production trajectory
-//   /prod/stats/accepted  — 0/1 acceptance flag
-//   /prod/obs/s           — S_full
-//   /prod/obs/mag         — |<phi>|           (per-config magnetization magnitude)
-//   /prod/obs/mag_sq      — (<phi>)^2         (per-config magnetization squared; chi input)
-//   /prod/obs/m2          — <phi^2>           (per-site field-squared average)
+//  /run@*                — reproducibility metadata stamped by Writer
+//  /vars@*               — every --flag the Parser resolved
+//  /therm/stats/s        — S_full per thermalisation trajectory
+//  /prod/stats/dH        — H_final - H_initial per production trajectory
+//  /prod/stats/accepted  — 0/1 acceptance flag
+//  /prod/obs/s           — S_full
+//  /prod/obs/mag         — |<phi>|           (per-config magnetization magnitude)
+//  /prod/obs/mag_sq      — (<phi>)^2         (per-config magnetization squared; chi input)
+//  /prod/obs/m2          — <phi^2>           (per-site field-squared average)
 
 #include <reticolo/reticolo.hpp>
 

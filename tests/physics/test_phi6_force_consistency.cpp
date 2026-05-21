@@ -9,6 +9,7 @@
 #include <cstddef>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 using reticolo::FastRng;
 using reticolo::Lattice;
@@ -52,7 +53,7 @@ TEST_CASE("Phi6: ds_local matches finite difference of s_full", "[physics][phi6]
         double const s_new = action.s_full(phi);
         phi[x]             = old;
 
-        REQUIRE(std::abs(ds_predicted - (s_new - s_old)) < 1e-9);
+        REQUIRE(ds_predicted == Catch::Approx((s_new - s_old)).margin(1e-9));
     }
 }
 
@@ -83,7 +84,7 @@ TEST_CASE("Phi6: compute_force matches central FD of s_full", "[physics][phi6]")
         double const grad_numeric    = (s_plus - s_minus) / (2.0 * k_eps);
         double const force_predicted = force[x];
 
-        REQUIRE(std::abs(force_predicted - (-grad_numeric)) < k_tol);
+        REQUIRE(force_predicted == Catch::Approx((-grad_numeric)).margin(k_tol));
     }
 }
 
@@ -95,13 +96,13 @@ TEST_CASE("Phi6 at g6=0 reduces exactly to Phi4", "[physics][phi6]") {
     FastRng rng{42};
     randomize(phi, rng);
 
-    REQUIRE(std::abs(a6.s_full(phi) - a4.s_full(phi)) < 1e-12);
+    REQUIRE(a6.s_full(phi) == Catch::Approx(a4.s_full(phi)).margin(1e-12));
 
     Lattice<double> f6{phi.indexing()};
     Lattice<double> f4{phi.indexing()};
     a6.compute_force(phi, f6);
     a4.compute_force(phi, f4);
     for (Site const x : phi.sites()) {
-        REQUIRE(std::abs(f6[x] - f4[x]) < 1e-12);
+        REQUIRE(f6[x] == Catch::Approx(f4[x]).margin(1e-12));
     }
 }

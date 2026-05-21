@@ -9,36 +9,34 @@
 
 namespace reticolo::math::su3 {
 
-// =============================================================================
-//  Hand-written 3×3 complex matrix kernels for SU(3) lattice gauge fields.
+// Hand-written 3×3 complex matrix kernels for SU(3) lattice gauge fields.
 //
-//  Storage layout (one link element, 18 real doubles):
+// Storage layout (one link element, 18 real doubles):
 //
-//      For matrix entry (i, j) with i, j ∈ {0, 1, 2}:
-//          Re U_{ij}  at slot  2·(3·i + j)
-//          Im U_{ij}  at slot  2·(3·i + j) + 1
+//     For matrix entry (i, j) with i, j ∈ {0, 1, 2}:
+//         Re U_{ij}  at slot  2·(3·i + j)
+//         Im U_{ij}  at slot  2·(3·i + j) + 1
 //
-//      So the 18 slots in order are:
-//          (00r 00i 01r 01i 02r 02i 10r 10i 11r 11i 12r 12i 20r 20i 21r 21i 22r 22i)
+//     So the 18 slots in order are:
+//         (00r 00i 01r 01i 02r 02i 10r 10i 11r 11i 12r 12i 20r 20i 21r 21i 22r 22i)
 //
-//  Slab kernels read/write nc=18 stride-1 component arrays per direction; the
-//  outer per-site loop auto-vectorises (16+ stride-1 streams, hand-unrolled
-//  inner products via the small 3×3-with-constant-bounds loops below).
+// Slab kernels read/write nc=18 stride-1 component arrays per direction; the
+// outer per-site loop auto-vectorises (16+ stride-1 streams, hand-unrolled
+// inner products via the small 3×3-with-constant-bounds loops below).
 //
-//  Algebra (anti-hermitian P, su(3)) is stored in the same 18-real layout
-//  with the structural constraints: Re P_{ii} = 0 for i=0,1,2; P_{ji} = -conj(P_{ij})
-//  for i ≠ j; sum_i Im P_{ii} = 0 (traceless). Eight independent real
-//  parameters per link (Gell-Mann coordinates h_1..h_8). See sample_algebra_slab
-//  for the explicit parameterisation P = i·Σ_a h_a·λ_a (Gell-Mann basis with
-//  Tr(λ_a λ_b) = 2 δ_ab — no extra 1/2 in the basis), giving K_per_link =
-//  ‖h‖² and Q(P) ∝ exp(−K) when h_a ~ N(0, 1/√2) — same convention as SU(2).
+// Algebra (anti-hermitian P, su(3)) is stored in the same 18-real layout
+// with the structural constraints: Re P_{ii} = 0 for i=0,1,2; P_{ji} = -conj(P_{ij})
+// for i ≠ j; sum_i Im P_{ii} = 0 (traceless). Eight independent real
+// parameters per link (Gell-Mann coordinates h_1..h_8). See sample_algebra_slab
+// for the explicit parameterisation P = i·Σ_a h_a·λ_a (Gell-Mann basis with
+// Tr(λ_a λ_b) = 2 δ_ab — no extra 1/2 in the basis), giving K_per_link =
+// ‖h‖² and Q(P) ∝ exp(−K) when h_a ~ N(0, 1/√2) — same convention as SU(2).
 //
-//  Matrix exponential follows the Cayley-Hamilton form of Morningstar & Peardon
-//  (Phys. Rev. D 69, 054501) — for hermitian traceless Q, exp(iQ) =
-//  f_0·I + f_1·Q + f_2·Q² where f_n are computed from c0 = (1/3)Tr Q³ and
-//  c1 = (1/2)Tr Q² via the angle θ = acos(c0/c0_max). Small-c1 (Q ≈ 0)
-//  branch uses Taylor.
-// =============================================================================
+// Matrix exponential follows the Cayley-Hamilton form of Morningstar & Peardon
+// (Phys. Rev. D 69, 054501) — for hermitian traceless Q, exp(iQ) =
+// f_0·I + f_1·Q + f_2·Q² where f_n are computed from c0 = (1/3)Tr Q³ and
+// c1 = (1/2)Tr Q² via the angle θ = acos(c0/c0_max). Small-c1 (Q ≈ 0)
+// branch uses Taylor.
 
 // ---------- 18-slot accessors ------------------------------------------------
 
@@ -157,17 +155,17 @@ adj_mul_3x3(double* out, double const* a, double const* b) noexcept {
 // 18-real layout. Internally form Q = -i·dt·P (hermitian, traceless) and use
 // Morningstar-Peardon's coefficients:
 //
-//   exp(iQ) = f_0·I + f_1·Q + f_2·Q²        (Cayley-Hamilton)
+//  exp(iQ) = f_0·I + f_1·Q + f_2·Q²        (Cayley-Hamilton)
 //
 // where (with c1 = (1/2)Tr Q², c0 = (1/3)Tr Q³, c0_max = 2·(c1/3)^{3/2},
-//        θ = acos(c0/c0_max),
-//        u = sqrt(c1/3)·cos(θ/3), w = sqrt(c1)·sin(θ/3),
-//        ξ(w) = sin(w)/w,  den = 9u² − w²):
+//       θ = acos(c0/c0_max),
+//       u = sqrt(c1/3)·cos(θ/3), w = sqrt(c1)·sin(θ/3),
+//       ξ(w) = sin(w)/w,  den = 9u² − w²):
 //
-//   h_0 = (u² − w²)·e^{2iu} + e^{−iu}·[8 u² cos(w) + 2 i u (3u² + w²) ξ(w)]
-//   h_1 = 2u·e^{2iu} − e^{−iu}·[2 u cos(w) − i (3u² − w²) ξ(w)]
-//   h_2 = e^{2iu} − e^{−iu}·[cos(w) + 3 i u ξ(w)]
-//   f_n = h_n / den
+//  h_0 = (u² − w²)·e^{2iu} + e^{−iu}·[8 u² cos(w) + 2 i u (3u² + w²) ξ(w)]
+//  h_1 = 2u·e^{2iu} − e^{−iu}·[2 u cos(w) − i (3u² − w²) ξ(w)]
+//  h_2 = e^{2iu} − e^{−iu}·[cos(w) + 3 i u ξ(w)]
+//  f_n = h_n / den
 //
 // Small-c1 (Q ≈ 0) branch: Taylor series exp(iQ) ≈ I + iQ − Q²/2 − iQ³/6.
 // For HMC step sizes this branch is hit only when ‖dt·P‖ is below ~1e-3.
@@ -454,15 +452,15 @@ adj_mul_slab(double* out, double const* a, double const* b, std::size_t n) noexc
 // 2 sqrt. Batching them across all slab sites via Sleef cuts the
 // transcendental cost ~2× on AArch64 / AVX2. The structure is multi-pass:
 //
-//   pass 1 (per site, scalar): compute c1, c0, branch flag, ratio = c0/c0_max
-//                              (clamped + safe for small-c1), √(c1/3), √c1.
-//   pass 2 (vector):           theta = acos(ratio) via acos_batch.
-//   pass 3 (vector):           build theta/3 buffer; sincos_batch → (s_t3, c_t3).
-//   pass 3.5 (per site):       u = √(c1/3)·c_t3, w = √c1·s_t3.
-//   pass 4 (vector):           sincos_batch(u) → (su, cu), sincos_batch(w) → (sw, cw).
-//   pass 5 (per site):         assemble V = f₀·I + f₁·Q + f₂·Q² (main branch)
-//                              or fall back to Taylor for sites where small_flag = 1;
-//                              then U ← V · U.
+//  pass 1 (per site, scalar): compute c1, c0, branch flag, ratio = c0/c0_max
+//                             (clamped + safe for small-c1), √(c1/3), √c1.
+//  pass 2 (vector):           theta = acos(ratio) via acos_batch.
+//  pass 3 (vector):           build theta/3 buffer; sincos_batch → (s_t3, c_t3).
+//  pass 3.5 (per site):       u = √(c1/3)·c_t3, w = √c1·s_t3.
+//  pass 4 (vector):           sincos_batch(u) → (su, cu), sincos_batch(w) → (sw, cw).
+//  pass 5 (per site):         assemble V = f₀·I + f₁·Q + f₂·Q² (main branch)
+//                             or fall back to Taylor for sites where small_flag = 1;
+//                             then U ← V · U.
 //
 // 2u-trig is computed inline as c2u = cu² − su² and s2u = 2·cu·su (no extra
 // transcendentals). ξ = sin(w)/w uses a branchless small-w guard.

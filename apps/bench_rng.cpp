@@ -35,11 +35,11 @@ void print_row(char const* field, char const* rng, std::size_t doubles, double w
 
 // Field-agnostic batched fill: same path the HMC sample_momenta_ takes for
 // the field type. Each lambda calls the *right* batched API for the field:
-//   Lattice<double>           → normal_fill
-//   Lattice<complex<double>>  → normal_fill on reinterpret_cast<double*>
-//   Lattice<array<double,N>>  → per-element rng.normal()
-//   LinkLattice<double>       → normal_fill
-//   MatrixLinkLattice<G,T>    → G::sample_algebra_slab per direction
+//  Lattice<double>           → normal_fill
+//  Lattice<complex<double>>  → normal_fill on reinterpret_cast<double*>
+//  Lattice<array<double,N>>  → per-element rng.normal()
+//  LinkLattice<double>       → normal_fill
+//  MatrixLinkLattice<G,T>    → G::sample_algebra_slab per direction
 
 template <class Rng>
 void bench_rng_for(char const* rng_name) {

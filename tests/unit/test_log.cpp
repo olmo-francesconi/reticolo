@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <iostream>
+#include <regex>
 #include <sstream>
 #include <streambuf>
 #include <string>
@@ -147,27 +148,8 @@ TEST_CASE("elapsed timestamp uses HHH:MM:SS.mmm format", "[log]") {
 
     rl::info("init", "tick");
 
-    auto const s = cap.cout_buf.str();
-    // The first ':' must be at position 3 inside the timestamp; check the
-    // literal shape "HHH:MM:SS.mmm" (digits + the right separators) is present.
-    bool found_shape = false;
-    for (std::size_t i = 0; i + 13 <= s.size(); ++i) {
-        auto sub = s.substr(i, 13);
-        if (std::isdigit(static_cast<unsigned char>(sub[0])) &&
-            std::isdigit(static_cast<unsigned char>(sub[1])) &&
-            std::isdigit(static_cast<unsigned char>(sub[2])) && sub[3] == ':' &&
-            std::isdigit(static_cast<unsigned char>(sub[4])) &&
-            std::isdigit(static_cast<unsigned char>(sub[5])) && sub[6] == ':' &&
-            std::isdigit(static_cast<unsigned char>(sub[7])) &&
-            std::isdigit(static_cast<unsigned char>(sub[8])) && sub[9] == '.' &&
-            std::isdigit(static_cast<unsigned char>(sub[10])) &&
-            std::isdigit(static_cast<unsigned char>(sub[11])) &&
-            std::isdigit(static_cast<unsigned char>(sub[12]))) {
-            found_shape = true;
-            break;
-        }
-    }
-    REQUIRE(found_shape);
+    std::regex const ts{R"(\d{3}:\d{2}:\d{2}\.\d{3})"};
+    REQUIRE(std::regex_search(cap.cout_buf.str(), ts));
 }
 
 TEST_CASE("set_min_level suppresses lower-severity entries", "[log]") {

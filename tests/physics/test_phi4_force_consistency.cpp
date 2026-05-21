@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 using reticolo::FastRng;
 using reticolo::Lattice;
@@ -48,7 +49,7 @@ TEST_CASE("Phi4: ds_local matches finite difference of s_full", "[physics][phi4]
         phi[x]             = old;
 
         double const ds_measured = s_new - s_old;
-        REQUIRE(std::abs(ds_predicted - ds_measured) < 1e-9);
+        REQUIRE(ds_predicted == Catch::Approx(ds_measured).margin(1e-9));
     }
 }
 
@@ -81,7 +82,7 @@ TEST_CASE("Phi4: compute_force matches central finite difference of s_full", "[p
         double const force_predicted = force[x];
         double const force_numeric   = -grad_numeric;
 
-        REQUIRE(std::abs(force_predicted - force_numeric) < k_tol);
+        REQUIRE(force_predicted == Catch::Approx(force_numeric).margin(k_tol));
     }
 }
 
@@ -101,7 +102,7 @@ TEST_CASE("Phi4: free-theory limit (lambda=0) gives force = 2 kappa sum_nn - 2 p
             nbrs += phi[phi.next(x, mu)] + phi[phi.prev(x, mu)];
         }
         double const expected = (2.0 * action.kappa * nbrs) - (2.0 * phi[x]);
-        REQUIRE(std::abs(force[x] - expected) < 1e-12);
+        REQUIRE(force[x] == Catch::Approx(expected).margin(1e-12));
     }
 }
 
@@ -116,5 +117,5 @@ TEST_CASE("Phi4: zero coupling (kappa=0, lambda=0) reduces to phi^2 + 1", "[phys
     for (Site x : phi.sites()) {
         s += phi[x] * phi[x];
     }
-    REQUIRE(std::abs(action.s_full(phi) - s) < 1e-12);
+    REQUIRE(action.s_full(phi) == Catch::Approx(s).margin(1e-12));
 }

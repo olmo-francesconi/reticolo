@@ -102,7 +102,7 @@ def collapse_residual(
     return total
 
 
-def main() -> int:
+def main():
     files = sorted(RESULTS.glob("on_sigma_L*_beta*.h5"))
     if not files:
         print(f"no results in {RESULTS}; run ./run.sh first", file=sys.stderr)
@@ -183,8 +183,6 @@ def main() -> int:
     out = HERE / "binder.pdf"
     fig.savefig(out, dpi=150)
     print(f"\nwrote {out}")
-    return 0
-
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

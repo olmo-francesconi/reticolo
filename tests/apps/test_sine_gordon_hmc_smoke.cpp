@@ -1,4 +1,4 @@
-#include "smoke_helpers.hpp"
+#include "../test_helpers.hpp"
 
 #ifndef SINE_GORDON_HMC_BINARY
     #error "SINE_GORDON_HMC_BINARY compile definition is required"

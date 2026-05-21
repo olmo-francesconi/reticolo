@@ -56,34 +56,24 @@ if(RETICOLO_BUILD_IO)
 endif()
 
 if(RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS)
-    function(reticolo_add_app_smoke test_name app_target define_name source)
+    function(reticolo_add_app_smoke test_name app_target source)
         reticolo_add_test(${test_name} ${source})
+        string(TOUPPER "${app_target}" _u)
         target_compile_definitions(${test_name} PRIVATE
-            ${define_name}="$<TARGET_FILE:${app_target}>"
+            ${_u}_BINARY="$<TARGET_FILE:${app_target}>"
         )
         add_dependencies(${test_name} ${app_target})
     endfunction()
 
-    reticolo_add_app_smoke(test_phi4_hmc_smoke          phi4_hmc
-        PHI4_HMC_BINARY            apps/test_phi4_hmc_smoke.cpp)
-    reticolo_add_app_smoke(test_phi6_hmc_smoke          phi6_hmc
-        PHI6_HMC_BINARY            apps/test_phi6_hmc_smoke.cpp)
-    reticolo_add_app_smoke(test_sine_gordon_hmc_smoke   sine_gordon_hmc
-        SINE_GORDON_HMC_BINARY     apps/test_sine_gordon_hmc_smoke.cpp)
-    reticolo_add_app_smoke(test_xy_wolff_smoke          xy_wolff
-        XY_WOLFF_BINARY            apps/test_xy_wolff_smoke.cpp)
-    reticolo_add_app_smoke(test_on_sigma_metropolis_smoke on_sigma_metropolis
-        ON_SIGMA_METROPOLIS_BINARY apps/test_on_sigma_metropolis_smoke.cpp)
-    reticolo_add_app_smoke(test_on_sigma_wolff_smoke      on_sigma_wolff
-        ON_SIGMA_WOLFF_BINARY      apps/test_on_sigma_wolff_smoke.cpp)
-    reticolo_add_app_smoke(test_u1_metropolis_smoke       u1_metropolis
-        U1_METROPOLIS_BINARY       apps/test_u1_metropolis_smoke.cpp)
-    reticolo_add_app_smoke(test_u1_hmc_smoke              u1_hmc
-        U1_HMC_BINARY              apps/test_u1_hmc_smoke.cpp)
-    reticolo_add_app_smoke(test_u1_llr_smoke              u1_llr
-        U1_LLR_BINARY              apps/test_u1_llr_smoke.cpp)
-    reticolo_add_app_smoke(test_su2_llr_smoke             su2_llr
-        SU2_LLR_BINARY             apps/test_su2_llr_smoke.cpp)
-    reticolo_add_app_smoke(test_bench_volume_scaling_smoke bench_volume_scaling
-        BENCH_VOLUME_SCALING_BINARY apps/test_bench_volume_scaling_smoke.cpp)
+    reticolo_add_app_smoke(test_phi4_hmc_smoke             phi4_hmc             apps/test_phi4_hmc_smoke.cpp)
+    reticolo_add_app_smoke(test_phi6_hmc_smoke             phi6_hmc             apps/test_phi6_hmc_smoke.cpp)
+    reticolo_add_app_smoke(test_sine_gordon_hmc_smoke      sine_gordon_hmc      apps/test_sine_gordon_hmc_smoke.cpp)
+    reticolo_add_app_smoke(test_xy_wolff_smoke             xy_wolff             apps/test_xy_wolff_smoke.cpp)
+    reticolo_add_app_smoke(test_on_sigma_metropolis_smoke  on_sigma_metropolis  apps/test_on_sigma_metropolis_smoke.cpp)
+    reticolo_add_app_smoke(test_on_sigma_wolff_smoke       on_sigma_wolff       apps/test_on_sigma_wolff_smoke.cpp)
+    reticolo_add_app_smoke(test_u1_metropolis_smoke        u1_metropolis        apps/test_u1_metropolis_smoke.cpp)
+    reticolo_add_app_smoke(test_u1_hmc_smoke               u1_hmc               apps/test_u1_hmc_smoke.cpp)
+    reticolo_add_app_smoke(test_u1_llr_smoke               u1_llr               apps/test_u1_llr_smoke.cpp)
+    reticolo_add_app_smoke(test_su2_llr_smoke              su2_llr              apps/test_su2_llr_smoke.cpp)
+    reticolo_add_app_smoke(test_bench_volume_scaling_smoke bench_volume_scaling apps/test_bench_volume_scaling_smoke.cpp)
 endif()

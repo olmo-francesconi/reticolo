@@ -8,6 +8,7 @@
 #include <cstddef>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 using reticolo::FastRng;
 using reticolo::LinkLattice;
@@ -52,7 +53,7 @@ TEST_CASE("CompactU1: ds_local matches finite difference of s_full", "[physics][
         links(x, mu)       = old;
 
         double const ds_measured = s_new - s_old;
-        REQUIRE(std::abs(ds_predicted - ds_measured) < 1e-9);
+        REQUIRE(ds_predicted == Catch::Approx(ds_measured).margin(1e-9));
     }
 }
 
@@ -86,7 +87,7 @@ TEST_CASE("CompactU1: compute_force matches central finite difference of s_full"
         double const force_predicted = force(x, mu);
         double const force_numeric   = -grad_numeric;
 
-        REQUIRE(std::abs(force_predicted - force_numeric) < k_tol);
+        REQUIRE(force_predicted == Catch::Approx(force_numeric).margin(k_tol));
     }
 }
 
@@ -113,7 +114,7 @@ TEST_CASE("CompactU1: compute_force_and_kick matches compute_force + manual kick
 
     double const* const mb = mom_b.data();
     for (std::size_t i = 0; i < mom_a.nlinks(); ++i) {
-        REQUIRE(std::abs(ma[i] - mb[i]) < 1e-12);
+        REQUIRE(ma[i] == Catch::Approx(mb[i]).margin(1e-12));
     }
 }
 
@@ -123,5 +124,5 @@ TEST_CASE("CompactU1: aligned plaquette config (all theta=0) has S = 0", "[physi
     constexpr double k_beta = 2.7;
     CompactU1<double> const action{.beta = k_beta};
     LinkLattice<double> links{{6, 6, 6}, 0.0};
-    REQUIRE(std::abs(action.s_full(links)) < 1e-9);
+    REQUIRE(action.s_full(links) == Catch::Approx(0.0).margin(1e-9));
 }

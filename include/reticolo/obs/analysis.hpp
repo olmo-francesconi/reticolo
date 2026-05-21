@@ -5,11 +5,9 @@
 #include <span>
 #include <stdexcept>
 
-// =============================================================================
-//  Ensemble-level reductions over time series of per-config measurements.
-//  These take std::span<double const> and do not touch the lattice — they
-//  belong on the analysis side, not in the per-config observer set.
-// =============================================================================
+// Ensemble-level reductions over time series of per-config measurements.
+// These take std::span<double const> and do not touch the lattice — they
+// belong on the analysis side, not in the per-config observer set.
 
 namespace reticolo::obs::analysis {
 
@@ -26,7 +24,7 @@ namespace reticolo::obs::analysis {
 }
 
 // Magnetic susceptibility:
-//   chi = N * (<m^2> - <|m|>^2)
+//  chi = N * (<m^2> - <|m|>^2)
 // where the input span holds per-config |m| values and N is the lattice volume.
 // Returns 0 for an empty span.
 [[nodiscard]] inline double susceptibility(std::span<double const> abs_m, double n_sites) {
@@ -49,7 +47,7 @@ namespace reticolo::obs::analysis {
 }
 
 // Binder cumulant:
-//   U = 1 - <m^4> / (3 <m^2>^2)
+//  U = 1 - <m^4> / (3 <m^2>^2)
 // where the two input spans hold per-config m^2 and m^4 values; the spans must
 // be the same length (paired measurements). Returns 0 for empty spans.
 [[nodiscard]] inline double binder(std::span<double const> m2_series,

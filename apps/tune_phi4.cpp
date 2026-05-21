@@ -1,9 +1,9 @@
 // Single-binary parameter-tuning rig for Phi4. Drives ONE of:
 //
-//   --algo metropolis     --sigma <σ>
-//   --algo hmc_leapfrog   --tau <τ> --n_md <n>
-//   --algo hmc_omelyan2   --tau <τ> --n_md <n>
-//   --algo hmc_omelyan4   --tau <τ> --n_md <n>
+//  --algo metropolis     --sigma <σ>
+//  --algo hmc_leapfrog   --tau <τ> --n_md <n>
+//  --algo hmc_omelyan2   --tau <τ> --n_md <n>
+//  --algo hmc_omelyan4   --tau <τ> --n_md <n>
 //
 // Dumps per-update time series of S and Σφ² (obs::sq_of_mean) to HDF5, with the
 // wall-time of the production loop stamped as /prod@wall_seconds so the
@@ -11,13 +11,13 @@
 // than algorithm-internal "steps".
 //
 // Output schema:
-//   /run@*                      reproducibility metadata
-//   /vars@*                     every --flag the Parser resolved
-//   /prod@wall_seconds          inner-loop wall time (seconds, double)
-//   /prod@n_meas                number of production measurements (int)
-//   /prod@accept_rate           acceptance over the production loop (double)
-//   /prod/obs/s                 S_full per update
-//   /prod/obs/mean_sq           Σφ² / V per update
+//  /run@*                      reproducibility metadata
+//  /vars@*                     every --flag the Parser resolved
+//  /prod@wall_seconds          inner-loop wall time (seconds, double)
+//  /prod@n_meas                number of production measurements (int)
+//  /prod@accept_rate           acceptance over the production loop (double)
+//  /prod/obs/s                 S_full per update
+//  /prod/obs/mean_sq           Σφ² / V per update
 
 #include <reticolo/reticolo.hpp>
 

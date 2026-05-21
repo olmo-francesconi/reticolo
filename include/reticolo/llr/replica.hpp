@@ -20,21 +20,19 @@ struct ReplicaStats {
     long n_accepted = 0;
 };
 
-// =============================================================================
-//  Single LLR replica: owns its phi, its RNG, its WindowedAction wrapper (and
-//  through it, its own copy of the base action), and its HMC kernel. The base
-//  is copied at construction so any mutable per-action state stays
-//  per-replica — required for OpenMP parallelism over replicas.
+// Single LLR replica: owns its phi, its RNG, its WindowedAction wrapper (and
+// through it, its own copy of the base action), and its HMC kernel. The base
+// is copied at construction so any mutable per-action state stays
+// per-replica — required for OpenMP parallelism over replicas.
 //
-//  One template for both scalar and gauge LLR: `Field` defaults to
-//  `Lattice<T>` so existing scalar callers compile unchanged; gauge users
-//  pass `LinkLattice<T>` explicitly. Window/tilt math lives in
-//  WindowedAction; HMC handles the field-type dispatch via flat_size.
+// One template for both scalar and gauge LLR: `Field` defaults to
+// `Lattice<T>` so existing scalar callers compile unchanged; gauge users
+// pass `LinkLattice<T>` explicitly. Window/tilt math lives in
+// WindowedAction; HMC handles the field-type dispatch via flat_size.
 //
-//  Non-moveable / non-copyable: the HMC inside holds references into the
-//  replica's own members. Use `std::vector<std::unique_ptr<Replica<...>>>`
-//  in the driver code.
-// =============================================================================
+// Non-moveable / non-copyable: the HMC inside holds references into the
+// replica's own members. Use `std::vector<std::unique_ptr<Replica<...>>>`
+// in the driver code.
 
 template <class Base,
           class Rng,

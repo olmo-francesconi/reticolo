@@ -11,17 +11,15 @@
 
 namespace reticolo::action {
 
-// =============================================================================
-//  Phi^6 scalar action — same hopping + on-site phi^4 structure as Phi4 plus
-//  a `g6 * phi^6` term per site:
+// Phi^6 scalar action — same hopping + on-site phi^4 structure as Phi4 plus
+// a `g6 * phi^6` term per site:
 //
-//    S = sum_x  [  -2 kappa phi(x) sum_{mu>0} phi(x+mu)
-//                + phi(x)^2
-//                + lambda * (phi(x)^2 - 1)^2
-//                + g6     * phi(x)^6 ]
+//   S = sum_x  [  -2 kappa phi(x) sum_{mu>0} phi(x+mu)
+//               + phi(x)^2
+//               + lambda * (phi(x)^2 - 1)^2
+//               + g6     * phi(x)^6 ]
 //
-//  At g6 = 0 this reduces exactly to Phi4 — verified by the M8 physics suite.
-// =============================================================================
+// At g6 = 0 this reduces exactly to Phi4 — verified by the M8 physics suite.
 
 template <class T = double>
 struct Phi6 {
@@ -39,7 +37,12 @@ struct Phi6 {
     }
 
     [[nodiscard]] T s_local(Lattice<T> const& l, Site x) const noexcept {
-        return ds_baseline_(l[x], nn_neighbour_sum(l, x));
+        T const phi  = l[x];
+        T const nbrs = nn_neighbour_sum(l, x);
+        T const phi2 = phi * phi;
+        T const dev  = phi2 - T{1};
+        T const phi6 = phi2 * phi2 * phi2;
+        return (T{-2} * kappa * phi * nbrs) + phi2 + (lambda * dev * dev) + (g6 * phi6);
     }
 
     [[nodiscard]] T ds_local(Lattice<T> const& l, Site x, T new_v) const noexcept {
@@ -109,14 +112,6 @@ struct Phi6 {
     }
 
     mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
-
-private:
-    [[nodiscard]] T ds_baseline_(T phi, T nbrs) const noexcept {
-        T const phi2 = phi * phi;
-        T const dev  = phi2 - T{1};
-        T const phi6 = phi2 * phi2 * phi2;
-        return (T{-2} * kappa * phi * nbrs) + phi2 + (lambda * dev * dev) + (g6 * phi6);
-    }
 };
 
 }  // namespace reticolo::action

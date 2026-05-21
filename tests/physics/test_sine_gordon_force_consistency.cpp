@@ -9,6 +9,7 @@
 #include <cstddef>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 using reticolo::FastRng;
 using reticolo::Lattice;
@@ -51,7 +52,7 @@ TEST_CASE("SineGordon: ds_local matches finite difference of s_full", "[physics]
         double const s_new        = action.s_full(phi);
         phi[x]                    = old;
 
-        REQUIRE(std::abs(ds_predicted - (s_new - s_old)) < 1e-9);
+        REQUIRE(ds_predicted == Catch::Approx((s_new - s_old)).margin(1e-9));
     }
 }
 
@@ -79,7 +80,7 @@ TEST_CASE("SineGordon: compute_force matches central FD of s_full", "[physics][s
         phi[x]               = old;
 
         double const grad_numeric = (s_plus - s_minus) / (2.0 * k_eps);
-        REQUIRE(std::abs(force[x] - (-grad_numeric)) < k_tol);
+        REQUIRE(force[x] == Catch::Approx((-grad_numeric)).margin(k_tol));
     }
 }
 
@@ -91,13 +92,13 @@ TEST_CASE("SineGordon at alpha=0 reduces to Phi4 with lambda=0", "[physics][sine
     FastRng rng{42};
     randomize(phi, rng);
 
-    REQUIRE(std::abs(sg.s_full(phi) - p4.s_full(phi)) < 1e-12);
+    REQUIRE(sg.s_full(phi) == Catch::Approx(p4.s_full(phi)).margin(1e-12));
 
     Lattice<double> f_sg{phi.indexing()};
     Lattice<double> f_p4{phi.indexing()};
     sg.compute_force(phi, f_sg);
     p4.compute_force(phi, f_p4);
     for (Site const x : phi.sites()) {
-        REQUIRE(std::abs(f_sg[x] - f_p4[x]) < 1e-12);
+        REQUIRE(f_sg[x] == Catch::Approx(f_p4[x]).margin(1e-12));
     }
 }

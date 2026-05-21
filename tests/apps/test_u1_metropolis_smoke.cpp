@@ -1,4 +1,4 @@
-#include "smoke_helpers.hpp"
+#include "../test_helpers.hpp"
 
 #ifndef U1_METROPOLIS_BINARY
     #error "U1_METROPOLIS_BINARY compile definition is required"

@@ -12,28 +12,26 @@
 
 namespace reticolo::action {
 
-// =============================================================================
-//  Generic Wilson plaquette action for any SU(N) (and U(1)) gauge group
-//  conforming to the `gauge_group::GaugeGroup` concept.
+// Generic Wilson plaquette action for any SU(N) (and U(1)) gauge group
+// conforming to the `gauge_group::GaugeGroup` concept.
 //
-//      S_W = (β/N) · Σ_x Σ_{μ<ν} ( N − Re Tr U_{μν}(x) )
-//          = β · n_plaq − (β/N) · Σ_p Re Tr U_p
+//     S_W = (β/N) · Σ_x Σ_{μ<ν} ( N − Re Tr U_{μν}(x) )
+//         = β · n_plaq − (β/N) · Σ_p Re Tr U_p
 //
-//  The hot loops walk one plaquette plane (μ, ν) at a time via the existing
-//  `detail::visit_plane` driver (bulk-vs-slab, stride-1 in the inner site
-//  loop, peeled wrap boundaries). The per-plaquette math — Re Tr U_p and
-//  the staple force scatter — is delegated to the group model G, which
-//  receives base pointers to the nc-component link blocks for the two
-//  directions in the plane plus the three site indices `(s, s_pmu, s_pnu)`
-//  and the per-direction stride (= nsites). Models with `n_real_components
-//  = 1` (U(1)) ignore the stride; matrix groups index per component as
-//      block_ptr[k * stride + s].
+// The hot loops walk one plaquette plane (μ, ν) at a time via the existing
+// `detail::visit_plane` driver (bulk-vs-slab, stride-1 in the inner site
+// loop, peeled wrap boundaries). The per-plaquette math — Re Tr U_p and
+// the staple force scatter — is delegated to the group model G, which
+// receives base pointers to the nc-component link blocks for the two
+// directions in the plane plus the three site indices `(s, s_pmu, s_pnu)`
+// and the per-direction stride (= nsites). Models with `n_real_components
+// = 1` (U(1)) ignore the stride; matrix groups index per component as
+//     block_ptr[k * stride + s].
 //
-//  At N=1 with U=exp(iθ) this reduces line-for-line to `CompactU1` — the
-//  bit-identity is the design point of M3 and lets the gauge group concept
-//  be validated on a known-correct path before the SU(2)/SU(3) instances
-//  arrive in M5/M7.
-// =============================================================================
+// At N=1 with U=exp(iθ) this reduces line-for-line to `CompactU1` — the
+// bit-identity is the design point of M3 and lets the gauge group concept
+// be validated on a known-correct path before the SU(2)/SU(3) instances
+// arrive in M5/M7.
 
 template <gauge_group::GaugeGroup G, class T = double>
 struct Wilson {
@@ -49,8 +47,6 @@ struct Wilson {
         e.line("Wilson<{}>", G::name);
         e.param("β={:.3f}", beta);
     }
-
-    // ---- HasLinkSEff equivalent ----------------------------------------------
 
     [[nodiscard]] T s_full(field_type const& U) const noexcept {
         std::size_t const d      = U.ndims();
@@ -90,7 +86,6 @@ struct Wilson {
     [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
     void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
 
-    // ---- HasLinkForce equivalent ---------------------------------------------
     //
     // Each gauge group owns its force algorithm — U(1) uses the per-plaquette
     // scatter that matches CompactU1 bit-for-bit; SU(N) uses a link-centric
@@ -103,7 +98,6 @@ struct Wilson {
         G::compute_force(U, force, beta_over_n_dbl);
     }
 
-    // ---- HasLinkFusedKick equivalent -----------------------------------------
     //
     // Fused force-and-kick: scatter the per-plaquette force contribution
     // directly into the momentum field with the integrator's scale, skipping
@@ -121,7 +115,6 @@ struct Wilson {
 
     mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
 
-    // ---- LinkLocalAction equivalent ------------------------------------------
     //
     // Sum of Re Tr U_p over the 2(d−1) plaquettes through link (x, μ),
     // wrapped into the Wilson constant offset so the returned value is

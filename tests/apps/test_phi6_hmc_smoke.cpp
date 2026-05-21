@@ -1,4 +1,4 @@
-#include "smoke_helpers.hpp"
+#include "../test_helpers.hpp"
 
 #ifndef PHI6_HMC_BINARY
     #error "PHI6_HMC_BINARY compile definition is required"

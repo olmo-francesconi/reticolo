@@ -3,12 +3,12 @@
 // Energy variable: E(theta) = S_base(theta) (full Wilson action).
 // Sampler:        Gauge HMC with templated integrator (default Omelyan2).
 // Update:         Newton-Raphson warm-up then restarted Robbins-Monro,
-//                 with k reset to 0 after the warm-up.
+//                with k reset to 0 after the warm-up.
 // Geometry:       n_rep replicas at E_n = E_min + n * delta;
-//                 delta is the single LLR tuning knob (Gaussian half-width
-//                 AND replica spacing).
+//                delta is the single LLR tuning knob (Gaussian half-width
+//                AND replica spacing).
 // Exchange:       even/odd alternating nearest-neighbour swaps after each
-//                 RM sweep.
+//                RM sweep.
 
 #include <reticolo/reticolo.hpp>
 

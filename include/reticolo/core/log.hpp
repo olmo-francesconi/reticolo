@@ -2,20 +2,20 @@
 
 // reticolo logger.
 //
-//   * Threadsafe via std::osyncstream (line-atomic) + a mutex around the
-//     per-run file map.
-//   * Severity = sigil:   ·  debug   ┃  info   ⚠  warn   ✖  error
-//   * Single line format (parallel mode, run_tag_width = 4):
+//  * Threadsafe via std::osyncstream (line-atomic) + a mutex around the
+//    per-run file map.
+//  * Severity = sigil:   ·  debug   ┃  info   ⚠  warn   ✖  error
+//  * Single line format (parallel mode, run_tag_width = 4):
 //
-//       ┃ r000 HHH:MM:SS.mmm  init  lattice 32^4, β=6.0
+//      ┃ r000 HHH:MM:SS.mmm  init  lattice 32^4, β=6.0
 //
-//   * Multi-line entries preserve the sigil on continuation lines and
-//     blank the metadata columns so the message column aligns.
-//   * Run-id is bound per OpenMP iteration via RAII Scope (works with
-//     schedule(dynamic) and N_sims > N_threads — same thread rebinds
-//     each iteration).
-//   * Per-run files in parallel mode: <outdir>/run.<runid>.log, lazy-open,
-//     per-line flush.
+//  * Multi-line entries preserve the sigil on continuation lines and
+//    blank the metadata columns so the message column aligns.
+//  * Run-id is bound per OpenMP iteration via RAII Scope (works with
+//    schedule(dynamic) and N_sims > N_threads — same thread rebinds
+//    each iteration).
+//  * Per-run files in parallel mode: <outdir>/run.<runid>.log, lazy-open,
+//    per-line flush.
 
 #include <reticolo/core/build_info.hpp>
 

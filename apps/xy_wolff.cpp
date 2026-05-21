@@ -1,20 +1,20 @@
 // Wolff cluster + Metropolis hybrid for the XY (planar rotor) model on a 2D
 // square lattice.
 //
-//   S = -beta Σ_<x,y> cos(theta(x) - theta(y))
+//  S = -beta Σ_<x,y> cos(theta(x) - theta(y))
 //
 // Each measurement step does `n_cluster` single-cluster Wolff updates followed
 // by one full Metropolis sweep (the sweep covers the few sites that Wolff
 // rarely touches deep in the symmetric phase).
 //
 // Output schema:
-//   /run@*                — reproducibility metadata stamped by Writer
-//   /vars@*               — every --flag the Parser resolved
-//   /therm/stats/cluster  — cluster size per Wolff update
-//   /prod/stats/cluster   — cluster size per Wolff update
-//   /prod/stats/accept    — Metropolis acceptance per sweep
-//   /prod/obs/s           — S_full
-//   /prod/obs/m2          — |M|^2 / V^2     (rotation-invariant magnetization²)
+//  /run@*                — reproducibility metadata stamped by Writer
+//  /vars@*               — every --flag the Parser resolved
+//  /therm/stats/cluster  — cluster size per Wolff update
+//  /prod/stats/cluster   — cluster size per Wolff update
+//  /prod/stats/accept    — Metropolis acceptance per sweep
+//  /prod/obs/s           — S_full
+//  /prod/obs/m2          — |M|^2 / V^2     (rotation-invariant magnetization²)
 
 #include <reticolo/reticolo.hpp>
 

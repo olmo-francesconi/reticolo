@@ -243,8 +243,6 @@ def main():
     out = HERE / "rho_hmc_vs_llr.pdf"
     fig.savefig(out, dpi=150)
     print(f"wrote {out}")
-    return 0
-
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

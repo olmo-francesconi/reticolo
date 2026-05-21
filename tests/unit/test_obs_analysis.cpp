@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 namespace ana = reticolo::obs::analysis;
 
@@ -23,7 +24,7 @@ TEST_CASE("analysis::mean averages correctly", "[analysis]") {
 TEST_CASE("analysis::susceptibility on a constant series is zero", "[analysis][susceptibility]") {
     std::vector<double> m(100, 0.7);
     // Variance is zero => chi = N * 0 = 0 modulo FP roundoff.
-    REQUIRE(std::abs(ana::susceptibility(m, 1024.0)) < 1e-9);
+    REQUIRE(ana::susceptibility(m, 1024.0) == Catch::Approx(0.0).margin(1e-9));
 }
 
 TEST_CASE("analysis::susceptibility recovers N * var(m)", "[analysis][susceptibility]") {
@@ -42,7 +43,7 @@ TEST_CASE("analysis::susceptibility recovers N * var(m)", "[analysis][susceptibi
     // chi     = N * var.
     double const N   = 256.0;
     double const chi = ana::susceptibility(m, N);
-    REQUIRE(std::abs(chi - (N * 0.01)) < 1e-12);
+    REQUIRE(chi == Catch::Approx((N * 0.01)).margin(1e-12));
 }
 
 TEST_CASE("analysis::susceptibility throws on non-positive N", "[analysis][susceptibility]") {
@@ -58,7 +59,7 @@ TEST_CASE("analysis::binder of a Gaussian-distributed scalar trends toward 1/3",
     // analytic values per-sample.
     std::array<double, 4> m2{1.0, 1.0, 1.0, 1.0};
     std::array<double, 4> m4{3.0, 3.0, 3.0, 3.0};
-    REQUIRE(std::abs(ana::binder(m2, m4)) < 1e-12);
+    REQUIRE(ana::binder(m2, m4) == Catch::Approx(0.0).margin(1e-12));
 }
 
 TEST_CASE("analysis::binder of a saturated (two-delta) m approaches 2/3", "[analysis][binder]") {
@@ -66,7 +67,7 @@ TEST_CASE("analysis::binder of a saturated (two-delta) m approaches 2/3", "[anal
     // U = 1 - m0^4 / (3 m0^4) = 2/3.
     std::array<double, 6> m2{1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
     std::array<double, 6> m4{1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
-    REQUIRE(std::abs(ana::binder(m2, m4) - 2.0 / 3.0) < 1e-12);
+    REQUIRE(ana::binder(m2, m4) == Catch::Approx(2.0 / 3.0).margin(1e-12));
 }
 
 TEST_CASE("analysis::binder rejects mismatched span sizes", "[analysis][binder]") {

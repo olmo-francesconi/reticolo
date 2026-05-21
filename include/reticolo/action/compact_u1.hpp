@@ -17,37 +17,35 @@
 
 namespace reticolo::action {
 
-// =============================================================================
-//  Compact U(1) gauge theory with the standard Wilson plaquette action:
+// Compact U(1) gauge theory with the standard Wilson plaquette action:
 //
-//      S_W = beta * sum_x  sum_{mu<nu}  ( 1 - cos( theta_{mu,nu}(x) ) )
+//     S_W = beta * sum_x  sum_{mu<nu}  ( 1 - cos( theta_{mu,nu}(x) ) )
 //
-//      theta_{mu,nu}(x) =  theta_mu(x)
-//                        + theta_nu(x + mu_hat)
-//                        - theta_mu(x + nu_hat)
-//                        - theta_nu(x)
+//     theta_{mu,nu}(x) =  theta_mu(x)
+//                       + theta_nu(x + mu_hat)
+//                       - theta_mu(x + nu_hat)
+//                       - theta_nu(x)
 //
-//  This is the convention used by every production lattice code (openQCD,
-//  Grid, MILC, Chroma, QUDA) and by Gattringer-Lang. S_W is bounded below
-//  by 0 (cold config), reaches `beta * n_plaq` at maximal disorder.
+// This is the convention used by every production lattice code (openQCD,
+// Grid, MILC, Chroma, QUDA) and by Gattringer-Lang. S_W is bounded below
+// by 0 (cold config), reaches `beta * n_plaq` at maximal disorder.
 //
-//  Boltzmann weight: exp(-S_W). The gauge HMC uses H = K + S so
-//  exp(-H) = exp(-K - S). `compute_force` returns the *force* F = -dS/dtheta;
-//  the integrator kick is `mom += k_dt * F`. `LinkMetropolis` accepts moves
-//  with `ds <= 0 || rng < exp(-ds)` (favours moves that decrease S).
+// Boltzmann weight: exp(-S_W). The gauge HMC uses H = K + S so
+// exp(-H) = exp(-K - S). `compute_force` returns the *force* F = -dS/dtheta;
+// the integrator kick is `mom += k_dt * F`. `LinkMetropolis` accepts moves
+// with `ds <= 0 || rng < exp(-ds)` (favours moves that decrease S).
 //
-//  The (1 - cos) constant `beta * n_plaq_per_link` and `beta * n_plaq_total`
-//  on `s_local` / `s_full` makes both non-negative for sanity checking — the
-//  HMC dynamics and Metropolis acceptance only depend on differences, where
-//  the constant cancels.
+// The (1 - cos) constant `beta * n_plaq_per_link` and `beta * n_plaq_total`
+// on `s_local` / `s_full` makes both non-negative for sanity checking — the
+// HMC dynamics and Metropolis acceptance only depend on differences, where
+// the constant cancels.
 //
-//  Storage layout: `LinkLattice<T>` is direction-major (each direction is a
-//  contiguous nsites-element block). The hot loops here iterate one
-//  plaquette plane (mu, nu) at a time via `gauge::detail::visit_plane`,
-//  which peels wrap slabs off the boundary so the bulk body sees stride-1
-//  reads and writes through fixed `(s_pmu - s, s_pnu - s)` offsets — clean
-//  autovectorisation territory.
-// =============================================================================
+// Storage layout: `LinkLattice<T>` is direction-major (each direction is a
+// contiguous nsites-element block). The hot loops here iterate one
+// plaquette plane (mu, nu) at a time via `gauge::detail::visit_plane`,
+// which peels wrap slabs off the boundary so the bulk body sees stride-1
+// reads and writes through fixed `(s_pmu - s, s_pnu - s)` offsets — clean
+// autovectorisation territory.
 
 template <class T = double>
 struct CompactU1 {
@@ -61,16 +59,12 @@ struct CompactU1 {
         e.param("β={:.3f}", beta);
     }
 
-    // ---------- helpers ----------
-
     [[nodiscard]] T
     plaq_angle(LinkLattice<T> const& l, Site x, std::size_t mu, std::size_t nu) const noexcept {
         Site const x_pmu = l.next(x, mu);
         Site const x_pnu = l.next(x, nu);
         return l(x, mu) + l(x_pmu, nu) - l(x_pnu, mu) - l(x, nu);
     }
-
-    // ---------- LinkLocalAction (Metropolis path) ----------
 
     [[nodiscard]] T s_local(LinkLattice<T> const& l, Site x, std::size_t mu) const noexcept {
         T cos_sum           = T{0};
@@ -110,8 +104,6 @@ struct CompactU1 {
         // d/dt (sum 1-cos) = -d/dt (sum cos), so flip sign.
         return -beta * cos_delta;
     }
-
-    // ---------- HasLinkSEff — plane-by-plane on direction-major blocks ------
 
     [[nodiscard]] T s_full(LinkLattice<T> const& l) const noexcept {
         std::size_t const d      = l.ndims();
@@ -166,8 +158,6 @@ struct CompactU1 {
     [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
     void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
 
-    // ---------- HasLinkForce — plaquette-centric scatter -------------------
-
     void compute_force(LinkLattice<T> const& l, LinkLattice<T>& force) const noexcept {
         std::fill(force.begin(), force.end(), T{0});
         std::size_t const d = l.ndims();
@@ -217,8 +207,6 @@ struct CompactU1 {
             }
         }
     }
-
-    // ---------- HasLinkFusedKick — scatter directly into mom ---------------
 
     void
     compute_force_and_kick(LinkLattice<T> const& l, LinkLattice<T>& mom, T k_dt) const noexcept {

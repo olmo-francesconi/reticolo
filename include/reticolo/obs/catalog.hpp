@@ -8,26 +8,24 @@
 #include <cstddef>
 #include <stdexcept>
 
-// =============================================================================
-//  Per-configuration observers for scalar lattices.
+// Per-configuration observers for scalar lattices.
 //
-//  Every observer returns a `double` so series storage is uniform. The
-//  ensemble-level reductions (susceptibility, Binder cumulant, etc.) live in
-//  reticolo/obs/analysis.hpp; they take a span of measurements.
+// Every observer returns a `double` so series storage is uniform. The
+// ensemble-level reductions (susceptibility, Binder cumulant, etc.) live in
+// reticolo/obs/analysis.hpp; they take a span of measurements.
 //
-//  Naming:
-//    obs::mean       — <φ>           = (1/V) Σ_x φ(x)
-//    obs::sq         — <φ²>          = (1/V) Σ_x φ(x)²
-//    obs::quartic    — <φ⁴>          = (1/V) Σ_x φ(x)⁴
-//    obs::sq_of_mean — <φ>²          = ((1/V) Σ_x φ(x))²
-//    obs::two_point  — G(r,μ)        translation-averaged two-point function
-//    obs::mag::abs   — |<φ>|         magnetisation modulus for a scalar field
-//    obs::mag::xy_sq — |M|²/V²       for a θ-valued (XY) lattice
-//    obs::mag::on_sq — |M|²/V²       for an O(N) array<T,N> lattice
+// Naming:
+//   obs::mean       — <φ>           = (1/V) Σ_x φ(x)
+//   obs::sq         — <φ²>          = (1/V) Σ_x φ(x)²
+//   obs::quartic    — <φ⁴>          = (1/V) Σ_x φ(x)⁴
+//   obs::sq_of_mean — <φ>²          = ((1/V) Σ_x φ(x))²
+//   obs::two_point  — G(r,μ)        translation-averaged two-point function
+//   obs::mag::abs   — |<φ>|         magnetisation modulus for a scalar field
+//   obs::mag::xy_sq — |M|²/V²       for a θ-valued (XY) lattice
+//   obs::mag::on_sq — |M|²/V²       for an O(N) array<T,N> lattice
 //
-//  Moments live bare in `obs::`. Anything specific to the magnetisation
-//  symmetry channel (scalar / XY / O(N)) lives under `obs::mag::`.
-// =============================================================================
+// Moments live bare in `obs::`. Anything specific to the magnetisation
+// symmetry channel (scalar / XY / O(N)) lives under `obs::mag::`.
 
 namespace reticolo::obs {
 
@@ -66,7 +64,7 @@ template <class T>
 
 // (Σ_x phi(x) / V)^2 — the squared magnetisation-per-site of one configuration.
 // Right input for the connected susceptibility
-//   chi = V * (<sq_of_mean> - <mag::abs>^2)
+//  chi = V * (<sq_of_mean> - <mag::abs>^2)
 // and for the Binder cumulant of a scalar field. Distinct from `sq` (= <φ²>),
 // which is the per-site field squared.
 template <class T>
@@ -76,7 +74,7 @@ template <class T>
 }
 
 // Translation-averaged two-point function in direction `mu` at separation `r`:
-//   G(r) = (1/N) Σ_x phi(x) phi(x + r·ê_μ)
+//  G(r) = (1/N) Σ_x phi(x) phi(x + r·ê_μ)
 // where the shift uses the lattice's neighbour table (`r` applications of next).
 // The lattice is always periodic, so `r` may exceed the linear extent without
 // concern — wraps just keep walking.
@@ -106,7 +104,7 @@ template <class T>
 }
 
 // Squared magnetisation per site for a vector-valued field:
-//   |M|^2 / V^2  with M = Σ_x phi(x)  (phi(x) ∈ R^N)
+//  |M|^2 / V^2  with M = Σ_x phi(x)  (phi(x) ∈ R^N)
 // Returns a rotation-invariant scalar suitable for ensemble averaging into
 // susceptibility / Binder cumulants of an O(N) symmetry.
 template <std::size_t N, class T>

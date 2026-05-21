@@ -11,22 +11,20 @@
 
 namespace reticolo::action {
 
-// =============================================================================
-//  Phi^4 scalar action on a hypercubic (periodic) lattice.
+// Phi^4 scalar action on a hypercubic (periodic) lattice.
 //
-//    S = sum_x  [  -2 kappa phi(x) sum_{mu>0} phi(x+mu)
-//                 + phi(x)^2
-//                 + lambda (phi(x)^2 - 1)^2 ]
+//   S = sum_x  [  -2 kappa phi(x) sum_{mu>0} phi(x+mu)
+//                + phi(x)^2
+//                + lambda (phi(x)^2 - 1)^2 ]
 //
-//  Each nearest-neighbour bond appears once in `s_full` (positive-mu
-//  convention). `s_local(x)` for Metropolis sums all 2d neighbours of x —
-//  the contribution to S that involves phi(x), each touching bond once.
+// Each nearest-neighbour bond appears once in `s_full` (positive-mu
+// convention). `s_local(x)` for Metropolis sums all 2d neighbours of x —
+// the contribution to S that involves phi(x), each touching bond once.
 //
-//  MD force is `force(x) = -dS/dphi(x)`. The hot kernels (`s_full`,
-//  `compute_force`) hoist raw pointers and run a tight counter-indexed
-//  loop with no per-iteration member-access — see the body for the layout
-//  the compiler vectorises around.
-// =============================================================================
+// MD force is `force(x) = -dS/dphi(x)`. The hot kernels (`s_full`,
+// `compute_force`) hoist raw pointers and run a tight counter-indexed
+// loop with no per-iteration member-access — see the body for the layout
+// the compiler vectorises around.
 
 template <class T = double>
 struct Phi4 {

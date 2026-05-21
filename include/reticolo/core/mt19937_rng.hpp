@@ -9,20 +9,18 @@
 
 namespace reticolo {
 
-// =============================================================================
-//  Mt19937Rng — thin wrapper around std::mt19937_64 (64-bit Mersenne Twister).
+// Mt19937Rng — thin wrapper around std::mt19937_64 (64-bit Mersenne Twister).
 //
-//  Drop-in for FastRng: same constructor / reseed / uniform_u64 / uniform /
-//  uniform_int / normal / normal_fill surface, same `state_type = uint64_t`,
-//  same Box-Muller polar form for Gaussian sampling. Plug into any existing
-//  templated call site (`Hmc<A, R, Integrator, Field>`, gauge group algebra
-//  samplers, LLR replicas, …) by changing `FastRng` to `Mt19937Rng`.
+// Drop-in for FastRng: same constructor / reseed / uniform_u64 / uniform /
+// uniform_int / normal / normal_fill surface, same `state_type = uint64_t`,
+// same Box-Muller polar form for Gaussian sampling. Plug into any existing
+// templated call site (`Hmc<A, R, Integrator, Field>`, gauge group algebra
+// samplers, LLR replicas, …) by changing `FastRng` to `Mt19937Rng`.
 //
-//  Engine is natively 64-bit per call (period 2^19937 - 1, equidistribution
-//  in 311 dimensions). Mostly relevant as a comparison baseline against
-//  FastRng's xoshiro256++ — both are 64-bit-per-call so the cost difference
-//  is the engine itself.
-// =============================================================================
+// Engine is natively 64-bit per call (period 2^19937 - 1, equidistribution
+// in 311 dimensions). Mostly relevant as a comparison baseline against
+// FastRng's xoshiro256++ — both are 64-bit-per-call so the cost difference
+// is the engine itself.
 
 class Mt19937Rng {
 public:

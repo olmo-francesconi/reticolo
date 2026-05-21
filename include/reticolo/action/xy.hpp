@@ -15,15 +15,13 @@
 
 namespace reticolo::action {
 
-// =============================================================================
-//  XY (planar rotor) model on a hypercubic (periodic) lattice. theta(x) is an
-//  angle and the action is
+// XY (planar rotor) model on a hypercubic (periodic) lattice. theta(x) is an
+// angle and the action is
 //
-//    S = -beta * sum_<x,y>  cos(theta(x) - theta(y))
+//   S = -beta * sum_<x,y>  cos(theta(x) - theta(y))
 //
-//  HMC-friendly: force is -dS/dtheta. Also satisfies WolffEmbeddable via the
-//  axis_type / wolff_* member block below.
-// =============================================================================
+// HMC-friendly: force is -dS/dtheta. Also satisfies WolffEmbeddable via the
+// axis_type / wolff_* member block below.
 
 template <class T = double>
 struct Xy {

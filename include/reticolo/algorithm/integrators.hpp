@@ -11,28 +11,26 @@
 
 namespace reticolo::alg::integ {
 
-// =============================================================================
-//  Symplectic integrators for HMC.
+// Symplectic integrators for HMC.
 //
-//  Every integrator is a stateless tag class with a single static template
-//  `run(action, field, mom, force, tau, n_md)`. The HMC driver is templated on
-//  the integrator type — there is no runtime switch in the trajectory loop,
-//  so the optimiser can inline the integrator body alongside the action force.
+// Every integrator is a stateless tag class with a single static template
+// `run(action, field, mom, force, tau, n_md)`. The HMC driver is templated on
+// the integrator type — there is no runtime switch in the trajectory loop,
+// so the optimiser can inline the integrator body alongside the action force.
 //
-//  Field-generic: works for scalar `Lattice<F>` and link `LinkLattice<F>`
-//  unchanged. `flat_size(field)` overloads on the field type to give the
-//  right element count; the fused-kick concept check covers both
-//  `HasFusedKick` (scalar) and `HasLinkFusedKick` (gauge).
+// Field-generic: works for scalar `Lattice<F>` and link `LinkLattice<F>`
+// unchanged. `flat_size(field)` overloads on the field type to give the
+// right element count; the fused-kick concept check covers both
+// `HasFusedKick` (scalar) and `HasLinkFusedKick` (gauge).
 //
-//  Convention: tau = total trajectory time, n_md = number of MD steps,
-//  dt = tau / n_md. `force` is scratch storage owned by the HMC driver; the
-//  integrator writes through it and leaves it in an unspecified state on exit.
-// =============================================================================
+// Convention: tau = total trajectory time, n_md = number of MD steps,
+// dt = tau / n_md. `force` is scratch storage owned by the HMC driver; the
+// integrator writes through it and leaves it in an unspecified state on exit.
 
 namespace detail {
 
 template <class A, class Field, class F = typename Field::value_type>
-[[gnu::always_inline]] inline void
+inline void
 kick_(A const& action, Field& field, Field& mom, Field& force, double k_dt) noexcept {
     // Generic fused-kick dispatch — accepts whatever Field type the action
     // actually operates on (Lattice<F>, LinkLattice<F>, MatrixLinkLattice<G,T>).
@@ -50,7 +48,7 @@ kick_(A const& action, Field& field, Field& mom, Field& force, double k_dt) noex
 }
 
 template <class Field>
-[[gnu::always_inline]] inline void drift_(Field& field, Field const& mom, double c_dt) noexcept {
+inline void drift_(Field& field, Field const& mom, double c_dt) noexcept {
     drift_field(field, mom, c_dt);
 }
 
@@ -84,8 +82,8 @@ struct Leapfrog {
 
 // Omelyan-Mryglod-Folk 2nd-order minimum-norm integrator (2MN).
 //
-//   One step (timestep dt), V = momentum kick, T = position drift:
-//     V(λ·dt)  T(dt/2)  V((1-2λ)·dt)  T(dt/2)  V(λ·dt)
+//  One step (timestep dt), V = momentum kick, T = position drift:
+//    V(λ·dt)  T(dt/2)  V((1-2λ)·dt)  T(dt/2)  V(λ·dt)
 //
 // Adjacent steps fuse boundary kicks (λ·dt + λ·dt = 2λ·dt), so the amortised
 // cost is 2 force evaluations per step (2·n_md + 1 per trajectory). λ is
@@ -125,10 +123,10 @@ struct Omelyan2 {
 
 // Omelyan-Mryglod-Folk 4th-order minimum-norm integrator (4MN5FP).
 //
-//   One step (timestep dt), in BABABABAB form (5 kicks, 4 drifts):
-//     V(ρ·dt) T(θ·dt) V(λ·dt) T(μ·dt) V((1-2ρ-2λ)·dt) T(μ·dt) V(λ·dt) T(θ·dt) V(ρ·dt)
+//  One step (timestep dt), in BABABABAB form (5 kicks, 4 drifts):
+//    V(ρ·dt) T(θ·dt) V(λ·dt) T(μ·dt) V((1-2ρ-2λ)·dt) T(μ·dt) V(λ·dt) T(θ·dt) V(ρ·dt)
 //
-//   where  μ = 1/2 - θ  (drift constraint, total drift = 1).
+//  where  μ = 1/2 - θ  (drift constraint, total drift = 1).
 //
 // Adjacent steps fuse boundary kicks (ρ·dt + ρ·dt = 2ρ·dt). Amortised cost:
 // 4 force evaluations per step (4·n_md + 1 per trajectory) — ~4× Leapfrog's
