@@ -26,47 +26,33 @@ import matplotlib.pyplot as plt
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 
+sys.path.insert(0, str(HERE.parent / "_common"))
+from llr_reconstruct import (  # noqa: E402
+    load_a_history,
+    reconstruct_log_rho,
+)
+
 
 def load_hmc(path):
+    # S_I (imaginary action) — bose gas is the only mode-B LLR app, so
+    # the HMC twin records `/prod/obs/s_i` rather than `/prod/obs/s`.
     with h5py.File(path, "r") as f:
         return np.asarray(f["/prod/obs/s_i"][:], dtype=float)
 
 
 def load_llr(path):
+    # Wrap the shared loader to also stash mu / volume / size / ndim — the
+    # plot code uses `volume` to render the intensive variable s = S_I / V.
+    data = load_a_history(path)
     with h5py.File(path, "r") as f:
-        n_rep = int(f["/cfg"].attrs["n_rep"])
-        n_nr  = int(f["/cfg"].attrs["n_nr"])
-        n_rm  = int(f["/cfg"].attrs["n_rm"])
-        delta = float(f["/cfg"].attrs["delta"])
-        e_n   = np.asarray(f["/cfg/E_n"][:], dtype=float)
-        a_hist = np.empty((n_rep, n_nr + n_rm), dtype=float)
-        for n in range(n_rep):
-            a = np.asarray(f[f"/replica_{n:03d}/a"][:], dtype=float)
-            m = min(len(a), n_nr + n_rm)
-            a_hist[n, :m] = a[:m]
-            if m < n_nr + n_rm:
-                a_hist[n, m:] = a[-1]
         size = int(f["/vars"].attrs["size"])
         ndim = int(f["/vars"].attrs["ndim"])
         mu   = float(f["/vars"].attrs["mu"])
-    volume = size ** ndim
-    return {"E_n": e_n, "a_hist": a_hist, "n_nr": n_nr, "n_rm": n_rm,
-            "delta": delta, "mu": mu, "size": size, "ndim": ndim, "volume": volume}
-
-
-def reconstruct_log_rho(e_n, a_final):
-    """ln ρ_pq(S_I) at the window centres via trapezoidal integration of a_n.
-
-    With `HasImagPart` dispatch the LLR fixed point is a* = d ln ρ_pq/dS_I,
-    where ρ_pq is the phase-quenched DoS of S_I. Integrating a_n directly
-    gives ln ρ_pq — no `+S` correction (the natural Boltzmann factor on S_R
-    is built into the sampling, not the reconstruction).
-    """
-    log_rho = np.zeros_like(e_n)
-    for i in range(1, len(e_n)):
-        slope = 0.5 * (a_final[i - 1] + a_final[i])
-        log_rho[i] = log_rho[i - 1] + slope * (e_n[i] - e_n[i - 1])
-    return log_rho
+    data["size"]   = size
+    data["ndim"]   = ndim
+    data["mu"]     = mu
+    data["volume"] = size ** ndim
+    return data
 
 
 def piecewise_log_rho_symmetric(e_n, a_final, log_rho, delta, n_per_window=16):

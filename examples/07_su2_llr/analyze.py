@@ -18,65 +18,27 @@ import matplotlib.pyplot as plt
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 
-
-def load_hmc(path):
-    with h5py.File(path, "r") as f:
-        return np.asarray(f["/prod/obs/s"][:], dtype=float)
+sys.path.insert(0, str(HERE.parent / "_common"))
+from llr_reconstruct import (  # noqa: E402
+    load_a_history,
+    load_hmc_action as load_hmc,
+    piecewise_log_rho,
+    reconstruct_log_rho,
+)
 
 
 def load_llr(path):
+    # Wrap the shared loader to also stash the plaquette-normalisation scale
+    # `beta * n_plaq` so plotting code can render the intensive variable
+    # ⟨1 − P⟩ = S / (β · n_plaq).
+    data = load_a_history(path)
     with h5py.File(path, "r") as f:
-        n_rep = int(f["/cfg"].attrs["n_rep"])
-        n_nr = int(f["/cfg"].attrs["n_nr"])
-        n_rm = int(f["/cfg"].attrs["n_rm"])
-        delta = float(f["/cfg"].attrs["delta"])
-        e_n = np.asarray(f["/cfg/E_n"][:], dtype=float)
-        a_hist = np.empty((n_rep, n_nr + n_rm), dtype=float)
-        for n in range(n_rep):
-            a = np.asarray(f[f"/replica_{n:03d}/a"][:], dtype=float)
-            m = min(len(a), n_nr + n_rm)
-            a_hist[n, :m] = a[:m]
-            if m < n_nr + n_rm:
-                a_hist[n, m:] = a[-1]
         size = int(f["/vars"].attrs["size"])
         ndim = int(f["/vars"].attrs["ndim"])
         beta = float(f["/vars"].attrs["beta"])
-    # Intensive variable for SU(N) Wilson:
-    #     ⟨1 − P⟩ = S / (β · n_plaq)        with  n_plaq = (d(d-1)/2)·V
-    # so S / (β · n_plaq) is the dimensionless "1 − ⟨(1/N) Re Tr U_p⟩".
     n_plaq = (ndim * (ndim - 1) // 2) * (size ** ndim)
-    scale = beta * n_plaq
-    return {"E_n": e_n, "a_hist": a_hist, "n_nr": n_nr, "n_rm": n_rm,
-            "delta": delta, "scale": scale}
-
-
-def reconstruct_log_rho(e_n, a_final):
-    """Reconstruct ln rho_natural at each window centre E_n via trapezoid.
-
-    Mode A LLR (real action): S_LLR = (1+a)·S + window. The saddle of
-    ⟨S − E_n⟩ = 0 puts a* = d ln rho_natural/dE, so ∫ a(E) dE gives
-    ln rho_natural directly — same formula as the U(1) and φ⁴ twins.
-    """
-    log_rho = np.zeros_like(e_n)
-    for i in range(1, len(e_n)):
-        slope = 0.5 * (a_final[i - 1] + a_final[i])
-        log_rho[i] = log_rho[i - 1] + slope * (e_n[i] - e_n[i - 1])
-    return log_rho
-
-
-def piecewise_log_rho(e_n, a_final, log_rho, delta, n_per_window=16):
-    """Finely-sampled piecewise-exponential reconstruction of ln rho_natural.
-
-    Inside each window: rho_natural(S) = rho_natural(E_n)·exp(a_n·(S − E_n)).
-    """
-    xs, ys = [], []
-    half = 0.5 * delta
-    for n in range(len(e_n)):
-        seg_x = np.linspace(e_n[n] - half, e_n[n] + half, n_per_window)
-        seg_y = log_rho[n] + a_final[n] * (seg_x - e_n[n])
-        xs.append(seg_x)
-        ys.append(seg_y)
-    return np.concatenate(xs), np.concatenate(ys)
+    data["scale"] = beta * n_plaq
+    return data
 
 
 def beta_of(path):

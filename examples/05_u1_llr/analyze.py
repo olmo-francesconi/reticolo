@@ -16,73 +16,27 @@ import matplotlib.pyplot as plt
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 
-
-def load_hmc(path):
-    with h5py.File(path, "r") as f:
-        return np.asarray(f["/prod/obs/s"][:], dtype=float)
+sys.path.insert(0, str(HERE.parent / "_common"))
+from llr_reconstruct import (  # noqa: E402
+    load_a_history,
+    load_hmc_action as load_hmc,
+    piecewise_log_rho,
+    reconstruct_log_rho,
+)
 
 
 def load_llr(path):
+    # Wrap the shared loader to also stash the plaquette-normalisation scale
+    # `beta * n_plaq` so plotting code can render the intensive variable
+    # e_p = S / (beta * 6V).
+    data = load_a_history(path)
     with h5py.File(path, "r") as f:
-        n_rep = int(f["/cfg"].attrs["n_rep"])
-        n_nr = int(f["/cfg"].attrs["n_nr"])
-        n_rm = int(f["/cfg"].attrs["n_rm"])
-        delta = float(f["/cfg"].attrs["delta"])
-        e_n = np.asarray(f["/cfg/E_n"][:], dtype=float)
-        a_hist = np.empty((n_rep, n_nr + n_rm), dtype=float)
-        for n in range(n_rep):
-            a = np.asarray(f[f"/replica_{n:03d}/a"][:], dtype=float)
-            m = min(len(a), n_nr + n_rm)
-            a_hist[n, :m] = a[:m]
-            if m < n_nr + n_rm:
-                a_hist[n, m:] = a[-1]
         size = int(f["/vars"].attrs["size"])
         ndim = int(f["/vars"].attrs["ndim"])
         beta = float(f["/vars"].attrs["beta"])
-    # Per-plaquette intensive variable, beta-free:
-    #     e_p = (1 - cos theta_p)_avg = S / (beta * 6 V)
-    # where V = L^ndim is the lattice volume (sites) and the 6 comes from
-    # ndim*(ndim-1)/2 plaquette planes in 4D. Our internal S already has beta
-    # baked in (S = beta * sum_p (1 - cos theta_p)), so we divide by both.
-    n_plaq = (ndim * (ndim - 1) // 2) * (size ** ndim)   # = 6V in 4D
-    scale  = beta * n_plaq
-    return {"E_n": e_n, "a_hist": a_hist, "n_nr": n_nr, "n_rm": n_rm,
-            "delta": delta, "scale": scale}
-
-
-def reconstruct_log_rho(e_n, a_final):
-    """Reconstruct ln rho_natural at each window centre E_n via the trapezoidal
-    rule.
-
-    Standard Wilson convention, mode-A LLR: S_LLR = (1+a)*S + window, so
-    weight ∝ exp(-S) * exp(-a*S - window) = natural * tilt * window. The
-    saddle of <S - E_n> = 0 puts a* = d ln Omega/dE - 1, equivalent to
-    d ln rho_natural/dE. Trapezoidal integration of a(E_n) therefore
-    reconstructs ln rho_natural directly — same formula as the scalar twin
-    (examples/04_phi4_llr).
-    """
-    log_rho = np.zeros_like(e_n)
-    for i in range(1, len(e_n)):
-        slope = 0.5 * (a_final[i - 1] + a_final[i])
-        log_rho[i] = log_rho[i - 1] + slope * (e_n[i] - e_n[i - 1])
-    return log_rho
-
-
-def piecewise_log_rho(e_n, a_final, log_rho, delta, n_per_window=16):
-    """Finely-sampled piecewise-exponential reconstruction of ln rho_natural.
-
-    Inside each window the local model is
-        rho_natural(S) = rho_natural(E_n) * exp(a_n * (S - E_n))
-    (slope a_n in log space — same convention as `reconstruct_log_rho`).
-    """
-    xs, ys = [], []
-    half = 0.5 * delta
-    for n in range(len(e_n)):
-        seg_x = np.linspace(e_n[n] - half, e_n[n] + half, n_per_window)
-        seg_y = log_rho[n] + a_final[n] * (seg_x - e_n[n])
-        xs.append(seg_x)
-        ys.append(seg_y)
-    return np.concatenate(xs), np.concatenate(ys)
+    n_plaq = (ndim * (ndim - 1) // 2) * (size ** ndim)
+    data["scale"] = beta * n_plaq
+    return data
 
 
 def beta_of(path):

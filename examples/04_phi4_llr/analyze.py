@@ -15,65 +15,19 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import h5py
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import cm
 
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 
-
-def load_hmc(path):
-    with h5py.File(path, "r") as f:
-        return np.asarray(f["/prod/obs/s"][:], dtype=float)
-
-
-def load_llr(path):
-    with h5py.File(path, "r") as f:
-        n_rep = int(f["/cfg"].attrs["n_rep"])
-        n_nr = int(f["/cfg"].attrs["n_nr"])
-        n_rm = int(f["/cfg"].attrs["n_rm"])
-        delta = float(f["/cfg"].attrs["delta"])
-        e_n = np.asarray(f["/cfg/E_n"][:], dtype=float)
-        a_hist = np.empty((n_rep, n_nr + n_rm), dtype=float)
-        for n in range(n_rep):
-            a = np.asarray(f[f"/replica_{n:03d}/a"][:], dtype=float)
-            # The series length should equal n_nr + n_rm; be defensive anyway.
-            m = min(len(a), n_nr + n_rm)
-            a_hist[n, :m] = a[:m]
-            if m < n_nr + n_rm:
-                a_hist[n, m:] = a[-1]
-    return {"E_n": e_n, "a_hist": a_hist, "n_nr": n_nr, "n_rm": n_rm, "delta": delta}
-
-
-def reconstruct_log_rho(e_n, a_final):
-    """Reconstruct ln rho at each window centre E_n via the trapezoidal rule.
-    Continuity at the boundary E_n + delta/2 between adjacent piecewise
-    exponentials gives ln rho(E_{n+1}) = ln rho(E_n) + (a_n + a_{n+1}) * delta / 2.
-    """
-    log_rho = np.zeros_like(e_n)
-    for i in range(1, len(e_n)):
-        log_rho[i] = log_rho[i - 1] + 0.5 * (a_final[i - 1] + a_final[i]) * (e_n[i] - e_n[i - 1])
-    return log_rho
-
-
-def piecewise_log_rho(e_n, a_final, log_rho, delta, n_per_window=16):
-    """Build a finely-sampled piecewise-exponential reconstruction.
-
-    Within each window [E_n - delta/2, E_n + delta/2] the DoS is
-        rho(E) = rho(E_n) * exp(a_n * (E - E_n))
-    i.e. a straight line of slope a_n in log space. Adjacent segments share
-    their endpoint by construction of `reconstruct_log_rho` (continuity).
-    """
-    xs, ys = [], []
-    half = 0.5 * delta
-    for n in range(len(e_n)):
-        seg_x = np.linspace(e_n[n] - half, e_n[n] + half, n_per_window)
-        seg_y = log_rho[n] + a_final[n] * (seg_x - e_n[n])
-        xs.append(seg_x)
-        ys.append(seg_y)
-    return np.concatenate(xs), np.concatenate(ys)
+sys.path.insert(0, str(HERE.parent / "_common"))
+from llr_reconstruct import (  # noqa: E402
+    load_a_history as load_llr,
+    load_hmc_action as load_hmc,
+    piecewise_log_rho,
+    reconstruct_log_rho,
+)
 
 
 def kappa_of(path):
