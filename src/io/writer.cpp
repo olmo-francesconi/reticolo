@@ -1,5 +1,9 @@
 #include <reticolo/cli/parser.hpp>
+#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/log.hpp>
+#include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/rng.hpp>
 #include <reticolo/io/writer.hpp>
 
 #include <algorithm>
@@ -351,6 +355,9 @@ struct Series<T>::Impl {
 
 // Series<T> definitions
 template <class T>
+Series<T>::Series() = default;
+
+template <class T>
 Series<T>::~Series() = default;
 
 template <class T>
@@ -519,5 +526,146 @@ RETICOLO_IO_INSTANTIATE(std::complex<double>)
 #undef RETICOLO_IO_INSTANTIATE
 
 template void Writer::attr<std::string>(std::string_view, std::string const&);
+
+// ---------------------------------------------------------------------------
+// Field / rng-state writes (config-snapshot surface).
+// ---------------------------------------------------------------------------
+namespace {
+
+hid_t native_type_for(Writer::ScalarKind k) {
+    switch (k) {
+        case Writer::ScalarKind::f32:
+            return native_type<float>();
+        case Writer::ScalarKind::f64:
+            return native_type<double>();
+        case Writer::ScalarKind::c32:
+            return native_type<std::complex<float>>();
+        case Writer::ScalarKind::c64:
+            return native_type<std::complex<double>>();
+    }
+    return H5I_INVALID_HID;
+}
+
+char const* scalar_type_name(Writer::ScalarKind k) {
+    switch (k) {
+        case Writer::ScalarKind::f32:
+            return "float";
+        case Writer::ScalarKind::f64:
+            return "double";
+        case Writer::ScalarKind::c32:
+            return "complex<float>";
+        case Writer::ScalarKind::c64:
+            return "complex<double>";
+    }
+    return "?";
+}
+
+char const* field_kind_name(Writer::FieldKind k) {
+    switch (k) {
+        case Writer::FieldKind::scalar:
+            return "scalar";
+        case Writer::FieldKind::link:
+            return "link";
+        case Writer::FieldKind::matrix_link:
+            return "matrix_link";
+    }
+    return "?";
+}
+
+std::string join_shape(std::vector<std::size_t> const& shape) {
+    std::string out;
+    for (std::size_t i = 0; i < shape.size(); ++i) {
+        if (i > 0) {
+            out += ',';
+        }
+        out += std::to_string(shape[i]);
+    }
+    return out;
+}
+
+void write_1d_dataset(
+    hid_t parent, char const* leaf, hid_t htype, void const* data, hsize_t count) {
+    hid_t space = H5Screate_simple(1, &count, nullptr);
+    hid_check(space, "Screate_simple field");
+    hid_t dset = H5Dcreate2(parent, leaf, htype, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    if (dset < 0) {
+        H5Sclose(space);
+        hdf5_throw("Dcreate2 field");
+    }
+    herr_t const e = H5Dwrite(dset, htype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
+    H5Dclose(dset);
+    H5Sclose(space);
+    herr_check(e, "Dwrite field");
+}
+
+}  // namespace
+
+void Writer::write_field_raw_(std::string_view path,
+                              void const* data,
+                              std::size_t n_elems,
+                              ScalarKind scalar_kind,
+                              FieldKind kind,
+                              std::vector<std::size_t> const& shape,
+                              std::size_t n_components,
+                              char const* group_name) {
+    std::lock_guard<std::mutex> lock{impl_->mu};
+
+    auto segments = split_path(path);
+    if (segments.empty()) {
+        throw std::invalid_argument{"Writer::field: empty path"};
+    }
+
+    hid_t parent = ensure_parent_groups(impl_->file, segments);
+
+    hid_t const htype = native_type_for(scalar_kind);
+    write_1d_dataset(parent, segments.back().c_str(), htype, data, n_elems);
+
+    hid_t dset = H5Oopen(parent, segments.back().c_str(), H5P_DEFAULT);
+    H5Gclose(parent);
+    hid_check(dset, "field reopen for attrs");
+
+    write_string_attr(dset, "kind", field_kind_name(kind));
+    write_string_attr(dset, "scalar_type", scalar_type_name(scalar_kind));
+    write_string_attr(dset, "shape", join_shape(shape));
+    write_scalar_attr<std::uint64_t>(dset, "n_components", n_components);
+    if (group_name != nullptr && group_name[0] != '\0') {
+        write_string_attr(dset, "group", group_name);
+    }
+
+    H5Oclose(dset);
+}
+
+void Writer::rng_state(std::string_view path, FastRng const& rng) {
+    std::lock_guard<std::mutex> lock{impl_->mu};
+
+    auto segments = split_path(path);
+    if (segments.empty()) {
+        throw std::invalid_argument{"Writer::rng_state: empty path"};
+    }
+
+    hid_t parent = ensure_parent_groups(impl_->file, segments);
+
+    auto const& s = rng.state();
+    write_1d_dataset(parent, segments.back().c_str(), H5T_NATIVE_UINT64, s.data(), s.size());
+
+    hid_t dset = H5Oopen(parent, segments.back().c_str(), H5P_DEFAULT);
+    H5Gclose(parent);
+    hid_check(dset, "rng_state reopen for attrs");
+
+    write_string_attr(dset, "kind", "FastRng");
+    write_scalar_attr<unsigned int>(dset, "has_cached_normal", rng.has_cached_normal() ? 1U : 0U);
+    write_scalar_attr<double>(dset, "cached_normal", rng.cached_normal());
+
+    H5Oclose(dset);
+}
+
+#define RETICOLO_IO_INSTANTIATE_FIELD(T)                                                           \
+    template void Writer::field<T>(std::string_view, Lattice<T> const&);                           \
+    template void Writer::field<T>(std::string_view, LinkLattice<T> const&);
+RETICOLO_IO_INSTANTIATE_FIELD(float)
+RETICOLO_IO_INSTANTIATE_FIELD(double)
+RETICOLO_IO_INSTANTIATE_FIELD(std::complex<float>)
+RETICOLO_IO_INSTANTIATE_FIELD(std::complex<double>)
+#undef RETICOLO_IO_INSTANTIATE_FIELD
 
 }  // namespace reticolo::io

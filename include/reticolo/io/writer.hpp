@@ -1,5 +1,10 @@
 #pragma once
 
+#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/link_lattice.hpp>
+#include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/rng.hpp>
+
 #include <complex>
 #include <cstddef>
 #include <cstdint>
@@ -7,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // Public-facing HDF5 writer.
 //
@@ -40,7 +46,7 @@ class Series {
 public:
     using value_type = T;
 
-    Series() = default;
+    Series();
     ~Series();
 
     Series(Series const&)            = delete;
@@ -107,12 +113,97 @@ public:
     // exists (catches typo'd phase reuse early instead of silently overwriting).
     void start_phase(std::string_view phase);
 
+    // Write the full field buffer as a 1-D dataset at `path`. Companion
+    // attributes record the kind ("scalar"/"link"/"matrix_link"), the scalar
+    // type, the lattice shape, and the per-site component count. Together
+    // they let `io::Reader::field` validate the target lattice and refill it
+    // bit-exact. Element-count check: scalar = nsites; link = ndim·nsites;
+    // matrix_link = ndim·nc·nsites.
+    template <class T>
+    void field(std::string_view path, Lattice<T> const& lat);
+
+    template <class T>
+    void field(std::string_view path, LinkLattice<T> const& lat);
+
+    template <class G, class T>
+    void field(std::string_view path, MatrixLinkLattice<G, T> const& lat) {
+        write_field_raw_(path,
+                         lat.data(),
+                         lat.ncomponents(),
+                         scalar_kind_of<T>(),
+                         FieldKind::matrix_link,
+                         lat.shape(),
+                         G::n_real_components,
+                         G::name);
+    }
+
+    // Write the RNG's full state (state words + cached normal) under `path`.
+    // The corresponding Reader::rng_state restores it bit-exact.
+    void rng_state(std::string_view path, FastRng const& rng);
+
     [[nodiscard]] std::filesystem::path const& path() const noexcept;
+
+    // Wire-level scalar type tag. Public because the templated `field<T>`
+    // helpers above translate `T` to this tag and hand it to the writer's
+    // private raw-write path.
+    enum class ScalarKind : int {
+        f32,
+        f64,
+        c32,
+        c64,
+    };
+
+    enum class FieldKind : int {
+        scalar,
+        link,
+        matrix_link,
+    };
 
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
+
+    void write_field_raw_(std::string_view path,
+                          void const* data,
+                          std::size_t n_elems,
+                          ScalarKind scalar_kind,
+                          FieldKind kind,
+                          std::vector<std::size_t> const& shape,
+                          std::size_t n_components,
+                          char const* group_name);
 };
+
+template <class T>
+constexpr Writer::ScalarKind scalar_kind_of();
+
+template <>
+constexpr Writer::ScalarKind scalar_kind_of<float>() {
+    return Writer::ScalarKind::f32;
+}
+template <>
+constexpr Writer::ScalarKind scalar_kind_of<double>() {
+    return Writer::ScalarKind::f64;
+}
+template <>
+constexpr Writer::ScalarKind scalar_kind_of<std::complex<float>>() {
+    return Writer::ScalarKind::c32;
+}
+template <>
+constexpr Writer::ScalarKind scalar_kind_of<std::complex<double>>() {
+    return Writer::ScalarKind::c64;
+}
+
+template <class T>
+void Writer::field(std::string_view path, Lattice<T> const& lat) {
+    write_field_raw_(
+        path, lat.data(), lat.nsites(), scalar_kind_of<T>(), FieldKind::scalar, lat.shape(), 1, "");
+}
+
+template <class T>
+void Writer::field(std::string_view path, LinkLattice<T> const& lat) {
+    write_field_raw_(
+        path, lat.data(), lat.nlinks(), scalar_kind_of<T>(), FieldKind::link, lat.shape(), 1, "");
+}
 
 // Extern template declarations for the supported scalar set. The macro is the
 // only sane way to write three correlated extern-template declarations per

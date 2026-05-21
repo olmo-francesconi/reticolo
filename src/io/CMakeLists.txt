@@ -1,4 +1,4 @@
-add_library(reticolo_io STATIC writer.cpp)
+add_library(reticolo_io STATIC writer.cpp reader.cpp)
 add_library(reticolo::io ALIAS reticolo_io)
 
 target_link_libraries(reticolo_io

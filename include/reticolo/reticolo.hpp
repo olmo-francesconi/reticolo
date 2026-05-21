@@ -34,6 +34,8 @@
 #include <reticolo/core/ranlux_rng.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
+#include <reticolo/io/checkpoint.hpp>
+#include <reticolo/io/reader.hpp>
 #include <reticolo/io/writer.hpp>
 #include <reticolo/llr/driver.hpp>
 #include <reticolo/llr/exchange.hpp>

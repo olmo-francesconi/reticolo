@@ -161,6 +161,20 @@ public:
     }
 
     [[nodiscard]] std::array<state_type, 4> const& state() const noexcept { return s_; }
+    [[nodiscard]] double cached_normal() const noexcept { return cached_normal_; }
+    [[nodiscard]] bool has_cached_normal() const noexcept { return has_cached_normal_; }
+
+    // Rehydrate from a previously captured state — every word the generator
+    // owns, restored bit-exact. Skips the constructor's `log::info` since
+    // resume sites already announce themselves via io::Reader.
+    [[nodiscard]] static FastRng
+    from_state(std::array<state_type, 4> const& s, double cached, bool has_cached) noexcept {
+        FastRng r{0};
+        r.s_                 = s;
+        r.cached_normal_     = cached;
+        r.has_cached_normal_ = has_cached;
+        return r;
+    }
 
 private:
     std::array<state_type, 4> s_{};
