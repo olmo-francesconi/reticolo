@@ -13,7 +13,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-namespace log = reticolo::log;
+// Alias is `rl`, not `log`, because Linux glibc's <math.h> (transitively
+// pulled in via the action headers below) declares `::log(double)` at global
+// scope. gcc/clang then refuse `namespace log = ...` as a redeclaration of
+// a different kind of entity. macOS libc++ doesn't surface this.
+namespace rl = reticolo::log;
 
 namespace {
 
@@ -22,7 +26,7 @@ namespace {
 // duration of the test and restore them in the destructor.
 //
 // Also re-enables the logger: the shared test main (`tests/test_main.cpp`)
-// calls `log::off()` so unrelated tests stay silent; the log-specific tests
+// calls `rl::off()` so unrelated tests stay silent; the log-specific tests
 // need it back on. Restored to whatever it was on destruction.
 struct StreamCapture {
     std::stringstream cout_buf;
@@ -32,16 +36,16 @@ struct StreamCapture {
     bool was_enabled;
 
     StreamCapture()
-        : old_cout{std::cout.rdbuf(cout_buf.rdbuf())}, old_cerr{std::cerr.rdbuf(cerr_buf.rdbuf())},
-          was_enabled{log::enabled()} {
-        log::on();
+        : cout_buf{}, cerr_buf{}, old_cout{std::cout.rdbuf(cout_buf.rdbuf())},
+          old_cerr{std::cerr.rdbuf(cerr_buf.rdbuf())}, was_enabled{rl::enabled()} {
+        rl::on();
     }
 
     ~StreamCapture() {
         std::cout.rdbuf(old_cout);
         std::cerr.rdbuf(old_cerr);
         if (!was_enabled) {
-            log::off();
+            rl::off();
         }
     }
 
@@ -65,14 +69,14 @@ std::vector<std::string> lines_of(std::string const& s) {
 }  // namespace
 
 TEST_CASE("info goes to stdout; warn and error go to stderr", "[log]") {
-    log::init_serial();
-    log::set_color(false);
-    log::set_min_level(log::Level::debug);
+    rl::init_serial();
+    rl::set_color(false);
+    rl::set_min_level(rl::Level::debug);
     StreamCapture cap;
 
-    log::info("init", "info-line");
-    log::warn("hmc", "warn-line");
-    log::error("io", "error-line");
+    rl::info("init", "info-line");
+    rl::warn("hmc", "warn-line");
+    rl::error("io", "error-line");
 
     REQUIRE(cap.cout_buf.str().find("info-line") != std::string::npos);
     REQUIRE(cap.cout_buf.str().find("warn-line") == std::string::npos);
@@ -81,15 +85,15 @@ TEST_CASE("info goes to stdout; warn and error go to stderr", "[log]") {
 }
 
 TEST_CASE("severity sigil distinguishes levels", "[log]") {
-    log::init_serial();
-    log::set_color(false);
-    log::set_min_level(log::Level::debug);
+    rl::init_serial();
+    rl::set_color(false);
+    rl::set_min_level(rl::Level::debug);
     StreamCapture cap;
 
-    log::debug("init", "d");
-    log::info("init", "i");
-    log::warn("init", "w");
-    log::error("init", "e");
+    rl::debug("init", "d");
+    rl::info("init", "i");
+    rl::warn("init", "w");
+    rl::error("init", "e");
 
     auto const so = cap.cout_buf.str();
     auto const se = cap.cerr_buf.str();
@@ -100,12 +104,12 @@ TEST_CASE("severity sigil distinguishes levels", "[log]") {
 }
 
 TEST_CASE("tag is truncated and padded to 4 cells", "[log]") {
-    log::init_serial();
-    log::set_color(false);
+    rl::init_serial();
+    rl::set_color(false);
     StreamCapture cap;
 
-    log::info("longtag", "msg-trunc");
-    log::info("hi", "msg-pad");
+    rl::info("longtag", "msg-trunc");
+    rl::info("hi", "msg-pad");
 
     auto const s = cap.cout_buf.str();
     // 4-char truncated tag + 2-space gutter:
@@ -115,11 +119,11 @@ TEST_CASE("tag is truncated and padded to 4 cells", "[log]") {
 }
 
 TEST_CASE("multi-line entry keeps sigil, blanks metadata on continuations", "[log]") {
-    log::init_serial();
-    log::set_color(false);
+    rl::init_serial();
+    rl::set_color(false);
     StreamCapture cap;
 
-    log::info("init").line("first").line("second").line("third");
+    rl::info("init").line("first").line("second").line("third");
 
     auto const ls = lines_of(cap.cout_buf.str());
     REQUIRE(ls.size() == 3);
@@ -137,11 +141,11 @@ TEST_CASE("multi-line entry keeps sigil, blanks metadata on continuations", "[lo
 }
 
 TEST_CASE("elapsed timestamp uses HHH:MM:SS.mmm format", "[log]") {
-    log::init_serial();
-    log::set_color(false);
+    rl::init_serial();
+    rl::set_color(false);
     StreamCapture cap;
 
-    log::info("init", "tick");
+    rl::info("init", "tick");
 
     auto const s = cap.cout_buf.str();
     // The first ':' must be at position 3 inside the timestamp; check the
@@ -167,30 +171,30 @@ TEST_CASE("elapsed timestamp uses HHH:MM:SS.mmm format", "[log]") {
 }
 
 TEST_CASE("set_min_level suppresses lower-severity entries", "[log]") {
-    log::init_serial();
-    log::set_color(false);
-    log::set_min_level(log::Level::warn);
+    rl::init_serial();
+    rl::set_color(false);
+    rl::set_min_level(rl::Level::warn);
     StreamCapture cap;
 
-    log::info("init", "should-be-dropped");
-    log::warn("init", "should-pass");
+    rl::info("init", "should-be-dropped");
+    rl::warn("init", "should-pass");
 
     REQUIRE(cap.cout_buf.str().find("should-be-dropped") == std::string::npos);
     REQUIRE(cap.cerr_buf.str().find("should-pass") != std::string::npos);
 
-    log::set_min_level(log::Level::debug);  // restore for any later tests
+    rl::set_min_level(rl::Level::debug);  // restore for any later tests
 }
 
-TEST_CASE("log::act renders any action's describe() with the act tag", "[log]") {
-    log::init_serial();
-    log::set_color(false);
+TEST_CASE("rl::act renders any action's describe() with the act tag", "[log]") {
+    rl::init_serial();
+    rl::set_color(false);
     StreamCapture cap;
 
     reticolo::action::Phi4<double> phi4{.kappa = 0.137, .lambda = 1.000};
     reticolo::action::Wilson<reticolo::gauge_group::SU2, double> w{.beta = 2.500};
 
-    log::act(phi4);
-    log::act(w);
+    rl::act(phi4);
+    rl::act(w);
 
     auto const s = cap.cout_buf.str();
     REQUIRE(s.find("act") != std::string::npos);
@@ -204,15 +208,15 @@ TEST_CASE("log::act renders any action's describe() with the act tag", "[log]") 
 TEST_CASE("Scope binds a run-id for the current thread; clears on exit", "[log]") {
     auto const tmp = std::filesystem::temp_directory_path() / "reticolo_log_test";
     std::filesystem::create_directories(tmp);
-    log::init_parallel(tmp, /*run_tag_width=*/4);
-    log::set_color(false);
+    rl::init_parallel(tmp, /*run_tag_width=*/4);
+    rl::set_color(false);
     StreamCapture cap;
 
     {
-        auto _ = log::scope("r042");
-        log::info("hmc", "inside");
+        auto _ = rl::scope("r042");
+        rl::info("hmc", "inside");
     }
-    log::info("post", "outside");
+    rl::info("post", "outside");
 
     auto const s           = cap.cout_buf.str();
     auto const inside_pos  = s.find("inside");
@@ -229,5 +233,5 @@ TEST_CASE("Scope binds a run-id for the current thread; clears on exit", "[log]"
     REQUIRE(std::filesystem::exists(tmp / "run.r042.log"));
     std::filesystem::remove_all(tmp);
 
-    log::init_serial();  // restore mode for any later tests
+    rl::init_serial();  // restore mode for any later tests
 }
