@@ -17,20 +17,20 @@ int main(int argc, char** argv) {
     log::off();
 
     cli::Parser p{"tune_phi4_hmc_omelyan4", "Phi4 HMC tuning rig (Omelyan4)"};
-    auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
-    auto const& kappa      = p.opt<double>("kappa", 0.18, "hopping parameter");
-    auto const& lambda     = p.opt<double>("lambda", 1.0, "quartic coupling");
-    auto const& ndim       = p.opt<int>("ndim", 3, "spatial dimensions");
-    auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
-    auto const& n_md       = p.opt<int>("n_md", 20, "MD steps per trajectory");
-    auto const& n_therm    = p.opt<int>("n_therm", 1000, "thermalisation trajectories");
-    auto const& n_prod     = p.opt<int>("n_prod", 5000, "production trajectories");
-    auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& outpath    = p.opt<std::string>("out", std::string{"tune.h5"}, "HDF5 output");
-    auto const& init_from  = p.opt<std::string>("init_from", std::string{},
-                                                "raw-binary state to load (skip thermalisation)");
-    auto const& save_state = p.opt<std::string>("save_state", std::string{},
-                                                "raw-binary state to save after production");
+    auto const& L         = p.opt<int>("L,size", 8, "linear lattice extent");
+    auto const& kappa     = p.opt<double>("kappa", 0.18, "hopping parameter");
+    auto const& lambda    = p.opt<double>("lambda", 1.0, "quartic coupling");
+    auto const& ndim      = p.opt<int>("ndim", 3, "spatial dimensions");
+    auto const& tau       = p.opt<double>("tau", 1.0, "HMC trajectory length");
+    auto const& n_md      = p.opt<int>("n_md", 20, "MD steps per trajectory");
+    auto const& n_therm   = p.opt<int>("n_therm", 1000, "thermalisation trajectories");
+    auto const& n_prod    = p.opt<int>("n_prod", 5000, "production trajectories");
+    auto const& seed      = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
+    auto const& outpath   = p.opt<std::string>("out", std::string{"tune.h5"}, "HDF5 output");
+    auto const& init_from = p.opt<std::string>(
+        "init_from", std::string{}, "raw-binary state to load (skip thermalisation)");
+    auto const& save_state = p.opt<std::string>(
+        "save_state", std::string{}, "raw-binary state to save after production");
     if (!p.parse(argc, argv)) {
         return 0;
     }

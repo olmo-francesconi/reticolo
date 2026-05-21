@@ -41,10 +41,12 @@ struct DriverSpec {
 };
 
 template <class Replica, class ExchRng>
-void run(std::vector<std::unique_ptr<Replica>>& reps, ExchRng& exch_rng,
-         DriverSpec const& spec, io::Writer& out) {
-    int const n_rep             = static_cast<int>(reps.size());
-    std::size_t const n_rep_u   = reps.size();
+void run(std::vector<std::unique_ptr<Replica>>& reps,
+         ExchRng& exch_rng,
+         DriverSpec const& spec,
+         io::Writer& out) {
+    int const n_rep           = static_cast<int>(reps.size());
+    std::size_t const n_rep_u = reps.size();
 
     out.attr<int>("/cfg@n_rep", n_rep);
     out.attr<int>("/cfg@n_nr", spec.n_nr);
@@ -102,8 +104,12 @@ void run(std::vector<std::unique_ptr<Replica>>& reps, ExchRng& exch_rng,
             de_buf[n] = r.sample(spec.n_meas_rm, log::Mode::silent);
             a_buf[n]  = rm_update(r.a(), de_buf[n], spec.delta, s);
             r.set_a(a_buf[n]);
-            iter("RM", static_cast<std::size_t>(s + 1), static_cast<std::size_t>(spec.n_rm),
-                 a_buf[n], de_buf[n], spec.delta);
+            iter("RM",
+                 static_cast<std::size_t>(s + 1),
+                 static_cast<std::size_t>(spec.n_rm),
+                 a_buf[n],
+                 de_buf[n],
+                 spec.delta);
         }
         for (std::size_t n = 0; n < n_rep_u; ++n) {
             a_series[n].append(a_buf[n]);

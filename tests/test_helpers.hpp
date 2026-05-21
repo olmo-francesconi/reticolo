@@ -36,7 +36,9 @@ public:
     ScratchH5& operator=(ScratchH5&&)      = delete;
 
     [[nodiscard]] std::filesystem::path const& path() const noexcept { return path_; }
-    operator std::filesystem::path const&() const noexcept { return path_; }  // NOLINT(google-explicit-constructor)
+    operator std::filesystem::path const&() const noexcept {
+        return path_;
+    }  // NOLINT(google-explicit-constructor)
 
 private:
     std::filesystem::path path_;

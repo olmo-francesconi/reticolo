@@ -81,8 +81,7 @@ void emit_row(std::ostream& os,
     os.flush();
 }
 
-void start_progress(
-    int ndim, int L, std::size_t dofs, char const* action, char const* kernel) {
+void start_progress(int ndim, int L, std::size_t dofs, char const* action, char const* kernel) {
     std::fprintf(stderr,
                  "[bench] ndim=%d L=%-3d dofs=%-7zu  %-12s %-15s ... ",
                  ndim,
@@ -122,16 +121,15 @@ void bench_kernels(std::ostream& os,
     std::size_t const nsites = phi.nsites();
     {
         start_progress(ndim, L, dofs, name, "s_full");
-        auto const r =
-            time_per_call_budgeted([&] { consume(action.s_full(phi)); }, dofs, budget);
+        auto const r = time_per_call_budgeted([&] { consume(action.s_full(phi)); }, dofs, budget);
         end_progress(r, dofs);
         emit_row(os, ndim, L, nsites, dofs, name, "s_full", r);
     }
     {
         Field force{phi.indexing()};
         start_progress(ndim, L, dofs, name, "compute_force");
-        auto const r = time_per_call_budgeted(
-            [&] { action.compute_force(phi, force); }, dofs, budget);
+        auto const r =
+            time_per_call_budgeted([&] { action.compute_force(phi, force); }, dofs, budget);
         end_progress(r, dofs);
         emit_row(os, ndim, L, nsites, dofs, name, "compute_force", r);
     }
@@ -144,8 +142,8 @@ int main(int argc, char** argv) {
 
     cli::Parser p{"bench_volume_scaling",
                   "Sweep s_full / compute_force throughput across (ndim, L, action) and emit CSV."};
-    auto const& ndims_s = p.opt<std::string>(
-        "ndims", std::string{"2,3,4"}, "comma-separated spatial dimensions");
+    auto const& ndims_s =
+        p.opt<std::string>("ndims", std::string{"2,3,4"}, "comma-separated spatial dimensions");
     auto const& sizes_s = p.opt<std::string>(
         "sizes", std::string{"4,6,8,12,16,24,32"}, "comma-separated linear lattice extents");
     auto const& actions_s =
@@ -156,9 +154,9 @@ int main(int argc, char** argv) {
         p.opt<double>("budget_dofs", 2e9, "stop a kernel after this many dof updates");
     auto const& budget_seconds =
         p.opt<double>("budget_seconds", 2.0, "stop a kernel after this many wall seconds");
-    auto const& seed    = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& outpath = p.opt<std::string>(
-        "out", std::string{""}, "CSV output path (default stdout)");
+    auto const& seed = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
+    auto const& outpath =
+        p.opt<std::string>("out", std::string{""}, "CSV output path (default stdout)");
     if (!p.parse(argc, argv)) {
         return 0;
     }
@@ -170,8 +168,7 @@ int main(int argc, char** argv) {
     auto const actions_list = split_csv(actions_s);
     std::set<std::string> const actions(actions_list.begin(), actions_list.end());
 
-    static std::set<std::string> const known = {
-        "phi4", "compact_u1", "wilson_su2", "wilson_su3"};
+    static std::set<std::string> const known = {"phi4", "compact_u1", "wilson_su2", "wilson_su3"};
     for (auto const& a : actions) {
         if (known.find(a) == known.end()) {
             throw std::runtime_error("unknown --actions token: " + a);
@@ -227,8 +224,7 @@ int main(int argc, char** argv) {
                 LinkLattice<double> theta{shape, 0.0};
                 hot_init(theta, rng);
                 action::CompactU1<double> const action{.beta = 1.0};
-                bench_kernels(
-                    os, ndim, L, "compact_u1", action, theta, theta.nlinks(), budget);
+                bench_kernels(os, ndim, L, "compact_u1", action, theta, theta.nlinks(), budget);
             }
             if (actions.contains("wilson_su2")) {
                 using F = MatrixLinkLattice<gauge_group::SU2, double>;
@@ -242,8 +238,7 @@ int main(int argc, char** argv) {
                               "wilson_su2",
                               action,
                               theta,
-                              gauge_group::SU2::n_real_components * theta.ndims() *
-                                  theta.nsites(),
+                              gauge_group::SU2::n_real_components * theta.ndims() * theta.nsites(),
                               budget);
             }
             if (actions.contains("wilson_su3")) {
@@ -258,22 +253,16 @@ int main(int argc, char** argv) {
                               "wilson_su3",
                               action,
                               theta,
-                              gauge_group::SU3::n_real_components * theta.ndims() *
-                                  theta.nsites(),
+                              gauge_group::SU3::n_real_components * theta.ndims() * theta.nsites(),
                               budget);
             }
         }
     }
 
-    auto const elapsed_s = std::chrono::duration<double>(
-                               std::chrono::steady_clock::now() - t_start)
-                               .count();
-    auto const n_cells =
-        static_cast<long long>(ndims.size() * sizes.size() * actions.size());
-    std::fprintf(stderr,
-                 "[bench] done  %lld cells × 2 kernels in %.2f s\n",
-                 n_cells,
-                 elapsed_s);
+    auto const elapsed_s =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - t_start).count();
+    auto const n_cells = static_cast<long long>(ndims.size() * sizes.size() * actions.size());
+    std::fprintf(stderr, "[bench] done  %lld cells × 2 kernels in %.2f s\n", n_cells, elapsed_s);
     if (!outpath.empty()) {
         std::fprintf(stderr, "[bench] wrote %s\n", outpath.c_str());
     }

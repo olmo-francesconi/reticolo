@@ -97,11 +97,11 @@ concept HasImagPart =
 // change). Used by LLR's `WindowedAction` to maintain a running constraint
 // value so its `ds_local` returns the full windowed delta.
 template <class A, class F>
-concept HasSweepState = LocalAction<A, F> &&
-                       requires(A const& a, Lattice<F> const& l, Site x, F new_v) {
-                           { a.begin_sweep(l) };
-                           { a.commit_accept(l, x, new_v) };
-                       };
+concept HasSweepState =
+    LocalAction<A, F> && requires(A const& a, Lattice<F> const& l, Site x, F new_v) {
+        { a.begin_sweep(l) };
+        { a.commit_accept(l, x, new_v) };
+    };
 
 // Refinement: action admits a Wolff cluster embedding. The cluster updater
 // is action-agnostic; it asks the action for an axis, a reflection, and a

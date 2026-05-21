@@ -1,6 +1,6 @@
-#include "../test_helpers.hpp"
-
 #include <reticolo/io/writer.hpp>
+
+#include "../test_helpers.hpp"
 
 #include <complex>
 #include <cstddef>

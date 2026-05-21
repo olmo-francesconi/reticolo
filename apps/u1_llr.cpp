@@ -29,7 +29,8 @@ int main(int argc, char** argv) {
     auto const& e_min = p.opt<double>("E_min", 200.0, "lower window centre");
     auto const& e_max = p.opt<double>("E_max", 1400.0, "upper window centre");
     auto const& delta = p.opt<double>(
-        "delta", 200.0,
+        "delta",
+        200.0,
         "single LLR tuning knob: Gaussian half-width AND replica spacing. "
         "n_rep is derived so that adjacent window centres are exactly `delta` apart.");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
@@ -54,22 +55,20 @@ int main(int argc, char** argv) {
     Action const base{.beta = beta};
     log::act(base);
 
-    int const n_rep            = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e           = delta;
+    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
+    double const d_e = delta;
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
 
     std::vector<std::unique_ptr<ReplicaT>> reps;
     reps.reserve(static_cast<std::size_t>(n_rep));
     for (int n = 0; n < n_rep; ++n) {
         double const e_n = e_min + (static_cast<double>(n) * d_e);
-        reps.push_back(
-            std::make_unique<ReplicaT>(base,
-                                       FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
-                                       ReplicaT::Spec{.id    = std::format("r{:03}", n),
-                                                      .shape = shape,
-                                                      .e_n   = e_n,
-                                                      .delta = delta},
-                                       alg::HmcSpec{.tau = tau, .n_md = n_md}));
+        reps.push_back(std::make_unique<ReplicaT>(
+            base,
+            FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
+            ReplicaT::Spec{
+                .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
+            alg::HmcSpec{.tau = tau, .n_md = n_md}));
     }
 
     FastRng exch_rng{seed};
@@ -78,15 +77,15 @@ int main(int argc, char** argv) {
 
     llr::run(reps,
              exch_rng,
-             llr::DriverSpec{.n_nr        = n_nr,
-                             .n_therm_nr  = n_therm_nr,
-                             .n_meas_nr   = n_meas_nr,
-                             .n_rm        = n_rm,
-                             .n_therm_rm  = n_therm_rm,
-                             .n_meas_rm   = n_meas_rm,
-                             .delta       = delta,
-                             .e_min       = e_min,
-                             .E_max       = e_max_snapped,
-                             .d_e         = d_e},
+             llr::DriverSpec{.n_nr       = n_nr,
+                             .n_therm_nr = n_therm_nr,
+                             .n_meas_nr  = n_meas_nr,
+                             .n_rm       = n_rm,
+                             .n_therm_rm = n_therm_rm,
+                             .n_meas_rm  = n_meas_rm,
+                             .delta      = delta,
+                             .e_min      = e_min,
+                             .E_max      = e_max_snapped,
+                             .d_e        = d_e},
              out);
 }

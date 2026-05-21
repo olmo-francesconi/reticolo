@@ -38,7 +38,8 @@ int main(int argc, char** argv) {
     auto const& e_min  = p.opt<double>("E_min", -100.0, "lower window centre");
     auto const& e_max  = p.opt<double>("E_max", 100.0, "upper window centre");
     auto const& delta  = p.opt<double>(
-        "delta", 25.0,
+        "delta",
+        25.0,
         "single LLR tuning knob: Gaussian half-width AND replica spacing. "
          "n_rep is derived so that adjacent window centres are exactly `delta` apart.");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
@@ -63,8 +64,8 @@ int main(int argc, char** argv) {
     Action const base{.kappa = kappa, .lambda = lambda};
     log::act(base);
 
-    int const n_rep            = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e           = delta;
+    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
+    double const d_e = delta;
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
 
     std::vector<std::unique_ptr<ReplicaT>> reps;
@@ -85,15 +86,15 @@ int main(int argc, char** argv) {
 
     llr::run(reps,
              exch_rng,
-             llr::DriverSpec{.n_nr        = n_nr,
-                             .n_therm_nr  = n_therm_nr,
-                             .n_meas_nr   = n_meas_nr,
-                             .n_rm        = n_rm,
-                             .n_therm_rm  = n_therm_rm,
-                             .n_meas_rm   = n_meas_rm,
-                             .delta       = delta,
-                             .e_min       = e_min,
-                             .E_max       = e_max_snapped,
-                             .d_e         = d_e},
+             llr::DriverSpec{.n_nr       = n_nr,
+                             .n_therm_nr = n_therm_nr,
+                             .n_meas_nr  = n_meas_nr,
+                             .n_rm       = n_rm,
+                             .n_therm_rm = n_therm_rm,
+                             .n_meas_rm  = n_meas_rm,
+                             .delta      = delta,
+                             .e_min      = e_min,
+                             .E_max      = e_max_snapped,
+                             .d_e        = d_e},
              out);
 }

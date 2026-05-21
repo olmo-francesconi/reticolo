@@ -1,7 +1,7 @@
-#include "../test_helpers.hpp"
-
 #include <reticolo/cli/parser.hpp>
 #include <reticolo/io/writer.hpp>
+
+#include "../test_helpers.hpp"
 
 #include <array>
 #include <string>

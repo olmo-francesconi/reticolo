@@ -66,8 +66,8 @@ int main(int argc, char** argv) {
     Action const base{.mass = mass, .lambda = lambda, .mu = mu};
     log::act(base);
 
-    int const n_rep            = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e           = delta;
+    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
+    double const d_e = delta;
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
 
     std::vector<std::unique_ptr<ReplicaT>> reps;
@@ -109,21 +109,20 @@ int main(int argc, char** argv) {
             reps[n]->rng(),
             alg::MetropolisSpec{.sigma = k_metro_sigma},
             log::Mode::silent};
-        reps[n]->thermalize_until_in_window(
-            warmup, k_metro_max_batches, k_metro_batch_size, 1.0);
+        reps[n]->thermalize_until_in_window(warmup, k_metro_max_batches, k_metro_batch_size, 1.0);
     }
 
     llr::run(reps,
              exch_rng,
-             llr::DriverSpec{.n_nr        = n_nr,
-                             .n_therm_nr  = n_therm_nr,
-                             .n_meas_nr   = n_meas_nr,
-                             .n_rm        = n_rm,
-                             .n_therm_rm  = n_therm_rm,
-                             .n_meas_rm   = n_meas_rm,
-                             .delta       = delta,
-                             .e_min       = e_min,
-                             .E_max       = e_max_snapped,
-                             .d_e         = d_e},
+             llr::DriverSpec{.n_nr       = n_nr,
+                             .n_therm_nr = n_therm_nr,
+                             .n_meas_nr  = n_meas_nr,
+                             .n_rm       = n_rm,
+                             .n_therm_rm = n_therm_rm,
+                             .n_meas_rm  = n_meas_rm,
+                             .delta      = delta,
+                             .e_min      = e_min,
+                             .E_max      = e_max_snapped,
+                             .d_e        = d_e},
              out);
 }

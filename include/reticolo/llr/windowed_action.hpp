@@ -98,12 +98,11 @@ struct WindowedAction {
         } else {
             ds_constraint = ds_base;
         }
-        scalar_t const inv2 = scalar_t{1} / (delta * delta);
-        scalar_t const half = scalar_t{1} / scalar_t{2};
-        scalar_t const window_ds =
-            (((s_constraint_running_ - E_n) * ds_constraint) +
-             (half * ds_constraint * ds_constraint)) *
-            inv2;
+        scalar_t const inv2      = scalar_t{1} / (delta * delta);
+        scalar_t const half      = scalar_t{1} / scalar_t{2};
+        scalar_t const window_ds = (((s_constraint_running_ - E_n) * ds_constraint) +
+                                    (half * ds_constraint * ds_constraint)) *
+                                   inv2;
         if constexpr (k_complex) {
             return ds_base + (a * ds_constraint) + window_ds;
         } else {
@@ -142,8 +141,7 @@ struct WindowedAction {
         scalar_t const inv2    = scalar_t{1} / (delta * delta);
         scalar_t const half    = scalar_t{1} / scalar_t{2};
         scalar_t const window_ds =
-            (((s_constraint_running_ - E_n) * ds_base) + (half * ds_base * ds_base)) *
-            inv2;
+            (((s_constraint_running_ - E_n) * ds_base) + (half * ds_base * ds_base)) * inv2;
         return ((scalar_t{1} + a) * ds_base) + window_ds;
     }
 

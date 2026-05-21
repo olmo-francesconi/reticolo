@@ -45,10 +45,10 @@ template <class Base,
           class Field      = Lattice<T>>
 class Replica {
 public:
-    using value_type      = T;
-    using field_type      = Field;
-    using scalar_t        = scalar_of_t<T>;
-    using SizeVec         = typename Field::SizeVec;
+    using value_type           = T;
+    using field_type           = Field;
+    using scalar_t             = scalar_of_t<T>;
+    using SizeVec              = typename Field::SizeVec;
     using windowed_action_type = WindowedAction<Base, T, Field>;
 
     static constexpr std::string_view log_tag = "repl";
@@ -152,9 +152,7 @@ public:
     [[nodiscard]] Field& phi() noexcept { return phi_; }
     [[nodiscard]] Field const& phi() const noexcept { return phi_; }
     [[nodiscard]] Rng& rng() noexcept { return rng_; }
-    [[nodiscard]] windowed_action_type const& windowed_action() const noexcept {
-        return windowed_;
-    }
+    [[nodiscard]] windowed_action_type const& windowed_action() const noexcept { return windowed_; }
 
     // Random Gaussian-shift seed of the field, sigma per real component.
     // Complex fields get independent N(0, sigma²) on Re and Im.
@@ -184,10 +182,10 @@ public:
     // exhausted without convergence.
     template <class Sampler>
     int thermalize_until_in_window(Sampler& sampler,
-                                    int max_batches,
-                                    int batch_size           = 10,
-                                    double threshold_sigmas  = 1.0,
-                                    log::Mode log_mode       = log::Mode::normal) {
+                                   int max_batches,
+                                   int batch_size          = 10,
+                                   double threshold_sigmas = 1.0,
+                                   log::Mode log_mode      = log::Mode::normal) {
         for (int b = 0; b < max_batches; ++b) {
             for (int i = 0; i < batch_size; ++i) {
                 (void)sampler.step(log::Mode::silent);

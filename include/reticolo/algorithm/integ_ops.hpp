@@ -49,8 +49,8 @@ inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
 // the same per-direction loop.
 template <class G, class T>
 inline void drift_field(MatrixLinkLattice<G, T>& field,
-                                               MatrixLinkLattice<G, T> const& mom,
-                                               double cdt) noexcept {
+                        MatrixLinkLattice<G, T> const& mom,
+                        double cdt) noexcept {
     std::size_t const d  = field.ndims();
     std::size_t const ns = field.nsites();
     for (std::size_t mu = 0; mu < d; ++mu) {
