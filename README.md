@@ -1,27 +1,13 @@
-<div align="center">
-
-```
-
- ██████╗ ███████╗████████╗██╗ ██████╗ ██████╗ ██╗      ██████╗
- ██╔══██╗██╔════╝╚══██╔══╝██║██╔════╝██╔═══██╗██║     ██╔═══██╗
- ██████╔╝█████╗     ██║   ██║██║     ██║   ██║██║     ██║   ██║
- ██╔══██╗██╔══╝     ██║   ██║██║     ██║   ██║██║     ██║   ██║
- ██║  ██║███████╗   ██║   ██║╚██████╗╚██████╔╝███████╗╚██████╔╝
- ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝ ╚═════╝
-
-```
+# reticolo
 
 **Modern C++ library for Monte Carlo simulation of lattice quantum field theories.**
 
-</div>
-
-Scalar fields (Phi4, Phi6, SineGordon, XY, O(N) sigma, complex Bose gas) and gauge fields
-(compact U(1), Wilson SU(2)/SU(3)) behind a concept-refined action interface. Ships HMC
+Scalar actions (Phi4, Phi6, SineGordon, XY, O(N) sigma, Relativistic Bose gas) and gauge actions
+(compact U(1), Wilson SU(2)/SU(3)) behind a concept-refined interface. Ships HMC
 (Leapfrog / Omelyan2 / Omelyan4), Metropolis, Wolff cluster, and LLR density-of-states
-updaters; OpenMP at the LLR replica layer only. Output is self-describing HDF5 — every run
-stamps cmdline, git commit, compile flags, and every CLI flag the parser resolved. Apps under
-`apps/` are ~60–130 LOC each: the trajectory `for` loop stays plainly visible. See
-[`docs/architecture.md`](docs/architecture.md) for the design rationale.
+updaters. Output in self-describing HDF5.
+
+See [`docs/architecture.md`](docs/architecture.md) for the design rationale.
 
 ## Build
 
