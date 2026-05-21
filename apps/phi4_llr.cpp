@@ -3,17 +3,17 @@
 // Energy variable: E(phi) = S_base(phi) (the full action).
 // Sampler:        HMC with a templated integrator (default Omelyan2).
 // Update:         Newton-Raphson warm-up (n_nr iters), then restarted RM
-//                with counter k reset to 0 after the warm-up.
+//                 with counter k reset to 0 after the warm-up.
 // Geometry:       n_rep replicas at E_n = E_min + n * dE,
-//                dE = (E_max - E_min) / (n_rep - 1).
+//                 dE = (E_max - E_min) / (n_rep - 1).
 // Exchange:       even/odd alternating nearest-neighbour swaps after each RM sweep.
 //
 // Output schema (HDF5):
-//  /cfg@n_rep, /cfg@delta, /cfg@E_min, /cfg@E_max, /cfg@dE
-//  /cfg/E_n                  — series, length n_rep
-//  /replica_NNN/a            — series, one append per NR iter + per RM sweep
-//  /replica_NNN/dE           — series, paired with /a
-//  /exchange/accepted        — series, one append per RM sweep (count, 0..n_rep/2)
+//   /cfg@n_rep, /cfg@delta, /cfg@E_min, /cfg@E_max, /cfg@dE
+//   /cfg/E_n                  — series, length n_rep
+//   /replica_NNN/a            — series, one append per NR iter + per RM sweep
+//   /replica_NNN/dE           — series, paired with /a
+//   /exchange/accepted        — series, one append per RM sweep (count, 0..n_rep/2)
 
 #include <reticolo/reticolo.hpp>
 
@@ -38,8 +38,7 @@ int main(int argc, char** argv) {
     auto const& e_min  = p.opt<double>("E_min", -100.0, "lower window centre");
     auto const& e_max  = p.opt<double>("E_max", 100.0, "upper window centre");
     auto const& delta  = p.opt<double>(
-        "delta",
-        25.0,
+        "delta", 25.0,
         "single LLR tuning knob: Gaussian half-width AND replica spacing. "
          "n_rep is derived so that adjacent window centres are exactly `delta` apart.");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
@@ -64,8 +63,8 @@ int main(int argc, char** argv) {
     Action const base{.kappa = kappa, .lambda = lambda};
     log::act(base);
 
-    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e = delta;
+    int const n_rep            = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
+    double const d_e           = delta;
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
 
     std::vector<std::unique_ptr<ReplicaT>> reps;
@@ -84,92 +83,17 @@ int main(int argc, char** argv) {
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
-    out.attr<int>("/cfg@n_rep", n_rep);
-    out.attr<int>("/cfg@n_nr", n_nr);
-    out.attr<int>("/cfg@n_rm", n_rm);
-    out.attr<double>("/cfg@delta", delta);
-    out.attr<double>("/cfg@E_min", e_min);
-    out.attr<double>("/cfg@E_max", e_max_snapped);
-    out.attr<double>("/cfg@dE", d_e);
-
-    auto e_n_series = out.series<double>("/cfg/E_n");
-    for (auto const& r : reps) {
-        e_n_series.append(r->E_n());
-    }
-
-    std::vector<io::Series<double>> a_series;
-    std::vector<io::Series<double>> de_series;
-    a_series.reserve(static_cast<std::size_t>(n_rep));
-    de_series.reserve(static_cast<std::size_t>(n_rep));
-    for (int n = 0; n < n_rep; ++n) {
-        a_series.emplace_back(out.series<double>(std::format("/replica_{:03d}/a", n)));
-        de_series.emplace_back(out.series<double>(std::format("/replica_{:03d}/dE", n)));
-    }
-    auto exch_series = out.series<int>("/exchange/accepted");
-
-    std::size_t const n_rep_u = static_cast<std::size_t>(n_rep);
-
-    // Replicas are independent (each owns its own field / RNG / base action
-    // copy via WindowedAction-by-value), so the per-replica loop is a clean
-    // OpenMP parallel for. HDF5 writes are not thread-safe — stage them into
-    // per-iteration buffers and drain serially. Schedule is dynamic because
-    // trajectory wall-time varies across replicas.
-    std::vector<double> de_buf(n_rep_u);
-    std::vector<double> a_buf(n_rep_u);
-
-    log::info("llr", "NR phase  {} iters × {} replicas", n_nr, n_rep_u);
-    for (int k = 0; k < n_nr; ++k) {
-#pragma omp parallel for schedule(dynamic, 1)
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto _  = log::scope(reps[n]->id());
-            auto& r = *reps[n];
-            r.thermalize(n_therm_nr);
-            de_buf[n] = r.sample(n_meas_nr);
-            a_buf[n]  = llr::nr_update(r.a(), de_buf[n], delta);
-            r.set_a(a_buf[n]);
-        }
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            a_series[n].append(a_buf[n]);
-            de_series[n].append(de_buf[n]);
-        }
-        log::info("llr", "NR iter  {:>3}/{}  done", k + 1, n_nr);
-    }
-
-    log::info("llr", "RM phase  {} iters × {} replicas", n_rm, n_rep_u);
-    for (int s = 0; s < n_rm; ++s) {
-#pragma omp parallel for schedule(dynamic, 1)
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto _  = log::scope(reps[n]->id());
-            auto& r = *reps[n];
-            r.thermalize(n_therm_rm, log::Mode::silent);
-            de_buf[n] = r.sample(n_meas_rm, log::Mode::silent);
-            a_buf[n]  = llr::rm_update(r.a(), de_buf[n], delta, s);
-            r.set_a(a_buf[n]);
-            llr::iter("RM",
-                      static_cast<std::size_t>(s + 1),
-                      static_cast<std::size_t>(n_rm),
-                      a_buf[n],
-                      de_buf[n],
-                      delta);
-        }
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            a_series[n].append(a_buf[n]);
-            de_series[n].append(de_buf[n]);
-        }
-
-        // Even/odd alternating nearest-neighbour exchange — serial: touches
-        // pairs of replicas and a single shared exchange RNG.
-        std::size_t const off = static_cast<std::size_t>(s & 1);
-        int accepted          = 0;
-        int attempts          = 0;
-        for (std::size_t i = off; i + 1 < reps.size(); i += 2) {
-            ++attempts;
-            if (llr::try_exchange(*reps[i], *reps[i + 1], exch_rng)) {
-                ++accepted;
-            }
-        }
-        exch_series.append(accepted);
-        log::info("exch", "step  {:>3}  accepted  {}/{}", s + 1, accepted, attempts);
-        log::info("llr", "RM iter  {:>3}/{}  done", s + 1, n_rm);
-    }
+    llr::run(reps,
+             exch_rng,
+             llr::DriverSpec{.n_nr        = n_nr,
+                             .n_therm_nr  = n_therm_nr,
+                             .n_meas_nr   = n_meas_nr,
+                             .n_rm        = n_rm,
+                             .n_therm_rm  = n_therm_rm,
+                             .n_meas_rm   = n_meas_rm,
+                             .delta       = delta,
+                             .e_min       = e_min,
+                             .E_max       = e_max_snapped,
+                             .d_e         = d_e},
+             out);
 }

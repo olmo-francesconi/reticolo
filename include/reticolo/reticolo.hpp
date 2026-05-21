@@ -35,6 +35,7 @@
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/io/writer.hpp>
+#include <reticolo/llr/driver.hpp>
 #include <reticolo/llr/exchange.hpp>
 #include <reticolo/llr/log.hpp>
 #include <reticolo/llr/replica.hpp>

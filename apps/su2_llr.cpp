@@ -1,15 +1,9 @@
 // LLR (Gaussian-penalty) with replica exchange for SU(2) Wilson gauge theory.
 //
-// Mirrors u1_llr.cpp but on `MatrixLinkLattice<SU2, double>` with the
-// generic `Wilson<SU2>` action. Each replica is cold-initialised to the SU(2)
-// identity (all matrices = I) since the default field ctor leaves zeros,
-// which would be an invalid group element.
-//
-// Energy variable: E(U) = S_W(U) (full Wilson action; bounded below by 0).
-// Sampler:        SU(2) HMC with templated integrator (default Omelyan2).
-// Update:         Newton-Raphson warm-up then restarted Robbins-Monro.
-// Geometry:       n_rep replicas at E_n = E_min + n * delta.
-// Exchange:       even/odd alternating nearest-neighbour swaps.
+// Mirrors u1_llr.cpp but on `MatrixLinkLattice<SU2, double>` with the generic
+// `Wilson<SU2>` action. Each replica is cold-initialised to the SU(2) identity
+// (all matrices = I) since the default field ctor leaves zeros, which would
+// be an invalid group element.
 
 #include <reticolo/reticolo.hpp>
 
@@ -58,10 +52,9 @@ int main(int argc, char** argv) {
     Action const base{.beta = beta};
     log::act(base);
 
-    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e = delta;
+    int const n_rep            = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
+    double const d_e           = delta;
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
-    double const a_init        = 0.0;
 
     std::vector<std::unique_ptr<ReplicaT>> reps;
     reps.reserve(static_cast<std::size_t>(n_rep));
@@ -70,14 +63,11 @@ int main(int argc, char** argv) {
         reps.push_back(
             std::make_unique<ReplicaT>(base,
                                        FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
-                                       ReplicaT::Spec{.id     = std::format("r{:03}", n),
-                                                      .shape  = shape,
-                                                      .e_n    = e_n,
-                                                      .delta  = delta,
-                                                      .a_init = a_init},
+                                       ReplicaT::Spec{.id    = std::format("r{:03}", n),
+                                                      .shape = shape,
+                                                      .e_n   = e_n,
+                                                      .delta = delta},
                                        alg::HmcSpec{.tau = tau, .n_md = n_md}));
-        // Replica's ctor self-announces with its id bound.
-        //
         // Cold-start each replica's field to SU(2) identity (Re U_{00} =
         // Re U_{11} = 1, all else 0).
         Field& phi           = reps.back()->phi();
@@ -95,84 +85,17 @@ int main(int argc, char** argv) {
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
-    out.attr<int>("/cfg@n_rep", n_rep);
-    out.attr<int>("/cfg@n_nr", n_nr);
-    out.attr<int>("/cfg@n_rm", n_rm);
-    out.attr<double>("/cfg@delta", delta);
-    out.attr<double>("/cfg@E_min", e_min);
-    out.attr<double>("/cfg@E_max", e_max_snapped);
-    out.attr<double>("/cfg@dE", d_e);
-
-    auto e_n_series = out.series<double>("/cfg/E_n");
-    for (auto const& r : reps) {
-        e_n_series.append(r->E_n());
-    }
-
-    std::vector<io::Series<double>> a_series;
-    std::vector<io::Series<double>> de_series;
-    a_series.reserve(static_cast<std::size_t>(n_rep));
-    de_series.reserve(static_cast<std::size_t>(n_rep));
-    for (int n = 0; n < n_rep; ++n) {
-        a_series.emplace_back(out.series<double>(std::format("/replica_{:03d}/a", n)));
-        de_series.emplace_back(out.series<double>(std::format("/replica_{:03d}/dE", n)));
-    }
-    auto exch_series = out.series<int>("/exchange/accepted");
-
-    std::size_t const n_rep_u = static_cast<std::size_t>(n_rep);
-    std::vector<double> de_buf(n_rep_u);
-    std::vector<double> a_buf(n_rep_u);
-
-    log::info("llr", "NR phase  {} iters × {} replicas", n_nr, n_rep_u);
-    for (int k = 0; k < n_nr; ++k) {
-#pragma omp parallel for schedule(dynamic, 1)
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto _  = log::scope(reps[n]->id());
-            auto& r = *reps[n];
-            r.thermalize(n_therm_nr);
-            de_buf[n] = r.sample(n_meas_nr);
-            a_buf[n]  = llr::nr_update(r.a(), de_buf[n], delta);
-            r.set_a(a_buf[n]);
-        }
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            a_series[n].append(a_buf[n]);
-            de_series[n].append(de_buf[n]);
-        }
-        log::info("llr", "NR iter  {:>3}/{}  done", k + 1, n_nr);
-    }
-
-    log::info("llr", "RM phase  {} iters × {} replicas", n_rm, n_rep_u);
-    for (int s = 0; s < n_rm; ++s) {
-#pragma omp parallel for schedule(dynamic, 1)
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto _  = log::scope(reps[n]->id());
-            auto& r = *reps[n];
-            r.thermalize(n_therm_rm, log::Mode::silent);
-            de_buf[n] = r.sample(n_meas_rm, log::Mode::silent);
-            a_buf[n]  = llr::rm_update(r.a(), de_buf[n], delta, s);
-            r.set_a(a_buf[n]);
-            llr::iter("RM",
-                      static_cast<std::size_t>(s + 1),
-                      static_cast<std::size_t>(n_rm),
-                      a_buf[n],
-                      de_buf[n],
-                      delta);
-        }
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            a_series[n].append(a_buf[n]);
-            de_series[n].append(de_buf[n]);
-        }
-
-        std::size_t const off = static_cast<std::size_t>(s & 1);
-        int accepted          = 0;
-        int attempts          = 0;
-        for (std::size_t i = off; i + 1 < reps.size(); i += 2) {
-            ++attempts;
-            if (llr::try_exchange(*reps[i], *reps[i + 1], exch_rng)) {
-                ++accepted;
-            }
-        }
-        exch_series.append(accepted);
-        log::info("exch", "step  {:>3}  accepted  {}/{}", s + 1, accepted, attempts);
-        log::info("llr", "RM iter  {:>3}/{}  done", s + 1, n_rm);
-    }
+    llr::run(reps,
+             exch_rng,
+             llr::DriverSpec{.n_nr        = n_nr,
+                             .n_therm_nr  = n_therm_nr,
+                             .n_meas_nr   = n_meas_nr,
+                             .n_rm        = n_rm,
+                             .n_therm_rm  = n_therm_rm,
+                             .n_meas_rm   = n_meas_rm,
+                             .delta       = delta,
+                             .e_min       = e_min,
+                             .E_max       = e_max_snapped,
+                             .d_e         = d_e},
+             out);
 }
