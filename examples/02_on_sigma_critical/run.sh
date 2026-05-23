@@ -24,7 +24,7 @@ ndim=${NDIM:-3}
 n_cluster=${N_CLUSTER:-5}
 n_therm=${N_THERM:-2000}
 n_prod=${N_PROD:-30000}
-seed=${SEED:-20260517}
+seed=${SEED:-42}
 jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 
 # Sizes and beta grid bracket the 3D O(3) transition (beta_c ≈ 0.693).

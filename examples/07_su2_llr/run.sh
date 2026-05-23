@@ -53,7 +53,7 @@ range_lo_pct=${RANGE_LO_PCT:-0.5}
 range_hi_pct=${RANGE_HI_PCT:-99.5}
 target_n_rep=${TARGET_N_REP:-30}
 
-seed=${SEED:-20260520}
+seed=${SEED:-42}
 jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 
 omp_threads=${OMP_THREADS:-4}

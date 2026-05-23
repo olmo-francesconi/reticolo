@@ -51,7 +51,7 @@ range_lo_pct=${RANGE_LO_PCT:-0.5}
 range_hi_pct=${RANGE_HI_PCT:-99.5}
 target_n_rep=${TARGET_N_REP:-20}
 
-seed=${SEED:-20260518}
+seed=${SEED:-42}
 jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 
 # LLR uses OpenMP internally over replicas. Run llr_jobs parameter values in

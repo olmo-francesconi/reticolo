@@ -56,7 +56,7 @@ n_meas_rm=${N_MEAS_RM:-400}
 si_over_v_max=${SI_OVER_V_MAX:-0.08}
 target_n_rep=${TARGET_N_REP:-30}
 
-seed=${SEED:-20260518}
+seed=${SEED:-42}
 jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 
 # LLR uses OpenMP internally over replicas. Run llr_jobs parameter values in

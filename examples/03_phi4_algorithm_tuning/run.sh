@@ -48,7 +48,7 @@ fi
 lambda=${LAMBDA:-1.0}
 n_therm_shared=${N_THERM_SHARED:-5000}
 n_prod=${N_PROD:-20000}
-seed=${SEED:-20260518}
+seed=${SEED:-42}
 jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 state_path="$results/thermalized.bin"
 

@@ -25,7 +25,7 @@ ndim=${NDIM:-2}
 lambda=${LAMBDA:-1.145}
 n_therm=${N_THERM:-3000}
 n_prod=${N_PROD:-50000}
-seed=${SEED:-20260517}
+seed=${SEED:-42}
 jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 
 # Four sizes spanning V = 256 -> 2304 give a clean lever arm in 2D; kappa grid
