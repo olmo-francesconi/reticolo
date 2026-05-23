@@ -48,6 +48,7 @@ n_therm_nr=${N_THERM_NR:-200}
 n_meas_nr=${N_MEAS_NR:-1000}
 n_therm_rm=${N_THERM_RM:-100}
 n_meas_rm=${N_MEAS_RM:-500}
+exchange=${EXCHANGE:-1}
 range_pad=${RANGE_PAD:-0.30}
 range_lo_pct=${RANGE_LO_PCT:-0.5}
 range_hi_pct=${RANGE_HI_PCT:-99.5}
@@ -68,7 +69,7 @@ betas=(${BETAS:-0.95 1.00 1.05})
 
 export hmc_bin llr_bin results ndim size
 export n_therm n_prod delta tau n_md n_nr n_rm
-export n_therm_nr n_meas_nr n_therm_rm n_meas_rm
+export n_therm_nr n_meas_nr n_therm_rm n_meas_rm exchange
 export range_pad range_lo_pct range_hi_pct target_n_rep seed
 
 stage1_hmc() {
@@ -121,6 +122,7 @@ PY
         --tau="$tau" --n_md="$n_md" \
         --n_nr="$n_nr" --n_therm_nr="$n_therm_nr" --n_meas_nr="$n_meas_nr" \
         --n_rm="$n_rm" --n_therm_rm="$n_therm_rm" --n_meas_rm="$n_meas_rm" \
+        --exchange="$exchange" \
         --seed="$seed" --out="$llr_out" >/dev/null || rc=$?
     if [[ $rc -ne 0 ]]; then
         printf '[%s] LLR beta=%s FAILED (exit %d)  range=[%.2f, %.2f]  delta=%.3f\n' \

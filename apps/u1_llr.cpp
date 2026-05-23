@@ -44,8 +44,10 @@ int main(int argc, char** argv) {
     auto const& n_therm_rm =
         p.opt<int>("n_therm_rm", 100, "thermalisation trajectories per RM sweep");
     auto const& n_meas_rm = p.opt<int>("n_meas_rm", 500, "measurement trajectories per RM sweep");
-    auto const& seed      = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& outpath   = p.opt<std::string>("out", std::string{"u1_llr.h5"}, "HDF5 output");
+    auto const& exchange  = p.opt<int>(
+        "exchange", 1, "enable even/odd nearest-neighbour replica exchange in the RM phase (0/1)");
+    auto const& seed    = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
+    auto const& outpath = p.opt<std::string>("out", std::string{"u1_llr.h5"}, "HDF5 output");
     if (!p.parse(argc, argv)) {
         return 0;
     }
@@ -80,7 +82,32 @@ int main(int argc, char** argv) {
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
-    // ---- Drive: NR warm-up + RM + exchange ----
+    // ---- Warm-up: Metropolis into S window ----
+    // Hot-start each replica with random link angles, then run windowed
+    // Metropolis until each replica sits inside its E_n window. Pure HMC
+    // can struggle here: deep in the S tail the windowed force gets large
+    // enough that the leapfrog destabilises and accept collapses.
+    // Metropolis with a Gaussian-shift proposal stays stable at any window
+    // strength; WindowedAction wires the LLR tilt into ds_local.
+    constexpr double k_hot_sigma      = 3.141592653589793;  // ~uniform theta
+    constexpr double k_metro_sigma    = 0.4;
+    constexpr int k_metro_max_batches = 50;
+    constexpr int k_metro_batch_size  = 10;
+    std::size_t const n_rep_u         = static_cast<std::size_t>(n_rep);
+#pragma omp parallel for schedule(dynamic, 1)
+    for (std::size_t n = 0; n < n_rep_u; ++n) {
+        auto _ = log::scope(reps[n]->id());
+        reps[n]->hot_start(k_hot_sigma);
+        alg::Metropolis<ReplicaT::windowed_action_type, FastRng, double, LinkLattice<double>>
+            warmup{reps[n]->windowed_action(),
+                   reps[n]->phi(),
+                   reps[n]->rng(),
+                   alg::MetropolisSpec{.sigma = k_metro_sigma},
+                   log::Mode::silent};
+        reps[n]->thermalize_until_in_window(warmup, k_metro_max_batches, k_metro_batch_size, 1.0);
+    }
+
+    // ---- Drive: NR warm-up + RM + (optional) exchange ----
     llr::run(reps,
              exch_rng,
              llr::DriverSpec{.n_nr       = n_nr,
@@ -92,6 +119,7 @@ int main(int argc, char** argv) {
                              .delta      = delta,
                              .e_min      = e_min,
                              .E_max      = e_max_snapped,
-                             .d_e        = d_e},
+                             .d_e        = d_e,
+                             .exchange   = (exchange != 0)},
              out);
 }

@@ -38,6 +38,7 @@ struct DriverSpec {
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
     double E_max;  // already snapped to the (n_rep - 1) * delta grid
     double d_e;
+    bool exchange = true;  // even/odd replica swaps each RM sweep
 };
 
 template <class Replica, class ExchRng>
@@ -117,14 +118,17 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
         }
 
         // Even/odd alternating nearest-neighbour exchange: serial — pairs
-        // of replicas and a single shared exchange RNG.
-        std::size_t const off = static_cast<std::size_t>(s & 1);
-        int accepted          = 0;
-        int attempts          = 0;
-        for (std::size_t i = off; i + 1 < reps.size(); i += 2) {
-            ++attempts;
-            if (try_exchange(*reps[i], *reps[i + 1], exch_rng)) {
-                ++accepted;
+        // of replicas and a single shared exchange RNG. When disabled the
+        // series still gets a 0 so its shape stays in lockstep with /a, /dE.
+        int accepted = 0;
+        int attempts = 0;
+        if (spec.exchange) {
+            std::size_t const off = static_cast<std::size_t>(s & 1);
+            for (std::size_t i = off; i + 1 < reps.size(); i += 2) {
+                ++attempts;
+                if (try_exchange(*reps[i], *reps[i + 1], exch_rng)) {
+                    ++accepted;
+                }
             }
         }
         exch_series.append(accepted);
