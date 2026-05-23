@@ -41,6 +41,7 @@
 #include <reticolo/llr/exchange.hpp>
 #include <reticolo/llr/log.hpp>
 #include <reticolo/llr/replica.hpp>
+#include <reticolo/llr/smoothed_driver.hpp>
 #include <reticolo/llr/update_a.hpp>
 #include <reticolo/llr/windowed_action.hpp>
 #include <reticolo/obs/analysis.hpp>
