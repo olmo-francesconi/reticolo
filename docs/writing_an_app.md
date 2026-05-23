@@ -1,12 +1,9 @@
-# Writing an app — 10 minutes to a working LQFT measurement
+# Writing an app (and a test for it)
 
-This is the canonical walkthrough. We'll build `apps/phi4_hmc.cpp`
-line-by-line: 4D φ⁴ scalar field driven by HMC, full reproducibility
-metadata in the HDF5 output, susceptibility + magnetisation observers
-recorded as time series.
-
-The completed app is ~55 LOC. No framework, no driver, no config file —
-the binary's `argv` plus the git SHA stamped to `/run@` is the run record.
+This is the canonical walkthrough. We'll build `apps/phi4_hmc.cpp`: 4D φ⁴
+scalar field driven by HMC, full reproducibility metadata in the HDF5
+output, susceptibility + magnetisation observers recorded as time series.
+The completed app is ~55 LOC.
 
 ## Skeleton
 
@@ -17,16 +14,13 @@ Apps live in [`apps/`](../apps/) and get registered through one CMake line:
 reticolo_add_app(my_app my_app.cpp)
 ```
 
-`reticolo_add_app` is a tiny helper in the same file — it adds an executable
-and links it against `reticolo::reticolo` (the umbrella target that pulls
-in core + io + cli).
+`reticolo_add_app` is a tiny helper that adds an executable and links it
+against `reticolo::reticolo`.
 
 ## Step 1 — the umbrella include
 
 ```cpp
 #include <reticolo/reticolo.hpp>
-
-#include <cstddef>
 
 int main(int argc, char** argv) {
     using namespace reticolo;
@@ -35,68 +29,53 @@ int main(int argc, char** argv) {
 ```
 
 One include gets you `Lattice`, `FastRng`, `act::Phi4`, `alg::Hmc`,
-`io::Writer`, `cli::Parser`, `obs::*` — everything. `using namespace
-reticolo;` is the idiomatic way to bring in the short namespace aliases
-(`act`, `alg`, `obs`) so the body stays terse.
+`io::Writer`, `cli::Parser`, `obs::*`.
 
 ## Step 2 — declare the CLI flags
 
 ```cpp
 cli::Parser p{"phi4_hmc", "Hybrid Monte Carlo for the phi^4 scalar field"};
-auto const& L          = p.req<int>("L,size",       "linear lattice extent");
-auto const& kappa      = p.req<double>("kappa",     "hopping parameter");
-auto const& lambda     = p.req<double>("lambda",    "quartic coupling");
-auto const& ndim       = p.opt<int>("ndim",         4,    "spatial dimensions");
-auto const& tau        = p.opt<double>("tau",       1.0,  "HMC trajectory length");
-auto const& n_md       = p.opt<int>("n_md",         20,   "MD steps per trajectory");
-auto const& n_therm    = p.opt<int>("n_therm",      200,  "thermalisation trajectories");
-auto const& n_prod     = p.opt<int>("n_prod",       1000, "production trajectories");
-auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-auto const& outpath    = p.opt<std::string>("out",  std::string{"phi4.h5"}, "HDF5 output path");
+auto const& L       = p.req<int>("L,size",    "linear lattice extent");
+auto const& kappa   = p.req<double>("kappa",  "hopping parameter");
+auto const& lambda  = p.req<double>("lambda", "quartic coupling");
+auto const& ndim    = p.opt<int>("ndim",      4,    "spatial dimensions");
+auto const& tau     = p.opt<double>("tau",    1.0,  "HMC trajectory length");
+auto const& n_md    = p.opt<int>("n_md",      20,   "MD steps per trajectory");
+auto const& n_therm = p.opt<int>("n_therm",   200,  "thermalisation trajectories");
+auto const& n_prod  = p.opt<int>("n_prod",    1000, "production trajectories");
+auto const& seed    = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
+auto const& outpath = p.opt<std::string>("out", std::string{"phi4.h5"}, "output");
 p.parse(argc, argv);
 ```
 
-`req<T>` registers a required flag and returns `T const&` to stable
-parser-owned storage. The reference is meaningful only **after** `parse()`
-returns. `opt<T>` is the same but with a default value.
+`req<T>` returns `T const&` to stable parser-owned storage; the reference
+is meaningful only after `parse()` returns. `opt<T>` is the same with a
+default. `"L,size"` is cxxopts' "short + long" spec — `-L 16` and
+`--size=16` both work.
 
-The `"L,size"` form is cxxopts' "short + long" spec — `-L 16` and
-`--size=16` both work. Single-character names must be paired with a long
-form (cxxopts requirement).
-
-Pass `--help` and the parser prints the usage block and exits.
-
-## Step 3 — wire the action and the field
+## Step 3 — field, RNG, action
 
 ```cpp
 Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim),
                                static_cast<std::size_t>(L));
-Lattice<double>  phi{shape};
-FastRng          rng{seed};
+Lattice<double>   phi{shape};
+FastRng           rng{seed};
 act::Phi4<double> phi4{.kappa = kappa, .lambda = lambda};
 ```
 
-- `Lattice<T>::SizeVec` is `std::vector<std::size_t>`; we build an
-  `ndim`-tuple of `L`s for a cubic lattice. (Use any shape you like —
-  rectangular lattices work, too.)
-- `act::Phi4` is a plain struct with two fields; designated initialisers
-  make the construction self-documenting.
-- `FastRng` is seeded once. Copies of an `Rng` diverge from each other from
-  the moment they're made, which is useful if you ever want reproducible
-  parallel chains.
+`act::Phi4` is a plain struct with two fields — designated initialisers
+make the construction self-documenting.
 
-## Step 4 — open the writer and stamp metadata
+## Step 4 — open the writer
 
 ```cpp
 io::Writer out{outpath, argc, argv, &p};
 ```
 
-Truncate-or-fail. The constructor stamps every reproducibility attribute in
-[`/run@*`](architecture.md#io) and, because we pass a `Parser*`, every
-resolved CLI flag in `/vars@<name>`. You don't have to write any of this
-yourself. The file is now self-describing.
+Truncate-or-fail. The constructor stamps every reproducibility attribute
+in `/run@*` and every resolved CLI flag in `/vars@<name>`.
 
-## Step 5 — declare phases and series
+## Step 5 — phases and series
 
 ```cpp
 out.start_phase("therm");
@@ -110,39 +89,23 @@ auto mag      = out.series<double>("/prod/obs/mag");
 auto mag_sq   = out.series<double>("/prod/obs/mag_sq");
 ```
 
-- `start_phase("foo")` creates `/foo` and rejects re-use (typo'd phase names
-  raise instead of silently overwriting).
-- `series<T>(path)` returns a `Series<T>` handle by value (move-only). The
-  handle owns a 4096-row buffer and flushes when full or on dtor. Distinct
-  handles for `dH`, `accepted`, the observables — every dataset lives at
-  its own HDF5 path.
-
-Pick a path naming convention and stick to it (`/<phase>/stats/<name>` and
-`/<phase>/obs/<name>` work well — stats are integrator diagnostics, obs are
-physics observables).
+`start_phase` rejects re-use (typo'd phases raise instead of silently
+overwriting). `series<T>` returns a move-only handle that owns a 4096-row
+buffer and flushes when full or on dtor. Convention:
+`/<phase>/stats/<name>` for integrator diagnostics, `/<phase>/obs/<name>`
+for physics observables.
 
 ## Step 6 — the updater
 
 ```cpp
-alg::Hmc<act::Phi4<double>, FastRng> hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
+alg::Hmc<act::Phi4<double>, FastRng> hmc{phi4, phi, rng,
+                                         {.tau = tau, .n_md = n_md}};
 ```
 
-The class template parameters are the action type and the RNG type. The
-third (defaulted) parameter is the integrator — three ship today:
-`alg::integ::Leapfrog` (default), `alg::integ::Omelyan2`,
-`alg::integ::Omelyan4`. Swap is a type, not a flag:
-
-```cpp
-alg::Hmc<act::Phi4<double>, FastRng, alg::integ::Omelyan2> hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
-```
-
-Adding a new integrator is a struct with a static `run(...)` method — no
-registry, no `switch`. See `apps/bench_integrators.cpp` for a wall-time
-comparison at fixed acceptance.
-
-The `Hmc` constructor pre-allocates the momentum, force, and rollback
-lattices as **siblings** of `phi` (same `Indexing`). One neighbour table,
-three lattices.
+The third (defaulted) template parameter is the integrator —
+`alg::integ::Leapfrog` (default), `alg::integ::Omelyan2`, or
+`alg::integ::Omelyan4`. Swap is a type, not a flag. The `Hmc` ctor
+pre-allocates momentum, force, and rollback as sibling lattices of `phi`.
 
 ## Step 7 — own the for loop
 
@@ -161,15 +124,10 @@ for (int i = 0; i < n_prod; ++i) {
 }
 ```
 
-This is the philosophy: **apps own the for loop**. There's no closure-based
-driver, no `simulate(action, n_steps)` helper. The trajectory cadence, the
-measurement cadence, the conditional logic about when to write what — it's
-all visible in plain `main`.
-
-`hmc.step()` returns a `HmcResult { dH, accepted }` (`acceptance()` accessor for
-parity with the Metropolis / Wolff result types). Stash both for
-later diagnostics — the per-trajectory `dH` history is the cheapest
-single check that the integrator step is sized right.
+Apps own the for loop. No closure-based driver, no `simulate(action,
+n_steps)` helper. Trajectory cadence, measurement cadence, conditional
+logic — all visible in plain `main`. `hmc.step()` returns
+`HmcResult { dH, accepted }`.
 
 ## Step 8 — build and run
 
@@ -178,66 +136,182 @@ cmake --build --preset macos-appleclang --target phi4_hmc
 build/macos-appleclang/apps/phi4_hmc --size 8 --kappa 0.13 --lambda 0.02 --out phi4.h5
 ```
 
-Inspect the output:
-
-```sh
-h5ls -r phi4.h5
-# /                        Group
-# /prod                    Group
-# /prod/obs                Group
-# /prod/obs/mag            Dataset {1000}
-# /prod/obs/mag_sq         Dataset {1000}
-# /prod/obs/s              Dataset {1000}
-# /prod/stats              Group
-# /prod/stats/accepted     Dataset {1000}
-# /prod/stats/dH           Dataset {1000}
-# /run                     Group
-# /therm                   Group
-# /therm/stats/s           Dataset {200}
-# /vars                    Group
-
-h5dump -A phi4.h5 | grep '@'
-# everything you passed on argv + the git SHA + compile flags
-```
-
-The HDF5 is fully self-describing — push it through Python/numpy/h5py for
-the analysis. See [`examples/01_phi4_tuning/analyze.py`](../examples/01_phi4_tuning/analyze.py)
-for the block-jackknife + Bhattacharjee-Seno collapse pattern.
+Inspect with `h5ls -r phi4.h5` and `h5dump -A phi4.h5 | grep '@'`. The
+HDF5 is fully self-describing — push it through h5py for analysis. See
+[`examples/01_phi4_tuning/analyze.py`](../examples/01_phi4_tuning/analyze.py).
 
 ## When to start a new app
 
-When you'd otherwise be adding a `--mode` flag to an existing app. The cost
-of writing a new app is one file in `apps/`, one line in
-`apps/CMakeLists.txt`, and one smoke test in `tests/apps/`
-(template: [`tests/apps/test_phi4_hmc_smoke.cpp`](../tests/apps/test_phi4_hmc_smoke.cpp)).
-That's *cheaper* than the conditional logic + documentation a multi-mode
-app accumulates.
-
-The library ships six apps for exactly this reason — same physics in some
-of them, different updaters or different observables, hand-written.
-
-## What's *not* in the app
-
-- **No** result post-processing: that's Python's job downstream. The app
-  writes raw per-trajectory time series; reductions happen later.
-- **No** error recovery beyond what the standard library does. If
-  `s_full` returns NaN you'll see NaN; debug the integrator step size.
+When you'd otherwise be adding a `--mode` flag to an existing one. The
+cost is one file in `apps/`, one line in `apps/CMakeLists.txt`, and one
+smoke test in `tests/apps/`. Cheaper than the conditional logic + docs a
+multi-mode app accumulates.
 
 ## Logging — automatic
 
-The snippet above doesn't show any `log::` calls. That's deliberate — the
-library does the announcing for you. Action / algorithm / Replica
-constructors emit their own `init`, `act`, `hmc`, etc. lines; `step()`
-logs each completed update. To enable it, add one line at the top of `main`:
+Action / algorithm / Replica constructors emit their own `init`, `act`,
+`hmc` lines; `step()` logs each completed update. One call at the top of
+`main` enables the file logger:
 
 ```cpp
 log::start(outpath);   // init_parallel + banner — call once
 ```
 
-That's the entire logger surface a typical app needs. Suppress everything
-with `log::off()`; opt out of a single algorithm step with
-`log::Mode::silent` (e.g. `hmc.step(log::Mode::silent)` for
-thermalisation). The full surface is documented in
-[`docs/logging.md`](logging.md).
+Suppress everything with `log::off()`; opt out of a single algorithm step
+with `log::Mode::silent` (e.g. `hmc.step(log::Mode::silent)` during
+thermalisation).
 
-That's the whole framework.
+---
+
+# Writing a test
+
+Every action, algorithm, and IO component has tests under `tests/`. The
+patterns are uniform — once you've seen one of each kind, adding one
+takes ~10 minutes.
+
+## Where tests live
+
+```
+tests/
+  CMakeLists.txt        # one line per test target via reticolo_add_test()
+  test_main.cpp         # shared Catch entry; calls log::off()
+  unit/                 # types in isolation
+  physics/              # action / algorithm correctness
+  io/                   # Writer roundtrip + metadata + phase collision
+  apps/                 # end-to-end: run the binary, assert HDF5 schema
+```
+
+Catch2 v3, vendored via FetchContent. One file per target;
+`catch_discover_tests` registers each `TEST_CASE` as its own ctest entry.
+
+## Adding a test
+
+```cmake
+# tests/CMakeLists.txt
+reticolo_add_test(test_my_thing  unit/test_my_thing.cpp)
+```
+
+`reticolo_add_test()` adds `tests/test_main.cpp` to the sources, links
+`reticolo::reticolo + Catch2::Catch2`, configures warnings, and runs
+`catch_discover_tests`. One file + one line; done.
+
+## The five canonical patterns
+
+### 1. Concept static_assert
+
+Every action header has one. Zero-runtime; failures at compile time:
+
+```cpp
+static_assert(LocalAction<Phi4<double>, double>);
+static_assert(HasSEff   <Phi4<double>, double>);
+static_assert(HasForce  <Phi4<double>, double>);
+```
+
+Put at the top of every action's force-consistency test.
+
+### 2. `ds_local` matches finite difference of `s_full`
+
+The Metropolis contract. If `ds_local(φ, x, nv) ≠ s_full(φ_new) − s_full(φ)`
+the update is wrong by definition:
+
+```cpp
+TEST_CASE("Phi4: ds_local matches FD of s_full", "[physics][phi4]") {
+    Phi4<double> const action{.kappa = 0.13, .lambda = 0.05};
+    Lattice<double> phi{{6, 6, 6}};
+    FastRng rng{1234};
+    randomize(phi, rng);
+
+    for (std::size_t trial = 0; trial < 20; ++trial) {
+        Site const x     = Site{rng.uniform_int(phi.nsites())};
+        double const old = phi[x];
+        double const nv  = old + rng.normal();
+
+        double const ds_predicted = action.ds_local(phi, x, nv);
+        double const s_old = action.s_full(phi);
+        phi[x] = nv;
+        double const s_new = action.s_full(phi);
+        phi[x] = old;
+
+        REQUIRE(std::abs(ds_predicted - (s_new - s_old)) < 1e-9);
+    }
+}
+```
+
+Tolerance 1e-9 is for a tight exact-arithmetic identity. Loosen to 1e-6
+only if you have a numerical reason to.
+
+### 3. `compute_force` matches central FD of `s_full`
+
+The HMC contract: `F(x) = −∂S/∂φ(x)`. Central diff is O(ε²); with
+ε = 1e-4 you should see <1e-7 disagreement:
+
+```cpp
+action.compute_force(phi, force);
+
+phi[x]               = old + k_eps;
+double const s_plus  = action.s_full(phi);
+phi[x]               = old - k_eps;
+double const s_minus = action.s_full(phi);
+phi[x] = old;
+
+double const force_numeric = -(s_plus - s_minus) / (2.0 * k_eps);
+REQUIRE(std::abs(force[x] - force_numeric) < 1e-7);
+```
+
+Every HMC-capable action has this pattern in
+`tests/physics/test_<action>_force_consistency.cpp`. Copy one, edit the
+action type + couplings.
+
+### 4. HMC reversibility
+
+Integrating forward then back must return to the starting field (modulo
+round-off). The integrator's symplectic contract:
+
+```cpp
+auto phi = phi0;                          // deep copy
+alg::Hmc<...> hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
+
+hmc.integrate_only(/*tau=*/+1.0, /*n_md=*/20);
+/* flip momentum sign on hmc.momentum() */
+hmc.integrate_only(/*tau=*/+1.0, /*n_md=*/20);
+
+for (Site x : phi.sites()) REQUIRE(std::abs(phi[x] - phi0[x]) < 1e-9);
+```
+
+`integrate_only` exposes the bare integrator (no momentum resampling, no
+accept/reject). See `tests/physics/test_hmc_reversibility.cpp`,
+`test_u1_hmc_reversibility.cpp`, `test_su2_hmc_reversibility.cpp`.
+
+### 5. Limiting regime
+
+Pick a limit where the answer is known analytically:
+
+- **Free theory (λ=0)** for Phi4: `force(x) = 2κ·Σ_NN φ_nn − 2φ(x)`.
+- **Gaussian Metropolis at β=0** for OnSigma: acceptance → 1.
+- **β=0 Wolff** for XY: every cluster is a singleton.
+- **Large β Wolff**: clusters span the lattice.
+- **Integrator order** for HMC: `⟨|ΔH|⟩` scales as `Δt²` (Leapfrog,
+  Omelyan2) or `Δt⁴` (Omelyan4). See
+  `tests/physics/test_hmc_integrator_order.cpp` for the cleanest example
+  — sweep `Δt`, fit log-log slope, REQUIRE within ~0.3 of theory.
+
+## App smoke tests
+
+For every reference app, a smoke test in `tests/apps/`:
+
+1. Runs the binary with tiny `--L --n_therm --n_prod`.
+2. Opens the HDF5 and asserts the schema.
+3. Optionally checks one or two physics-grounded invariants.
+
+Boilerplate is factored into `tests/test_helpers.hpp`. A new app's
+smoke test = copy `tests/apps/test_phi4_hmc_smoke.cpp` and change the
+binary name + expected paths.
+
+## Conventions
+
+- Seed RNGs explicitly. Most tests use `FastRng{42}` or similar.
+- Use `Lattice<T> force{phi.indexing()}` (sibling), not
+  `Lattice<T> force{phi.shape()}` (allocates a fresh `Indexing`).
+- Reset `phi[x] = old;` after a single-site FD probe inside a loop.
+- Central diff noise floor with ε = 1e-4 is ~1e-8, not 1e-12 — don't
+  over-tighten the tolerance.

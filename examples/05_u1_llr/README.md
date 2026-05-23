@@ -99,5 +99,5 @@ For a cleaner double peak — what's actually shown in the paper figures — rai
 `L` to 8 (factor ~5 in wall time) and lengthen `N_RM` correspondingly.
 
 This won't reproduce the paper's *Potts* results (need a new discrete-spin
-action), nor its complex-action work — see `proposals/llr.md` and the gauge
-plan for what's currently in scope.
+action), nor its complex-action work — both are out of scope for the
+current tree.

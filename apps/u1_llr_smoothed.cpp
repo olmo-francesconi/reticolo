@@ -1,6 +1,6 @@
 // Smoothed LLR variant for compact U(1): per-replica Robbins-Monro with a
 // cross-replica local-quadratic smoother shrunk into each iterate. See
-// proposals/llr_smoothed.md and include/reticolo/llr/smoothed_driver.hpp.
+// include/reticolo/llr/smoothed_driver.hpp.
 //
 // Mirrors apps/u1_llr.cpp: same action, sampler, geometry, exchange and
 // HDF5 schema; the only differences are the driver call and four extra
