@@ -98,14 +98,16 @@ for physics observables.
 ## Step 6 — the updater
 
 ```cpp
-alg::Hmc<act::Phi4<double>, FastRng> hmc{phi4, phi, rng,
-                                         {.tau = tau, .n_md = n_md}};
+alg::Hmc hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
 ```
 
-The third (defaulted) template parameter is the integrator —
-`alg::integ::Leapfrog` (default), `alg::integ::Omelyan2`, or
-`alg::integ::Omelyan4`. Swap is a type, not a flag. The `Hmc` ctor
-pre-allocates momentum, force, and rollback as sibling lattices of `phi`.
+Action, RNG, and field types deduce (CTAD); the default integrator is
+Leapfrog. A trailing tag value selects another — `alg::integ::omelyan2`
+or `alg::integ::omelyan4`, e.g.
+`alg::Hmc hmc{phi4, phi, rng, spec, alg::integ::omelyan2}`. The tag's
+type is what picks the integrator at compile time — it's a type, not a
+runtime flag. The `Hmc` ctor pre-allocates momentum, force, and rollback
+as sibling lattices of `phi`.
 
 ## Step 7 — own the for loop
 
@@ -269,7 +271,7 @@ round-off). The integrator's symplectic contract:
 
 ```cpp
 auto phi = phi0;                          // deep copy
-alg::Hmc<...> hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
+alg::Hmc hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
 
 hmc.integrate_only(/*tau=*/+1.0, /*n_md=*/20);
 /* flip momentum sign on hmc.momentum() */

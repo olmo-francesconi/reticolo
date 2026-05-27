@@ -57,7 +57,7 @@ void run_one(std::string const& name,
         auto const nsites = phi.nsites();
 
         // Warmup.
-        alg::Hmc<Action, FastRng> warm{action, phi, rng, {.tau = 1.0, .n_md = n_md}};
+        alg::Hmc warm{action, phi, rng, {.tau = 1.0, .n_md = n_md}};
         for (int i = 0; i < 50; ++i) {
             (void)warm.step();
         }
@@ -72,7 +72,7 @@ void run_one(std::string const& name,
         double const mc_thru = static_cast<double>(nsites) / mc_per;
 
         // HMC.
-        alg::Hmc<Action, FastRng> hmc{action, phi, rng, {.tau = 1.0, .n_md = n_md}};
+        alg::Hmc hmc{action, phi, rng, {.tau = 1.0, .n_md = n_md}};
         int accepted  = 0;
         auto const t1 = bench_clock::now();
         for (int i = 0; i < c.n_hmc; ++i) {
@@ -156,7 +156,7 @@ int main() {
         using Integ = decltype(integ_tag);
         Lattice<double> phi{shape};
         FastRng rng{42};
-        alg::Hmc<act::Phi4<double>, FastRng, Integ> hmc{phi4, phi, rng, {.tau = 1.0, .n_md = n_md}};
+        alg::Hmc hmc{phi4, phi, rng, {.tau = 1.0, .n_md = n_md}, Integ{}};
         // Warmup.
         for (int i = 0; i < 50; ++i)
             (void)hmc.step();
@@ -183,7 +183,7 @@ int main() {
     //   Leapfrog : n_md + 1
     //   Omelyan2 : 2*n_md + 1
     //   Omelyan4 : 4*n_md + 1
-    run_integ("Leapfrog", alg::integ::Leapfrog{}, /*n_md=*/30, /*fe=*/31);
-    run_integ("Omelyan2", alg::integ::Omelyan2{}, /*n_md=*/16, /*fe=*/33);
-    run_integ("Omelyan4", alg::integ::Omelyan4{}, /*n_md=*/6, /*fe=*/25);
+    run_integ("Leapfrog", alg::integ::leapfrog, /*n_md=*/30, /*fe=*/31);
+    run_integ("Omelyan2", alg::integ::omelyan2, /*n_md=*/16, /*fe=*/33);
+    run_integ("Omelyan4", alg::integ::omelyan4, /*n_md=*/6, /*fe=*/25);
 }

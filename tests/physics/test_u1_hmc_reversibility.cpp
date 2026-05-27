@@ -35,8 +35,7 @@ static void check_reversibility() {
         }
     }
 
-    Hmc<CompactU1<double>, FastRng, Integrator, LinkLattice<double>> hmc{
-        action, links, rng, {.tau = 1.0, .n_md = 20}};
+    Hmc hmc{action, links, rng, {.tau = 1.0, .n_md = 20}, Integrator{}};
 
     {
         double* const mp    = hmc.momentum().data();

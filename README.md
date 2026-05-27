@@ -33,8 +33,8 @@ int main() {
     FastRng           rng{42};
     act::Phi4<double> action{.kappa = 0.18, .lambda = 1.0};    // plain struct; no inheritance
 
-    // Default integrator is Leapfrog; pass alg::integ::Omelyan2 / Omelyan4 as a template arg.
-    alg::Hmc<act::Phi4<double>, FastRng> hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
+    // Default integrator is Leapfrog; pass alg::integ::omelyan2 / omelyan4 as a trailing tag.
+    alg::Hmc hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
 
     io::Writer writer{"phi4.h5"};                              // HDF5 + run metadata
     auto       s = writer.series<double>("/prod/obs/s");

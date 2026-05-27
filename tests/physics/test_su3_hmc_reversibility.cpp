@@ -61,8 +61,7 @@ void check_reversibility() {
     FastRng rng{31415};
     hot_start(u, rng);
 
-    Hmc<Wilson<SU3, double>, FastRng, Integrator, MatrixLinkLattice<SU3, double>> hmc{
-        action, u, rng, {.tau = 0.3, .n_md = 10}};
+    Hmc hmc{action, u, rng, {.tau = 0.3, .n_md = 10}, Integrator{}};
 
     std::size_t const d  = u.ndims();
     std::size_t const ns = u.nsites();

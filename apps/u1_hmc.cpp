@@ -45,8 +45,7 @@ int main(int argc, char** argv) {
     auto plaq     = out.series<double>("/prod/obs/plaq");
 
     // ---- Updater ----
-    alg::Hmc<Action, FastRng, alg::integ::Omelyan2, LinkLattice<double>> hmc{
-        action, links, rng, {.tau = tau, .n_md = n_md}};
+    alg::Hmc hmc{action, links, rng, {.tau = tau, .n_md = n_md}, alg::integ::omelyan2};
 
     std::size_t const v_sites = links.nsites();
     std::size_t const n_plaq =

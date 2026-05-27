@@ -145,8 +145,11 @@ member — read the compiler error.
 The HMC integrator is a **type parameter**, not a runtime switch. Three
 ship: `alg::integ::Leapfrog` (2nd-order, cheap default),
 `alg::integ::Omelyan2` (2nd-order minimum-norm, ~1.4× speedup at the same
-acceptance), `alg::integ::Omelyan4` (4th-order, large τ). Adding one =
-struct with a static `run(...)` + instantiate `Hmc<A, R, NewInteg>`.
+acceptance), `alg::integ::Omelyan4` (4th-order, large τ). Select one at
+the `Hmc` ctor with a brace-free tag value (`alg::integ::omelyan2`, CTAD
+deduces the type) or the explicit `Hmc<A, R, Omelyan2>` form. Adding one =
+struct with a static `run(...)`; the matching `inline constexpr` tag is a
+one-liner.
 
 HMC keeps its momentum, force, and rollback buffers as sibling lattices
 of the field — one neighbour table, three lattices.

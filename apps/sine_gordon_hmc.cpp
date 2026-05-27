@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
     auto cos_phi  = out.series<double>("/prod/obs/cos_phi");
 
     // ---- Updater ----
-    alg::Hmc<act::SineGordon<double>, FastRng> hmc{sg, phi, rng, {.tau = tau, .n_md = n_md}};
+    alg::Hmc hmc{sg, phi, rng, {.tau = tau, .n_md = n_md}};
 
     auto cos_avg = [&phi]() {
         double sum = 0.0;

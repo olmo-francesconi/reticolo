@@ -30,7 +30,7 @@ static void check_reversibility() {
         phi[x] = rng.normal();
     }
 
-    Hmc<Phi4<double>, FastRng, Integrator> hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
+    Hmc hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}, Integrator{}};
 
     for (Site x : phi.sites()) {
         hmc.momentum()[x] = rng.normal();
@@ -81,7 +81,7 @@ TEST_CASE("HMC trajectory is symplectic: dH small and bounded vs trajectory leng
         phi[x] = 0.1 * rng.normal();
     }
 
-    Hmc<Phi4<double>, FastRng, Leapfrog> hmc{action, phi, rng, {.tau = 0.5, .n_md = 50}};
+    Hmc hmc{action, phi, rng, {.tau = 0.5, .n_md = 50}, Leapfrog{}};
 
     // dH should hover near zero with no secular drift; we tolerate |dH| < ~0.5
     // ensemble-wise. The point of this test is "no obvious bug producing big dH".

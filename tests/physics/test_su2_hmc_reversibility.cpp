@@ -74,8 +74,7 @@ void check_reversibility() {
     FastRng rng{31415};
     hot_start(u, rng);
 
-    Hmc<Wilson<SU2, double>, FastRng, Integrator, MatrixLinkLattice<SU2, double>> hmc{
-        action, u, rng, {.tau = 0.4, .n_md = 10}};
+    Hmc hmc{action, u, rng, {.tau = 0.4, .n_md = 10}, Integrator{}};
 
     // Sample momenta into the HMC's internal buffer.
     std::size_t const d  = u.ndims();

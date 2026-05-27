@@ -29,7 +29,7 @@ static double mean_abs_dh(A const& action,
                           double const tau,
                           int const n_md,
                           int const n_traj) {
-    Hmc<A, FastRng, Integrator> hmc{action, phi, rng, {.tau = tau, .n_md = n_md}};
+    Hmc hmc{action, phi, rng, {.tau = tau, .n_md = n_md}, Integrator{}};
     double sum = 0.0;
     for (int t = 0; t < n_traj; ++t) {
         auto step = hmc.step();

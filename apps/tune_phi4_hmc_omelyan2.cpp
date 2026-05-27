@@ -51,8 +51,7 @@ int main(int argc, char** argv) {
     out.start_phase("prod");
 
     // ---- Updater ----
-    alg::Hmc<act::Phi4<double>, FastRng, Integrator> hmc{
-        phi4, phi, rng, {.tau = tau, .n_md = n_md}};
+    alg::Hmc hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}, Integrator{}};
 
     // ---- Thermalisation ----
     for (int i = 0; i < n_therm; ++i) {

@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
     auto m_sq     = out.series<double>("/prod/obs/m2");
 
     // ---- Updater ----
-    alg::Hmc<act::Phi6<double>, FastRng> hmc{phi6, phi, rng, {.tau = tau, .n_md = n_md}};
+    alg::Hmc hmc{phi6, phi, rng, {.tau = tau, .n_md = n_md}};
 
     // ---- Thermalisation ----
     log::info("hmc", "therm  {} trajectories", n_therm);

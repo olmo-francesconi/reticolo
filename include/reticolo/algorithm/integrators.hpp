@@ -174,4 +174,12 @@ struct Omelyan4 {
     }
 };
 
+// Brace-free tag values for the HMC constructor's integrator selector:
+//   alg::Hmc hmc{action, field, rng, spec, alg::integ::omelyan2};
+// CTAD deduces the integrator type from the tag. The explicit forms
+// `Hmc<A, R, Omelyan2>` and `Omelyan2::run(...)` stay available.
+inline constexpr Leapfrog leapfrog{};
+inline constexpr Omelyan2 omelyan2{};
+inline constexpr Omelyan4 omelyan4{};
+
 }  // namespace reticolo::alg::integ

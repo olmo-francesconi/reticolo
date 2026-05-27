@@ -92,7 +92,7 @@ int main(int argc, char** argv) {
     auto m_sq     = out.series<double>("/prod/obs/m2");
 
     // ---- Updater ----
-    alg::Hmc<act::Phi4<double>, FastRng> hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
+    alg::Hmc hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
 
     // ---- Thermalisation ----
     if (!resuming) {

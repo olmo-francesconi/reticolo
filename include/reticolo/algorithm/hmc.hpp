@@ -98,10 +98,14 @@ public:
 
     static constexpr std::string_view log_tag = "hmc";
 
+    // The defaulted Integrator parameter is a deduction anchor only: it lets
+    // CTAD pick the integrator from a tag value (e.g. integ::omelyan2) while
+    // A/R/Field/Scalar deduce from the other args. Omit it for Leapfrog.
     Hmc(A const& action,
         Field& field,
         R& rng,
         HmcSpec const& spec,
+        Integrator         = {},
         log::Mode announce = log::Mode::normal)
         : action_{action}, field_{field}, rng_{rng}, mom_{field.indexing()},
           force_{field.indexing()}, old_field_{field.indexing()}, tau_{spec.tau}, n_md_{spec.n_md} {

@@ -62,8 +62,7 @@ int main() {
             LinkLattice<double> theta{shape, 0.0};
             FastRng rng{42};
             Action const action{.beta = k_beta};
-            alg::Hmc<Action, FastRng, Integ, LinkLattice<double>> hmc{
-                action, theta, rng, {.tau = k_tau, .n_md = k_n_md}};
+            alg::Hmc hmc{action, theta, rng, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.step();
             }
@@ -87,8 +86,7 @@ int main() {
             Field theta{shape};
             FastRng rng{42};
             Action const action{.beta = k_beta};
-            alg::Hmc<Action, FastRng, Integ, Field> hmc{
-                action, theta, rng, {.tau = k_tau, .n_md = k_n_md}};
+            alg::Hmc hmc{action, theta, rng, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.step();
             }

@@ -157,8 +157,7 @@ int main() {
         {
             Lattice<double> phi{shape_s};
             FastRng rng{42};
-            alg::Hmc<ScalarPhi4, FastRng, Integ> hmc{
-                phi4, phi, rng, {.tau = k_tau, .n_md = k_n_md}};
+            alg::Hmc hmc{phi4, phi, rng, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.step();
             }
@@ -181,7 +180,7 @@ int main() {
         {
             Lattice<double> phi{shape_s};
             FastRng rng{42};
-            alg::Hmc<ScalarSG, FastRng, Integ> hmc{sg, phi, rng, {.tau = k_tau, .n_md = k_n_md}};
+            alg::Hmc hmc{sg, phi, rng, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.step();
             }
@@ -204,8 +203,7 @@ int main() {
         {
             LinkLattice<double> theta{shape_g, 0.0};
             FastRng rng{42};
-            alg::Hmc<GaugeU1, FastRng, GaugeInteg, LinkLattice<double>> hmc{
-                u1, theta, rng, {.tau = k_tau, .n_md = k_n_md}};
+            alg::Hmc hmc{u1, theta, rng, {.tau = k_tau, .n_md = k_n_md}, GaugeInteg{}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.step();
             }

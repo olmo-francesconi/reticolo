@@ -64,7 +64,7 @@ public:
     Replica(Base const& base, Rng rng_init, Spec spec, alg::HmcSpec const& hmc_spec)
         : id_{std::move(spec.id)}, phi_{std::move(spec.shape)}, rng_{std::move(rng_init)},
           windowed_{.base = base, .a = spec.a_init, .E_n = spec.e_n, .delta = spec.delta},
-          hmc_{windowed_, phi_, rng_, hmc_spec, log::Mode::silent} {
+          hmc_{windowed_, phi_, rng_, hmc_spec, Integrator{}, log::Mode::silent} {
         // Self-announce with our run id bound as scope so the line carries
         // `r0NN` automatically — apps don't have to wrap construction in
         // `log::scope` themselves. Announce the nested HMC too so its tau /

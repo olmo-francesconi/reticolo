@@ -63,8 +63,7 @@ int main(int argc, char** argv) {
     auto plaq     = out.series<double>("/prod/obs/plaq");
 
     // ---- Updater ----
-    alg::Hmc<Action, FastRng, alg::integ::Omelyan2, Field> hmc{
-        action, links, rng, {.tau = tau, .n_md = n_md}};
+    alg::Hmc hmc{action, links, rng, {.tau = tau, .n_md = n_md}, alg::integ::omelyan2};
 
     std::size_t const n_plaq =
         (static_cast<std::size_t>(ndim) * static_cast<std::size_t>(ndim - 1) / 2U) * ns;
