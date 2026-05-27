@@ -46,6 +46,43 @@ int main() {
 }
 ```
 
+## Reading the output
+
+Every app writes a self-describing HDF5 file: reproducibility metadata under
+`/run@*`, the resolved command-line flags under `/vars@*`, and one dataset per
+time series. Read it with `h5py` — attributes carry the run record, datasets are
+plain 1-D arrays:
+
+```python
+import h5py, numpy as np
+
+with h5py.File("phi4.h5", "r") as f:
+    print(dict(f["/run"].attrs))          # commit, compile_flags, started_utc, ...
+    print(dict(f["/vars"].attrs))          # parsed CLI args
+
+    s   = np.asarray(f["/prod/obs/s"])     # action per production trajectory
+    acc = np.asarray(f["/prod/stats/accepted"])
+    print(f"<S> = {s.mean():.4g} ± {s.std(ddof=1) / len(s)**0.5:.2g}")
+    print(f"acceptance = {acc.mean():.3f}")
+```
+
+[`scripts/read_output.py`](scripts/read_output.py) is a runnable version that
+prints the full metadata and a mean ± stderr summary of every series:
+
+```sh
+./build/macos-appleclang/apps/phi4_hmc --out phi4.h5 --n_prod 1000
+python scripts/read_output.py phi4.h5
+```
+
+```
+dataset                      rows           mean      std err
+--------------------------------------------------------------
+/prod/obs/s                  1000        797.566         2.14
+/prod/stats/accepted         1000          0.842       0.0115
+...
+HMC acceptance: 0.842 over 1000 trajectories
+```
+
 ## Performance
 
 Single-thread kernel throughput. Numbers below are from an **Apple M1 Pro** with
