@@ -45,3 +45,59 @@ int main() {
     }
 }
 ```
+
+## Performance
+
+Single-thread kernel throughput. Numbers below are from an **Apple M1 Pro** with
+the `macos-appleclang` preset (Apple clang 21, `-O3 -march=native`, OpenMP off).
+Each cell is the mean over many batch samples; `p05`/`p95` are the 5th/95th
+percentiles of throughput across those samples. Indicative — reproduce with:
+
+```sh
+cmake --build --preset macos-appleclang --target bench_readme
+./build/macos-appleclang/apps/bench_readme
+```
+
+All three RNGs satisfy the same `Rng` concept and plug into every call site.
+`uniform()` is a single draw; `gaussian` is the batched `normal_fill` path HMC
+uses to sample momenta. Throughput in M draws/s:
+
+| RNG          | draw     |   mean |  p05 |   p95 |
+|--------------|----------|-------:|-----:|------:|
+| FastRng      | uniform  |  809.7 | 772.9 | 841.1 |
+| FastRng      | gaussian |  178.9 | 172.1 | 184.2 |
+| Mt19937_64   | uniform  |  266.2 | 259.0 | 272.5 |
+| Mt19937_64   | gaussian |   93.3 |  91.1 |  94.8 |
+| Ranlux48     | uniform  |    3.2 |   3.2 |   3.3 |
+| Ranlux48     | gaussian |    2.4 |   2.3 |   2.4 |
+
+(`Ranlux48` is two orders of magnitude slower by design — `std::ranlux48` keeps
+11 of every 389 values for decorrelation. `FastRng`, the default, is xoshiro256++.)
+
+`compute_force` on a hot random 4D configuration, per degree of freedom (sites
+for scalar, links for gauge). Phi4 is the scalar baseline; the SU(2)/SU(3)
+staple force is correspondingly heavier per link. Throughput in M dof-updates/s:
+
+| Action            | lattice |   mean |    p05 |    p95 |
+|-------------------|---------|-------:|-------:|-------:|
+| Phi4              | 4⁴      |  483.5 |  471.7 |  493.5 |
+| Phi4              | 6⁴      |  561.9 |  545.7 |  575.8 |
+| Phi4              | 8⁴      |  611.7 |  593.0 |  627.0 |
+| Phi4              | 12⁴     |  972.2 |  939.1 |  994.2 |
+| Phi4              | 16⁴     | 1021.2 |  993.3 | 1037.2 |
+| Phi4              | 20⁴     | 1041.7 | 1001.8 | 1069.3 |
+| Phi4              | 24⁴     | 1042.2 | 1001.9 | 1075.5 |
+| Wilson&lt;SU2&gt; | 4⁴      |   12.0 |   11.5 |   12.4 |
+| Wilson&lt;SU2&gt; | 6⁴      |   11.9 |   11.5 |   12.3 |
+| Wilson&lt;SU2&gt; | 8⁴      |    9.8 |    9.3 |   10.3 |
+| Wilson&lt;SU2&gt; | 12⁴     |   10.3 |    9.7 |   10.9 |
+| Wilson&lt;SU2&gt; | 16⁴     |    8.1 |    7.9 |    8.3 |
+| Wilson&lt;SU2&gt; | 20⁴     |    9.1 |    8.9 |    9.3 |
+| Wilson&lt;SU2&gt; | 24⁴     |    8.5 |    8.4 |    8.6 |
+| Wilson&lt;SU3&gt; | 4⁴      |    4.7 |    4.6 |    4.8 |
+| Wilson&lt;SU3&gt; | 6⁴      |    4.7 |    4.5 |    4.9 |
+| Wilson&lt;SU3&gt; | 8⁴      |    3.9 |    3.6 |    4.1 |
+| Wilson&lt;SU3&gt; | 12⁴     |    3.9 |    3.8 |    4.1 |
+| Wilson&lt;SU3&gt; | 16⁴     |    3.1 |    3.0 |    3.1 |
+| Wilson&lt;SU3&gt; | 20⁴     |    3.8 |    3.7 |    3.9 |
+| Wilson&lt;SU3&gt; | 24⁴     |    3.3 |    3.3 |    3.4 |
