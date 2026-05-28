@@ -83,6 +83,20 @@ inline constexpr std::size_t k_vec_width_d = 2;
 inline constexpr std::size_t k_vec_width_d = 1;
 #endif
 
+// Width of the vector path in floats per vector (= 2× the double width). Used
+// to size site-batch kernels so a float batch fills whole SIMD registers.
+#ifdef __AVX512F__
+inline constexpr std::size_t k_vec_width_f = 16;
+#elif defined(__AVX2__) || defined(__AVX__)
+inline constexpr std::size_t k_vec_width_f = 8;
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+inline constexpr std::size_t k_vec_width_f = 4;
+#elifdef __SSE2__
+inline constexpr std::size_t k_vec_width_f = 4;
+#else
+inline constexpr std::size_t k_vec_width_f = 1;
+#endif
+
 // --------------- cos_batch ---------------------------------------------------
 
 inline void cos_batch(double* dst, double const* src, std::size_t n) noexcept {

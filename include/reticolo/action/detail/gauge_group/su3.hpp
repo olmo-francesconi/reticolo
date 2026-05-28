@@ -105,7 +105,7 @@ private:
     // `ci += ar*bi + ai*br` becomes pure stride-1 vector arithmetic with no
     // cross-lane permutation. That's the structural fix that frees the
     // auto-vectoriser to pack `b`.
-    static constexpr std::size_t k_batch = 8;
+    static constexpr std::size_t k_batch = k_gauge_batch;
 
     template <bool Fused, class T>
     [[gnu::always_inline]] static inline void compute_force_batched_(

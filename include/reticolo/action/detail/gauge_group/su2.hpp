@@ -104,7 +104,7 @@ private:
     // slabs, run all matmul / TA / scatter loops with an innermost
     // `for b in 0..k_batch` over stride-1 packed data. The compiler
     // auto-vectorises the b-loop on any target SIMD width.
-    static constexpr std::size_t k_batch = 8;
+    static constexpr std::size_t k_batch = k_gauge_batch;
 
     template <bool Fused, class T>
     [[gnu::always_inline]] static inline void compute_force_batched_(
