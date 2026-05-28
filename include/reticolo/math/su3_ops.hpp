@@ -464,8 +464,15 @@ adj_mul_slab(double* out, double const* a, double const* b, std::size_t n) noexc
 //
 // 2u-trig is computed inline as c2u = cu² − su² and s2u = 2·cu·su (no extra
 // transcendentals). ξ = sin(w)/w uses a branchless small-w guard.
+// Templated on the field precision T: the link storage U and momentum P are
+// loaded/stored as T (float halves the bandwidth), but the Cayley-Hamilton
+// exponential itself is evaluated in double. The acos near ±1, the 9u²−w²
+// denominator and the Taylor fallback are precision-delicate, so this kernel
+// trades the float SIMD width on the arithmetic for double-accurate links —
+// a fully T-native (4-wide) SU(3) expi would need an AoSoA rewrite.
+template <class T>
 [[gnu::always_inline]] inline void
-expi_lmul_slab(double* u, double const* p, double dt, std::size_t n) noexcept {
+expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {
     thread_local std::vector<double> scratch;
     constexpr std::size_t k_slabs = 13;
     if (scratch.size() < k_slabs * n) {
@@ -495,8 +502,8 @@ expi_lmul_slab(double* u, double const* p, double dt, std::size_t n) noexcept {
     for (std::size_t s = 0; s < n; ++s) {
         double q[18];
         for (std::size_t k = 0; k < 9; ++k) {
-            q[2 * k]       = dt * p[((2 * k) + 1) * n + s];
-            q[(2 * k) + 1] = -dt * p[(2 * k) * n + s];
+            q[2 * k]       = dt * static_cast<double>(p[((2 * k) + 1) * n + s]);
+            q[(2 * k) + 1] = -dt * static_cast<double>(p[(2 * k) * n + s]);
         }
         double c1 = 0.0;
         for (std::size_t k = 0; k < 18; ++k) {
@@ -563,12 +570,12 @@ expi_lmul_slab(double* u, double const* p, double dt, std::size_t n) noexcept {
         // Recompute q (cheap vs stashing 18·n doubles).
         double q[18];
         for (std::size_t k = 0; k < 9; ++k) {
-            q[2 * k]       = dt * p[((2 * k) + 1) * n + s];
-            q[(2 * k) + 1] = -dt * p[(2 * k) * n + s];
+            q[2 * k]       = dt * static_cast<double>(p[((2 * k) + 1) * n + s]);
+            q[(2 * k) + 1] = -dt * static_cast<double>(p[(2 * k) * n + s]);
         }
         double u_old[18];
         for (std::size_t k = 0; k < 18; ++k) {
-            u_old[k] = u[(k * n) + s];
+            u_old[k] = static_cast<double>(u[(k * n) + s]);
         }
 
         double v[18];
@@ -669,7 +676,7 @@ expi_lmul_slab(double* u, double const* p, double dt, std::size_t n) noexcept {
         double o_s[18];
         mul_3x3(o_s, v, u_old);
         for (std::size_t k = 0; k < 18; ++k) {
-            u[(k * n) + s] = o_s[k];
+            u[(k * n) + s] = static_cast<T>(o_s[k]);
         }
     }
 }
@@ -692,9 +699,8 @@ expi_lmul_slab(double* u, double const* p, double dt, std::size_t n) noexcept {
 // P = i·sum_a h_a·λ_a (Tr(λ_a λ_b) = 2 δ_ab convention, no extra 1/2 in
 // the basis). Gives Q(P) ∝ exp(−K) with K = (1/2) Tr(P† P) = ‖h‖² — same
 // matching convention as SU(2).
-template <class Rng>
-[[gnu::always_inline]] inline void
-sample_algebra_slab(double* p, Rng& rng, std::size_t n) noexcept {
+template <class T, class Rng>
+[[gnu::always_inline]] inline void sample_algebra_slab(T* p, Rng& rng, std::size_t n) noexcept {
     constexpr double k_inv_sqrt2 = 0.70710678118654752440;
     constexpr double k_inv_sqrt3 = 0.57735026918962576451;
     // Pre-fill 8n independent N(0, 1/√2) draws into a thread-local buffer
@@ -713,22 +719,22 @@ sample_algebra_slab(double* p, Rng& rng, std::size_t n) noexcept {
     double const* const h7_arr = h_buf.data() + (6 * n);
     double const* const h8_arr = h_buf.data() + (7 * n);
     for (std::size_t s = 0; s < n; ++s) {
-        double const h1            = h1_arr[s] * k_inv_sqrt2;
-        double const h2            = h2_arr[s] * k_inv_sqrt2;
-        double const h3            = h3_arr[s] * k_inv_sqrt2;
-        double const h4            = h4_arr[s] * k_inv_sqrt2;
-        double const h5            = h5_arr[s] * k_inv_sqrt2;
-        double const h6            = h6_arr[s] * k_inv_sqrt2;
-        double const h7            = h7_arr[s] * k_inv_sqrt2;
-        double const h8            = h8_arr[s] * k_inv_sqrt2;
-        double const h8_over_sqrt3 = h8 * k_inv_sqrt3;
+        T const h1            = static_cast<T>(h1_arr[s] * k_inv_sqrt2);
+        T const h2            = static_cast<T>(h2_arr[s] * k_inv_sqrt2);
+        T const h3            = static_cast<T>(h3_arr[s] * k_inv_sqrt2);
+        T const h4            = static_cast<T>(h4_arr[s] * k_inv_sqrt2);
+        T const h5            = static_cast<T>(h5_arr[s] * k_inv_sqrt2);
+        T const h6            = static_cast<T>(h6_arr[s] * k_inv_sqrt2);
+        T const h7            = static_cast<T>(h7_arr[s] * k_inv_sqrt2);
+        T const h8            = static_cast<T>(h8_arr[s] * k_inv_sqrt2);
+        T const h8_over_sqrt3 = static_cast<T>(static_cast<double>(h8) * k_inv_sqrt3);
         // Diagonal: 00 = i·(h3 + h8/√3), 11 = i·(-h3 + h8/√3), 22 = i·(-2 h8/√3)
-        p[(idx_re(0, 0) * n) + s] = 0.0;
+        p[(idx_re(0, 0) * n) + s] = T{0};
         p[(idx_im(0, 0) * n) + s] = h3 + h8_over_sqrt3;
-        p[(idx_re(1, 1) * n) + s] = 0.0;
+        p[(idx_re(1, 1) * n) + s] = T{0};
         p[(idx_im(1, 1) * n) + s] = -h3 + h8_over_sqrt3;
-        p[(idx_re(2, 2) * n) + s] = 0.0;
-        p[(idx_im(2, 2) * n) + s] = -2.0 * h8_over_sqrt3;
+        p[(idx_re(2, 2) * n) + s] = T{0};
+        p[(idx_im(2, 2) * n) + s] = T{-2} * h8_over_sqrt3;
         // Off-diagonal: P_{ij} = h_re + i·h_im, P_{ji} = -h_re + i·h_im.
         p[(idx_re(0, 1) * n) + s] = h2;
         p[(idx_im(0, 1) * n) + s] = h1;
@@ -747,15 +753,18 @@ sample_algebra_slab(double* p, Rng& rng, std::size_t n) noexcept {
 
 // K_per_link = (1/2) Tr(P† P) = (1/2)·sum_18 P_storage[k]². Returns sum over
 // n links in this direction. Matches the SU(2) convention.
-[[gnu::always_inline]] inline double kinetic_slab(double const* p, std::size_t n) noexcept {
+template <class T>
+[[gnu::always_inline]] inline double kinetic_slab(T const* p, std::size_t n) noexcept {
+    // Per-link sum-of-squares in T (float → 4-wide), accumulated over links in
+    // double — the reduction-returns-double invariant.
     double k = 0.0;
     for (std::size_t s = 0; s < n; ++s) {
-        double per_link = 0.0;
+        T per_link = T{0};
         for (std::size_t c = 0; c < 18; ++c) {
-            double const v = p[(c * n) + s];
+            T const v = p[(c * n) + s];
             per_link += v * v;
         }
-        k += per_link;
+        k += static_cast<double>(per_link);
     }
     return 0.5 * k;
 }

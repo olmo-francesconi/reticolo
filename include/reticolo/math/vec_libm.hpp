@@ -60,6 +60,8 @@ inline auto const sleef_dispatch_warmup = [] {
     sink                   = Sleef_acos_u10(1.0);
     Sleef_double2 const sc = Sleef_sincos_u10(0.0);
     sink                   = sc.x + sc.y;
+    Sleef_float2 const scf = Sleef_sincosf_u10(0.0F);
+    sink                   = static_cast<double>(scf.x + scf.y);
     return static_cast<double>(sink);
 }();
 
@@ -243,6 +245,59 @@ sincos_batch(double* dst_sin, double* dst_cos, double const* src, std::size_t n)
         Sleef_double_2 const sc = Sleef_sincos_u10(src[i]);
         dst_sin[i]              = sc.x;
         dst_cos[i]              = sc.y;
+    }
+}
+
+// --------------- sincos_batch (float) ----------------------------------------
+//
+// Single-precision twin of the double sincos_batch — 4-wide on NEON/SSE,
+// 8-wide on AVX/AVX2, 16-wide on AVX-512. Lets the mixed-precision gauge
+// drift (expi_lmul_slab<float>) run its transcendentals at the same lane
+// count as its matmul instead of widening to double.
+
+inline void sincos_batch(float* dst_sin, float* dst_cos, float const* src, std::size_t n) noexcept {
+    std::size_t i = 0;
+#ifdef __AVX512F__
+    for (; i + 16 <= n; i += 16) {
+        __m512 const v          = _mm512_loadu_ps(src + i);
+        Sleef___m512_2 const sc = Sleef_sincosf16_u10avx512f(v);
+        _mm512_storeu_ps(dst_sin + i, sc.x);
+        _mm512_storeu_ps(dst_cos + i, sc.y);
+    }
+#elifdef __AVX2__
+    for (; i + 8 <= n; i += 8) {
+        __m256 const v          = _mm256_loadu_ps(src + i);
+        Sleef___m256_2 const sc = Sleef_sincosf8_u10avx2(v);
+        _mm256_storeu_ps(dst_sin + i, sc.x);
+        _mm256_storeu_ps(dst_cos + i, sc.y);
+    }
+#elifdef __AVX__
+    for (; i + 8 <= n; i += 8) {
+        __m256 const v          = _mm256_loadu_ps(src + i);
+        Sleef___m256_2 const sc = Sleef_sincosf8_u10avx(v);
+        _mm256_storeu_ps(dst_sin + i, sc.x);
+        _mm256_storeu_ps(dst_cos + i, sc.y);
+    }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+    // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 4` in the for header
+    for (; i + 4 <= n; i += 4) {
+        float32x4_t const v          = vld1q_f32(src + i);
+        Sleef_float32x4_t_2 const sc = Sleef_sincosf4_u10advsimd(v);
+        vst1q_f32(dst_sin + i, sc.x);
+        vst1q_f32(dst_cos + i, sc.y);
+    }
+#elifdef __SSE2__
+    for (; i + 4 <= n; i += 4) {
+        __m128 const v          = _mm_loadu_ps(src + i);
+        Sleef___m128_2 const sc = Sleef_sincosf4_u10sse2(v);
+        _mm_storeu_ps(dst_sin + i, sc.x);
+        _mm_storeu_ps(dst_cos + i, sc.y);
+    }
+#endif
+    for (; i < n; ++i) {
+        Sleef_float_2 const sc = Sleef_sincosf_u10(src[i]);
+        dst_sin[i]             = sc.x;
+        dst_cos[i]             = sc.y;
     }
 }
 

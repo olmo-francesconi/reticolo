@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <vector>
 
 namespace reticolo::math::su2 {
@@ -44,8 +45,8 @@ namespace reticolo::math::su2 {
 // ---------- per-site complex-multiply primitives -----------------------------
 
 // (acc_re, acc_im) += (ar+iai) * (br+ibi)
-[[gnu::always_inline]] inline void
-cmul_acc(double& acc_re, double& acc_im, double ar, double ai, double br, double bi) noexcept {
+template <class T>
+[[gnu::always_inline]] inline void cmul_acc(T& acc_re, T& acc_im, T ar, T ai, T br, T bi) noexcept {
     acc_re += (ar * br) - (ai * bi);
     acc_im += (ar * bi) + (ai * br);
 }
@@ -69,25 +70,26 @@ cmul_acc(double& acc_re, double& acc_im, double ar, double ai, double br, double
 // above. Out must not alias the inputs. Hand-unrolled — 8 multiply-adds per
 // output entry, 4 entries = 32 mul + 24 add per product.
 
-[[gnu::always_inline]] inline void mul_2x2(double* out, double const* a, double const* b) noexcept {
+template <class T>
+[[gnu::always_inline]] inline void mul_2x2(T* out, T const* a, T const* b) noexcept {
     // out_{00} = a_{00}·b_{00} + a_{01}·b_{10}
-    out[0] = 0.0;
-    out[1] = 0.0;
+    out[0] = T{0};
+    out[1] = T{0};
     cmul_acc(out[0], out[1], a[0], a[1], b[0], b[1]);
     cmul_acc(out[0], out[1], a[2], a[3], b[4], b[5]);
     // out_{01} = a_{00}·b_{01} + a_{01}·b_{11}
-    out[2] = 0.0;
-    out[3] = 0.0;
+    out[2] = T{0};
+    out[3] = T{0};
     cmul_acc(out[2], out[3], a[0], a[1], b[2], b[3]);
     cmul_acc(out[2], out[3], a[2], a[3], b[6], b[7]);
     // out_{10} = a_{10}·b_{00} + a_{11}·b_{10}
-    out[4] = 0.0;
-    out[5] = 0.0;
+    out[4] = T{0};
+    out[5] = T{0};
     cmul_acc(out[4], out[5], a[4], a[5], b[0], b[1]);
     cmul_acc(out[4], out[5], a[6], a[7], b[4], b[5]);
     // out_{11} = a_{10}·b_{01} + a_{11}·b_{11}
-    out[6] = 0.0;
-    out[7] = 0.0;
+    out[6] = T{0};
+    out[7] = T{0};
     cmul_acc(out[6], out[7], a[4], a[5], b[2], b[3]);
     cmul_acc(out[6], out[7], a[6], a[7], b[6], b[7]);
 }
@@ -281,60 +283,67 @@ adj_mul_slab(double* out, double const* a, double const* b, std::size_t n) noexc
 // 2 is sincos_batch; pass 3 builds V from (c, γ·h) and multiplies into U.
 // γ = sin(β)/‖h‖ has a branchless small-‖h‖ guard so the inner loop stays
 // vector-friendly.
+template <class T>
 [[gnu::always_inline]] inline void
-expi_lmul_slab(double* u, double const* p, double dt, std::size_t n) noexcept {
-    thread_local std::vector<double> scratch;
+expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {
+    // Scratch is in the field's scalar type T, so the whole kernel — including
+    // the sincos transcendentals (math::sincos_batch is overloaded for float
+    // and double) — runs at the lattice precision and lane count. β, ‖h‖, the
+    // V matrix and the U ← V·U product are all T; for float that is 4-wide.
+    thread_local std::vector<T> scratch;
     if (scratch.size() < 7 * n) {
         scratch.resize(7 * n);
     }
-    double* const beta_buf = scratch.data();
-    double* const h_buf    = scratch.data() + n;
-    double* const h1_buf   = scratch.data() + (2 * n);
-    double* const h2_buf   = scratch.data() + (3 * n);
-    double* const h3_buf   = scratch.data() + (4 * n);
-    double* const sin_buf  = scratch.data() + (5 * n);
-    double* const cos_buf  = scratch.data() + (6 * n);
+    T* const beta_buf = scratch.data();
+    T* const h_buf    = scratch.data() + n;
+    T* const h1_buf   = scratch.data() + (2 * n);
+    T* const h2_buf   = scratch.data() + (3 * n);
+    T* const h3_buf   = scratch.data() + (4 * n);
+    T* const sin_buf  = scratch.data() + (5 * n);
+    T* const cos_buf  = scratch.data() + (6 * n);
+
+    T const dt_t = static_cast<T>(dt);
 
     // Pass 1: per site, compute β = dt·‖h‖ and stash the algebra coords.
     for (std::size_t s = 0; s < n; ++s) {
-        double const h3 = p[(1 * n) + s];
-        double const h2 = p[(2 * n) + s];
-        double const h1 = p[(3 * n) + s];
-        double const hs = (h1 * h1) + (h2 * h2) + (h3 * h3);
-        double const h  = std::sqrt(hs);
-        beta_buf[s]     = dt * h;
-        h_buf[s]        = h;
-        h1_buf[s]       = h1;
-        h2_buf[s]       = h2;
-        h3_buf[s]       = h3;
+        T const h3  = p[(1 * n) + s];
+        T const h2  = p[(2 * n) + s];
+        T const h1  = p[(3 * n) + s];
+        T const hs  = (h1 * h1) + (h2 * h2) + (h3 * h3);
+        T const h   = std::sqrt(hs);
+        beta_buf[s] = dt_t * h;
+        h_buf[s]    = h;
+        h1_buf[s]   = h1;
+        h2_buf[s]   = h2;
+        h3_buf[s]   = h3;
     }
 
-    // Pass 2: vectorised sincos of β.
+    // Pass 2: vectorised sincos of β (float or double per T).
     reticolo::math::sincos_batch(sin_buf, cos_buf, beta_buf, n);
 
     // Pass 3: build V = (c, γ·h₃, γ·h₂, γ·h₁, −γ·h₂, γ·h₁, c, −γ·h₃) and
     // write U ← V · U. Branchless γ guard: at h ≈ 0 the algebra coords are
     // also ≈ 0, so any finite γ leaves V ≈ I to first order; the only worry
-    // is division by zero, fixed by max(h, ε).
-    constexpr double k_eps_h = 1.0e-300;
+    // is division by zero, fixed by adding a tiny ε to ‖h‖.
+    T const k_eps_h = std::numeric_limits<T>::min();
     for (std::size_t s = 0; s < n; ++s) {
-        double const h     = h_buf[s];
-        double const c     = cos_buf[s];
-        double const sb    = sin_buf[s];
-        double const gamma = sb / (h + k_eps_h);
-        double u_s[8];
+        T const h     = h_buf[s];
+        T const c     = cos_buf[s];
+        T const sb    = sin_buf[s];
+        T const gamma = sb / (h + k_eps_h);
+        T u_s[8];
         for (std::size_t k = 0; k < 8; ++k) {
             u_s[k] = u[(k * n) + s];
         }
-        double const v_s[8] = {c,
-                               gamma * h3_buf[s],
-                               gamma * h2_buf[s],
-                               gamma * h1_buf[s],
-                               -(gamma * h2_buf[s]),
-                               gamma * h1_buf[s],
-                               c,
-                               -(gamma * h3_buf[s])};
-        double o_s[8];
+        T const v_s[8] = {c,
+                          gamma * h3_buf[s],
+                          gamma * h2_buf[s],
+                          gamma * h1_buf[s],
+                          -(gamma * h2_buf[s]),
+                          gamma * h1_buf[s],
+                          c,
+                          -(gamma * h3_buf[s])};
+        T o_s[8];
         mul_2x2(o_s, v_s, u_s);
         for (std::size_t k = 0; k < 8; ++k) {
             u[(k * n) + s] = o_s[k];
@@ -361,14 +370,14 @@ expi_lmul_slab(double* u, double const* p, double dt, std::size_t n) noexcept {
 // matches the kinetic part of H used by the Metropolis accept (HMC detailed
 // balance). Variance 1/2 is the SU(N) analog of the scalar N(0, 1) sampling
 // against K = (1/2)·p²: in both cases σ² = 1 / (∂²K/∂coord²).
-template <class Rng>
-[[gnu::always_inline]] inline void
-sample_algebra_slab(double* p, Rng& rng, std::size_t n) noexcept {
+template <class T, class Rng>
+[[gnu::always_inline]] inline void sample_algebra_slab(T* p, Rng& rng, std::size_t n) noexcept {
     constexpr double k_inv_sqrt2 = 0.70710678118654752440;
     // Pre-fill 3n independent N(0, 1/√2) draws into a thread-local buffer,
     // then a single stride-1 scatter pass into the storage layout. Splits
     // the random-draw (rng-state-bound) from the scatter (memory-bound,
     // auto-vectorisable) — both phases run cleanly without interleaving.
+    // Draws are double (the RNG stream is double); the scatter narrows to T.
     thread_local std::vector<double> h_buf;
     if (h_buf.size() < 3 * n) {
         h_buf.resize(3 * n);
@@ -378,29 +387,32 @@ sample_algebra_slab(double* p, Rng& rng, std::size_t n) noexcept {
     double const* const h2_arr = h_buf.data() + n;
     double const* const h3_arr = h_buf.data() + (2 * n);
     for (std::size_t s = 0; s < n; ++s) {
-        double const h1 = h1_arr[s] * k_inv_sqrt2;
-        double const h2 = h2_arr[s] * k_inv_sqrt2;
-        double const h3 = h3_arr[s] * k_inv_sqrt2;
-        p[(0 * n) + s]  = 0.0;
-        p[(1 * n) + s]  = h3;
-        p[(2 * n) + s]  = h2;
-        p[(3 * n) + s]  = h1;
-        p[(4 * n) + s]  = -h2;
-        p[(5 * n) + s]  = h1;
-        p[(6 * n) + s]  = 0.0;
-        p[(7 * n) + s]  = -h3;
+        T const h1     = static_cast<T>(h1_arr[s] * k_inv_sqrt2);
+        T const h2     = static_cast<T>(h2_arr[s] * k_inv_sqrt2);
+        T const h3     = static_cast<T>(h3_arr[s] * k_inv_sqrt2);
+        p[(0 * n) + s] = T{0};
+        p[(1 * n) + s] = h3;
+        p[(2 * n) + s] = h2;
+        p[(3 * n) + s] = h1;
+        p[(4 * n) + s] = -h2;
+        p[(5 * n) + s] = h1;
+        p[(6 * n) + s] = T{0};
+        p[(7 * n) + s] = -h3;
     }
 }
 
 // K_per_link = ||h||² where (h_1, h_2, h_3) are the algebra coords of P.
-// Returns the total kinetic energy summed over n links in this direction.
-[[gnu::always_inline]] inline double kinetic_slab(double const* p, std::size_t n) noexcept {
+// Returns the total kinetic energy summed over n links — accumulated in double
+// regardless of the field precision T (the reduction-returns-double invariant).
+template <class T>
+[[gnu::always_inline]] inline double kinetic_slab(T const* p, std::size_t n) noexcept {
     double k = 0.0;
     for (std::size_t s = 0; s < n; ++s) {
-        double const h3 = p[(1 * n) + s];
-        double const h2 = p[(2 * n) + s];
-        double const h1 = p[(3 * n) + s];
-        k += (h1 * h1) + (h2 * h2) + (h3 * h3);
+        T const h3 = p[(1 * n) + s];
+        T const h2 = p[(2 * n) + s];
+        T const h1 = p[(3 * n) + s];
+        T const sq = (h1 * h1) + (h2 * h2) + (h3 * h3);
+        k += static_cast<double>(sq);
     }
     return k;
 }

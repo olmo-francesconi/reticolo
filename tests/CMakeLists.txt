@@ -37,7 +37,9 @@ reticolo_add_test(test_compact_u1_force_consistency physics/test_compact_u1_forc
 reticolo_add_test(test_u1_hmc_reversibility         physics/test_u1_hmc_reversibility.cpp)
 reticolo_add_test(test_wilson_u1_vs_compact         physics/test_wilson_u1_vs_compact.cpp)
 reticolo_add_test(test_su2_hmc_reversibility        physics/test_su2_hmc_reversibility.cpp)
+reticolo_add_test(test_su2_hmc_mixed_precision      physics/test_su2_hmc_mixed_precision.cpp)
 reticolo_add_test(test_su3_hmc_reversibility        physics/test_su3_hmc_reversibility.cpp)
+reticolo_add_test(test_su3_hmc_mixed_precision      physics/test_su3_hmc_mixed_precision.cpp)
 reticolo_add_test(test_phi6_force_consistency       physics/test_phi6_force_consistency.cpp)
 reticolo_add_test(test_sine_gordon_force_consistency physics/test_sine_gordon_force_consistency.cpp)
 reticolo_add_test(test_xy_force_consistency         physics/test_xy_force_consistency.cpp)
@@ -46,6 +48,7 @@ reticolo_add_test(test_hmc_reversibility            physics/test_hmc_reversibili
 reticolo_add_test(test_hmc_integrator_order         physics/test_hmc_integrator_order.cpp)
 reticolo_add_test(test_metropolis_gaussian_limit    physics/test_metropolis_gaussian_limit.cpp)
 reticolo_add_test(test_metropolis_checkerboard      physics/test_metropolis_checkerboard.cpp)
+reticolo_add_test(test_phi4_hmc_mixed_precision      physics/test_phi4_hmc_mixed_precision.cpp)
 reticolo_add_test(test_wolff_cluster                physics/test_wolff_cluster.cpp)
 
 if(RETICOLO_BUILD_IO)

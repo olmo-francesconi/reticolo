@@ -274,8 +274,8 @@ inline void visit_nn(Lattice<T> const& l, Body&& body) noexcept {
 
 // ---------- reduce_fwd -------------------------------------------------------
 
-template <class T, class Body>
-[[nodiscard]] inline T reduce_fwd_fallback_(Lattice<T> const& l, Body&& body) noexcept {
+template <class T, class Acc = T, class Body>
+[[nodiscard]] inline Acc reduce_fwd_fallback_(Lattice<T> const& l, Body&& body) noexcept {
     RETICOLO_FP_REASSOCIATE
     auto const& idx              = l.indexing_ref();
     T const* data                = l.data();
@@ -283,7 +283,7 @@ template <class T, class Body>
     std::size_t const n          = idx.nsites();
     std::size_t const d          = idx.ndims();
 
-    T total{};
+    Acc total{};
     for (std::size_t i = 0; i < n; ++i) {
         T fwd_sum              = T{0};
         std::size_t const base = i * d;
@@ -295,12 +295,12 @@ template <class T, class Body>
     return total;
 }
 
-template <class T, class Body>
-[[nodiscard]] inline T reduce_fwd_1d_(Lattice<T> const& l, Body&& body) noexcept {
+template <class T, class Acc = T, class Body>
+[[nodiscard]] inline Acc reduce_fwd_1d_(Lattice<T> const& l, Body&& body) noexcept {
     RETICOLO_FP_REASSOCIATE
     T const* data        = l.data();
     std::size_t const Lx = l.shape()[0];
-    T total{};
+    Acc total{};
     for (std::size_t x = 0; x + 1 < Lx; ++x) {
         total += body(data[x], data[x + 1]);
     }
@@ -308,15 +308,15 @@ template <class T, class Body>
     return total;
 }
 
-template <class T, class Body>
-[[nodiscard]] inline T reduce_fwd_2d_(Lattice<T> const& l, Body&& body) noexcept {
+template <class T, class Acc = T, class Body>
+[[nodiscard]] inline Acc reduce_fwd_2d_(Lattice<T> const& l, Body&& body) noexcept {
     RETICOLO_FP_REASSOCIATE
     T const* data        = l.data();
     auto const& sh       = l.shape();
     std::size_t const Lx = sh[0];
     std::size_t const Ly = sh[1];
     std::size_t const sy = Lx;
-    T total{};
+    Acc total{};
     for (std::size_t y = 0; y < Ly; ++y) {
         std::size_t const yp     = (y + 1 == Ly) ? 0 : (y + 1);
         std::size_t const row    = y * sy;
@@ -331,8 +331,8 @@ template <class T, class Body>
     return total;
 }
 
-template <class T, class Body>
-[[nodiscard]] inline T reduce_fwd_3d_(Lattice<T> const& l, Body&& body) noexcept {
+template <class T, class Acc = T, class Body>
+[[nodiscard]] inline Acc reduce_fwd_3d_(Lattice<T> const& l, Body&& body) noexcept {
     RETICOLO_FP_REASSOCIATE
     T const* data        = l.data();
     auto const& sh       = l.shape();
@@ -341,7 +341,7 @@ template <class T, class Body>
     std::size_t const Lz = sh[2];
     std::size_t const sy = Lx;
     std::size_t const sz = Lx * Ly;
-    T total{};
+    Acc total{};
     for (std::size_t z = 0; z < Lz; ++z) {
         std::size_t const zp       = (z + 1 == Lz) ? 0 : (z + 1);
         std::size_t const plane    = z * sz;
@@ -362,8 +362,8 @@ template <class T, class Body>
     return total;
 }
 
-template <class T, class Body>
-[[nodiscard]] inline T reduce_fwd_4d_(Lattice<T> const& l, Body&& body) noexcept {
+template <class T, class Acc = T, class Body>
+[[nodiscard]] inline Acc reduce_fwd_4d_(Lattice<T> const& l, Body&& body) noexcept {
     RETICOLO_FP_REASSOCIATE
     T const* data        = l.data();
     auto const& sh       = l.shape();
@@ -374,7 +374,7 @@ template <class T, class Body>
     std::size_t const s1 = L0;
     std::size_t const s2 = L0 * L1;
     std::size_t const s3 = L0 * L1 * L2;
-    T total{};
+    Acc total{};
     for (std::size_t w = 0; w < L3; ++w) {
         std::size_t const wp     = (w + 1 == L3) ? 0 : (w + 1);
         std::size_t const hyp    = w * s3;
@@ -406,22 +406,22 @@ template <class T, class Body>
     return total;
 }
 
-template <class T, class Body>
-[[nodiscard]] inline T reduce_fwd(Lattice<T> const& l, Body&& body) noexcept {
+template <class T, class Acc = T, class Body>
+[[nodiscard]] inline Acc reduce_fwd(Lattice<T> const& l, Body&& body) noexcept {
 #if RETICOLO_HOT_LOOP_FORCE_FALLBACK
-    return reduce_fwd_fallback_(l, std::forward<Body>(body));
+    return reduce_fwd_fallback_<T, Acc>(l, std::forward<Body>(body));
 #else
     switch (l.ndims()) {
         case 1:
-            return reduce_fwd_1d_(l, std::forward<Body>(body));
+            return reduce_fwd_1d_<T, Acc>(l, std::forward<Body>(body));
         case 2:
-            return reduce_fwd_2d_(l, std::forward<Body>(body));
+            return reduce_fwd_2d_<T, Acc>(l, std::forward<Body>(body));
         case 3:
-            return reduce_fwd_3d_(l, std::forward<Body>(body));
+            return reduce_fwd_3d_<T, Acc>(l, std::forward<Body>(body));
         case 4:
-            return reduce_fwd_4d_(l, std::forward<Body>(body));
+            return reduce_fwd_4d_<T, Acc>(l, std::forward<Body>(body));
         default:
-            return reduce_fwd_fallback_(l, std::forward<Body>(body));
+            return reduce_fwd_fallback_<T, Acc>(l, std::forward<Body>(body));
     }
 #endif
 }

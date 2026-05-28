@@ -48,7 +48,11 @@ struct Wilson {
         e.param("β={:.3f}", beta);
     }
 
-    [[nodiscard]] T s_full(field_type const& U) const noexcept {
+    // Returns double regardless of the field precision T: the plaquette sum is
+    // accumulated in double, and the final β·n_plaq − (β/N)·Σ combine — a
+    // difference of two ~volume-sized quantities — is also done in double to
+    // avoid catastrophic cancellation when T = float.
+    [[nodiscard]] double s_full(field_type const& U) const noexcept {
         std::size_t const d      = U.ndims();
         std::size_t const ns     = U.nsites();
         std::size_t const n_plaq = (d * (d - 1) / 2) * ns;
@@ -73,18 +77,18 @@ struct Wilson {
                 }
             }
         }
-        T const N_re        = static_cast<T>(G::n_color);
-        T const beta_over_n = beta / N_re;
-        T const s = (beta * static_cast<T>(n_plaq)) - (beta_over_n * static_cast<T>(accum_re_tr));
-        last_s_full_ = s;
+        double const beta_d      = static_cast<double>(beta);
+        double const beta_over_n = beta_d / static_cast<double>(G::n_color);
+        double const s = (beta_d * static_cast<double>(n_plaq)) - (beta_over_n * accum_re_tr);
+        last_s_full_   = s;
         return s;
     }
 
     // Raw-action cache: last `s_full` evaluated on the field. NaN before the
     // first call. The LLR Replica reads this after a trajectory instead of
     // re-sweeping; HMC snapshots and restores it across reject rollbacks.
-    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
+    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
 
     // Each gauge group owns its force algorithm — U(1) uses the per-plaquette
     // scatter that matches CompactU1 bit-for-bit; SU(N) uses a link-centric
@@ -111,7 +115,7 @@ struct Wilson {
         G::compute_force_and_kick(U, mom, beta_over_n_dbl, static_cast<double>(k_dt));
     }
 
-    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
+    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 
     // Sum of Re Tr U_p over the 2(d−1) plaquettes through link (x, μ),
     // wrapped into the Wilson constant offset so the returned value is

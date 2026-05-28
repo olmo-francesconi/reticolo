@@ -18,6 +18,7 @@
 #include <optional>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace reticolo::alg {
 
@@ -215,12 +216,32 @@ private:
         } else if constexpr (std::is_same_v<Scalar, std::complex<double>>) {
             std::size_t const n = flat_size(mom_);
             rng_.normal_fill(reinterpret_cast<double*>(mom_.data()), 2 * n);
+        } else if constexpr (std::is_same_v<Scalar, float>) {
+            fill_normals_narrowed_(mom_.data(), flat_size(mom_));
+        } else if constexpr (std::is_same_v<Scalar, std::complex<float>>) {
+            std::size_t const n = flat_size(mom_);
+            fill_normals_narrowed_(reinterpret_cast<float*>(mom_.data()), 2 * n);
         } else {
             Scalar* const m     = mom_.data();
             std::size_t const n = flat_size(mom_);
             for (std::size_t i = 0; i < n; ++i) {
                 m[i] = static_cast<Scalar>(rng_.normal());
             }
+        }
+    }
+
+    // Batched standard-normal fill for float buffers. Draws doubles (so the RNG
+    // stream matches the double path one-for-one) into a thread_local scratch,
+    // then narrows to float. Momentum precision is non-critical — the kinetic
+    // energy is summed in double regardless of the field's scalar type.
+    void fill_normals_narrowed_(float* out, std::size_t n) {
+        thread_local std::vector<double> scratch;
+        if (scratch.size() < n) {
+            scratch.resize(n);
+        }
+        rng_.normal_fill(scratch.data(), n);
+        for (std::size_t i = 0; i < n; ++i) {
+            out[i] = static_cast<float>(scratch[i]);
         }
     }
 

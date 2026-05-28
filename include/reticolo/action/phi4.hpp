@@ -64,20 +64,26 @@ struct Phi4 {
         return hop + onsite;
     }
 
-    [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T const k    = kappa;
-        T const lam  = lambda;
-        T const s    = detail::reduce_fwd<T>(l, [k, lam](T phi, T fwd_sum) {
+    // The per-site contribution is evaluated in the field's scalar type `T`
+    // (so float lattices keep their bandwidth/SIMD advantage), but the volume
+    // sum accumulates in — and returns — `double`. A float sum over a large V
+    // would lose ~log2(V) bits and wreck the ΔH the HMC acceptance depends on;
+    // the double accumulator removes that, leaving only the per-site rounding.
+    [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
+        T const k      = kappa;
+        T const lam    = lambda;
+        double const s = detail::reduce_fwd<T, double>(l, [k, lam](T phi, T fwd_sum) {
             T const phi2 = phi * phi;
             T const dev  = phi2 - T{1};
-            return (T{-2} * k * phi * fwd_sum) + phi2 + (lam * dev * dev);
+            T const site = (T{-2} * k * phi * fwd_sum) + phi2 + (lam * dev * dev);
+            return static_cast<double>(site);
         });
-        last_s_full_ = s;
+        last_s_full_   = s;
         return s;
     }
 
-    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
+    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
 
     // force(x) = -dS/dphi(x) = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x) - 4 lambda phi(x)
     // (phi(x)^2 - 1)
@@ -106,7 +112,7 @@ struct Phi4 {
 
     // Mutable cache slot — keep public to preserve aggregate-init. Read via
     // `last_s_full()`, never assign directly from outside the action.
-    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
+    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 };
 
 }  // namespace reticolo::action
