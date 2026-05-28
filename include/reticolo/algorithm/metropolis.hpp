@@ -8,14 +8,31 @@
 #include <reticolo/core/log_helpers.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
+#include <reticolo/math/vec_libm.hpp>
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <span>
+#include <vector>
 
 namespace reticolo::alg {
 
+// Update order for the scalar nearest-neighbour fast path.
+//   Sequential   — one in-place lexicographic sweep; site i+1 sees i's
+//                  accepted update. The default; bit-stable RNG order.
+//   Checkerboard — even sublattice then odd, each against the frozen other
+//                  colour. A different (still valid) Markov chain: proposals
+//                  and the exp(-ds) acceptance weights batch through Sleef,
+//                  moving both transcendentals off the scalar critical path.
+//                  Only available for actions with an NN ds_local_from_nbrs;
+//                  requested on any other action it logs once and falls back
+//                  to Sequential.
+enum class Sweep : std::uint8_t { Sequential, Checkerboard };
+
 struct MetropolisSpec {
     double sigma = 1.0;
+    Sweep sweep  = Sweep::Sequential;
 };
 
 struct MetropolisResult {
@@ -57,7 +74,15 @@ public:
                R& rng,
                MetropolisSpec const& spec,
                log::Mode announce = log::Mode::normal)
-        : action_{action}, field_{field}, rng_{rng}, sigma_{spec.sigma} {
+        : action_{action}, field_{field}, rng_{rng}, sigma_{spec.sigma}, sweep_{spec.sweep} {
+        if constexpr (!action::HasDsLocalFromNbrs<A, F>) {
+            if (sweep_ == Sweep::Checkerboard) {
+                log::warn("metr",
+                          "checkerboard sweep needs an NN ds_local_from_nbrs action; "
+                          "falling back to sequential");
+                sweep_ = Sweep::Sequential;
+            }
+        }
         if (announce == log::Mode::normal) {
             log::algo(*this);
         }
@@ -66,6 +91,7 @@ public:
     void describe(log::Entry& e) const {
         e.line("Metropolis");
         e.param("σ={:.3f}", sigma_);
+        e.param("sweep={}", sweep_ == Sweep::Checkerboard ? "checkerboard" : "sequential");
     }
 
     MetropolisResult step(log::Mode log_mode = log::Mode::normal) {
@@ -76,6 +102,15 @@ public:
         }
 
         if constexpr (action::HasDsLocalFromNbrs<A, F>) {
+            if (sweep_ == Sweep::Checkerboard) {
+                checkerboard_color_(field_.even_sites(), stats);
+                checkerboard_color_(field_.odd_sites(), stats);
+                ++step_count_;
+                if (log_mode == log::Mode::normal) {
+                    log::info("metr", "sweep {:>6}  acc={:.3f}", step_count_, stats.acceptance());
+                }
+                return stats;
+            }
             // Scalar fast path: visit_nn precomputes the NN sum and the body
             // accepts (phi, nbrs) directly. Bit-stable order, vectorised
             // neighbour sum.
@@ -148,10 +183,74 @@ private:
         }
     }
 
+    // One sublattice of a checkerboard sweep: propose, score, and accept every
+    // site of `color` against the frozen opposite colour. Proposals and the
+    // exp(-ds) acceptance weights are batched (Sleef) so neither transcendental
+    // sits on the scalar accept loop; the NN sum gather and the accept compare
+    // are all that remain serial. `mds` holds −ds, so the weight is exp(mds)
+    // and the unconditional-accept test is `mds >= 0`.
+    void checkerboard_color_(std::span<Site const> color, MetropolisResult& stats) {
+        std::size_t const m = color.size();
+        if (m == 0) {
+            return;
+        }
+        F* const data                = field_.data();
+        Indexing const& idx          = field_.indexing_ref();
+        Site::value_type const* next = idx.next_data();
+        Site::value_type const* prev = idx.prev_data();
+        std::size_t const d          = idx.ndims();
+
+        thread_local std::vector<F> prop;
+        thread_local std::vector<double> mds;
+        thread_local std::vector<double> wexp;
+        thread_local std::vector<double> nrm;
+        prop.resize(m);
+        mds.resize(m);
+        wexp.resize(m);
+
+        if constexpr (action::HasProposal<A, F, R>) {
+            for (std::size_t k = 0; k < m; ++k) {
+                prop[k] = action_.propose(field_, color[k], rng_);
+            }
+        } else {
+            nrm.resize(m);
+            rng_.normal_fill(nrm.data(), m);
+            for (std::size_t k = 0; k < m; ++k) {
+                prop[k] = data[color[k].value()] + static_cast<F>(sigma_ * nrm[k]);
+            }
+        }
+
+        for (std::size_t k = 0; k < m; ++k) {
+            std::size_t const s    = color[k].value();
+            std::size_t const base = s * d;
+            F nbrs                 = F{0};
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                nbrs += data[next[base + mu]] + data[prev[base + mu]];
+            }
+            mds[k] = -static_cast<double>(action_.ds_local_from_nbrs(data[s], prop[k], nbrs));
+        }
+
+        math::exp_batch(wexp.data(), mds.data(), m);
+
+        for (std::size_t k = 0; k < m; ++k) {
+            ++stats.attempts;
+            bool const accepted = (mds[k] >= 0.0) || (rng_.uniform() < wexp[k]);
+            if (accepted) {
+                Site const s = color[k];
+                if constexpr (action::HasSweepState<A, F>) {
+                    action_.commit_accept(field_, s, prop[k]);
+                }
+                data[s.value()] = prop[k];
+                ++stats.accepted;
+            }
+        }
+    }
+
     A const& action_;
     Field& field_;
     R& rng_;
     double sigma_;
+    Sweep sweep_;
 
     // Cumulative sweep counter — advances on every call, silent or not.
     std::size_t step_count_ = 0;
