@@ -15,15 +15,8 @@
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/../_common/preset.sh" "$@"
-bindir="$root/build/$preset/apps"
-
-for variant in tune_phi4_metropolis tune_phi4_hmc_leapfrog tune_phi4_hmc_omelyan2 tune_phi4_hmc_omelyan4; do
-    if [[ ! -x $bindir/$variant ]]; then
-        echo "$variant binary not found at $bindir/$variant" >&2
-        echo "Build it first: cmake --build --preset $preset --target $variant" >&2
-        exit 1
-    fi
-done
+build_example
+bindir="$example_bin"
 
 scenario=${SCENARIO:-easy}
 results="$here/results/$scenario"

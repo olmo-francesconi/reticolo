@@ -8,13 +8,8 @@
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/../_common/preset.sh" "$@"
-binary="$root/build/$preset/apps/on_sigma_wolff"
-
-if [[ ! -x $binary ]]; then
-    echo "on_sigma_wolff binary not found at $binary" >&2
-    echo "Build it first: cmake --build --preset $preset" >&2
-    exit 1
-fi
+build_example
+binary="$example_bin/on_sigma_wolff"
 
 results="$here/results"
 mkdir -p "$results"

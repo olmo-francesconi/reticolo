@@ -19,16 +19,27 @@ The target is the exact 2D Ising universality class — Onsager 1944:
   own error bar, the master curve is *not* drawn (just the raw rescaled data
   collapsing onto itself).
 
-## Run it
+## Building & running
 
-```bash
-# 1. build (once)
-cmake --build --preset macos-appleclang
+Standalone build (copy the directory anywhere and this still works):
 
-# 2. sweep (parallel across cores) + analyse
+```sh
+cd examples/01_phi4_tuning
+cmake -S . -B build && cmake --build build
+```
+
+Or let `run.sh` handle it — it calls `build_example` automatically:
+
+```sh
 bash examples/01_phi4_tuning/run.sh
 python3 examples/01_phi4_tuning/analyze.py
 ```
+
+Override the preset with `RETICOLO_PRESET=macos-llvm ./run.sh` (needed for
+OpenMP on macOS). In-tree: `cmake --build --preset macos-appleclang` then
+run the scripts as above.
+
+## Run it
 
 Results land in `examples/01_phi4_tuning/results/` (one HDF5 per (L, κ)) and
 `susceptibility.png` next to the script.

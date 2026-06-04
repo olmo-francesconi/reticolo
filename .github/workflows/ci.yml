@@ -90,6 +90,28 @@ jobs:
         if: always()
         run: ccache --show-stats --verbose
 
+  example-standalone:
+    name: example standalone build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: install tools
+        run: brew install ninja hdf5
+      - name: build example as a detached consumer
+        # Configure + build examples/01 through its OWN CMakeLists (not the root
+        # preset). With the repo checked out, the example's find-or-fetch block
+        # resolves reticolo via the sibling-checkout branch (add_subdirectory
+        # ../..), building it core-only. This exercises the consumer linking
+        # path and the OpenMP auto-degrade on AppleClang that the preset build
+        # (which forces OpenMP off) never hits. The git-fetch fallback isn't
+        # tested here: on a PR it would pull the published main, not this commit.
+        run: |
+          cd examples/01_phi4_tuning
+          cmake -S . -B build/ci -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/ci
+      - name: smoke-run
+        run: examples/01_phi4_tuning/build/ci/phi4_hmc --size=8 --n_therm=5 --n_prod=5 --out="$RUNNER_TEMP/ci.h5"
+
   format:
     name: clang-format
     runs-on: ubuntu-latest

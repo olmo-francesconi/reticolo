@@ -3,3 +3,4 @@ results/
 *.png
 *.pdf
 *.gif
+build/

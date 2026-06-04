@@ -237,6 +237,64 @@ Two convention watch-outs:
   the natural peak, so `a_init = -1` and DoS reconstruction uses `(1+a)`.
   Energy convention keeps `a_init = 0` and integrates `a` directly.
 
+## apps/ and examples/
+
+### Builtin apps (`apps/`)
+
+`apps/` is the canonical reference set: one sim per action
+(`phi4_hmc`, `phi6_hmc`, `sine_gordon_hmc`, `xy_wolff`,
+`on_sigma_metropolis`/`wolff`, `bose_gas_hmc`, `u1_metropolis`/`hmc`,
+`su2_hmc`, `su3_hmc`), the LLR sims (`phi4_llr`, `u1_llr`,
+`u1_llr_smoothed`, `bose_gas_llr`, `su2_llr`), `f32` variants, and the
+`bench_*` suite. Built in-tree only; registered with `reticolo_add_app`
+in `apps/CMakeLists.txt`.
+
+### Standalone examples (`examples/`)
+
+`examples/NN_short_name/` are **standalone consumer projects**. Each
+directory can be copied out of the repo and still build: it carries its
+own driver source(s), an inline find-or-fetch `CMakeLists.txt`, a `run.sh`
+bash sweep, and an `analyze.py`.
+
+The find-or-fetch block near the top of each example's `CMakeLists.txt`
+resolves `reticolo::reticolo` in three stages:
+
+1. Reuse the target if already configured (in-tree aggregate build).
+2. `add_subdirectory("../../")` if the sibling checkout is present
+   (`../../include/reticolo/reticolo.hpp` exists).
+3. `FetchContent_Declare` a pinned git tag otherwise.
+
+```cmake
+if(NOT TARGET reticolo::reticolo)
+    set(_root "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+    if(EXISTS "${_root}/include/reticolo/reticolo.hpp")
+        add_subdirectory("${_root}" "${CMAKE_BINARY_DIR}/_reticolo" EXCLUDE_FROM_ALL)
+    else()
+        include(FetchContent)
+        FetchContent_Declare(reticolo
+            GIT_REPOSITORY https://github.com/olmo-francesconi/reticolo.git
+            GIT_TAG        main    # pin a release tag/SHA for reproducible builds
+            GIT_SHALLOW    TRUE)
+        FetchContent_MakeAvailable(reticolo)
+    endif()
+endif()
+```
+
+Targets are named `exNN_<binary>` with `OUTPUT_NAME` set to the clean
+binary name so the in-tree aggregate build has no target-name collisions.
+
+### Build flags
+
+`RETICOLO_BUILD_APPS`, `RETICOLO_BUILD_EXAMPLES`, and
+`RETICOLO_BUILD_TESTS` all default `OFF`. A bare `cmake` or a
+`FetchContent`/`add_subdirectory` consumer builds **core/io/cli only**.
+Every preset in `CMakePresets.json` sets all three `ON`, so
+`cmake --preset … && ctest --preset …` behaves exactly as before.
+
+OpenMP is not `REQUIRED`; if the toolchain lacks it (e.g. Apple Clang)
+the configure degrades gracefully to serial. The `macos-appleclang` preset
+sets `RETICOLO_ENABLE_OPENMP=OFF` explicitly.
+
 ## Tests
 
 - `tests/unit/` — types in isolation: `Site`, `Indexing`, pool, `Lattice`,

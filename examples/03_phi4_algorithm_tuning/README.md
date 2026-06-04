@@ -47,17 +47,24 @@ samples per second.
   different sensitivities to the dynamics, and the optimum on the
   (τ, n_md) plane shifts with the observable.
 
-## Run it
+## Building & running
 
-```bash
-# 1. build (once)
-cmake --build --preset macos-appleclang --target tune_phi4
+Standalone build:
 
-# 2. sweep (parallel; default = one job per core) + analyse + plot
+```sh
+cd examples/03_phi4_algorithm_tuning
+cmake -S . -B build && cmake --build build
+```
+
+Or let `run.sh` do it automatically:
+
+```sh
 bash   examples/03_phi4_algorithm_tuning/run.sh
 python examples/03_phi4_algorithm_tuning/analyze.py
 python examples/03_phi4_algorithm_tuning/plot.py
 ```
+
+## Run it
 
 Configurable via environment variables on `run.sh`: `L`, `NDIM`, `KAPPA`,
 `LAMBDA`, `N_THERM`, `N_PROD`, `SEED`, `JOBS`.

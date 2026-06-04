@@ -18,16 +18,9 @@
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/../_common/preset.sh" "$@"
-hmc_bin="$root/build/$preset/apps/u1_hmc"
-llr_bin="$root/build/$preset/apps/u1_llr"
-
-for b in "$hmc_bin" "$llr_bin"; do
-    if [[ ! -x $b ]]; then
-        echo "binary not found at $b" >&2
-        echo "Build first: cmake --build --preset $preset" >&2
-        exit 1
-    fi
-done
+build_example
+hmc_bin="$example_bin/u1_hmc"
+llr_bin="$example_bin/u1_llr"
 
 results="$here/results"
 mkdir -p "$results"

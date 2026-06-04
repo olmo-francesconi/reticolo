@@ -5,7 +5,21 @@ scalar field driven by HMC, full reproducibility metadata in the HDF5
 output, susceptibility + magnetisation observers recorded as time series.
 The completed app is ~55 LOC.
 
-## Skeleton
+## Builtin apps vs standalone examples
+
+**Builtin app** (`apps/`): one canonical sim per action/algorithm variant,
+built in-tree only. Drop a `.cpp` here and register it in
+`apps/CMakeLists.txt` with `reticolo_add_app(my_app my_app.cpp)`.
+
+**Standalone example** (`examples/NN_short_name/`): an end-to-end study
+that a user can copy out of the repo and build independently. Each example
+is its own CMake project that links `reticolo::reticolo` via a find-or-fetch
+block (see the `apps/ and examples/` section in [architecture.md](architecture.md)).
+Details on writing one are at the end of this file.
+
+---
+
+## Skeleton (builtin app)
 
 Apps live in [`apps/`](../apps/) and get registered through one CMake line:
 
@@ -317,3 +331,106 @@ binary name + expected paths.
 - Reset `phi[x] = old;` after a single-site FD probe inside a loop.
 - Central diff noise floor with ε = 1e-4 is ~1e-8, not 1e-12 — don't
   over-tighten the tolerance.
+
+---
+
+# Writing a standalone example
+
+A standalone example lives in `examples/NN_short_name/`, carries its own
+`CMakeLists.txt` (find-or-fetch), a `run.sh` sweep, and an `analyze.py`.
+It must build from that directory alone — no dependency on the in-tree
+`apps/` build.
+
+## Minimal layout (single binary — model: `examples/01_phi4_tuning/`)
+
+```
+examples/01_phi4_tuning/
+  CMakeLists.txt     # find-or-fetch + one add_executable
+  phi4_hmc.cpp       # driver source (copy of or inspired by apps/phi4_hmc.cpp)
+  run.sh             # bash sweep using build_example from _common/preset.sh
+  analyze.py         # python post-processing
+  README.md          # physics write-up + knobs table + "Building & running"
+```
+
+## Two-binary template (`examples/04_phi4_llr/`)
+
+Same layout; `CMakeLists.txt` registers two targets via a `foreach`:
+
+```cmake
+foreach(_app phi4_hmc phi4_llr)
+    add_executable(ex04_${_app} ${_app}.cpp)
+    set_target_properties(ex04_${_app} PROPERTIES OUTPUT_NAME ${_app})
+    target_link_libraries(ex04_${_app} PRIVATE reticolo::reticolo)
+endforeach()
+```
+
+The `exNN_` prefix keeps target names unique across the in-tree aggregate
+build while `OUTPUT_NAME` keeps the binary name clean.
+
+## Step 1 — CMakeLists.txt
+
+Copy the find-or-fetch block from an existing example verbatim, then
+replace the project name and executable registration. Minimum:
+
+```cmake
+cmake_minimum_required(VERSION 3.25)
+project(example_NN_<name> CXX)
+
+if(NOT TARGET reticolo::reticolo)
+    set(_root "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+    if(EXISTS "${_root}/include/reticolo/reticolo.hpp")
+        add_subdirectory("${_root}" "${CMAKE_BINARY_DIR}/_reticolo" EXCLUDE_FROM_ALL)
+    else()
+        include(FetchContent)
+        FetchContent_Declare(reticolo
+            GIT_REPOSITORY https://github.com/olmo-francesconi/reticolo.git
+            GIT_TAG        main    # pin a release tag/SHA for reproducible builds
+            GIT_SHALLOW    TRUE)
+        FetchContent_MakeAvailable(reticolo)
+    endif()
+endif()
+
+add_executable(exNN_<binary> <binary>.cpp)
+set_target_properties(exNN_<binary> PROPERTIES OUTPUT_NAME <binary>)
+target_link_libraries(exNN_<binary> PRIVATE reticolo::reticolo)
+```
+
+## Step 2 — run.sh
+
+Source `_common/preset.sh`, call `build_example`, then use `$example_bin`
+as the directory holding the built binaries:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../_common/preset.sh" "$@"
+build_example
+binary="$example_bin/<binary>"
+# ... sweep logic ...
+```
+
+`build_example` configures+builds the example's `CMakeLists.txt` in
+`$here/build/$preset` via the find-or-fetch path. The user can override
+the preset with `RETICOLO_PRESET=macos-llvm ./run.sh` or pass `--preset`.
+
+## Step 3 — register in examples/CMakeLists.txt
+
+```cmake
+add_subdirectory(NN_<name>)
+```
+
+This is only reached when `RETICOLO_BUILD_EXAMPLES=ON` (set by all
+presets); it compile-checks the example in CI without affecting library
+consumers.
+
+## Step 4 — README.md
+
+Include a **Building & running** section (see the template in each
+example's README). One-liner for standalone build:
+
+```bash
+cd examples/NN_<name>
+cmake -S . -B build && cmake --build build
+```
+
+And note that `./run.sh` does this automatically.

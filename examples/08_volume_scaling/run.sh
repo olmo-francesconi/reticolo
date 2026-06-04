@@ -12,12 +12,8 @@ set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/../_common/preset.sh" "$@"
 
-bin="$root/build/$preset/apps/bench_volume_scaling"
-if [[ ! -x $bin ]]; then
-    echo "binary not found at $bin" >&2
-    echo "Build first: cmake --build --preset $preset" >&2
-    exit 1
-fi
+build_example
+bin="$example_bin/bench_volume_scaling"
 
 results="$here/results"
 mkdir -p "$results"

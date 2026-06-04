@@ -41,14 +41,24 @@ Tr U_p)` (so `S_W ≥ 0`, weight `exp(−S)`, `H = K + S`). Mode-A LLR with
 neutral starting point. The reconstructed quantity is `ln ρ_natural(S) =
 ∫ a(E) dE`, matching the formula in examples 04 (φ⁴) and 05 (U(1)).
 
-## How to run
+## Building & running
+
+Standalone build:
 
 ```sh
-cmake --build --preset macos-appleclang -j
+cd examples/07_su2_llr
+cmake -S . -B build && cmake --build build
+```
+
+Or let `run.sh` do it automatically (`build_example` is called internally):
+
+```sh
 ./run.sh         # ~5 min on 8 cores at L=4 4D defaults
 python3 analyze.py
 open rho_hmc_vs_llr.pdf
 ```
+
+Override the preset with `RETICOLO_PRESET=macos-llvm ./run.sh`.
 
 Tunable knobs (env vars):
 

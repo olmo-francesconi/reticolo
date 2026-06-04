@@ -35,12 +35,24 @@ parameter surface.
   within the per-replica statistical noise — this is the empirical
   unbiasedness check.
 
-## Run
+## Building & running
+
+Standalone build:
 
 ```sh
-cmake --build --preset macos-appleclang   # builds u1_llr and u1_llr_smoothed
-./run.sh                                   # ~6 min on 8 cores
+cd examples/09_u1_llr_smoothed
+cmake -S . -B build && cmake --build build
 ```
+
+Or let `run.sh` do it automatically:
+
+```sh
+./run.sh    # ~6 min on 8 cores
+```
+
+Override the preset with `RETICOLO_PRESET=macos-llvm ./run.sh`.
+
+## Run
 
 Outputs:
 

@@ -20,16 +20,25 @@ MC) is **β_c ≈ 0.693002**, **ν = 0.7112(5)** ⇒ **1/ν ≈ 1.406**.
 - Joint extraction of (β_c, 1/ν) via collapse minimisation lands within ~0.1%
   on β_c and a few percent on 1/ν at the shipped defaults.
 
-## Run it
+## Building & running
 
-```bash
-# 1. build (once)
-cmake --build --preset macos-appleclang
+Standalone build:
 
-# 2. sweep (parallel across cores) + analyse
+```sh
+cd examples/02_on_sigma_critical
+cmake -S . -B build && cmake --build build
+```
+
+Or let `run.sh` do it automatically:
+
+```sh
 bash examples/02_on_sigma_critical/run.sh
 python3 examples/02_on_sigma_critical/analyze.py
 ```
+
+Override the preset with `RETICOLO_PRESET=macos-llvm ./run.sh`.
+
+## Run it
 
 Results land in `examples/02_on_sigma_critical/results/` (one HDF5 per (L, β))
 and `binder.png` next to the script.

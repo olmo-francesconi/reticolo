@@ -9,13 +9,8 @@
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/../_common/preset.sh" "$@"
-binary="$root/build/$preset/apps/phi4_hmc"
-
-if [[ ! -x $binary ]]; then
-    echo "phi4_hmc binary not found at $binary" >&2
-    echo "Build it first: cmake --build --preset $preset" >&2
-    exit 1
-fi
+build_example
+binary="$example_bin/phi4_hmc"
 
 results="$here/results"
 mkdir -p "$results"

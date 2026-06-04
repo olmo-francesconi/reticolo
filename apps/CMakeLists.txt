@@ -20,7 +20,6 @@ reticolo_add_app(su3_hmc_f32         su3_hmc_f32.cpp)
 reticolo_add_app(su2_llr             su2_llr.cpp)
 reticolo_add_app(bench_wilson_vs_compact_u1 bench_wilson_vs_compact_u1.cpp)
 reticolo_add_app(bench_actions      bench_actions.cpp)
-reticolo_add_app(bench_volume_scaling bench_volume_scaling.cpp)
 reticolo_add_app(bench_rng          bench_rng.cpp)
 reticolo_add_app(bench_readme       bench_readme.cpp)
 reticolo_add_app(bench_integrators  bench_integrators.cpp)
@@ -36,10 +35,6 @@ reticolo_add_app(bench_gauge_vs_scalar bench_gauge_vs_scalar.cpp)
 reticolo_add_app(bench_phase_quenched  bench_phase_quenched.cpp)
 reticolo_add_app(bench_metropolis_sweep bench_metropolis_sweep.cpp)
 reticolo_add_app(bench_precision_hmc   bench_precision_hmc.cpp)
-reticolo_add_app(tune_phi4_metropolis    tune_phi4_metropolis.cpp)
-reticolo_add_app(tune_phi4_hmc_leapfrog  tune_phi4_hmc_leapfrog.cpp)
-reticolo_add_app(tune_phi4_hmc_omelyan2  tune_phi4_hmc_omelyan2.cpp)
-reticolo_add_app(tune_phi4_hmc_omelyan4  tune_phi4_hmc_omelyan4.cpp)
 
 # OpenMP is inherited transitively through reticolo::core — no per-app link
 # needed. Pragmas in headers/apps are inert when -fopenmp is off.

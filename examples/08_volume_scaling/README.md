@@ -43,12 +43,22 @@ This replaces the older adaptive-batch best-of-N timer (still used by
 `bench_actions`): noise is now comparable across volumes, and the
 SU(3)-4D-large-L tail can't run away.
 
-## Run
+## Building & running
+
+Standalone build:
 
 ```sh
-cmake --build --preset macos-appleclang   # ensure bench_volume_scaling is built
+cd examples/08_volume_scaling
+cmake -S . -B build && cmake --build build
+```
+
+Or let `run.sh` handle it automatically:
+
+```sh
 examples/08_volume_scaling/run.sh         # or: --preset linux-gcc
 ```
+
+## Run
 
 Env knobs (all optional):
 - `NDIMS=2,3,4`

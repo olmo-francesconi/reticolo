@@ -16,8 +16,9 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(RETICOLO_BUILD_APPS         "Build reference apps"                ON)
-option(RETICOLO_BUILD_TESTS        "Build test suite"                    ON)
+option(RETICOLO_BUILD_APPS         "Build reference apps"                OFF)
+option(RETICOLO_BUILD_EXAMPLES     "Build standalone example consumers"  OFF)
+option(RETICOLO_BUILD_TESTS        "Build test suite"                    OFF)
 option(RETICOLO_BUILD_IO           "Build the HDF5-backed io subsystem"  ON)
 option(RETICOLO_ENABLE_OPENMP      "Enable OpenMP threading in apps"     ON)
 option(RETICOLO_WARNINGS_AS_ERRORS "Treat warnings as errors"            OFF)
@@ -31,12 +32,19 @@ if(RETICOLO_BUILD_IO)
 endif()
 
 # Optional OpenMP. Exposed as an INTERFACE target so apps that opt in just
-# link `reticolo_openmp`. Pragmas in core headers are inert without -fopenmp.
+# link `reticolo_openmp`. Pragmas in core headers are inert without -fopenmp,
+# so a toolchain that lacks OpenMP (e.g. Apple Clang) degrades to serial rather
+# than failing the configure — important for standalone consumers.
 if(RETICOLO_ENABLE_OPENMP)
-    find_package(OpenMP REQUIRED COMPONENTS CXX)
-    add_library(reticolo_openmp INTERFACE)
-    add_library(reticolo::openmp ALIAS reticolo_openmp)
-    target_link_libraries(reticolo_openmp INTERFACE OpenMP::OpenMP_CXX)
+    find_package(OpenMP COMPONENTS CXX)
+    if(OpenMP_CXX_FOUND)
+        add_library(reticolo_openmp INTERFACE)
+        add_library(reticolo::openmp ALIAS reticolo_openmp)
+        target_link_libraries(reticolo_openmp INTERFACE OpenMP::OpenMP_CXX)
+    else()
+        message(STATUS "reticolo: OpenMP not found — building without it (serial)")
+        set(RETICOLO_ENABLE_OPENMP OFF)
+    endif()
 endif()
 
 include(FetchContent)
@@ -185,6 +193,10 @@ endif()
 if(PROJECT_IS_TOP_LEVEL AND RETICOLO_BUILD_TESTS AND EXISTS "${PROJECT_SOURCE_DIR}/tests/CMakeLists.txt")
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(PROJECT_IS_TOP_LEVEL AND RETICOLO_BUILD_EXAMPLES AND EXISTS "${PROJECT_SOURCE_DIR}/examples/CMakeLists.txt")
+    add_subdirectory(examples)
 endif()
 
 message(STATUS "reticolo: version       ${PROJECT_VERSION}")

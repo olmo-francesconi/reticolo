@@ -36,16 +36,26 @@ over the *full* chosen range at constant relative precision.
 The HMC stage is therefore a check + a useful range-finder, not the
 endpoint.
 
-## Run it
+## Building & running
 
-```bash
-# 1. build (once)
-cmake --build --preset macos-appleclang
+Standalone build:
 
-# 2. run both stages + compare
+```sh
+cd examples/04_phi4_llr
+cmake -S . -B build && cmake --build build
+```
+
+Or let `run.sh` do it automatically:
+
+```sh
 bash examples/04_phi4_llr/run.sh
 python3 examples/04_phi4_llr/analyze.py
 ```
+
+Override the preset with `RETICOLO_PRESET=macos-llvm ./run.sh` (recommended on
+macOS for OpenMP-enabled LLR replicas).
+
+## Run it
 
 Outputs in `examples/04_phi4_llr/results/`:
 * `hmc_kappa<k>.h5`  — full HMC output (per-trajectory S, magnetisation, etc.)

@@ -36,16 +36,26 @@ the transition. To see a sharper double peak: raise `L` (cost ~ L⁴, so
 keep an eye on wall time) and use `BETAS="1.00 1.01 1.02"` to bracket
 the transition more tightly.
 
-## Run it
+## Building & running
 
-```bash
-# 1. build (once)
-cmake --build --preset macos-appleclang
+Standalone build:
 
-# 2. run both stages + compare
+```sh
+cd examples/05_u1_llr
+cmake -S . -B build && cmake --build build
+```
+
+Or let `run.sh` do it automatically:
+
+```sh
 bash examples/05_u1_llr/run.sh
 python3 examples/05_u1_llr/analyze.py
 ```
+
+Override the preset with `RETICOLO_PRESET=macos-llvm ./run.sh` (recommended on
+macOS for OpenMP-enabled LLR replicas).
+
+## Run it
 
 Outputs in `examples/05_u1_llr/results/`:
 * `hmc_beta<b>.h5`   — full HMC output (per-trajectory S, plaquette, etc.)
