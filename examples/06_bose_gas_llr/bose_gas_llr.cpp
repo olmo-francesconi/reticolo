@@ -42,8 +42,14 @@ int main(int argc, char** argv) {
     auto const& delta =
         p.opt<double>("delta",
                       2.0,
-                      "single LLR tuning knob: Gaussian half-width AND replica spacing in S_I. "
-                      "n_rep is derived so adjacent window centres are exactly `delta` apart.");
+                      "Gaussian window half-width in S_I (and the replica spacing unless "
+                      "--spacing is given).");
+    auto const& spacing =
+        p.opt<double>("spacing",
+                      0.0,
+                      "window-centre spacing in S_I; 0 means `delta` (non-overlapping). "
+                      "spacing < delta gives overlapping windows: denser constraint grid "
+                      "without stiffening the window force. n_rep is derived from it.");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md = p.opt<int>("n_md", 10, "MD steps per trajectory");
     auto const& n_nr = p.opt<int>("n_nr", 6, "Newton-Raphson warm-up iterations");
@@ -69,8 +75,8 @@ int main(int argc, char** argv) {
     log::act(base);
 
     // ---- Replica geometry ----
-    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e = delta;
+    double const d_e = spacing > 0.0 ? spacing : delta;
+    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
 
     // ---- Replicas ----

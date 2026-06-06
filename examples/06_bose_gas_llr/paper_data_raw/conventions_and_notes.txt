@@ -1,0 +1,99 @@
+Reference data from arXiv:1910.11026 (PRD 101, 014504, 2020)
+Francesconi, Holzmann, Lucini, Rago
+=============================================================
+
+ACTION (Eq. 2 in paper):
+  S = sum_x [ (2d + m^2) phi_x* phi_x + lambda (phi_x* phi_x)^2
+            - sum_{nu=1}^{4} ( phi_x* e^{-mu delta_{nu,4}} phi_{x+nu}
+                               + phi_{x+nu}* e^{mu delta_{nu,4}} phi_x ) ]
+
+  With phi_x = phi_{1,x} + i phi_{2,x}, split into real/imaginary:
+  S = S^R + i sinh(mu) S^I
+
+  S^R = sum_x [ (1/2)(2d+m^2) phi_{a,x}^2 + (lambda/4)(phi_{a,x}^2)^2
+              - sum_{i=1}^{3} phi_{a,x} phi_{a,x+i}
+              - cosh(mu) phi_{a,x} phi_{a,x+4} ]
+
+  S^I = sum_x eps_{ab} phi_{a,x} phi_{b,x+4}   [antisymmetric tensor coupling]
+
+  PARAMETERS USED IN ALL SIMULATIONS: lambda = m = 1.0
+
+DEFINITION OF PHASE FACTOR:
+  <e^{i phi}>_pq = Z / Z_pq
+                = [integral rho(s) cos(mu s) ds] / [integral rho(s) ds]
+                = [integral rho(s) cos(sinh(mu) * s) ds] / [integral rho(s) ds]
+  Note: the argument is sinh(mu)*s, not mu*s, because the imaginary action
+  is S = S^R + i sinh(mu) S^I, so the Fourier transform uses sinh(mu) as frequency.
+
+DEFINITION OF OVERLAP FREE ENERGY:
+  Delta_F = F - F_pq = -(1/V) log(<e^{i phi}>_pq)   [PER UNIT VOLUME]
+  So: <e^{i phi}>_pq = exp(-V Delta_F)
+
+DATA FILES:
+  1910.11026_deltaF_4to10_tab2.csv   -- Tab 2: Delta_F * 1e3 for 4^4 to 10^4, mu 0.1-2.0
+  1910.11026_deltaF_all_volumes_tab4.csv  -- Tab 4: Delta_F * 1e3 for all volumes + infty extrap, mu 0.1-0.9
+  1910.11026_mu_c_tab3.csv           -- Tab 3: critical mu_c values per volume
+
+VOLUMES SIMULATED: 4^4, 6^4, 8^4, 10^4, 16^4
+MU RANGE: 0.1 to 2.0 (full), 0.1 to 0.9 (low density / all volumes)
+  Note: method fails near mu_c ~ 1.15 for volumes > 6^4
+
+SIMULATION PARAMETERS (Tab 1):
+  4^4:   N_NR=10, N_RM=1000, N_MC=2000, N_S^I_k=40,  N_rep=10
+  6^4:   N_NR=10, N_RM=1000, N_MC=2000, N_S^I_k=80,  N_rep=10
+  8^4:   N_NR=20, N_RM=2000, N_MC=2000, N_S^I_k=160, N_rep=10
+  10^4:  N_NR=50, N_RM=2000, N_MC=2000, N_S^I_k=200, N_rep=10
+  16^4:  N_NR=50, N_RM=2000, N_MC=2000, N_S^I_k=300, N_rep=10
+
+CRITICAL CHEMICAL POTENTIAL:
+  Mean-field: mu_c ~ 1.15
+  Dual method (Gattringer:2012df): mu_c = 1.146 +/- 0.001
+  Paper results (Tab 3): 4^4 -> 1.165(7), 6^4 -> 1.155(4), 8^4 -> 1.152(14), 10^4 -> 1.141(44)
+
+=============================================================
+Other papers checked:
+
+arXiv:1503.00450 (Langfeld, Lucini, Rago, Pellegrini, Bongiovanni — DISCRETE2014 proceedings)
+  Focus: Z_3 spin model and density-of-states methods; no Bose gas numerical data tables.
+  Only figures referenced (overlap_all2.pdf for Z_3). No tabulated Bose gas data.
+
+arXiv:1601.02929 (Pellegrini et al. — Lattice 2015 proceedings)
+  Apply LLR to the relativistic Bose gas. Parameters: m=lambda=1, volume 8^4 shown in figure.
+  Results shown only as a figure (phase_ply.png) comparing LLR to mean field.
+  No tabulated data; no 4^4 data shown.
+
+arXiv:1912.04190 (Francesconi, Holzmann, Lucini, Rago, Rantaharju — Lattice 2019 proceedings)
+  Summary of 1910.11026 results at Lattice 2019. No new data tables.
+  Adds preliminary results on general observables (density <n>, <phi^2>) for 4^4 and 6^4.
+  Figure shows phase factor comparison for volumes 4^4 to 16^4 (no numerical table).
+
+=============================================================
+CONVENTION MATCHING NOTES:
+
+For a simulation with action parameters mass=1.0, lambda=1.0 and phase factor
+defined as <cos S_I>_pq (cosine of the bare imaginary part):
+
+The paper's phase factor is <e^{i phi}>_pq = <cos(sinh(mu) S^I)>_pq
+where S^I = sum_x eps_{ab} phi_{a,x} phi_{b,x+4}.
+
+If your simulation defines the phase factor directly as <cos(S_I)>_pq where
+S_I is the same S^I field, then the comparison must account for the sinh(mu) prefactor:
+  Paper: phase factor = <cos(sinh(mu) * S^I)>_pq
+  Naive: <cos(S^I)>_pq
+
+These are the same ONLY if your code uses sinh(mu) as the coupling coefficient in
+the Fourier integral (i.e., integrates against cos(sinh(mu)*s), not cos(mu*s)).
+
+The paper's action is the standard one where mu enters as an imaginary vector
+potential in the time direction: the hopping term is phi_x* e^{-mu} phi_{x+4hat}.
+This is the convention used broadly in the literature (Aarts, Gattringer).
+The imaginary part of the action is S^I = sum_x eps_{ab} phi_{a,x} phi_{b,x+4},
+which does NOT contain mu explicitly; mu only appears as sinh(mu) in the Fourier
+transform of the partition function.
+
+Match is straightforward if your simulation:
+  (a) uses the same lattice action (hopping with e^{+/-mu} in time direction),
+  (b) computes S^I = sum_x eps_{ab} phi_{a,x} phi_{b,x+4},
+  (c) computes the overlap free energy as Delta_F = -(1/V) log(<cos(sinh(mu)*S^I)>_pq).
+
+The reference values in the CSV files are Delta_F * 1e3 (i.e., divided by 1000).
