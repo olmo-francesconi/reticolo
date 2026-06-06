@@ -14,8 +14,10 @@
 //  * Run-id is bound per OpenMP iteration via RAII Scope (works with
 //    schedule(dynamic) and N_sims > N_threads — same thread rebinds
 //    each iteration).
-//  * Per-run files in parallel mode: <outdir>/run.<runid>.log, lazy-open,
-//    per-line flush.
+//  * Per-run files in parallel mode: <outdir>/<stem>.<runid>.log, lazy-open,
+//    per-line flush. `log::start(output_path)` sets stem = the output file's
+//    stem so concurrent sims sharing an outdir don't append to each other's
+//    logs; bare `init_parallel` keeps the default "run".
 
 #include <reticolo/core/build_info.hpp>
 
@@ -60,6 +62,7 @@ namespace detail {
 struct Config {
     bool parallel_mode = false;
     std::filesystem::path outdir{"."};
+    std::string file_stem{"run"};
     std::size_t run_tag_width = 4;
     Level min_level           = Level::info;
     bool color                = false;
@@ -190,7 +193,7 @@ inline std::ofstream* run_file_for_locked(std::string const& run_id) {
     if (it != files.end()) {
         return &it->second;
     }
-    auto path     = cfg().outdir / std::format("run.{}.log", run_id);
+    auto path     = cfg().outdir / std::format("{}.{}.log", cfg().file_stem, run_id);
     auto [ins, _] = files.emplace(run_id, std::ofstream(path, std::ios::out | std::ios::app));
     return &ins->second;
 }
@@ -405,9 +408,11 @@ inline void init_serial() {
     detail::wall_start();
 }
 
-inline void init_parallel(std::filesystem::path outdir, std::size_t run_tag_width = 4) {
+inline void init_parallel(std::filesystem::path outdir, std::size_t run_tag_width = 4,
+                          std::string file_stem = "run") {
     detail::cfg().parallel_mode = true;
     detail::cfg().outdir        = std::move(outdir);
+    detail::cfg().file_stem     = std::move(file_stem);
     detail::cfg().run_tag_width = run_tag_width;
     detail::cfg().color         = detail::detect_color(fileno(stdout));
     detail::mono_start();
@@ -536,7 +541,7 @@ inline void banner() {
 inline void start(std::filesystem::path const& output_path) {
     auto dir = output_path.parent_path();
     init_parallel(dir.empty() ? std::filesystem::path{"."} : std::move(dir),
-                  /*run_tag_width=*/4);
+                  /*run_tag_width=*/4, output_path.stem().string());
     banner();
 }
 

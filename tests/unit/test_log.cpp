@@ -217,3 +217,23 @@ TEST_CASE("Scope binds a run-id for the current thread; clears on exit", "[log]"
 
     rl::init_serial();  // restore mode for any later tests
 }
+
+TEST_CASE("start(output_path) namespaces per-run files by the output stem", "[log]") {
+    auto const tmp = std::filesystem::temp_directory_path() / "reticolo_log_stem_test";
+    std::filesystem::create_directories(tmp);
+    rl::init_parallel(tmp, /*run_tag_width=*/4, "llr_mu0.9_s43");
+    rl::set_color(false);
+    StreamCapture cap;
+
+    {
+        auto _ = rl::scope("r007");
+        rl::info("hmc", "scoped line");
+    }
+
+    // Concurrent sims sharing an outdir must not collide on run.<id>.log.
+    REQUIRE(std::filesystem::exists(tmp / "llr_mu0.9_s43.r007.log"));
+    REQUIRE(!std::filesystem::exists(tmp / "run.r007.log"));
+    std::filesystem::remove_all(tmp);
+
+    rl::init_serial();
+}
