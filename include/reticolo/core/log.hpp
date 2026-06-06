@@ -408,8 +408,9 @@ inline void init_serial() {
     detail::wall_start();
 }
 
-inline void init_parallel(std::filesystem::path outdir, std::size_t run_tag_width = 4,
-                          std::string file_stem = "run") {
+inline void init_parallel(std::filesystem::path outdir,
+                          std::size_t run_tag_width = 4,
+                          std::string file_stem     = "run") {
     detail::cfg().parallel_mode = true;
     detail::cfg().outdir        = std::move(outdir);
     detail::cfg().file_stem     = std::move(file_stem);
@@ -541,7 +542,8 @@ inline void banner() {
 inline void start(std::filesystem::path const& output_path) {
     auto dir = output_path.parent_path();
     init_parallel(dir.empty() ? std::filesystem::path{"."} : std::move(dir),
-                  /*run_tag_width=*/4, output_path.stem().string());
+                  /*run_tag_width=*/4,
+                  output_path.stem().string());
     banner();
 }
 
