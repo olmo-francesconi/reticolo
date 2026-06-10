@@ -65,7 +65,7 @@ struct BoseGas {
     [[nodiscard]] T s_local(Lattice<complex_t> const& l, Site x) const noexcept {
         std::size_t const d = l.ndims();
         T const coef_mass   = (T{2} * static_cast<T>(d)) + (mass * mass);
-        T const ch          = std::cosh(mu);
+        T const ch          = cosh_mu_();
         complex_t const phi = l[x];
         T const abs2        = std::norm(phi);
         complex_t staple{T{0}, T{0}};
@@ -73,14 +73,13 @@ struct BoseGas {
             T const c = (nu + 1 == d) ? ch : T{1};
             staple += c * (l[l.next(x, nu)] + l[l.prev(x, nu)]);
         }
-        return (coef_mass * abs2) + (lambda * abs2 * abs2) -
-               (T{2} * std::real(std::conj(phi) * staple));
+        return (coef_mass * abs2) + (lambda * abs2 * abs2) - (T{2} * re_conj_mul_(phi, staple));
     }
 
     [[nodiscard]] T ds_local(Lattice<complex_t> const& l, Site x, complex_t new_v) const noexcept {
         std::size_t const d = l.ndims();
         T const coef_mass   = (T{2} * static_cast<T>(d)) + (mass * mass);
-        T const ch          = std::cosh(mu);
+        T const ch          = cosh_mu_();
         complex_t const phi = l[x];
         T const a_old       = std::norm(phi);
         T const a_new       = std::norm(new_v);
@@ -90,13 +89,13 @@ struct BoseGas {
             staple += c * (l[l.next(x, nu)] + l[l.prev(x, nu)]);
         }
         return (coef_mass * (a_new - a_old)) + (lambda * ((a_new * a_new) - (a_old * a_old))) -
-               (T{2} * std::real(std::conj(new_v - phi) * staple));
+               (T{2} * re_conj_mul_(new_v - phi, staple));
     }
 
     [[nodiscard]] T s_full(Lattice<complex_t> const& l) const noexcept {
         std::size_t const d   = l.ndims();
         T const coef_mass     = (T{2} * static_cast<T>(d)) + (mass * mass);
-        T const ch_minus_1    = std::cosh(mu) - T{1};
+        T const ch_minus_1    = cosh_mu_() - T{1};
         complex_t const total = detail::reduce_fwd_split_last<complex_t>(
             l,
             [coef_mass, lam = lambda, ch_minus_1](
@@ -104,7 +103,7 @@ struct BoseGas {
                 T const abs2 = std::norm(phi);
                 // hopping(x) = real( conj(phi) * (fwd_total + (ch-1)*fwd_last) )
                 complex_t const weighted = fwd_total + (ch_minus_1 * fwd_last);
-                T const hop              = std::real(std::conj(phi) * weighted);
+                T const hop              = re_conj_mul_(phi, weighted);
                 return complex_t{(coef_mass * abs2) + (lam * abs2 * abs2) - (T{2} * hop), T{0}};
             });
         T const s    = std::real(total);
@@ -118,7 +117,7 @@ struct BoseGas {
     void compute_force(Lattice<complex_t> const& l, Lattice<complex_t>& force) const noexcept {
         std::size_t const d  = l.ndims();
         T const coef_mass    = (T{2} * static_cast<T>(d)) + (mass * mass);
-        T const ch_minus_1   = std::cosh(mu) - T{1};
+        T const ch_minus_1   = cosh_mu_() - T{1};
         complex_t* const out = force.data();
         // F_R(x) = -2(2d+m^2) phi_x - 4 lambda |phi|^2 phi_x + 2 * staple
         // staple = sum_{mu, +-} phi_{x+mu} + (ch-1) * (phi_{x+last} + phi_{x-last})
@@ -142,7 +141,7 @@ struct BoseGas {
                                 complex_t k_dt) const noexcept {
         std::size_t const d = l.ndims();
         T const coef_mass   = (T{2} * static_cast<T>(d)) + (mass * mass);
-        T const ch_minus_1  = std::cosh(mu) - T{1};
+        T const ch_minus_1  = cosh_mu_() - T{1};
         complex_t* const mp = mom.data();
         detail::visit_nn_split_last<complex_t>(
             l,
@@ -167,10 +166,8 @@ struct BoseGas {
         complex_t const phi_x   = l[x];
         complex_t const phi_pmu = l[l.next(x, tau)];
         complex_t const phi_mmu = l[l.prev(x, tau)];
-        T const old_t =
-            T{2} * (std::imag(std::conj(phi_x) * phi_pmu) + std::imag(std::conj(phi_mmu) * phi_x));
-        T const new_t =
-            T{2} * (std::imag(std::conj(new_v) * phi_pmu) + std::imag(std::conj(phi_mmu) * new_v));
+        T const old_t = T{2} * (im_conj_mul_(phi_x, phi_pmu) + im_conj_mul_(phi_mmu, phi_x));
+        T const new_t = T{2} * (im_conj_mul_(new_v, phi_pmu) + im_conj_mul_(phi_mmu, new_v));
         return new_t - old_t;
     }
 
@@ -191,7 +188,7 @@ struct BoseGas {
             std::size_t const base   = w * s_tau;
             std::size_t const base_p = wp * s_tau;
             for (std::size_t k = 0; k < s_tau; ++k) {
-                acc += std::imag(std::conj(in[base + k]) * in[base_p + k]);
+                acc += im_conj_mul_(in[base + k], in[base_p + k]);
             }
         }
         T const s    = T{2} * acc;
@@ -243,7 +240,7 @@ struct BoseGas {
                                          T k_dt) const noexcept {
         std::size_t const d = l.ndims();
         T const coef_mass   = (T{2} * static_cast<T>(d)) + (mass * mass);
-        T const ch_minus_1  = std::cosh(mu) - T{1};
+        T const ch_minus_1  = cosh_mu_() - T{1};
         complex_t* const mp = mom.data();
         T const k_r         = k_dt * scale_r;
 
@@ -282,6 +279,33 @@ struct BoseGas {
 
     mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
     mutable T last_s_imag_ = std::numeric_limits<T>::quiet_NaN();
+
+    // cosh(mu) memo slots — public (like the caches above) to preserve
+    // aggregate-init; read only through `cosh_mu_()`. NaN key != NaN so the
+    // first call always computes.
+    mutable T cosh_mu_key_ = std::numeric_limits<T>::quiet_NaN();
+    mutable T cosh_mu_val_ = std::numeric_limits<T>::quiet_NaN();
+
+private:
+    // Re(conj(a) * b) and Im(conj(a) * b) without the full complex product —
+    // 2 mul + 1 add instead of 4 mul + 2 add with half the result discarded.
+    [[nodiscard]] static T re_conj_mul_(complex_t a, complex_t b) noexcept {
+        return (a.real() * b.real()) + (a.imag() * b.imag());
+    }
+    [[nodiscard]] static T im_conj_mul_(complex_t a, complex_t b) noexcept {
+        return (a.real() * b.imag()) - (a.imag() * b.real());
+    }
+
+    // cosh(mu) memoised on the current mu — `mu` is a fixed action parameter,
+    // but s_local/ds_local run per proposed site on the Metropolis cascade
+    // path where a fresh cosh per call is pure overhead.
+    [[nodiscard]] T cosh_mu_() const noexcept {
+        if (mu != cosh_mu_key_) {
+            cosh_mu_key_ = mu;
+            cosh_mu_val_ = std::cosh(mu);
+        }
+        return cosh_mu_val_;
+    }
 };
 
 }  // namespace reticolo::action
