@@ -144,6 +144,146 @@ adj_mul_2x2(double* out, double const* a, double const* b) noexcept {
     cmul_acc_a_conj(out[6], out[7], a[6], a[7], b[6], b[7]);
 }
 
+// ---------- batched AoSoA 2×2 complex products -------------------------------
+// Operate on `[4][B]` re/im slabs: entry (i,j) of site b lives at
+// `re[(2*i)+j][b]` / `im[(2*i)+j][b]`. The innermost b-loop is stride-1
+// packed data, so the compiler vectorises it at the target SIMD width.
+// `Acc` selects `out +=` over `out =`. Out must not alias the inputs.
+
+// out (+)= a · b
+template <bool Acc, std::size_t B, class T>
+[[gnu::always_inline]] inline void mul_2x2_batched(T (&out_re)[4][B],
+                                                   T (&out_im)[4][B],
+                                                   T const (&a_re)[4][B],
+                                                   T const (&a_im)[4][B],
+                                                   T const (&b_re)[4][B],
+                                                   T const (&b_im)[4][B]) noexcept {
+    for (std::size_t i = 0; i < 2; ++i) {
+        for (std::size_t j = 0; j < 2; ++j) {
+            T cr[B];
+            T ci[B];
+            for (std::size_t b = 0; b < B; ++b) {
+                cr[b] = T{0};
+                ci[b] = T{0};
+            }
+            for (std::size_t k = 0; k < 2; ++k) {
+                std::size_t const ka = (2 * i) + k;
+                std::size_t const kb = (2 * k) + j;
+                for (std::size_t b = 0; b < B; ++b) {
+                    cr[b] += (a_re[ka][b] * b_re[kb][b]) - (a_im[ka][b] * b_im[kb][b]);
+                    ci[b] += (a_re[ka][b] * b_im[kb][b]) + (a_im[ka][b] * b_re[kb][b]);
+                }
+            }
+            std::size_t const out_k = (2 * i) + j;
+            for (std::size_t b = 0; b < B; ++b) {
+                if constexpr (Acc) {
+                    out_re[out_k][b] += cr[b];
+                    out_im[out_k][b] += ci[b];
+                } else {
+                    out_re[out_k][b] = cr[b];
+                    out_im[out_k][b] = ci[b];
+                }
+            }
+        }
+    }
+}
+
+// out (+)= a · b†   →   out_{ij} = sum_k a_{ik} · conj(b_{jk})
+template <bool Acc, std::size_t B, class T>
+[[gnu::always_inline]] inline void mul_adj_2x2_batched(T (&out_re)[4][B],
+                                                       T (&out_im)[4][B],
+                                                       T const (&a_re)[4][B],
+                                                       T const (&a_im)[4][B],
+                                                       T const (&b_re)[4][B],
+                                                       T const (&b_im)[4][B]) noexcept {
+    for (std::size_t i = 0; i < 2; ++i) {
+        for (std::size_t j = 0; j < 2; ++j) {
+            T cr[B];
+            T ci[B];
+            for (std::size_t b = 0; b < B; ++b) {
+                cr[b] = T{0};
+                ci[b] = T{0};
+            }
+            for (std::size_t k = 0; k < 2; ++k) {
+                std::size_t const ka = (2 * i) + k;
+                std::size_t const kb = (2 * j) + k;
+                for (std::size_t b = 0; b < B; ++b) {
+                    cr[b] += (a_re[ka][b] * b_re[kb][b]) + (a_im[ka][b] * b_im[kb][b]);
+                    ci[b] += (a_im[ka][b] * b_re[kb][b]) - (a_re[ka][b] * b_im[kb][b]);
+                }
+            }
+            std::size_t const out_k = (2 * i) + j;
+            for (std::size_t b = 0; b < B; ++b) {
+                if constexpr (Acc) {
+                    out_re[out_k][b] += cr[b];
+                    out_im[out_k][b] += ci[b];
+                } else {
+                    out_re[out_k][b] = cr[b];
+                    out_im[out_k][b] = ci[b];
+                }
+            }
+        }
+    }
+}
+
+// out (+)= a† · b   →   out_{ij} = sum_k conj(a_{ki}) · b_{kj}
+template <bool Acc, std::size_t B, class T>
+[[gnu::always_inline]] inline void adj_mul_2x2_batched(T (&out_re)[4][B],
+                                                       T (&out_im)[4][B],
+                                                       T const (&a_re)[4][B],
+                                                       T const (&a_im)[4][B],
+                                                       T const (&b_re)[4][B],
+                                                       T const (&b_im)[4][B]) noexcept {
+    for (std::size_t i = 0; i < 2; ++i) {
+        for (std::size_t j = 0; j < 2; ++j) {
+            T cr[B];
+            T ci[B];
+            for (std::size_t b = 0; b < B; ++b) {
+                cr[b] = T{0};
+                ci[b] = T{0};
+            }
+            for (std::size_t k = 0; k < 2; ++k) {
+                std::size_t const ka = (2 * k) + i;
+                std::size_t const kb = (2 * k) + j;
+                for (std::size_t b = 0; b < B; ++b) {
+                    cr[b] += (a_re[ka][b] * b_re[kb][b]) + (a_im[ka][b] * b_im[kb][b]);
+                    ci[b] += (a_re[ka][b] * b_im[kb][b]) - (a_im[ka][b] * b_re[kb][b]);
+                }
+            }
+            std::size_t const out_k = (2 * i) + j;
+            for (std::size_t b = 0; b < B; ++b) {
+                if constexpr (Acc) {
+                    out_re[out_k][b] += cr[b];
+                    out_im[out_k][b] += ci[b];
+                } else {
+                    out_re[out_k][b] = cr[b];
+                    out_im[out_k][b] = ci[b];
+                }
+            }
+        }
+    }
+}
+
+// Batched TA(M): diagonal becomes ±i·(Im_{00} − Im_{11})/2; off-diag is the
+// anti-hermitian completion. Same math as traceless_antiherm_2x2.
+template <std::size_t B, class T>
+[[gnu::always_inline]] inline void traceless_antiherm_2x2_batched(
+    T (&ta_re)[4][B], T (&ta_im)[4][B], T const (&in_re)[4][B], T const (&in_im)[4][B]) noexcept {
+    for (std::size_t b = 0; b < B; ++b) {
+        T const diag_im = T{0.5} * (in_im[0][b] - in_im[3][b]);
+        ta_re[0][b]     = T{0};
+        ta_im[0][b]     = diag_im;
+        T const re01    = T{0.5} * (in_re[1][b] - in_re[2][b]);
+        T const im01    = T{0.5} * (in_im[1][b] + in_im[2][b]);
+        ta_re[1][b]     = re01;
+        ta_im[1][b]     = im01;
+        ta_re[2][b]     = -re01;
+        ta_im[2][b]     = im01;
+        ta_re[3][b]     = T{0};
+        ta_im[3][b]     = -diag_im;
+    }
+}
+
 // ---------- traceless anti-hermitian projection (su(2) algebra) -------------
 // TA(M) = (M − M†)/2 − (1/N)·Tr((M−M†)/2)·I. For SU(2) the diagonals become
 // ±i·(Im M_{00} − Im M_{11})/2 and the off-diagonals are the anti-hermitian
@@ -403,11 +543,29 @@ template <class T, class Rng>
 
 // K_per_link = ||h||² where (h_1, h_2, h_3) are the algebra coords of P.
 // Returns the total kinetic energy summed over n links — accumulated in double
-// regardless of the field precision T (the reduction-returns-double invariant).
+// regardless of the field precision T (the reduction-returns-double invariant,
+// applied at block granularity: T-lane accumulators over k_b sites folded into
+// the double total per block, so the loop has no per-site double chain).
 template <class T>
 [[gnu::always_inline]] inline double kinetic_slab(T const* p, std::size_t n) noexcept {
-    double k = 0.0;
-    for (std::size_t s = 0; s < n; ++s) {
+    constexpr std::size_t k_b   = 8;
+    std::size_t const tail_base = (n / k_b) * k_b;
+    double k                    = 0.0;
+    for (std::size_t s0 = 0; s0 < tail_base; s0 += k_b) {
+        T const* h3_row = p + (1 * n) + s0;
+        T const* h2_row = p + (2 * n) + s0;
+        T const* h1_row = p + (3 * n) + s0;
+        T acc[k_b];
+        for (std::size_t b = 0; b < k_b; ++b) {
+            acc[b] = (h1_row[b] * h1_row[b]) + (h2_row[b] * h2_row[b]) + (h3_row[b] * h3_row[b]);
+        }
+        double blk = 0.0;
+        for (std::size_t b = 0; b < k_b; ++b) {
+            blk += static_cast<double>(acc[b]);
+        }
+        k += blk;
+    }
+    for (std::size_t s = tail_base; s < n; ++s) {
         T const h3 = p[(1 * n) + s];
         T const h2 = p[(2 * n) + s];
         T const h1 = p[(3 * n) + s];

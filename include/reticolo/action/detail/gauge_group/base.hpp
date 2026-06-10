@@ -4,31 +4,87 @@
 
 #include <concepts>
 #include <cstddef>
+#include <type_traits>
 
 namespace reticolo::gauge_group {
 
-// Compile-time site-batch width for the batched SU(N) force kernels. The
-// batched force vectorises a `for b in 0..k_gauge_batch` loop over packed
-// sites, so to fill whole SIMD registers in single precision the batch must be
-// a multiple of the float lane count. We take the wider of {float lane width,
-// 8}: that keeps the well-tested 8 on NEON/SSE (4 lanes) and AVX2 (8 lanes) —
-// where the neighbour-index gather is amortised over 8 sites — and grows to 16
-// on AVX-512 so the float force uses full 512-bit registers (double then uses
-// two registers per batch). The cap `RETICOLO_GAUGE_K_BATCH_MAX` lets wide
-// ISAs that would spill the per-batch scratch (notably SU(3), 18 reals across
-// many `[k_gauge_batch]` arrays) be dialed back at build time without touching
-// the kernels — e.g. -DRETICOLO_GAUGE_K_BATCH_MAX=8.
+// Compile-time site-batch width for the batched SU(N) kernels. The batched
+// kernels vectorise a `for b in 0..k_gauge_batch<T>` loop over packed sites,
+// so the batch must be a multiple of the lane count of the field's scalar
+// type T. We take the wider of {T's lane width, 8}: 8 on NEON/SSE/AVX2 for
+// both precisions (the neighbour-index gather is amortised over 8 sites);
+// on AVX-512 the float batch would grow to 16 — but compilers default to
+// 256-bit vectors even with -mavx512f (prefer-vector-width=256), where a
+// 16-wide batch only doubles the per-batch scratch (notably SU(3), 18 reals
+// across many `[k_batch]` arrays) and spills. The cap therefore defaults to
+// 8; building for full 512-bit registers is the opt-in combo
+// -mprefer-vector-width=512 -DRETICOLO_GAUGE_K_BATCH_MAX=16 (double stays at
+// 8 = one zmm per row; only float grows to 16).
 #ifndef RETICOLO_GAUGE_K_BATCH_MAX
-    #define RETICOLO_GAUGE_K_BATCH_MAX 16
+    #define RETICOLO_GAUGE_K_BATCH_MAX 8
 #endif
 
+template <class T>
 [[nodiscard]] consteval std::size_t gauge_k_batch_() noexcept {
-    std::size_t const w   = math::k_vec_width_f > 8 ? math::k_vec_width_f : std::size_t{8};
+    std::size_t const lanes =
+        std::is_same_v<T, float> ? math::k_vec_width_f : math::k_vec_width_d;
+    std::size_t const w   = lanes > 8 ? lanes : std::size_t{8};
     std::size_t const cap = static_cast<std::size_t>(RETICOLO_GAUGE_K_BATCH_MAX);
     return w < cap ? w : cap;
 }
 
-inline constexpr std::size_t k_gauge_batch = gauge_k_batch_();
+template <class T>
+inline constexpr std::size_t k_gauge_batch = gauge_k_batch_<T>();
+
+// Load the (Re, Im) component slabs of one direction's links for a batch of
+// B sites into `[E][B]` AoSoA scratch (E = N² complex entries; component k's
+// Re at blk[(2k)·ns + s], Im at blk[(2k+1)·ns + s]).
+//
+// The gather form takes a per-lane site-index array. Neighbour batches are
+// contiguous (idx[b] == idx[0] + b) for every bulk batch — including batches
+// that wrap uniformly in a direction ≥ 1 — so the loads collapse to stride-1
+// vector loads there; only batches straddling a wrap (one per row for μ = 0,
+// row-crossing batches when L0 % B ≠ 0) pay the scalar gather.
+
+template <std::size_t E, std::size_t B, class T>
+[[gnu::always_inline]] inline void load_links_batched(T (&m_re)[E][B],
+                                                      T (&m_im)[E][B],
+                                                      T const* blk,
+                                                      std::size_t ns,
+                                                      std::size_t s0) noexcept {
+    for (std::size_t k = 0; k < E; ++k) {
+        std::size_t const off_re = (2 * k) * ns;
+        std::size_t const off_im = off_re + ns;
+        for (std::size_t b = 0; b < B; ++b) {
+            m_re[k][b] = blk[off_re + s0 + b];
+            m_im[k][b] = blk[off_im + s0 + b];
+        }
+    }
+}
+
+template <std::size_t E, std::size_t B, class T>
+[[gnu::always_inline]] inline void load_links_batched(T (&m_re)[E][B],
+                                                      T (&m_im)[E][B],
+                                                      T const* blk,
+                                                      std::size_t ns,
+                                                      std::size_t const (&idx)[B]) noexcept {
+    bool contig = true;
+    for (std::size_t b = 1; b < B; ++b) {
+        contig &= (idx[b] == idx[0] + b);
+    }
+    if (contig) [[likely]] {
+        load_links_batched(m_re, m_im, blk, ns, idx[0]);
+        return;
+    }
+    for (std::size_t k = 0; k < E; ++k) {
+        std::size_t const off_re = (2 * k) * ns;
+        std::size_t const off_im = off_re + ns;
+        for (std::size_t b = 0; b < B; ++b) {
+            m_re[k][b] = blk[off_re + idx[b]];
+            m_im[k][b] = blk[off_im + idx[b]];
+        }
+    }
+}
 
 // GaugeGroup concept — type-level interface satisfied by every gauge group
 // model (U(1), SU(2), SU(3), ...) that can serve as the template parameter

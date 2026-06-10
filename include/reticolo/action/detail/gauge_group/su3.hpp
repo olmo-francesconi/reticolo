@@ -59,6 +59,74 @@ struct SU3 {
         return re_tr;
     }
 
+    // Batched Σ Re Tr U_p over one (μ, ν) plane — the `Wilson<G>::s_full`
+    // fast path. T-native arithmetic (float keeps its full lane count, no
+    // widen-to-double per component); per-batch partials are folded into the
+    // double accumulator so the volume-sized sum keeps the double invariant
+    // and the b-loops stay free of a loop-carried double chain.
+    template <class T>
+    static double s_full_plane_re_tr_sum(MatrixLinkLattice<SU3, T> const& u,
+                                         std::size_t mu,
+                                         std::size_t nu) noexcept {
+        constexpr std::size_t k_batch = k_gauge_batch<T>;
+        std::size_t const ns          = u.nsites();
+        Indexing const& idx           = u.indexing_ref();
+        T const* const u_mu_blk       = u.mu_block_data(mu);
+        T const* const u_nu_blk       = u.mu_block_data(nu);
+
+        std::size_t const n_batches = ns / k_batch;
+        std::size_t const tail_base = n_batches * k_batch;
+        double total                = 0.0;
+
+        for (std::size_t bi = 0; bi < n_batches; ++bi) {
+            std::size_t const s_base = bi * k_batch;
+            std::size_t s_pmu[k_batch];
+            std::size_t s_pnu[k_batch];
+            for (std::size_t b = 0; b < k_batch; ++b) {
+                s_pmu[b] = idx.next(Site{s_base + b}, mu).value();
+                s_pnu[b] = idx.next(Site{s_base + b}, nu).value();
+            }
+            // A = U_μ(s), B = U_ν(s+μ̂), C = U_μ(s+ν̂), D = U_ν(s).
+            T a_re[9][k_batch];
+            T a_im[9][k_batch];
+            T b_re[9][k_batch];
+            T b_im[9][k_batch];
+            T c_re[9][k_batch];
+            T c_im[9][k_batch];
+            T d_re[9][k_batch];
+            T d_im[9][k_batch];
+            load_links_batched(a_re, a_im, u_mu_blk, ns, s_base);
+            load_links_batched(b_re, b_im, u_nu_blk, ns, s_pmu);
+            load_links_batched(c_re, c_im, u_mu_blk, ns, s_pnu);
+            load_links_batched(d_re, d_im, u_nu_blk, ns, s_base);
+            T ab_re[9][k_batch];
+            T ab_im[9][k_batch];
+            T dc_re[9][k_batch];
+            T dc_im[9][k_batch];
+            math::su3::mul_3x3_batched<false>(ab_re, ab_im, a_re, a_im, b_re, b_im);
+            math::su3::mul_3x3_batched<false>(dc_re, dc_im, d_re, d_im, c_re, c_im);
+            // Re Tr (AB · DC†) = Σ_k [Re·Re + Im·Im] — 18-real inner product.
+            T acc[k_batch];
+            for (std::size_t b = 0; b < k_batch; ++b) {
+                acc[b] = T{0};
+            }
+            for (std::size_t k = 0; k < 9; ++k) {
+                for (std::size_t b = 0; b < k_batch; ++b) {
+                    acc[b] += (ab_re[k][b] * dc_re[k][b]) + (ab_im[k][b] * dc_im[k][b]);
+                }
+            }
+            for (std::size_t b = 0; b < k_batch; ++b) {
+                total += static_cast<double>(acc[b]);
+            }
+        }
+        for (std::size_t s = tail_base; s < ns; ++s) {
+            std::size_t const s_pmu = idx.next(Site{s}, mu).value();
+            std::size_t const s_pnu = idx.next(Site{s}, nu).value();
+            total += plaq_re_tr(u_mu_blk, u_nu_blk, s, s_pmu, s_pnu, ns);
+        }
+        return total;
+    }
+
     // -------- HMC slab hooks --------------------------------------------------
     template <class T, class Rng>
     [[gnu::always_inline]] static inline void
@@ -105,11 +173,10 @@ private:
     // `ci += ar*bi + ai*br` becomes pure stride-1 vector arithmetic with no
     // cross-lane permutation. That's the structural fix that frees the
     // auto-vectoriser to pack `b`.
-    static constexpr std::size_t k_batch = k_gauge_batch;
-
     template <bool Fused, class T>
     [[gnu::always_inline]] static inline void compute_force_batched_(
         MatrixLinkLattice<SU3, T> const& u, MatrixLinkLattice<SU3, T>& out, double scale) noexcept {
+        constexpr std::size_t k_batch = k_gauge_batch<T>;
         std::size_t const d  = u.ndims();
         std::size_t const ns = u.nsites();
         Indexing const& idx  = u.indexing_ref();
@@ -166,223 +233,37 @@ private:
                     T b_im[9][k_batch];
                     T c_re[9][k_batch];
                     T c_im[9][k_batch];
+                    load_links_batched(a_re, a_im, u_nu_blk, ns, s_pmu);
+                    load_links_batched(b_re, b_im, u_mu_blk, ns, s_pnu);
+                    load_links_batched(c_re, c_im, u_nu_blk, ns, s_base);
 
-                    for (std::size_t k = 0; k < 9; ++k) {
-                        std::size_t const off_re = (2 * k) * ns;
-                        std::size_t const off_im = ((2 * k) + 1) * ns;
-                        for (std::size_t b = 0; b < k_batch; ++b) {
-                            a_re[k][b] = u_nu_blk[off_re + s_pmu[b]];
-                            a_im[k][b] = u_nu_blk[off_im + s_pmu[b]];
-                            b_re[k][b] = u_mu_blk[off_re + s_pnu[b]];
-                            b_im[k][b] = u_mu_blk[off_im + s_pnu[b]];
-                            c_re[k][b] = u_nu_blk[off_re + s_base + b];
-                            c_im[k][b] = u_nu_blk[off_im + s_base + b];
-                        }
-                    }
-
-                    // t1 = a · b†   →   t1_{ij} = sum_k a_{ik} · conj(b_{jk})
-                    // (ar+iai)(br-ibi) = (ar·br + ai·bi) + i·(ai·br - ar·bi)
+                    // t1 = a · b† ,  v += t1 · c†
                     T t1_re[9][k_batch];
                     T t1_im[9][k_batch];
-                    for (std::size_t i = 0; i < 3; ++i) {
-                        for (std::size_t j = 0; j < 3; ++j) {
-                            T cr[k_batch];
-                            T ci[k_batch];
-                            for (std::size_t b = 0; b < k_batch; ++b) {
-                                cr[b] = T{0};
-                                ci[b] = T{0};
-                            }
-                            for (std::size_t k = 0; k < 3; ++k) {
-                                std::size_t const ka = (3 * i) + k;
-                                std::size_t const kb = (3 * j) + k;
-                                for (std::size_t b = 0; b < k_batch; ++b) {
-                                    cr[b] +=
-                                        (a_re[ka][b] * b_re[kb][b]) + (a_im[ka][b] * b_im[kb][b]);
-                                    ci[b] +=
-                                        (a_im[ka][b] * b_re[kb][b]) - (a_re[ka][b] * b_im[kb][b]);
-                                }
-                            }
-                            std::size_t const out_k = (3 * i) + j;
-                            for (std::size_t b = 0; b < k_batch; ++b) {
-                                t1_re[out_k][b] = cr[b];
-                                t1_im[out_k][b] = ci[b];
-                            }
-                        }
-                    }
-
-                    // v += t1 · c†   →   (t1_{ik}) · conj(c_{jk}) — same shape.
-                    for (std::size_t i = 0; i < 3; ++i) {
-                        for (std::size_t j = 0; j < 3; ++j) {
-                            T cr[k_batch];
-                            T ci[k_batch];
-                            for (std::size_t b = 0; b < k_batch; ++b) {
-                                cr[b] = T{0};
-                                ci[b] = T{0};
-                            }
-                            for (std::size_t k = 0; k < 3; ++k) {
-                                std::size_t const ka = (3 * i) + k;
-                                std::size_t const kb = (3 * j) + k;
-                                for (std::size_t b = 0; b < k_batch; ++b) {
-                                    cr[b] +=
-                                        (t1_re[ka][b] * c_re[kb][b]) + (t1_im[ka][b] * c_im[kb][b]);
-                                    ci[b] +=
-                                        (t1_im[ka][b] * c_re[kb][b]) - (t1_re[ka][b] * c_im[kb][b]);
-                                }
-                            }
-                            std::size_t const out_k = (3 * i) + j;
-                            for (std::size_t b = 0; b < k_batch; ++b) {
-                                v_re[out_k][b] += cr[b];
-                                v_im[out_k][b] += ci[b];
-                            }
-                        }
-                    }
+                    math::su3::mul_adj_3x3_batched<false>(t1_re, t1_im, a_re, a_im, b_re, b_im);
+                    math::su3::mul_adj_3x3_batched<true>(v_re, v_im, t1_re, t1_im, c_re, c_im);
 
                     // ------------- Backward staple --------------------------
                     // t1 = U_μ(s-ν̂)† · U_ν(s-ν̂) ,  t2 = U_ν(s+μ̂-ν̂)† · t1
-                    // ar+iai)† · (br+ibi) form for t1 (a† · b style):
-                    //   (ar-iai)(br+ibi) = (ar·br + ai·bi) + i·(ar·bi - ai·br)
-                    for (std::size_t k = 0; k < 9; ++k) {
-                        std::size_t const off_re = (2 * k) * ns;
-                        std::size_t const off_im = ((2 * k) + 1) * ns;
-                        for (std::size_t b = 0; b < k_batch; ++b) {
-                            a_re[k][b] = u_nu_blk[off_re + s_pmu_mnu[b]];
-                            a_im[k][b] = u_nu_blk[off_im + s_pmu_mnu[b]];
-                            b_re[k][b] = u_mu_blk[off_re + s_mnu[b]];
-                            b_im[k][b] = u_mu_blk[off_im + s_mnu[b]];
-                            c_re[k][b] = u_nu_blk[off_re + s_mnu[b]];
-                            c_im[k][b] = u_nu_blk[off_im + s_mnu[b]];
-                        }
-                    }
-                    // t1 = b† · c   →   t1_{ij} = sum_k conj(b_{ki}) · c_{kj}
-                    for (std::size_t i = 0; i < 3; ++i) {
-                        for (std::size_t j = 0; j < 3; ++j) {
-                            T cr[k_batch];
-                            T ci[k_batch];
-                            for (std::size_t b = 0; b < k_batch; ++b) {
-                                cr[b] = T{0};
-                                ci[b] = T{0};
-                            }
-                            for (std::size_t k = 0; k < 3; ++k) {
-                                std::size_t const ka = (3 * k) + i;
-                                std::size_t const kb = (3 * k) + j;
-                                for (std::size_t b = 0; b < k_batch; ++b) {
-                                    cr[b] +=
-                                        (b_re[ka][b] * c_re[kb][b]) + (b_im[ka][b] * c_im[kb][b]);
-                                    ci[b] +=
-                                        (b_re[ka][b] * c_im[kb][b]) - (b_im[ka][b] * c_re[kb][b]);
-                                }
-                            }
-                            std::size_t const out_k = (3 * i) + j;
-                            for (std::size_t b = 0; b < k_batch; ++b) {
-                                t1_re[out_k][b] = cr[b];
-                                t1_im[out_k][b] = ci[b];
-                            }
-                        }
-                    }
-                    // v += a† · t1
-                    for (std::size_t i = 0; i < 3; ++i) {
-                        for (std::size_t j = 0; j < 3; ++j) {
-                            T cr[k_batch];
-                            T ci[k_batch];
-                            for (std::size_t b = 0; b < k_batch; ++b) {
-                                cr[b] = T{0};
-                                ci[b] = T{0};
-                            }
-                            for (std::size_t k = 0; k < 3; ++k) {
-                                std::size_t const ka = (3 * k) + i;
-                                std::size_t const kb = (3 * k) + j;
-                                for (std::size_t b = 0; b < k_batch; ++b) {
-                                    cr[b] +=
-                                        (a_re[ka][b] * t1_re[kb][b]) + (a_im[ka][b] * t1_im[kb][b]);
-                                    ci[b] +=
-                                        (a_re[ka][b] * t1_im[kb][b]) - (a_im[ka][b] * t1_re[kb][b]);
-                                }
-                            }
-                            std::size_t const out_k = (3 * i) + j;
-                            for (std::size_t b = 0; b < k_batch; ++b) {
-                                v_re[out_k][b] += cr[b];
-                                v_im[out_k][b] += ci[b];
-                            }
-                        }
-                    }
+                    load_links_batched(a_re, a_im, u_nu_blk, ns, s_pmu_mnu);
+                    load_links_batched(b_re, b_im, u_mu_blk, ns, s_mnu);
+                    load_links_batched(c_re, c_im, u_nu_blk, ns, s_mnu);
+                    // t1 = b† · c ,  v += a† · t1
+                    math::su3::adj_mul_3x3_batched<false>(t1_re, t1_im, b_re, b_im, c_re, c_im);
+                    math::su3::adj_mul_3x3_batched<true>(v_re, v_im, a_re, a_im, t1_re, t1_im);
                 }
 
                 // ------------ Final: U_μ(s) · V → TA → scatter ------------
                 T u_re[9][k_batch];
                 T u_im[9][k_batch];
-                for (std::size_t k = 0; k < 9; ++k) {
-                    std::size_t const off_re = (2 * k) * ns;
-                    std::size_t const off_im = ((2 * k) + 1) * ns;
-                    for (std::size_t b = 0; b < k_batch; ++b) {
-                        u_re[k][b] = u_mu_blk[off_re + s_base + b];
-                        u_im[k][b] = u_mu_blk[off_im + s_base + b];
-                    }
-                }
-                // uv = U · V (plain mul):
-                //   c_{ij} = sum_k U_{ik} · V_{kj}
-                //   (ar+iai)(br+ibi) = (ar·br - ai·bi) + i·(ar·bi + ai·br)
+                load_links_batched(u_re, u_im, u_mu_blk, ns, s_base);
+                // uv = U · V, then TA into the algebra.
                 T uv_re[9][k_batch];
                 T uv_im[9][k_batch];
-                for (std::size_t i = 0; i < 3; ++i) {
-                    for (std::size_t j = 0; j < 3; ++j) {
-                        T cr[k_batch];
-                        T ci[k_batch];
-                        for (std::size_t b = 0; b < k_batch; ++b) {
-                            cr[b] = T{0};
-                            ci[b] = T{0};
-                        }
-                        for (std::size_t k = 0; k < 3; ++k) {
-                            std::size_t const ka = (3 * i) + k;
-                            std::size_t const kb = (3 * k) + j;
-                            for (std::size_t b = 0; b < k_batch; ++b) {
-                                cr[b] += (u_re[ka][b] * v_re[kb][b]) - (u_im[ka][b] * v_im[kb][b]);
-                                ci[b] += (u_re[ka][b] * v_im[kb][b]) + (u_im[ka][b] * v_re[kb][b]);
-                            }
-                        }
-                        std::size_t const out_k = (3 * i) + j;
-                        for (std::size_t b = 0; b < k_batch; ++b) {
-                            uv_re[out_k][b] = cr[b];
-                            uv_im[out_k][b] = ci[b];
-                        }
-                    }
-                }
-                // TA(M): diagonal = i·(Im_{ii} − Tr/3); off-diag (i<j):
-                //   re_ij_out = 0.5·(Re_{ij} − Re_{ji})
-                //   im_ij_out = 0.5·(Im_{ij} + Im_{ji})
-                //   re_ji_out = −re_ij_out ;  im_ji_out = im_ij_out
-                //   diag re = 0; diag im = Im_{ii} − T/3 where T = sum Im_{ii}.
+                math::su3::mul_3x3_batched<false>(uv_re, uv_im, u_re, u_im, v_re, v_im);
                 T ta_re[9][k_batch];
                 T ta_im[9][k_batch];
-                for (std::size_t b = 0; b < k_batch; ++b) {
-                    T const t_over_3 = (uv_im[0][b] + uv_im[4][b] + uv_im[8][b]) / T{3};
-                    ta_re[0][b]      = T{0};
-                    ta_im[0][b]      = uv_im[0][b] - t_over_3;
-                    ta_re[4][b]      = T{0};
-                    ta_im[4][b]      = uv_im[4][b] - t_over_3;
-                    ta_re[8][b]      = T{0};
-                    ta_im[8][b]      = uv_im[8][b] - t_over_3;
-                    // (0,1) vs (1,0)
-                    T const re01 = T{0.5} * (uv_re[1][b] - uv_re[3][b]);
-                    T const im01 = T{0.5} * (uv_im[1][b] + uv_im[3][b]);
-                    ta_re[1][b]  = re01;
-                    ta_im[1][b]  = im01;
-                    ta_re[3][b]  = -re01;
-                    ta_im[3][b]  = im01;
-                    // (0,2) vs (2,0)
-                    T const re02 = T{0.5} * (uv_re[2][b] - uv_re[6][b]);
-                    T const im02 = T{0.5} * (uv_im[2][b] + uv_im[6][b]);
-                    ta_re[2][b]  = re02;
-                    ta_im[2][b]  = im02;
-                    ta_re[6][b]  = -re02;
-                    ta_im[6][b]  = im02;
-                    // (1,2) vs (2,1)
-                    T const re12 = T{0.5} * (uv_re[5][b] - uv_re[7][b]);
-                    T const im12 = T{0.5} * (uv_im[5][b] + uv_im[7][b]);
-                    ta_re[5][b]  = re12;
-                    ta_im[5][b]  = im12;
-                    ta_re[7][b]  = -re12;
-                    ta_im[7][b]  = im12;
-                }
+                math::su3::traceless_antiherm_3x3_batched(ta_re, ta_im, uv_re, uv_im);
                 // Scatter scale·ta into out_mu_blk.
                 for (std::size_t k = 0; k < 9; ++k) {
                     std::size_t const off_re = (2 * k) * ns;
@@ -409,11 +290,12 @@ private:
         }
     }
 
-    // Scalar fallback covering [tail_base, ns). Same math as
-    // compute_force_impl_ but restricted to a flat s range — reused by the
-    // batched path's remainder loop.
+    // Scalar fallback covering [tail_base, ns). Same math as the batched
+    // kernel but per-site. Cold path (only when ns % k_batch ≠ 0) — kept out
+    // of line so its ~900 straight-line FP ops don't double the I-cache
+    // footprint of every force instantiation.
     template <bool Fused, class T>
-    [[gnu::always_inline]] static inline void
+    [[gnu::noinline]] static void
     compute_force_impl_tail_(MatrixLinkLattice<SU3, T> const& u,
                              MatrixLinkLattice<SU3, T>& out,
                              double scale,

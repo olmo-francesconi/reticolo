@@ -118,6 +118,161 @@ adj_mul_3x3(double* out, double const* a, double const* b) noexcept {
     }
 }
 
+// ---------- batched AoSoA 3×3 complex products -------------------------------
+// Operate on `[9][B]` re/im slabs: entry (i,j) of site b lives at
+// `re[(3*i)+j][b]` / `im[(3*i)+j][b]`. The innermost b-loop is stride-1
+// packed data, so the compiler vectorises it at the target SIMD width with
+// no cross-lane permutation. `Acc` selects `out +=` over `out =`. Out must
+// not alias the inputs.
+
+// out (+)= a · b
+template <bool Acc, std::size_t B, class T>
+[[gnu::always_inline]] inline void mul_3x3_batched(T (&out_re)[9][B],
+                                                   T (&out_im)[9][B],
+                                                   T const (&a_re)[9][B],
+                                                   T const (&a_im)[9][B],
+                                                   T const (&b_re)[9][B],
+                                                   T const (&b_im)[9][B]) noexcept {
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            T cr[B];
+            T ci[B];
+            for (std::size_t b = 0; b < B; ++b) {
+                cr[b] = T{0};
+                ci[b] = T{0};
+            }
+            for (std::size_t k = 0; k < 3; ++k) {
+                std::size_t const ka = (3 * i) + k;
+                std::size_t const kb = (3 * k) + j;
+                for (std::size_t b = 0; b < B; ++b) {
+                    cr[b] += (a_re[ka][b] * b_re[kb][b]) - (a_im[ka][b] * b_im[kb][b]);
+                    ci[b] += (a_re[ka][b] * b_im[kb][b]) + (a_im[ka][b] * b_re[kb][b]);
+                }
+            }
+            std::size_t const out_k = (3 * i) + j;
+            for (std::size_t b = 0; b < B; ++b) {
+                if constexpr (Acc) {
+                    out_re[out_k][b] += cr[b];
+                    out_im[out_k][b] += ci[b];
+                } else {
+                    out_re[out_k][b] = cr[b];
+                    out_im[out_k][b] = ci[b];
+                }
+            }
+        }
+    }
+}
+
+// out (+)= a · b†   →   out_{ij} = sum_k a_{ik} · conj(b_{jk})
+template <bool Acc, std::size_t B, class T>
+[[gnu::always_inline]] inline void mul_adj_3x3_batched(T (&out_re)[9][B],
+                                                       T (&out_im)[9][B],
+                                                       T const (&a_re)[9][B],
+                                                       T const (&a_im)[9][B],
+                                                       T const (&b_re)[9][B],
+                                                       T const (&b_im)[9][B]) noexcept {
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            T cr[B];
+            T ci[B];
+            for (std::size_t b = 0; b < B; ++b) {
+                cr[b] = T{0};
+                ci[b] = T{0};
+            }
+            for (std::size_t k = 0; k < 3; ++k) {
+                std::size_t const ka = (3 * i) + k;
+                std::size_t const kb = (3 * j) + k;
+                for (std::size_t b = 0; b < B; ++b) {
+                    cr[b] += (a_re[ka][b] * b_re[kb][b]) + (a_im[ka][b] * b_im[kb][b]);
+                    ci[b] += (a_im[ka][b] * b_re[kb][b]) - (a_re[ka][b] * b_im[kb][b]);
+                }
+            }
+            std::size_t const out_k = (3 * i) + j;
+            for (std::size_t b = 0; b < B; ++b) {
+                if constexpr (Acc) {
+                    out_re[out_k][b] += cr[b];
+                    out_im[out_k][b] += ci[b];
+                } else {
+                    out_re[out_k][b] = cr[b];
+                    out_im[out_k][b] = ci[b];
+                }
+            }
+        }
+    }
+}
+
+// out (+)= a† · b   →   out_{ij} = sum_k conj(a_{ki}) · b_{kj}
+template <bool Acc, std::size_t B, class T>
+[[gnu::always_inline]] inline void adj_mul_3x3_batched(T (&out_re)[9][B],
+                                                       T (&out_im)[9][B],
+                                                       T const (&a_re)[9][B],
+                                                       T const (&a_im)[9][B],
+                                                       T const (&b_re)[9][B],
+                                                       T const (&b_im)[9][B]) noexcept {
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            T cr[B];
+            T ci[B];
+            for (std::size_t b = 0; b < B; ++b) {
+                cr[b] = T{0};
+                ci[b] = T{0};
+            }
+            for (std::size_t k = 0; k < 3; ++k) {
+                std::size_t const ka = (3 * k) + i;
+                std::size_t const kb = (3 * k) + j;
+                for (std::size_t b = 0; b < B; ++b) {
+                    cr[b] += (a_re[ka][b] * b_re[kb][b]) + (a_im[ka][b] * b_im[kb][b]);
+                    ci[b] += (a_re[ka][b] * b_im[kb][b]) - (a_im[ka][b] * b_re[kb][b]);
+                }
+            }
+            std::size_t const out_k = (3 * i) + j;
+            for (std::size_t b = 0; b < B; ++b) {
+                if constexpr (Acc) {
+                    out_re[out_k][b] += cr[b];
+                    out_im[out_k][b] += ci[b];
+                } else {
+                    out_re[out_k][b] = cr[b];
+                    out_im[out_k][b] = ci[b];
+                }
+            }
+        }
+    }
+}
+
+// Batched TA(M): diagonal = i·(Im_{ii} − Tr/3); off-diag (i<j) is the
+// anti-hermitian completion. Same math as traceless_antiherm_3x3.
+template <std::size_t B, class T>
+[[gnu::always_inline]] inline void traceless_antiherm_3x3_batched(
+    T (&ta_re)[9][B], T (&ta_im)[9][B], T const (&in_re)[9][B], T const (&in_im)[9][B]) noexcept {
+    for (std::size_t b = 0; b < B; ++b) {
+        T const t_over_3 = (in_im[0][b] + in_im[4][b] + in_im[8][b]) / T{3};
+        ta_re[0][b]      = T{0};
+        ta_im[0][b]      = in_im[0][b] - t_over_3;
+        ta_re[4][b]      = T{0};
+        ta_im[4][b]      = in_im[4][b] - t_over_3;
+        ta_re[8][b]      = T{0};
+        ta_im[8][b]      = in_im[8][b] - t_over_3;
+        T const re01     = T{0.5} * (in_re[1][b] - in_re[3][b]);
+        T const im01     = T{0.5} * (in_im[1][b] + in_im[3][b]);
+        ta_re[1][b]      = re01;
+        ta_im[1][b]      = im01;
+        ta_re[3][b]      = -re01;
+        ta_im[3][b]      = im01;
+        T const re02     = T{0.5} * (in_re[2][b] - in_re[6][b]);
+        T const im02     = T{0.5} * (in_im[2][b] + in_im[6][b]);
+        ta_re[2][b]      = re02;
+        ta_im[2][b]      = im02;
+        ta_re[6][b]      = -re02;
+        ta_im[6][b]      = im02;
+        T const re12     = T{0.5} * (in_re[5][b] - in_re[7][b]);
+        T const im12     = T{0.5} * (in_im[5][b] + in_im[7][b]);
+        ta_re[5][b]      = re12;
+        ta_im[5][b]      = im12;
+        ta_re[7][b]      = -re12;
+        ta_im[7][b]      = im12;
+    }
+}
+
 // ---------- traceless anti-hermitian projection (su(3) algebra) -------------
 // TA(M) = (M − M†)/2 − (1/3)·Tr((M−M†)/2)·I. Diagonal becomes
 // pure imag (Im_{ii} − T/3); off-diag is the anti-hermitian completion.
@@ -446,92 +601,195 @@ adj_mul_slab(double* out, double const* a, double const* b, std::size_t n) noexc
     }
 }
 
+namespace detail {
+
+// Cayley-Hamilton coefficient pass of expi_lmul_slab. Per site: branchless
+// straight-line block (selects only), so the loop vectorises across sites.
+// Small-c1 lanes blend to the Taylor coefficients, which fit the same
+// f₀·I + f₁·Q + f₂·Q² form via Q³ = c1·Q + c0·I —
+//   f₀ = 1 − i·c0/6,  f₁ = i·(1 − c1/6),  f₂ = −1/2.
+// The main-path values are still computed on those lanes (inv_den may
+// overflow to inf and produce NaN); the select discards them. Split out as a
+// function so the slab pointers carry __restrict: the f outputs reuse dead
+// scratch slabs and the vectoriser otherwise has to prove all stores/loads
+// disjoint at runtime.
+inline void ch_coeff_pass_(double* __restrict f0_re,
+                           double* __restrict f0_im,
+                           double* __restrict f1_re,
+                           double* __restrict f1_im,
+                           double* __restrict f2_re,
+                           double* __restrict f2_im,
+                           double const* __restrict u_buf,
+                           double const* __restrict w_buf,
+                           double const* __restrict cu_buf,
+                           double const* __restrict su_buf,
+                           double const* __restrict cw_buf,
+                           double const* __restrict sw_buf,
+                           double const* __restrict c0_buf,
+                           double const* __restrict c1_buf,
+                           std::size_t n) noexcept {
+    constexpr double k_small_c1 = 1.0e-8;
+    constexpr double k_eps_w    = 1.0e-10;
+    constexpr double k_inv_6    = 1.0 / 6.0;
+    // The NEON cost model rejects this loop (two fdivs); measured, the
+    // vector version still wins — the ~60 mul/add ops dominate and the
+    // divides pipeline. GCC's model vectorises it unaided.
+#if defined(__clang__)
+    #pragma clang loop vectorize(enable)
+#endif
+    for (std::size_t s = 0; s < n; ++s) {
+        double const u_ = u_buf[s];
+        double const w_ = w_buf[s];
+        double const cu = cu_buf[s];
+        double const su = su_buf[s];
+        double const cw = cw_buf[s];
+        double const sw = sw_buf[s];
+        // 2u trig via doubling — no extra Sleef call.
+        double const c2u = (cu * cu) - (su * su);
+        double const s2u = 2.0 * cu * su;
+        // ξ(w) = sin(w)/w, branchless small-w guard.
+        double const xi = (std::abs(w_) > k_eps_w) ? (sw / w_) : 1.0;
+
+        double const u2  = u_ * u_;
+        double const w2  = w_ * w_;
+        double const den = (9.0 * u2) - w2;
+
+        // h_0 = (u²−w²) e^{2iu} + e^{-iu}·[8 u² cw + 2 i u (3u² + w²) ξ]
+        double const t0a_re = (u2 - w2) * c2u;
+        double const t0a_im = (u2 - w2) * s2u;
+        double const inner0 = 2.0 * u_ * (3.0 * u2 + w2) * xi;
+        double const t0b_re = (cu * (8.0 * u2 * cw)) + (su * inner0);
+        double const t0b_im = -(su * (8.0 * u2 * cw)) + (cu * inner0);
+        double const h0_re  = t0a_re + t0b_re;
+        double const h0_im  = t0a_im + t0b_im;
+
+        // h_1 = 2u e^{2iu} − e^{-iu}·[2 u cw − i (3u² − w²) ξ]
+        double const t1a_re    = 2.0 * u_ * c2u;
+        double const t1a_im    = 2.0 * u_ * s2u;
+        double const inner1_re = 2.0 * u_ * cw;
+        double const inner1_im = -((3.0 * u2) - w2) * xi;
+        double const t1b_re    = (cu * inner1_re) + (su * inner1_im);
+        double const t1b_im    = (cu * inner1_im) - (su * inner1_re);
+        double const h1_re     = t1a_re - t1b_re;
+        double const h1_im     = t1a_im - t1b_im;
+
+        // h_2 = e^{2iu} − e^{-iu}·[cw + 3 i u ξ]
+        double const inner2_re = cw;
+        double const inner2_im = 3.0 * u_ * xi;
+        double const t2b_re    = (cu * inner2_re) + (su * inner2_im);
+        double const t2b_im    = (cu * inner2_im) - (su * inner2_re);
+        double const h2_re     = c2u - t2b_re;
+        double const h2_im     = s2u - t2b_im;
+
+        double const inv_den = 1.0 / den;
+        bool const small     = c1_buf[s] < k_small_c1;
+        f0_re[s]             = small ? 1.0 : h0_re * inv_den;
+        f0_im[s]             = small ? -c0_buf[s] * k_inv_6 : h0_im * inv_den;
+        f1_re[s]             = small ? 0.0 : h1_re * inv_den;
+        f1_im[s]             = small ? 1.0 - (c1_buf[s] * k_inv_6) : h1_im * inv_den;
+        f2_re[s]             = small ? -0.5 : h2_re * inv_den;
+        f2_im[s]             = small ? 0.0 : h2_im * inv_den;
+    }
+}
+
+}  // namespace detail
+
 // In-place U ← exp(dt·P) · U, slab edition.
 //
 // The per-site Cayley-Hamilton exp has 1 acos + 5 sincos calls per link plus
 // 2 sqrt. Batching them across all slab sites via Sleef cuts the
-// transcendental cost ~2× on AArch64 / AVX2. The structure is multi-pass:
+// transcendental cost ~2× on AArch64 / AVX2. The structure is multi-pass,
+// every pass site-parallel (stride-1 loads, no loop-carried state):
 //
-//  pass 1 (per site, scalar): compute c1, c0, branch flag, ratio = c0/c0_max
-//                             (clamped + safe for small-c1), √(c1/3), √c1.
-//  pass 2 (vector):           theta = acos(ratio) via acos_batch.
-//  pass 3 (vector):           build theta/3 buffer; sincos_batch → (s_t3, c_t3).
-//  pass 3.5 (per site):       u = √(c1/3)·c_t3, w = √c1·s_t3.
-//  pass 4 (vector):           sincos_batch(u) → (su, cu), sincos_batch(w) → (sw, cw).
-//  pass 5 (per site):         assemble V = f₀·I + f₁·Q + f₂·Q² (main branch)
-//                             or fall back to Taylor for sites where small_flag = 1;
-//                             then U ← V · U.
+//  pass 1 (vector):   c1 = ½·dt²·Σ p², c0 = det Q (straight-line, no matrix
+//                     temporaries — Q is a signed permutation of dt·P, and
+//                     for traceless hermitian Q, Tr(Q³)/3 = det Q), clamped
+//                     ratio = c0/c0_max, √(c1/3), √c1.
+//  pass 2 (vector):   theta = acos(ratio) via acos_batch.
+//  pass 3 (vector):   build theta/3 buffer; sincos_batch → (s_t3, c_t3).
+//  pass 3.5 (vector): u = √(c1/3)·c_t3, w = √c1·s_t3.
+//  pass 4 (vector):   sincos_batch(u) → (su, cu), sincos_batch(w) → (sw, cw).
+//  pass 4.5 (vector): Cayley-Hamilton coefficients f₀, f₁, f₂. Branchless:
+//                     small-c1 sites blend to the Taylor coefficients, which
+//                     fit the same form via Q³ = c1·Q + c0·I —
+//                     f₀ = 1 − i·c0/6, f₁ = i·(1 − c1/6), f₂ = −1/2.
+//  pass 5 (batched):  V = f₀·I + f₁·Q + f₂·Q² and U ← V·U in AoSoA batches
+//                     of B sites (separate re/im [9][B] slabs, batched 3×3
+//                     products) so the matrix work vectorises across sites.
 //
 // 2u-trig is computed inline as c2u = cu² − su² and s2u = 2·cu·su (no extra
 // transcendentals). ξ = sin(w)/w uses a branchless small-w guard.
 // Templated on the field precision T: the link storage U and momentum P are
 // loaded/stored as T (float halves the bandwidth), but the Cayley-Hamilton
-// exponential itself is evaluated in double. The acos near ±1, the 9u²−w²
-// denominator and the Taylor fallback are precision-delicate, so this kernel
-// trades the float SIMD width on the arithmetic for double-accurate links —
-// a fully T-native (4-wide) SU(3) expi would need an AoSoA rewrite.
+// exponential itself is evaluated in double — the acos near ±1, the 9u²−w²
+// denominator and the Taylor blend are precision-delicate. The site batching
+// recovers the SIMD width the double arithmetic allows.
 template <class T>
-[[gnu::always_inline]] inline void
-expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {
+inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {
     thread_local std::vector<double> scratch;
-    constexpr std::size_t k_slabs = 13;
+    constexpr std::size_t k_slabs = 14;
     if (scratch.size() < k_slabs * n) {
         scratch.resize(k_slabs * n);
     }
-    double* const ratio_buf  = scratch.data() + (0 * n);  // pass1→pass2
-    double* const theta_buf  = scratch.data() + (1 * n);  // pass2→pass3 prep
-    double* const t3_buf     = scratch.data() + (2 * n);  // pass3 input
-    double* const sqrt_c1_3  = scratch.data() + (3 * n);
-    double* const sqrt_c1    = scratch.data() + (4 * n);
-    double* const small_flag = scratch.data() + (5 * n);
-    double* const u_buf      = scratch.data() + (6 * n);
-    double* const w_buf      = scratch.data() + (7 * n);
-    double* const cu_buf     = scratch.data() + (8 * n);
-    double* const su_buf     = scratch.data() + (9 * n);
-    double* const cw_buf     = scratch.data() + (10 * n);
-    double* const sw_buf     = scratch.data() + (11 * n);
-    double* const s_t3_buf   = scratch.data() + (12 * n);
+    double* const ratio_buf = scratch.data() + (0 * n);  // pass1→pass2
+    double* const theta_buf = scratch.data() + (1 * n);  // pass2→pass3 prep
+    double* const t3_buf    = scratch.data() + (2 * n);  // pass3 input
+    double* const sqrt_c1_3 = scratch.data() + (3 * n);
+    double* const sqrt_c1   = scratch.data() + (4 * n);
+    double* const c0_buf    = scratch.data() + (5 * n);
+    double* const u_buf     = scratch.data() + (6 * n);
+    double* const w_buf     = scratch.data() + (7 * n);
+    double* const cu_buf    = scratch.data() + (8 * n);
+    double* const su_buf    = scratch.data() + (9 * n);
+    double* const cw_buf    = scratch.data() + (10 * n);
+    double* const sw_buf    = scratch.data() + (11 * n);
+    double* const s_t3_buf  = scratch.data() + (12 * n);
+    double* const c1_buf    = scratch.data() + (13 * n);
 
-    constexpr double k_small_c1 = 1.0e-8;
-    constexpr double k_eps_w    = 1.0e-10;
-    constexpr double k_inv_3    = 1.0 / 3.0;
+    constexpr double k_inv_3 = 1.0 / 3.0;
 
-    // ----- Pass 1: per-site scalar prep ----------------------------------
-    // Read p_s[18], build q = -i·dt·p, compute c1, c0, c0_max, clamped ratio
-    // and the two √c1 forms. Mark small-c1 sites for the Taylor fallback.
+    // ----- Pass 1: c1, c0 = det Q, clamped ratio, √c1 forms ---------------
+    // Q = -i·dt·P is a signed re/im swap of dt·P, so Σ Q² = dt²·Σ P² needs no
+    // assembly, and det Q is a straight-line complex 3×3 determinant on the
+    // swapped entries. Every load is stride-1 in s; the loop body is
+    // branchless (clamps and the c0_max guard are selects), so this
+    // vectorises across sites.
     for (std::size_t s = 0; s < n; ++s) {
-        double q[18];
+        double q_re[9];
+        double q_im[9];
         for (std::size_t k = 0; k < 9; ++k) {
-            q[2 * k]       = dt * static_cast<double>(p[((2 * k) + 1) * n + s]);
-            q[(2 * k) + 1] = -dt * static_cast<double>(p[(2 * k) * n + s]);
+            q_re[k] = dt * static_cast<double>(p[(((2 * k) + 1) * n) + s]);
+            q_im[k] = -dt * static_cast<double>(p[((2 * k) * n) + s]);
         }
-        double c1 = 0.0;
-        for (std::size_t k = 0; k < 18; ++k) {
-            c1 += q[k] * q[k];
+        double sum_sq = 0.0;
+        for (std::size_t k = 0; k < 9; ++k) {
+            sum_sq += (q_re[k] * q_re[k]) + (q_im[k] * q_im[k]);
         }
-        c1 *= 0.5;
-        if (c1 < k_small_c1) {
-            small_flag[s] = 1.0;
-            ratio_buf[s]  = 0.0;
-            sqrt_c1_3[s]  = 0.0;
-            sqrt_c1[s]    = 0.0;
-            continue;
-        }
-        small_flag[s] = 0.0;
-        double q2[18];
-        mul_3x3(q2, q, q);
-        // c0 = Tr(Q³)/3 = Tr(Q² · Q)/3, real for hermitian Q.
-        double const tr_q3 =
-            (q2[idx_re(0, 0)] * q[idx_re(0, 0)] - q2[idx_im(0, 0)] * q[idx_im(0, 0)]) +
-            (q2[idx_re(0, 1)] * q[idx_re(1, 0)] - q2[idx_im(0, 1)] * q[idx_im(1, 0)]) +
-            (q2[idx_re(0, 2)] * q[idx_re(2, 0)] - q2[idx_im(0, 2)] * q[idx_im(2, 0)]) +
-            (q2[idx_re(1, 0)] * q[idx_re(0, 1)] - q2[idx_im(1, 0)] * q[idx_im(0, 1)]) +
-            (q2[idx_re(1, 1)] * q[idx_re(1, 1)] - q2[idx_im(1, 1)] * q[idx_im(1, 1)]) +
-            (q2[idx_re(1, 2)] * q[idx_re(2, 1)] - q2[idx_im(1, 2)] * q[idx_im(2, 1)]) +
-            (q2[idx_re(2, 0)] * q[idx_re(0, 2)] - q2[idx_im(2, 0)] * q[idx_im(0, 2)]) +
-            (q2[idx_re(2, 1)] * q[idx_re(1, 2)] - q2[idx_im(2, 1)] * q[idx_im(1, 2)]) +
-            (q2[idx_re(2, 2)] * q[idx_re(2, 2)] - q2[idx_im(2, 2)] * q[idx_im(2, 2)]);
-        double const c0        = tr_q3 * k_inv_3;
+        double const c1 = 0.5 * sum_sq;
+        // det Q = Q00·(Q11 Q22 − Q12 Q21) − Q01·(Q10 Q22 − Q12 Q20)
+        //       + Q02·(Q10 Q21 − Q11 Q20); real for hermitian Q.
+        auto cmul_re = [](double ar, double ai, double br, double bi) noexcept {
+            return (ar * br) - (ai * bi);
+        };
+        auto cmul_im = [](double ar, double ai, double br, double bi) noexcept {
+            return (ar * bi) + (ai * br);
+        };
+        double const m0_re = cmul_re(q_re[4], q_im[4], q_re[8], q_im[8]) -
+                             cmul_re(q_re[5], q_im[5], q_re[7], q_im[7]);
+        double const m0_im = cmul_im(q_re[4], q_im[4], q_re[8], q_im[8]) -
+                             cmul_im(q_re[5], q_im[5], q_re[7], q_im[7]);
+        double const m1_re = cmul_re(q_re[3], q_im[3], q_re[8], q_im[8]) -
+                             cmul_re(q_re[5], q_im[5], q_re[6], q_im[6]);
+        double const m1_im = cmul_im(q_re[3], q_im[3], q_re[8], q_im[8]) -
+                             cmul_im(q_re[5], q_im[5], q_re[6], q_im[6]);
+        double const m2_re = cmul_re(q_re[3], q_im[3], q_re[7], q_im[7]) -
+                             cmul_re(q_re[4], q_im[4], q_re[6], q_im[6]);
+        double const m2_im = cmul_im(q_re[3], q_im[3], q_re[7], q_im[7]) -
+                             cmul_im(q_re[4], q_im[4], q_re[6], q_im[6]);
+        double const c0 = cmul_re(q_re[0], q_im[0], m0_re, m0_im) -
+                          cmul_re(q_re[1], q_im[1], m1_re, m1_im) +
+                          cmul_re(q_re[2], q_im[2], m2_re, m2_im);
+
         double const c1_over_3 = c1 * k_inv_3;
         double const sc13      = std::sqrt(c1_over_3);
         double const sc1       = std::sqrt(c1);
@@ -540,6 +798,8 @@ expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {
         ratio_buf[s]           = ratio;
         sqrt_c1_3[s]           = sc13;
         sqrt_c1[s]             = sc1;
+        c0_buf[s]              = c0;
+        c1_buf[s]              = c1;
     }
 
     // ----- Pass 2: theta = acos(ratio) -----------------------------------
@@ -565,114 +825,126 @@ expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {
     reticolo::math::sincos_batch(su_buf, cu_buf, u_buf, n);
     reticolo::math::sincos_batch(sw_buf, cw_buf, w_buf, n);
 
-    // ----- Pass 5: per-site assembly + multiply --------------------------
-    for (std::size_t s = 0; s < n; ++s) {
-        // Recompute q (cheap vs stashing 18·n doubles).
+    // ----- Pass 4.5: Cayley-Hamilton coefficients f₀, f₁, f₂ --------------
+    // The f slabs reuse buffers that are dead after pass 3.5; the kernel is
+    // split out (detail::ch_coeff_pass_) so its parameters carry __restrict —
+    // without it the vectoriser must prove the 6 stores and 8 loads disjoint
+    // at runtime and its cost model gives up.
+    double* const f0_re_buf = ratio_buf;
+    double* const f0_im_buf = theta_buf;
+    double* const f1_re_buf = t3_buf;
+    double* const f1_im_buf = sqrt_c1_3;
+    double* const f2_re_buf = sqrt_c1;
+    double* const f2_im_buf = s_t3_buf;
+    detail::ch_coeff_pass_(f0_re_buf,
+                           f0_im_buf,
+                           f1_re_buf,
+                           f1_im_buf,
+                           f2_re_buf,
+                           f2_im_buf,
+                           u_buf,
+                           w_buf,
+                           cu_buf,
+                           su_buf,
+                           cw_buf,
+                           sw_buf,
+                           c0_buf,
+                           c1_buf,
+                           n);
+
+    // ----- Pass 5: batched V = f₀·I + f₁·Q + f₂·Q², U ← V·U ---------------
+    // AoSoA batches of B sites: q/q²/u slabs split into [9][B] re/im scratch
+    // so the matrix products vectorise across sites (stride-1 in b).
+    constexpr std::size_t k_b   = 8;
+    std::size_t const tail_base = (n / k_b) * k_b;
+    for (std::size_t s0 = 0; s0 < tail_base; s0 += k_b) {
+        double q_re[9][k_b];
+        double q_im[9][k_b];
+        double uo_re[9][k_b];
+        double uo_im[9][k_b];
+        for (std::size_t k = 0; k < 9; ++k) {
+            T const* p_re = p + ((2 * k) * n) + s0;
+            T const* p_im = p + (((2 * k) + 1) * n) + s0;
+            T const* u_re = u + ((2 * k) * n) + s0;
+            T const* u_im = u + (((2 * k) + 1) * n) + s0;
+            for (std::size_t b = 0; b < k_b; ++b) {
+                q_re[k][b]  = dt * static_cast<double>(p_im[b]);
+                q_im[k][b]  = -dt * static_cast<double>(p_re[b]);
+                uo_re[k][b] = static_cast<double>(u_re[b]);
+                uo_im[k][b] = static_cast<double>(u_im[b]);
+            }
+        }
+        double q2_re[9][k_b];
+        double q2_im[9][k_b];
+        mul_3x3_batched<false>(q2_re, q2_im, q_re, q_im, q_re, q_im);
+
+        double v_re[9][k_b];
+        double v_im[9][k_b];
+        for (std::size_t k = 0; k < 9; ++k) {
+            for (std::size_t b = 0; b < k_b; ++b) {
+                double const f1r = f1_re_buf[s0 + b];
+                double const f1i = f1_im_buf[s0 + b];
+                double const f2r = f2_re_buf[s0 + b];
+                double const f2i = f2_im_buf[s0 + b];
+                v_re[k][b]       = ((f1r * q_re[k][b]) - (f1i * q_im[k][b])) +
+                               ((f2r * q2_re[k][b]) - (f2i * q2_im[k][b]));
+                v_im[k][b] = ((f1r * q_im[k][b]) + (f1i * q_re[k][b])) +
+                             ((f2r * q2_im[k][b]) + (f2i * q2_re[k][b]));
+            }
+        }
+        for (std::size_t k = 0; k < 9; k += 4) {  // diagonal entries 0, 4, 8
+            for (std::size_t b = 0; b < k_b; ++b) {
+                v_re[k][b] += f0_re_buf[s0 + b];
+                v_im[k][b] += f0_im_buf[s0 + b];
+            }
+        }
+
+        double o_re[9][k_b];
+        double o_im[9][k_b];
+        mul_3x3_batched<false>(o_re, o_im, v_re, v_im, uo_re, uo_im);
+        for (std::size_t k = 0; k < 9; ++k) {
+            T* u_re = u + ((2 * k) * n) + s0;
+            T* u_im = u + (((2 * k) + 1) * n) + s0;
+            for (std::size_t b = 0; b < k_b; ++b) {
+                u_re[b] = static_cast<T>(o_re[k][b]);
+                u_im[b] = static_cast<T>(o_im[k][b]);
+            }
+        }
+    }
+
+    // Scalar tail for the last n % k_b sites, same math per site.
+    for (std::size_t s = tail_base; s < n; ++s) {
         double q[18];
         for (std::size_t k = 0; k < 9; ++k) {
-            q[2 * k]       = dt * static_cast<double>(p[((2 * k) + 1) * n + s]);
-            q[(2 * k) + 1] = -dt * static_cast<double>(p[(2 * k) * n + s]);
+            q[2 * k]       = dt * static_cast<double>(p[(((2 * k) + 1) * n) + s]);
+            q[(2 * k) + 1] = -dt * static_cast<double>(p[((2 * k) * n) + s]);
         }
+        double q2[18];
+        mul_3x3(q2, q, q);
+        double const f0r = f0_re_buf[s];
+        double const f0i = f0_im_buf[s];
+        double const f1r = f1_re_buf[s];
+        double const f1i = f1_im_buf[s];
+        double const f2r = f2_re_buf[s];
+        double const f2i = f2_im_buf[s];
+        double v[18];
+        for (std::size_t k = 0; k < 9; ++k) {
+            std::size_t const kr = 2 * k;
+            std::size_t const ki = kr + 1;
+            v[kr] = ((f1r * q[kr]) - (f1i * q[ki])) + ((f2r * q2[kr]) - (f2i * q2[ki]));
+            v[ki] = ((f1r * q[ki]) + (f1i * q[kr])) + ((f2r * q2[ki]) + (f2i * q2[kr]));
+        }
+        v[idx_re(0, 0)] += f0r;
+        v[idx_im(0, 0)] += f0i;
+        v[idx_re(1, 1)] += f0r;
+        v[idx_im(1, 1)] += f0i;
+        v[idx_re(2, 2)] += f0r;
+        v[idx_im(2, 2)] += f0i;
+
         double u_old[18];
         for (std::size_t k = 0; k < 18; ++k) {
             u_old[k] = static_cast<double>(u[(k * n) + s]);
         }
-
-        double v[18];
-        if (small_flag[s] != 0.0) {
-            // Taylor branch: V = I + iQ − Q²/2 − iQ³/6.
-            double q2[18];
-            mul_3x3(q2, q, q);
-            double q3[18];
-            mul_3x3(q3, q2, q);
-            for (std::size_t k = 0; k < 18; ++k) {
-                v[k] = -0.5 * q2[k];
-            }
-            v[idx_re(0, 0)] += 1.0;
-            v[idx_re(1, 1)] += 1.0;
-            v[idx_re(2, 2)] += 1.0;
-            for (std::size_t k = 0; k < 9; ++k) {
-                v[2 * k] += -q[(2 * k) + 1];
-                v[(2 * k) + 1] += q[2 * k];
-            }
-            constexpr double k_inv6 = 1.0 / 6.0;
-            for (std::size_t k = 0; k < 9; ++k) {
-                v[2 * k] += k_inv6 * q3[(2 * k) + 1];
-                v[(2 * k) + 1] -= k_inv6 * q3[2 * k];
-            }
-        } else {
-            double const u_ = u_buf[s];
-            double const w_ = w_buf[s];
-            double const cu = cu_buf[s];
-            double const su = su_buf[s];
-            double const cw = cw_buf[s];
-            double const sw = sw_buf[s];
-            // 2u trig via doubling — no extra Sleef call.
-            double const c2u = (cu * cu) - (su * su);
-            double const s2u = 2.0 * cu * su;
-            // ξ(w) = sin(w)/w, branchless small-w guard.
-            double const xi = (std::abs(w_) > k_eps_w) ? (sw / w_) : 1.0;
-
-            double const u2  = u_ * u_;
-            double const w2  = w_ * w_;
-            double const den = (9.0 * u2) - w2;
-
-            // h_0 = (u²−w²) e^{2iu} + e^{-iu}·[8 u² cw + 2 i u (3u² + w²) ξ]
-            double const t0a_re = (u2 - w2) * c2u;
-            double const t0a_im = (u2 - w2) * s2u;
-            double const inner0 = 2.0 * u_ * (3.0 * u2 + w2) * xi;
-            double const t0b_re = (cu * (8.0 * u2 * cw)) + (su * inner0);
-            double const t0b_im = -(su * (8.0 * u2 * cw)) + (cu * inner0);
-            double const h0_re  = t0a_re + t0b_re;
-            double const h0_im  = t0a_im + t0b_im;
-
-            // h_1 = 2u e^{2iu} − e^{-iu}·[2 u cw − i (3u² − w²) ξ]
-            double const t1a_re    = 2.0 * u_ * c2u;
-            double const t1a_im    = 2.0 * u_ * s2u;
-            double const inner1_re = 2.0 * u_ * cw;
-            double const inner1_im = -((3.0 * u2) - w2) * xi;
-            double const t1b_re    = (cu * inner1_re) + (su * inner1_im);
-            double const t1b_im    = (cu * inner1_im) - (su * inner1_re);
-            double const h1_re     = t1a_re - t1b_re;
-            double const h1_im     = t1a_im - t1b_im;
-
-            // h_2 = e^{2iu} − e^{-iu}·[cw + 3 i u ξ]
-            double const inner2_re = cw;
-            double const inner2_im = 3.0 * u_ * xi;
-            double const t2b_re    = (cu * inner2_re) + (su * inner2_im);
-            double const t2b_im    = (cu * inner2_im) - (su * inner2_re);
-            double const h2_re     = c2u - t2b_re;
-            double const h2_im     = s2u - t2b_im;
-
-            double const inv_den = 1.0 / den;
-            double const f0_re   = h0_re * inv_den;
-            double const f0_im   = h0_im * inv_den;
-            double const f1_re   = h1_re * inv_den;
-            double const f1_im   = h1_im * inv_den;
-            double const f2_re   = h2_re * inv_den;
-            double const f2_im   = h2_im * inv_den;
-
-            double q2[18];
-            mul_3x3(q2, q, q);
-            // V = f0·I + f1·Q + f2·Q²
-            for (std::size_t k = 0; k < 9; ++k) {
-                std::size_t const kr = 2 * k;
-                std::size_t const ki = kr + 1;
-                double const q_re    = q[kr];
-                double const q_im    = q[ki];
-                double const q2_re   = q2[kr];
-                double const q2_im   = q2[ki];
-                v[kr] = ((f1_re * q_re) - (f1_im * q_im)) + ((f2_re * q2_re) - (f2_im * q2_im));
-                v[ki] = ((f1_re * q_im) + (f1_im * q_re)) + ((f2_re * q2_im) + (f2_im * q2_re));
-            }
-            v[idx_re(0, 0)] += f0_re;
-            v[idx_im(0, 0)] += f0_im;
-            v[idx_re(1, 1)] += f0_re;
-            v[idx_im(1, 1)] += f0_im;
-            v[idx_re(2, 2)] += f0_re;
-            v[idx_im(2, 2)] += f0_im;
-        }
-
         double o_s[18];
         mul_3x3(o_s, v, u_old);
         for (std::size_t k = 0; k < 18; ++k) {
@@ -755,10 +1027,31 @@ template <class T, class Rng>
 // n links in this direction. Matches the SU(2) convention.
 template <class T>
 [[gnu::always_inline]] inline double kinetic_slab(T const* p, std::size_t n) noexcept {
-    // Per-link sum-of-squares in T (float → 4-wide), accumulated over links in
-    // double — the reduction-returns-double invariant.
-    double k = 0.0;
-    for (std::size_t s = 0; s < n; ++s) {
+    // Blocked: T-precision lane accumulators over k_b sites, folded into the
+    // double total once per block. Keeps the reduction-returns-double
+    // invariant at block granularity while breaking the per-site double
+    // chain that stops the x86 cost model from vectorising the loop.
+    constexpr std::size_t k_b   = 8;
+    std::size_t const tail_base = (n / k_b) * k_b;
+    double k                    = 0.0;
+    for (std::size_t s0 = 0; s0 < tail_base; s0 += k_b) {
+        T acc[k_b];
+        for (std::size_t b = 0; b < k_b; ++b) {
+            acc[b] = T{0};
+        }
+        for (std::size_t c = 0; c < 18; ++c) {
+            T const* row = p + (c * n) + s0;
+            for (std::size_t b = 0; b < k_b; ++b) {
+                acc[b] += row[b] * row[b];
+            }
+        }
+        double blk = 0.0;
+        for (std::size_t b = 0; b < k_b; ++b) {
+            blk += static_cast<double>(acc[b]);
+        }
+        k += blk;
+    }
+    for (std::size_t s = tail_base; s < n; ++s) {
         T per_link = T{0};
         for (std::size_t c = 0; c < 18; ++c) {
             T const v = p[(c * n) + s];

@@ -24,6 +24,12 @@ option(RETICOLO_ENABLE_OPENMP      "Enable OpenMP threading in apps"     ON)
 option(RETICOLO_WARNINGS_AS_ERRORS "Treat warnings as errors"            OFF)
 option(RETICOLO_TUNE_NATIVE        "Build with -march=native"            ON)
 
+# AVX-512 note: compilers default to 256-bit vectors even with -mavx512f
+# (prefer-vector-width=256), so the gauge site-batch defaults to 8 lanes.
+# To use full 512-bit registers on an AVX-512 host, configure with
+#   -DCMAKE_CXX_FLAGS="-mprefer-vector-width=512 -DRETICOLO_GAUGE_K_BATCH_MAX=16"
+# (see include/reticolo/action/detail/gauge_group/base.hpp).
+
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(ReticoloWarnings)
 
