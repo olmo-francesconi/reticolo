@@ -24,6 +24,7 @@ template <class Replica, class Rng>
     if (accept) {
         using std::swap;
         swap(ri.phi(), rj.phi());
+        ri.swap_energy_cache(rj);
     }
     return accept;
 }

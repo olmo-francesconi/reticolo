@@ -136,7 +136,29 @@ public:
         return dE;
     }
 
-    [[nodiscard]] scalar_t energy() const noexcept { return windowed_.base.s_full(phi_); }
+    // Exchange energy E = S_base of the current config. Reads the base
+    // action's post-trajectory cache (populated by HMC's h1 s_full, rolled
+    // back on reject) instead of a fresh O(V) sweep — valid once at least
+    // one trajectory has run, which the drivers guarantee (exchange only
+    // happens after `sample`).
+    [[nodiscard]] scalar_t energy() const noexcept {
+        return static_cast<scalar_t>(windowed_.base.last_s_full());
+    }
+
+    // After an accepted exchange swaps the two fields, each base action's
+    // raw-scalar cache must follow the config it described.
+    void swap_energy_cache(Replica& other) noexcept {
+        auto const mine    = windowed_.base.last_s_full();
+        auto const other_s = other.windowed_.base.last_s_full();
+        windowed_.base.restore_last_s_full(other_s);
+        other.windowed_.base.restore_last_s_full(mine);
+        if constexpr (Windowed::k_complex) {
+            auto const mine_i  = windowed_.base.last_s_imag();
+            auto const other_i = other.windowed_.base.last_s_imag();
+            windowed_.base.restore_last_s_imag(other_i);
+            other.windowed_.base.restore_last_s_imag(mine_i);
+        }
+    }
 
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
     [[nodiscard]] scalar_t a() const noexcept { return windowed_.a; }
