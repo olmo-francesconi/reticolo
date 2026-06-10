@@ -81,7 +81,6 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     for (int k = 0; k < spec.n_nr; ++k) {
 #pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto _  = log::scope(reps[n]->id());
             auto& r = *reps[n];
             r.thermalize(spec.n_therm_nr);
             de_buf[n] = r.sample(spec.n_meas_nr);
@@ -99,6 +98,8 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     for (int s = 0; s < spec.n_rm; ++s) {
 #pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
+            // Scope needed: iter() below logs from driver code inside the
+            // parallel region (Replica methods self-bind their own).
             auto _  = log::scope(reps[n]->id());
             auto& r = *reps[n];
             r.thermalize(spec.n_therm_rm, log::Mode::silent);

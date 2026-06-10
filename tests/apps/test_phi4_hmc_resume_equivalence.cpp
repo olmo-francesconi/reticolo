@@ -82,13 +82,14 @@ TEST_CASE("phi4_hmc --resume reproduces the would-have-been continuation bit-exa
     constexpr int k_ckpt         = 15;
     constexpr char const* k_seed = "20260518";
 
-    std::string const base_cmd = std::string{PHI4_HMC_BINARY} +
-                                 " -L 6 --ndim=3 --kappa=0.13 --lambda=0.02"
-                                 " --n_therm=" +
-                                 std::to_string(k_n_therm) +
-                                 " --n_prod=" + std::to_string(k_n_prod) +
-                                 " --checkpoint_every=" + std::to_string(k_ckpt) +
-                                 " --seed=" + k_seed + " --out=" + base_out.string();
+    std::string const base_cmd =
+        std::string{PHI4_HMC_BINARY} +
+        " -L 6 --ndim=3 --kappa=0.13 --lambda=0.02"
+        " --n_therm=" +
+        std::to_string(k_n_therm) + " --n_prod=" + std::to_string(k_n_prod) +
+        " --checkpoint_every=" + std::to_string(k_ckpt) + " --seed=" + k_seed +
+        " --workspace=" + base_out.parent_path().string() +
+        " --out=" + base_out.filename().string();
     run_and_require_exit(base_cmd);
 
     REQUIRE(std::filesystem::exists(cfg15));
@@ -97,7 +98,9 @@ TEST_CASE("phi4_hmc --resume reproduces the would-have-been continuation bit-exa
                                    " -L 6 --ndim=3 --kappa=0.13 --lambda=0.02"
                                    " --n_prod=" +
                                    std::to_string(k_n_prod) + " --resume=" + cfg15.string() +
-                                   " --seed=" + k_seed + " --out=" + part2_out.string();
+                                   " --seed=" + k_seed +
+                                   " --workspace=" + part2_out.parent_path().string() +
+                                   " --out=" + part2_out.filename().string();
     run_and_require_exit(resume_cmd);
 
     hid_t a = H5Fopen(base_out.string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);

@@ -33,12 +33,12 @@ export binary results ndim lambda n_therm n_prod seed
 run_one() {
     set -e
     local L=$1 kappa=$2
-    local out="$results/phi4_L${L}_kappa${kappa}.h5"
+    local out="phi4_L${L}_kappa${kappa}.h5"
     rc=0
     "$binary" \
         --size="$L" --kappa="$kappa" --lambda="$lambda" --ndim="$ndim" \
         --n_therm="$n_therm" --n_prod="$n_prod" --seed="$seed" \
-        --out="$out" >/dev/null || rc=$?
+        --workspace="$results" --out="$out" >/dev/null || rc=$?
     if [[ $rc -ne 0 ]]; then
         printf '[%s] L=%-3s kappa=%s  FAILED (exit %d)\n' "$(date +%H:%M:%S)" "$L" "$kappa" "$rc" >&2
         return "$rc"

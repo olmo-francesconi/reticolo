@@ -18,10 +18,12 @@ TEST_CASE("on_sigma_wolff binary writes the expected HDF5 schema", "[app][e2e][o
     constexpr int k_n_prod    = 25;
     constexpr int k_n_cluster = 3;
 
-    std::string const cmd =
-        std::string{ON_SIGMA_WOLFF_BINARY} + " --size=4 --beta=0.7 --ndim=3" +
-        " --n_cluster=" + std::to_string(k_n_cluster) + " --n_therm=" + std::to_string(k_n_therm) +
-        " --n_prod=" + std::to_string(k_n_prod) + " --seed=20260517 --out=" + out.string();
+    std::string const cmd = std::string{ON_SIGMA_WOLFF_BINARY} + " --size=4 --beta=0.7 --ndim=3" +
+                            " --n_cluster=" + std::to_string(k_n_cluster) +
+                            " --n_therm=" + std::to_string(k_n_therm) +
+                            " --n_prod=" + std::to_string(k_n_prod) +
+                            " --seed=20260517 --workspace=" + out.parent_path().string() +
+                            " --out=" + out.filename().string();
     run_and_require_exit(cmd);
     REQUIRE(std::filesystem::exists(out));
 

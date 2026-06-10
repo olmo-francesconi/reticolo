@@ -18,10 +18,12 @@ TEST_CASE("xy_wolff binary writes the expected HDF5 schema", "[app][e2e][xy_wolf
     constexpr int k_n_prod    = 25;
     constexpr int k_n_cluster = 3;
 
-    std::string const cmd =
-        std::string{XY_WOLFF_BINARY} + " --size=6 --beta=1.0" +
-        " --n_cluster=" + std::to_string(k_n_cluster) + " --n_therm=" + std::to_string(k_n_therm) +
-        " --n_prod=" + std::to_string(k_n_prod) + " --seed=20260517 --out=" + out.string();
+    std::string const cmd = std::string{XY_WOLFF_BINARY} + " --size=6 --beta=1.0" +
+                            " --n_cluster=" + std::to_string(k_n_cluster) +
+                            " --n_therm=" + std::to_string(k_n_therm) +
+                            " --n_prod=" + std::to_string(k_n_prod) +
+                            " --seed=20260517 --workspace=" + out.parent_path().string() +
+                            " --out=" + out.filename().string();
     run_and_require_exit(cmd);
     REQUIRE(std::filesystem::exists(out));
 

@@ -84,14 +84,14 @@ export si_over_v_max target_n_rep overlap seed
 stage1_hmc() {
     set -e
     local mu=$1
-    local out="$results/hmc_mu${mu}.h5"
+    local out="hmc_mu${mu}.h5"
     rc=0
     "$hmc_bin" \
         -L "$size" --ndim="$ndim" \
         --mass="$mass" --lambda="$lambda_" --mu="$mu" \
         --tau=1.0 --n_md=10 \
         --n_therm="$n_therm" --n_prod="$n_prod" --meas_every=1 \
-        --seed="$seed" --out="$out" >/dev/null || rc=$?
+        --seed="$seed" --workspace="$results" --out="$out" >/dev/null || rc=$?
     if [[ $rc -ne 0 ]]; then
         printf '[%s] HMC mu=%s FAILED (exit %d)\n' "$(date +%H:%M:%S)" "$mu" "$rc" >&2
         return "$rc"
@@ -104,7 +104,7 @@ stage2_llr() {
     set -e
     local mu=$1 sd=$2
     local rng_out="$results/range_mu${mu}_s${sd}.txt"
-    local llr_out="$results/llr_mu${mu}_s${sd}.h5"
+    local llr_out="llr_mu${mu}_s${sd}.h5"
 
     # Fixed range in intensive S_I/V; extensive e_max = (S_I/V)_max · V.
     # delta = per-replica spacing referenced to the FULL symmetric range
@@ -139,7 +139,7 @@ PY
         --tau=1.0 --n_md="$n_md" \
         --n_nr="$n_nr" --n_therm_nr="$n_therm_nr" --n_meas_nr="$n_meas_nr" \
         --n_rm="$n_rm" --n_therm_rm="$n_therm_rm" --n_meas_rm="$n_meas_rm" \
-        --seed="$sd" --out="$llr_out" >/dev/null || rc=$?
+        --seed="$sd" --workspace="$results" --out="$llr_out" >/dev/null || rc=$?
     if [[ $rc -ne 0 ]]; then
         printf '[%s] LLR mu=%s seed=%s FAILED (exit %d)  range=[%.2f, %.2f]  delta=%.3f\n' \
             "$(date +%H:%M:%S)" "$mu" "$sd" "$rc" "$e_min" "$e_max" "$d" >&2

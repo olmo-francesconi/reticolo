@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
 #include <format>
 #include <memory>
 #include <string>
@@ -55,13 +56,16 @@ int main(int argc, char** argv) {
     auto const& smooth_lambda_exp = p.opt<double>(
         "smooth_lambda_exp", 2.0, "shrinkage decay exponent; >1 keeps the perturbation summable");
     auto const& seed = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& outpath =
-        p.opt<std::string>("out", std::string{"u1_llr_smoothed.h5"}, "HDF5 output");
+    auto const& workspace =
+        p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
+    auto const& outfile = p.opt<std::string>(
+        "out", std::string{"u1_llr_smoothed.h5"}, "HDF5 output file name, inside workspace");
     if (!p.parse(argc, argv)) {
         return 0;
     }
 
-    log::start(outpath);
+    log::start(workspace, outfile, /*replicas=*/true);
+    std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
 
     LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Action const base{.beta = beta};

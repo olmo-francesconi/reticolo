@@ -34,12 +34,12 @@ export binary results ndim n_cluster n_therm n_prod seed
 run_one() {
     set -e
     local L=$1 beta=$2
-    local out="$results/on_sigma_L${L}_beta${beta}.h5"
+    local out="on_sigma_L${L}_beta${beta}.h5"
     rc=0
     "$binary" \
         --size="$L" --beta="$beta" --ndim="$ndim" \
         --n_cluster="$n_cluster" --n_therm="$n_therm" --n_prod="$n_prod" \
-        --seed="$seed" --out="$out" >/dev/null || rc=$?
+        --seed="$seed" --workspace="$results" --out="$out" >/dev/null || rc=$?
     if [[ $rc -ne 0 ]]; then
         printf '[%s] L=%-3s beta=%s  FAILED (exit %d)\n' "$(date +%H:%M:%S)" "$L" "$beta" "$rc" >&2
         return "$rc"

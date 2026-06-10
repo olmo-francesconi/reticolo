@@ -20,7 +20,8 @@ TEST_CASE("phi4_hmc binary writes the expected HDF5 schema", "[app][e2e][phi4_hm
     std::string const cmd = std::string{PHI4_HMC_BINARY} + " --size=4 --kappa=0.13 --lambda=0.02" +
                             " --n_therm=" + std::to_string(k_n_therm) +
                             " --n_prod=" + std::to_string(k_n_prod) +
-                            " --seed=20260517 --out=" + out.string();
+                            " --seed=20260517 --workspace=" + out.parent_path().string() +
+                            " --out=" + out.filename().string();
     run_and_require_exit(cmd);
     REQUIRE(std::filesystem::exists(out));
 

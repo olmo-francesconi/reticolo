@@ -70,7 +70,7 @@ with h5py.File("phi4.h5", "r") as f:
 prints the full metadata and a mean ± stderr summary of every series:
 
 ```sh
-./build/macos-appleclang/apps/phi4_hmc --out phi4.h5 --n_prod 1000
+./build/macos-appleclang/apps/phi4_hmc --workspace runs/phi4 --out phi4.h5 --n_prod 1000
 python scripts/read_output.py phi4.h5
 ```
 

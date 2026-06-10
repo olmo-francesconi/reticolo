@@ -19,7 +19,8 @@ TEST_CASE("su2_llr binary writes the expected HDF5 schema", "[app][e2e][su2_llr]
                             " --E_min=0 --E_max=40 --delta=20" + " --tau=0.5 --n_md=8" +
                             " --n_nr=2 --n_therm_nr=4 --n_meas_nr=8" +
                             " --n_rm=2 --n_therm_rm=4 --n_meas_rm=8" +
-                            " --seed=20260520 --out=" + out.string();
+                            " --seed=20260520 --workspace=" + out.parent_path().string() +
+                            " --out=" + out.filename().string();
     run_and_require_exit(cmd);
     REQUIRE(std::filesystem::exists(out));
 

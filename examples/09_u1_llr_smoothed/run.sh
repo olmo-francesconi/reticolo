@@ -60,7 +60,7 @@ common_args=(
 
 printf '[%s] vanilla LLR  beta=%s  n_rm=%s  threads=%s\n' \
     "$(date +%H:%M:%S)" "$beta" "$n_rm" "$OMP_NUM_THREADS"
-"$vanilla_bin" "${common_args[@]}" --out="$results/llr_vanilla.h5"
+"$vanilla_bin" "${common_args[@]}" --workspace="$results" --out="llr_vanilla.h5"
 printf '[%s] vanilla done\n' "$(date +%H:%M:%S)"
 
 printf '[%s] smoothed  LLR  beta=%s  n_rm=%s  K=%s  deg=%s  λ0=%s  exp=%s\n' \
@@ -69,7 +69,7 @@ printf '[%s] smoothed  LLR  beta=%s  n_rm=%s  K=%s  deg=%s  λ0=%s  exp=%s\n' \
 "$smoothed_bin" "${common_args[@]}" \
     --smooth_K="$smooth_K" --smooth_degree="$smooth_degree" \
     --smooth_lambda0="$smooth_lambda0" --smooth_lambda_exp="$smooth_lambda_exp" \
-    --out="$results/llr_smoothed.h5"
+    --workspace="$results" --out="llr_smoothed.h5"
 printf '[%s] smoothed done\n' "$(date +%H:%M:%S)"
 
 echo

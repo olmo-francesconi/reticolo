@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
 #include <format>
 #include <memory>
 #include <string>
@@ -46,13 +47,17 @@ int main(int argc, char** argv) {
     auto const& n_meas_rm = p.opt<int>("n_meas_rm", 500, "measurement trajectories per RM sweep");
     auto const& exchange  = p.opt<int>(
         "exchange", 1, "enable even/odd nearest-neighbour replica exchange in the RM phase (0/1)");
-    auto const& seed    = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& outpath = p.opt<std::string>("out", std::string{"u1_llr.h5"}, "HDF5 output");
+    auto const& seed = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
+    auto const& workspace =
+        p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
+    auto const& outfile = p.opt<std::string>(
+        "out", std::string{"u1_llr.h5"}, "HDF5 output file name, inside workspace");
     if (!p.parse(argc, argv)) {
         return 0;
     }
 
-    log::start(outpath);
+    log::start(workspace, outfile, /*replicas=*/true);
+    std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
 
     // ---- Base action ----
     LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));

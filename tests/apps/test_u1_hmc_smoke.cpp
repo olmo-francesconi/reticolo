@@ -20,7 +20,8 @@ TEST_CASE("u1_hmc binary writes the expected HDF5 schema", "[app][e2e][u1_hmc]")
     std::string const cmd =
         std::string{U1_HMC_BINARY} + " --size=4 --ndim=2 --beta=1.0 --tau=1.0 --n_md=10" +
         " --n_therm=" + std::to_string(k_n_therm) + " --n_prod=" + std::to_string(k_n_prod) +
-        " --seed=20260518 --out=" + out.string();
+        " --seed=20260518 --workspace=" + out.parent_path().string() +
+        " --out=" + out.filename().string();
     run_and_require_exit(cmd);
     REQUIRE(std::filesystem::exists(out));
 

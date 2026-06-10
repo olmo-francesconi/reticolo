@@ -5,7 +5,9 @@
 #include <reticolo/core/log_helpers.hpp>
 
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <regex>
 #include <sstream>
 #include <streambuf>
@@ -67,10 +69,17 @@ std::vector<std::string> lines_of(std::string const& s) {
     return out;
 }
 
+// Reset to console-only serial rendering without rl::start() — the public
+// init opens a main log file, which the format-only tests don't want.
+// White-box by design: this is the logger's own test.
+void serial_mode() {
+    rl::detail::cfg().replicas = false;
+}
+
 }  // namespace
 
 TEST_CASE("info goes to stdout; warn and error go to stderr", "[log]") {
-    rl::init_serial();
+    serial_mode();
     rl::set_color(false);
     rl::set_min_level(rl::Level::debug);
     StreamCapture cap;
@@ -86,7 +95,7 @@ TEST_CASE("info goes to stdout; warn and error go to stderr", "[log]") {
 }
 
 TEST_CASE("severity sigil distinguishes levels", "[log]") {
-    rl::init_serial();
+    serial_mode();
     rl::set_color(false);
     rl::set_min_level(rl::Level::debug);
     StreamCapture cap;
@@ -105,7 +114,7 @@ TEST_CASE("severity sigil distinguishes levels", "[log]") {
 }
 
 TEST_CASE("tag is truncated and padded to 4 cells", "[log]") {
-    rl::init_serial();
+    serial_mode();
     rl::set_color(false);
     StreamCapture cap;
 
@@ -120,7 +129,7 @@ TEST_CASE("tag is truncated and padded to 4 cells", "[log]") {
 }
 
 TEST_CASE("multi-line entry keeps sigil, blanks metadata on continuations", "[log]") {
-    rl::init_serial();
+    serial_mode();
     rl::set_color(false);
     StreamCapture cap;
 
@@ -142,7 +151,7 @@ TEST_CASE("multi-line entry keeps sigil, blanks metadata on continuations", "[lo
 }
 
 TEST_CASE("elapsed timestamp uses HHH:MM:SS.mmm format", "[log]") {
-    rl::init_serial();
+    serial_mode();
     rl::set_color(false);
     StreamCapture cap;
 
@@ -153,7 +162,7 @@ TEST_CASE("elapsed timestamp uses HHH:MM:SS.mmm format", "[log]") {
 }
 
 TEST_CASE("set_min_level suppresses lower-severity entries", "[log]") {
-    rl::init_serial();
+    serial_mode();
     rl::set_color(false);
     rl::set_min_level(rl::Level::warn);
     StreamCapture cap;
@@ -168,7 +177,7 @@ TEST_CASE("set_min_level suppresses lower-severity entries", "[log]") {
 }
 
 TEST_CASE("rl::act renders any action's describe() with the act tag", "[log]") {
-    rl::init_serial();
+    serial_mode();
     rl::set_color(false);
     StreamCapture cap;
 
@@ -189,8 +198,8 @@ TEST_CASE("rl::act renders any action's describe() with the act tag", "[log]") {
 
 TEST_CASE("Scope binds a run-id for the current thread; clears on exit", "[log]") {
     auto const tmp = std::filesystem::temp_directory_path() / "reticolo_log_test";
-    std::filesystem::create_directories(tmp);
-    rl::init_parallel(tmp, /*run_tag_width=*/4);
+    std::filesystem::remove_all(tmp);
+    rl::start(tmp, "run.h5", /*replicas=*/true);
     rl::set_color(false);
     StreamCapture cap;
 
@@ -211,17 +220,24 @@ TEST_CASE("Scope binds a run-id for the current thread; clears on exit", "[log]"
     REQUIRE(s.substr(0, inside_pos).find("r042") != std::string::npos);
     REQUIRE(s.substr(inside_pos).find("main") != std::string::npos);
 
-    // Per-run file was created.
+    // Per-run file was created; the main log mirrors scoped AND unscoped lines.
     REQUIRE(std::filesystem::exists(tmp / "run.r042.log"));
+    REQUIRE(std::filesystem::exists(tmp / "run.log"));
+    {
+        std::ifstream mf{tmp / "run.log"};
+        std::string const all{std::istreambuf_iterator<char>{mf}, std::istreambuf_iterator<char>{}};
+        REQUIRE(all.find("inside") != std::string::npos);
+        REQUIRE(all.find("outside") != std::string::npos);
+    }
     std::filesystem::remove_all(tmp);
 
-    rl::init_serial();  // restore mode for any later tests
+    serial_mode();  // restore mode for any later tests
 }
 
-TEST_CASE("start(output_path) namespaces per-run files by the output stem", "[log]") {
+TEST_CASE("start(ws, out) creates the workspace and stems files by the out name", "[log]") {
     auto const tmp = std::filesystem::temp_directory_path() / "reticolo_log_stem_test";
-    std::filesystem::create_directories(tmp);
-    rl::init_parallel(tmp, /*run_tag_width=*/4, "llr_mu0.9_s43");
+    std::filesystem::remove_all(tmp);
+    rl::start(tmp, "llr_mu0.9_s43.h5", /*replicas=*/true);  // creates tmp itself
     rl::set_color(false);
     StreamCapture cap;
 
@@ -230,10 +246,11 @@ TEST_CASE("start(output_path) namespaces per-run files by the output stem", "[lo
         rl::info("hmc", "scoped line");
     }
 
-    // Concurrent sims sharing an outdir must not collide on run.<id>.log.
+    // Concurrent sims sharing a workspace must not collide on <stem>.log.
+    REQUIRE(std::filesystem::exists(tmp / "llr_mu0.9_s43.log"));
     REQUIRE(std::filesystem::exists(tmp / "llr_mu0.9_s43.r007.log"));
     REQUIRE(!std::filesystem::exists(tmp / "run.r007.log"));
     std::filesystem::remove_all(tmp);
 
-    rl::init_serial();
+    serial_mode();
 }

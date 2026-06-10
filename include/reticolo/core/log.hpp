@@ -2,22 +2,27 @@
 
 // reticolo logger.
 //
-//  * Threadsafe via std::osyncstream (line-atomic) + a mutex around the
-//    per-run file map.
+//  * Threadsafe: one mutex covers console + file emission, so multi-line
+//    entries are atomic across threads.
 //  * Severity = sigil:   ·  debug   ┃  info   ⚠  warn   ✖  error
-//  * Single line format (parallel mode, run_tag_width = 4):
+//  * Single line format (replica mode, run_tag_width = 4):
 //
 //      ┃ r000 HHH:MM:SS.mmm  init  lattice 32^4, β=6.0
 //
 //  * Multi-line entries preserve the sigil on continuation lines and
 //    blank the metadata columns so the message column aligns.
-//  * Run-id is bound per OpenMP iteration via RAII Scope (works with
-//    schedule(dynamic) and N_sims > N_threads — same thread rebinds
-//    each iteration).
-//  * Per-run files in parallel mode: <outdir>/<stem>.<runid>.log, lazy-open,
-//    per-line flush. `log::start(output_path)` sets stem = the output file's
-//    stem so concurrent sims sharing an outdir don't append to each other's
-//    logs; bare `init_parallel` keeps the default "run".
+//  * `log::start(workspace, out_name[, replicas])` is the single init:
+//    creates the workspace folder, opens <ws>/<stem>.log (stem = out_name
+//    minus extension — sweep-safe when sims share a workspace) and mirrors
+//    every entry into it, then prints the banner.
+//  * With replicas=true the run-id column is rendered and each scoped run
+//    id additionally gets its own <ws>/<stem>.<rid>.log (lazy-open,
+//    per-entry flush). Scoped lines land in both files.
+//  * Run-id is bound per thread via RAII `log::scope(id)` (works with
+//    schedule(dynamic) and N_sims > N_threads — same thread rebinds each
+//    iteration). Library code that owns a run id (llr::Replica) binds it
+//    internally; an app binds a scope only when it runs its own logging
+//    code inside a parallel region.
 
 #include <reticolo/core/build_info.hpp>
 
@@ -36,6 +41,7 @@
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -60,9 +66,9 @@ enum class Mode : std::uint8_t { normal, silent };
 namespace detail {
 
 struct Config {
-    bool parallel_mode = false;
-    std::filesystem::path outdir{"."};
-    std::string file_stem{"run"};
+    bool replicas = false;
+    std::filesystem::path workspace{"."};
+    std::string stem{"run"};
     std::size_t run_tag_width = 4;
     Level min_level           = Level::info;
     bool color                = false;
@@ -94,8 +100,13 @@ inline std::unordered_map<std::string, std::ofstream>& run_files() {
     return m;
 }
 
-inline std::vector<std::string>& scope_stack() {
-    thread_local std::vector<std::string> s;
+inline std::ofstream& main_file() {
+    static std::ofstream f;
+    return f;
+}
+
+inline std::string& bound_run() {
+    thread_local std::string s;
     return s;
 }
 
@@ -175,8 +186,7 @@ inline std::string fit(std::string_view s, std::size_t w) {
 }
 
 inline std::string current_run() {
-    auto const& s = scope_stack();
-    return s.empty() ? std::string{} : s.back();
+    return bound_run();
 }
 
 inline std::ostream& sink_for(Level lv) {
@@ -193,7 +203,7 @@ inline std::ostream& sink_for(Level lv) {
 
 // Must be called with sink_mutex() held by the caller.
 inline std::ofstream* run_file_for_locked(std::string const& run_id) {
-    if (!cfg().parallel_mode || run_id.empty()) {
+    if (!cfg().replicas || run_id.empty()) {
         return nullptr;
     }
     auto& files = run_files();
@@ -201,8 +211,8 @@ inline std::ofstream* run_file_for_locked(std::string const& run_id) {
     if (it != files.end()) {
         return &it->second;
     }
-    auto path     = cfg().outdir / std::format("{}.{}.log", cfg().file_stem, run_id);
-    auto [ins, _] = files.emplace(run_id, std::ofstream(path, std::ios::out | std::ios::app));
+    auto path     = cfg().workspace / std::format("{}.{}.log", cfg().stem, run_id);
+    auto [ins, _] = files.emplace(run_id, std::ofstream(path));
     return &ins->second;
 }
 
@@ -319,7 +329,7 @@ inline void Entry::emit() {
     auto const ts   = format_elapsed();
     auto const tag4 = fit(tag_, 4);
     auto const run  = current_run();
-    bool const par  = cfg().parallel_mode;
+    bool const par  = cfg().replicas;
     auto const runW = cfg().run_tag_width;
 
     // Placeholder for unscoped lines in parallel mode:
@@ -343,10 +353,13 @@ inline void Entry::emit() {
     std::string const first = std::format("{}{} {}{}  {}  ", col, sig, run_col, ts, tag4);
     std::string const cont =
         std::format("{}{} {}{}  {}  ", col, sig, blank_run, blank_ts, blank_tag);
+    // Plain (no-ANSI) variants for the main log file.
+    std::string const pfirst = std::format("{} {}{}  {}  ", sig, run_col, ts, tag4);
+    std::string const pcont  = std::format("{} {}{}  {}  ", sig, blank_run, blank_ts, blank_tag);
 
-    // One lock covers stdout/stderr emission AND the per-run-file map +
-    // append. Line-atomic for the whole multi-line Entry — no other thread
-    // can interleave between our lines.
+    // One lock covers stdout/stderr emission AND the file writes.
+    // Line-atomic for the whole multi-line Entry — no other thread can
+    // interleave between our lines.
     std::lock_guard lk{sink_mutex()};
 
 #ifdef _OPENMP
@@ -358,6 +371,13 @@ inline void Entry::emit() {
     auto& out = sink_for(lv_);
     for (std::size_t i = 0; i < lines_.size(); ++i) {
         out << (i == 0 ? first : cont) << lines_[i] << rst << '\n';
+    }
+
+    if (auto& mf = main_file(); mf.is_open()) {
+        for (std::size_t i = 0; i < lines_.size(); ++i) {
+            mf << (i == 0 ? pfirst : pcont) << lines_[i] << '\n';
+        }
+        mf.flush();
     }
 
     if (auto* rf = run_file_for_locked(run); rf != nullptr) {
@@ -415,21 +435,20 @@ inline void error(std::string_view tag, std::format_string<Args...> fmt, Args&&.
 }
 
 // RAII scope guard. Bind `run_id` to the current thread for the lifetime of
-// this object. Push/pop a thread-local stack so nested scopes work and so
-// the same thread rebinds correctly across OpenMP loop iterations.
+// this object; the previous binding is restored on destruction, so the same
+// thread rebinds correctly across OpenMP loop iterations.
 class Scope {
 public:
-    explicit Scope(std::string run_id) { detail::scope_stack().push_back(std::move(run_id)); }
-    ~Scope() {
-        auto& s = detail::scope_stack();
-        if (!s.empty()) {
-            s.pop_back();
-        }
-    }
+    explicit Scope(std::string run_id)
+        : prev_{std::exchange(detail::bound_run(), std::move(run_id))} {}
+    ~Scope() { detail::bound_run() = std::move(prev_); }
     Scope(Scope const&)            = delete;
     Scope& operator=(Scope const&) = delete;
     Scope(Scope&&)                 = delete;
     Scope& operator=(Scope&&)      = delete;
+
+private:
+    std::string prev_;
 };
 
 [[nodiscard]] inline Scope scope(std::string_view run_id) {
@@ -437,25 +456,6 @@ public:
 }
 
 // Init / config -------------------------------------------------------------
-
-inline void init_serial() {
-    detail::cfg().parallel_mode = false;
-    detail::cfg().color         = detail::detect_color(fileno(stdout));
-    detail::mono_start();
-    detail::wall_start();
-}
-
-inline void init_parallel(std::filesystem::path outdir,
-                          std::size_t run_tag_width = 4,
-                          std::string file_stem     = "run") {
-    detail::cfg().parallel_mode = true;
-    detail::cfg().outdir        = std::move(outdir);
-    detail::cfg().file_stem     = std::move(file_stem);
-    detail::cfg().run_tag_width = run_tag_width;
-    detail::cfg().color         = detail::detect_color(fileno(stdout));
-    detail::mono_start();
-    detail::wall_start();
-}
 
 inline void set_min_level(Level lv) {
     detail::cfg().min_level = lv;
@@ -540,28 +540,34 @@ inline void banner() {
     bottom += "━┛";
 
     std::lock_guard lk{detail::sink_mutex()};
-    auto& out = std::cout;
+    auto& mf  = detail::main_file();
+    auto emit = [&](std::string const& s) {
+        std::cout << s;
+        if (mf.is_open()) {
+            mf << s;
+        }
+    };
 
-    out << '\n';
-    out << rule("┏", "┓", inner_width) << '\n';
-    out << blank_row << '\n';
+    emit("\n");
+    emit(rule("┏", "┓", inner_width) + "\n");
+    emit(blank_row + "\n");
     for (auto const& row : figlet) {
-        out << "┃" << std::string(left_pad, ' ') << row << std::string(right_pad, ' ') << "┃"
-            << '\n';
+        emit("┃" + std::string(left_pad, ' ') + std::string{row} + std::string(right_pad, ' ') +
+             "┃\n");
     }
-    out << blank_row << '\n';
-    out << bottom << '\n';
+    emit(blank_row + "\n");
+    emit(bottom + "\n");
 
     // Metadata block — same ┃ sigil as log lines, no frame, so it bridges
     // into the run log naturally.
-    out << std::format("┃ branch   : {} @ {}\n", build::git_branch, build::git_commit);
-    out << std::format("┃ compiler : {}\n", build::compiler);
-    out << std::format("┃ build    : {} · {}\n", build::build_type, build::simd);
-    out << std::format("┃ openmp   : {}\n",
-                       build::openmp_enabled
-                           ? std::format("{} thread{}", omp_threads, omp_threads == 1 ? "" : "s")
-                           : std::string{"disabled"});
-    out << std::format("┃ started  : {} (local)\n", detail::format_wall(detail::wall_start()));
+    emit(std::format("┃ branch   : {} @ {}\n", build::git_branch, build::git_commit));
+    emit(std::format("┃ compiler : {}\n", build::compiler));
+    emit(std::format("┃ build    : {} · {}\n", build::build_type, build::simd));
+    emit(std::format("┃ openmp   : {}\n",
+                     build::openmp_enabled
+                         ? std::format("{} thread{}", omp_threads, omp_threads == 1 ? "" : "s")
+                         : std::string{"disabled"}));
+    emit(std::format("┃ started  : {} (local)\n", detail::format_wall(detail::wall_start())));
 
     // Section break between banner metadata and the live log stream.
     // Heavy T-junction continues the running ┃ column into a horizontal rule.
@@ -569,25 +575,37 @@ inline void banner() {
     for (std::size_t i = 0; i < inner_width; ++i) {
         sep += "━";
     }
-    out << sep << '\n';
+    emit(sep + "\n");
+    if (mf.is_open()) {
+        mf.flush();
+    }
 }
 
-// One-shot app entry point: init the logger in parallel mode with the
-// per-run files landing next to the given HDF5 output, then print the
-// banner. Idempotent — `init_parallel` overwrites cfg cheaply, banner
-// guards on its static flag.
-inline void start(std::filesystem::path const& output_path) {
-    auto dir = output_path.parent_path();
-    init_parallel(dir.empty() ? std::filesystem::path{"."} : std::move(dir),
-                  /*run_tag_width=*/4,
-                  output_path.stem().string());
-    banner();
-}
+// The single app entry point. Creates the workspace folder, opens the main
+// log file <workspace>/<stem>.log (stem = out_name minus extension) and
+// prints the banner. With replicas=true, scoped lines carry a run-id column
+// and additionally land in per-replica <workspace>/<stem>.<rid>.log files.
+inline void
+start(std::filesystem::path const& workspace, std::string_view out_name, bool replicas = false) {
+    auto& c     = detail::cfg();
+    c.replicas  = replicas;
+    c.workspace = workspace.empty() ? std::filesystem::path{"."} : workspace;
+    c.stem      = std::filesystem::path{out_name}.stem().string();
+    c.color     = detail::detect_color(fileno(stdout));
+    detail::mono_start();
+    detail::wall_start();
 
-// Serial-mode shorthand for apps that don't have multiple replicas /
-// per-run files. Same idempotency story.
-inline void start() {
-    init_serial();
+    std::error_code ec;
+    std::filesystem::create_directories(c.workspace, ec);
+    auto const log_path = c.workspace / (c.stem + ".log");
+    auto& mf            = detail::main_file();
+    if (mf.is_open()) {
+        mf.close();
+    }
+    mf.open(log_path);
+    if (!mf.is_open()) {
+        std::cerr << "⚠ logger: cannot open " << log_path.string() << " — console only\n";
+    }
     banner();
 }
 

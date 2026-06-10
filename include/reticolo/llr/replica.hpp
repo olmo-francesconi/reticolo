@@ -90,6 +90,7 @@ public:
     }
 
     void thermalize(int n, log::Mode log_mode = log::Mode::normal) {
+        auto _             = log::scope(id_);
         int local_accepted = 0;
         for (int i = 0; i < n; ++i) {
             auto const step = hmc_.step(log::Mode::silent);
@@ -113,6 +114,7 @@ public:
     // sweep — HMC's s_full call at h1 already populated it, and a reject
     // would have rolled it back to the h0 value.
     [[nodiscard]] scalar_t sample(int n, log::Mode log_mode = log::Mode::normal) {
+        auto _       = log::scope(id_);
         scalar_t sum = scalar_t{0};
         for (int i = 0; i < n; ++i) {
             auto const step = hmc_.step(log::Mode::silent);
@@ -208,6 +210,7 @@ public:
                                    int batch_size          = 10,
                                    double threshold_sigmas = 1.0,
                                    log::Mode log_mode      = log::Mode::normal) {
+        auto _ = log::scope(id_);
         for (int b = 0; b < max_batches; ++b) {
             for (int i = 0; i < batch_size; ++i) {
                 (void)sampler.step(log::Mode::silent);

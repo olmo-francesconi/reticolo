@@ -208,9 +208,18 @@ C++ over a span).
 `reticolo::log` is a thread-safe (mutex around `std::cout` / `std::cerr`),
 OpenMP-aware logger. Severity = sigil (`·` debug, `┃` info, `⚠` warn,
 `✖` error); each line carries elapsed `HHH:MM:SS.mmm` + a 4-char tag.
-`log::scope("rNNN")` (RAII) adds a thread-local replica tag — LLR apps
-bind one per replica inside the parallel-for; transitively-called code
-picks it up automatically.
+
+`log::start(workspace, out_name[, replicas])` is the single init: it
+creates the workspace folder, opens the main log file
+`<workspace>/<stem>.log` (stem = out_name minus extension, so sweeps
+sharing a workspace don't collide) and mirrors every entry into it, then
+prints the banner. With `replicas = true` each scoped run id also gets its
+own `<workspace>/<stem>.<rNNN>.log`.
+
+`log::scope("rNNN")` (RAII) binds a thread-local replica tag —
+`llr::Replica` binds its own id inside its public methods, so apps and
+drivers only bind a scope when they run their own logging code inside a
+parallel region; transitively-called code picks the tag up automatically.
 
 `Lattice`, `FastRng`, `Writer`, action, algorithm, and `llr::Replica`
 constructors auto-announce, so most apps don't call `log::info` at all.

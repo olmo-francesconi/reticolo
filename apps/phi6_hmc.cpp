@@ -13,6 +13,8 @@
 #include <reticolo/reticolo.hpp>
 
 #include <cstddef>
+#include <filesystem>
+#include <string>
 
 int main(int argc, char** argv) {
     using namespace reticolo;
@@ -30,11 +32,15 @@ int main(int argc, char** argv) {
     auto const& n_prod     = p.opt<int>("n_prod", 1000, "production trajectories");
     auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N trajectories");
     auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& outpath    = p.opt<std::string>("out", std::string{"phi6.h5"}, "HDF5 output path");
+    auto const& workspace =
+        p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
+    auto const& outfile = p.opt<std::string>(
+        "out", std::string{"phi6.h5"}, "HDF5 output file name, inside workspace");
     if (!p.parse(argc, argv))
         return 0;
 
-    log::start(outpath);
+    log::start(workspace, outfile);
+    std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
 
     // ---- State: lattice, RNG, action ----
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));

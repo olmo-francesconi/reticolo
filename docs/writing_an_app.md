@@ -58,7 +58,10 @@ auto const& n_md    = p.opt<int>("n_md",      20,   "MD steps per trajectory");
 auto const& n_therm = p.opt<int>("n_therm",   200,  "thermalisation trajectories");
 auto const& n_prod  = p.opt<int>("n_prod",    1000, "production trajectories");
 auto const& seed    = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-auto const& outpath = p.opt<std::string>("out", std::string{"phi4.h5"}, "output");
+auto const& workspace =
+    p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
+auto const& outfile =
+    p.opt<std::string>("out", std::string{"phi4.h5"}, "HDF5 output file name, inside workspace");
 p.parse(argc, argv);
 ```
 
@@ -83,6 +86,7 @@ make the construction self-documenting.
 ## Step 4 — open the writer
 
 ```cpp
+std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
 io::Writer out{outpath, argc, argv, &p};
 ```
 
@@ -170,8 +174,14 @@ Action / algorithm / Replica constructors emit their own `init`, `act`,
 `main` enables the file logger:
 
 ```cpp
-log::start(outpath);   // init_parallel + banner — call once
+log::start(workspace, outfile);   // call once, before constructing anything
 ```
+
+`start` creates the workspace folder, opens the main log file
+`<workspace>/<stem>.log` (stem = the `--out` name minus extension — sweeps
+sharing a workspace don't clobber each other) and mirrors every entry into
+it, then prints the banner. LLR apps pass `/*replicas=*/true` to add the
+run-id column and per-replica `<stem>.<rNNN>.log` files.
 
 Suppress everything with `log::off()`; opt out of a single algorithm step
 with `log::Mode::silent` (e.g. `hmc.step(log::Mode::silent)` during
