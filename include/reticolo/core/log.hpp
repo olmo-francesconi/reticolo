@@ -183,6 +183,14 @@ inline std::ostream& sink_for(Level lv) {
     return (lv == Level::warn || lv == Level::error) ? std::cerr : std::cout;
 }
 
+// True when a message at `lv` can never be emitted under the current config.
+// Checked BEFORE any formatting so suppressed calls (log::off in tests and
+// benches, debug below min_level in production) cost a couple of loads, not
+// a std::format + vector allocation per call.
+[[nodiscard]] inline bool suppressed(Level lv) noexcept {
+    return !cfg().enabled || static_cast<int>(lv) < static_cast<int>(cfg().min_level);
+}
+
 // Must be called with sink_mutex() held by the caller.
 inline std::ofstream* run_file_for_locked(std::string const& run_id) {
     if (!cfg().parallel_mode || run_id.empty()) {
@@ -216,12 +224,16 @@ inline bool detect_color(int fd) noexcept {
 // atomically — no interleaving across threads.
 class Entry {
 public:
-    Entry(Level lv, std::string_view tag) : lv_{lv}, tag_{tag} {}
+    // Suppression is latched at construction: a suppressed Entry skips all
+    // line()/param() formatting, so building a never-emitted entry costs
+    // nothing beyond the level check.
+    Entry(Level lv, std::string_view tag)
+        : lv_{lv}, tag_{tag}, suppressed_{detail::suppressed(lv)} {}
     Entry(Entry const&)            = delete;
     Entry& operator=(Entry const&) = delete;
     Entry(Entry&& other) noexcept
         : lv_{other.lv_}, tag_{std::move(other.tag_)}, lines_{std::move(other.lines_)},
-          emitted_{other.emitted_} {
+          suppressed_{other.suppressed_}, emitted_{other.emitted_} {
         other.emitted_ = true;
     }
     Entry& operator=(Entry&&) = delete;
@@ -232,11 +244,17 @@ public:
     // Holding an lvalue Entry (e.g. inside a class's `describe()` method)
     // and calling `.line()`/`.param()` incrementally also works.
     Entry& line(std::string_view s) {
+        if (suppressed_) {
+            return *this;
+        }
         lines_.emplace_back(s);
         return *this;
     }
     template <class... Args>
     Entry& line(std::format_string<Args...> fmt, Args&&... a) {
+        if (suppressed_) {
+            return *this;
+        }
         lines_.emplace_back(std::format(fmt, std::forward<Args>(a)...));
         return *this;
     }
@@ -244,6 +262,9 @@ public:
     // Parameter line — same as line() but with a fixed 2-space indent so
     // parameters render visually nested under the concept name above them.
     Entry& param(std::string_view s) {
+        if (suppressed_) {
+            return *this;
+        }
         std::string buf{"  "};
         buf.append(s);
         lines_.emplace_back(std::move(buf));
@@ -251,6 +272,9 @@ public:
     }
     template <class... Args>
     Entry& param(std::format_string<Args...> fmt, Args&&... a) {
+        if (suppressed_) {
+            return *this;
+        }
         std::string buf{"  "};
         buf.append(std::format(fmt, std::forward<Args>(a)...));
         lines_.emplace_back(std::move(buf));
@@ -258,6 +282,9 @@ public:
     }
 
     Entry& operator<<(std::string_view s) {
+        if (suppressed_) {
+            return *this;
+        }
         lines_.emplace_back(s);
         return *this;
     }
@@ -266,10 +293,7 @@ public:
         if (emitted_ || lines_.empty()) {
             return;
         }
-        if (!detail::cfg().enabled) {
-            return;
-        }
-        if (static_cast<int>(lv_) < static_cast<int>(detail::cfg().min_level)) {
+        if (detail::suppressed(lv_)) {
             return;
         }
         emit();
@@ -281,7 +305,8 @@ private:
     Level lv_;
     std::string tag_;
     std::vector<std::string> lines_;
-    bool emitted_ = false;
+    bool suppressed_ = false;
+    bool emitted_    = false;
 };
 
 inline void Entry::emit() {
@@ -362,18 +387,30 @@ inline Entry error(std::string_view tag) {
 
 template <class... Args>
 inline void debug(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
+    if (detail::suppressed(Level::debug)) {
+        return;
+    }
     Entry{Level::debug, tag}.line(fmt, std::forward<Args>(a)...);
 }
 template <class... Args>
 inline void info(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
+    if (detail::suppressed(Level::info)) {
+        return;
+    }
     Entry{Level::info, tag}.line(fmt, std::forward<Args>(a)...);
 }
 template <class... Args>
 inline void warn(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
+    if (detail::suppressed(Level::warn)) {
+        return;
+    }
     Entry{Level::warn, tag}.line(fmt, std::forward<Args>(a)...);
 }
 template <class... Args>
 inline void error(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
+    if (detail::suppressed(Level::error)) {
+        return;
+    }
     Entry{Level::error, tag}.line(fmt, std::forward<Args>(a)...);
 }
 
