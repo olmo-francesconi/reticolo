@@ -62,6 +62,8 @@ inline auto const sleef_dispatch_warmup = [] {
     sink                   = sc.x + sc.y;
     Sleef_float2 const scf = Sleef_sincosf_u10(0.0F);
     sink                   = static_cast<double>(scf.x + scf.y);
+    sink                   = static_cast<double>(Sleef_sinf_u10(0.0F));
+    sink                   = static_cast<double>(Sleef_cosf_u10(0.0F));
     return static_cast<double>(sink);
 }();
 
@@ -133,6 +135,44 @@ inline void cos_batch(double* dst, double const* src, std::size_t n) noexcept {
     }
 }
 
+// Single-precision twin — 2× the lane count of the double path. Lets float
+// gauge actions batch their plaquette cos at full SIMD width instead of
+// dropping to scalar libm per plaquette.
+
+inline void cos_batch(float* dst, float const* src, std::size_t n) noexcept {
+    std::size_t i = 0;
+#ifdef __AVX512F__
+    for (; i + 16 <= n; i += 16) {
+        __m512 const v = _mm512_loadu_ps(src + i);
+        _mm512_storeu_ps(dst + i, Sleef_cosf16_u10avx512f(v));
+    }
+#elifdef __AVX2__
+    for (; i + 8 <= n; i += 8) {
+        __m256 const v = _mm256_loadu_ps(src + i);
+        _mm256_storeu_ps(dst + i, Sleef_cosf8_u10avx2(v));
+    }
+#elifdef __AVX__
+    for (; i + 8 <= n; i += 8) {
+        __m256 const v = _mm256_loadu_ps(src + i);
+        _mm256_storeu_ps(dst + i, Sleef_cosf8_u10avx(v));
+    }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+    // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 4` in the for header
+    for (; i + 4 <= n; i += 4) {
+        float32x4_t const v = vld1q_f32(src + i);
+        vst1q_f32(dst + i, Sleef_cosf4_u10advsimd(v));
+    }
+#elifdef __SSE2__
+    for (; i + 4 <= n; i += 4) {
+        __m128 const v = _mm_loadu_ps(src + i);
+        _mm_storeu_ps(dst + i, Sleef_cosf4_u10sse2(v));
+    }
+#endif
+    for (; i < n; ++i) {
+        dst[i] = Sleef_cosf_u10(src[i]);
+    }
+}
+
 // --------------- sin_batch ---------------------------------------------------
 
 inline void sin_batch(double* dst, double const* src, std::size_t n) noexcept {
@@ -166,6 +206,42 @@ inline void sin_batch(double* dst, double const* src, std::size_t n) noexcept {
 #endif
     for (; i < n; ++i) {
         dst[i] = Sleef_sin_u10(src[i]);
+    }
+}
+
+// Single-precision twin of sin_batch — see cos_batch (float) above.
+
+inline void sin_batch(float* dst, float const* src, std::size_t n) noexcept {
+    std::size_t i = 0;
+#ifdef __AVX512F__
+    for (; i + 16 <= n; i += 16) {
+        __m512 const v = _mm512_loadu_ps(src + i);
+        _mm512_storeu_ps(dst + i, Sleef_sinf16_u10avx512f(v));
+    }
+#elifdef __AVX2__
+    for (; i + 8 <= n; i += 8) {
+        __m256 const v = _mm256_loadu_ps(src + i);
+        _mm256_storeu_ps(dst + i, Sleef_sinf8_u10avx2(v));
+    }
+#elifdef __AVX__
+    for (; i + 8 <= n; i += 8) {
+        __m256 const v = _mm256_loadu_ps(src + i);
+        _mm256_storeu_ps(dst + i, Sleef_sinf8_u10avx(v));
+    }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+    // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 4` in the for header
+    for (; i + 4 <= n; i += 4) {
+        float32x4_t const v = vld1q_f32(src + i);
+        vst1q_f32(dst + i, Sleef_sinf4_u10advsimd(v));
+    }
+#elifdef __SSE2__
+    for (; i + 4 <= n; i += 4) {
+        __m128 const v = _mm_loadu_ps(src + i);
+        _mm_storeu_ps(dst + i, Sleef_sinf4_u10sse2(v));
+    }
+#endif
+    for (; i < n; ++i) {
+        dst[i] = Sleef_sinf_u10(src[i]);
     }
 }
 
