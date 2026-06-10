@@ -134,8 +134,9 @@ struct Wilson {
             std::size_t const x_v    = x.value();
             std::size_t const x_pmu  = U.next(x, mu).value();
             std::size_t const x_pnu  = U.next(x, nu).value();
-            std::size_t const x_mnu  = U.prev(x, nu).value();
-            std::size_t const x_mnup = U.next(U.prev(x, nu), mu).value();
+            Site const x_mnu_site    = U.prev(x, nu);
+            std::size_t const x_mnu  = x_mnu_site.value();
+            std::size_t const x_mnup = U.next(x_mnu_site, mu).value();
             // Forward plaquette anchored at x.
             cos_sum += G::plaq_re_tr(mb, nb, x_v, x_pmu, x_pnu, ns);
             // Backward plaquette anchored at x − ν̂.
