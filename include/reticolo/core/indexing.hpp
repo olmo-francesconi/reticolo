@@ -72,7 +72,10 @@ public:
     ~Indexing()                          = default;
 
     [[nodiscard]] SizeVec const& shape() const noexcept { return shape_; }
-    [[nodiscard]] std::size_t ndims() const noexcept { return shape_.size(); }
+    // Plain member load, not shape_.size(): next()/prev() multiply by ndims()
+    // on the address path of every neighbour lookup, and the vector-size
+    // indirection (two loads + sub + shift) would sit on that critical path.
+    [[nodiscard]] std::size_t ndims() const noexcept { return ndims_; }
     [[nodiscard]] std::size_t nsites() const noexcept { return nsites_; }
 
     [[nodiscard]] Site next(Site s, std::size_t mu) const noexcept {
@@ -106,6 +109,10 @@ private:
 
     SiteVec even_;
     SiteVec odd_;
+
+    // Declared last so the hot members above (next_/prev_ headers) keep
+    // their cache-line placement; see ndims() for why this is a member.
+    std::size_t ndims_ = 0;
 };
 
 namespace detail {
@@ -159,6 +166,7 @@ inline Indexing::Indexing(SizeVec shape) : shape_{std::move(shape)} {
 
 inline void Indexing::build_() {
     std::size_t const d = shape_.size();
+    ndims_              = d;
 
     nsites_ = 1;
     for (auto length : shape_) {
