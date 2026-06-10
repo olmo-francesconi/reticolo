@@ -173,6 +173,55 @@ struct CompactU1 {
         }
     }
 
+    // Fused total action + force: one angle fill per plane feeds a single
+    // sincos pass whose cos half is reduced (action) and sin half scattered
+    // (force) — instead of the two full plane sweeps `s_full` +
+    // `compute_force` would do. Returns the action without updating the
+    // `last_s_full` cache — cache semantics stay with `s_full`. Used by the
+    // LLR WindowedAction, whose force scale needs S_base on every MD step.
+    [[nodiscard]] T s_full_and_force(LinkLattice<T> const& l,
+                                     LinkLattice<T>& force) const noexcept {
+        std::fill(force.begin(), force.end(), T{0});
+        std::size_t const d      = l.ndims();
+        std::size_t const n      = l.nsites();
+        std::size_t const n_plaq = (d * (d - 1) / 2) * n;
+        T accum                  = T{0};
+        T const b                = beta;
+        ensure_scratch_(2 * n);
+        T* const buf  = scratch.data();      // plaquette angles, then sin in place
+        T* const cbuf = scratch.data() + n;  // cos
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            T const* mb  = l.mu_data(mu);
+            T* const fmu = force.mu_data(mu);
+            for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                T const* nb  = l.mu_data(nu);
+                T* const fnu = force.mu_data(nu);
+                detail::visit_plane(
+                    l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                        buf[s] = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                    });
+                math::sincos_batch(buf, cbuf, buf, n);
+                {
+#if defined(__clang__)
+                    _Pragma("clang fp reassociate(on)")
+#endif
+                        for (std::size_t s = 0; s < n; ++s) {
+                        accum += cbuf[s];
+                    }
+                }
+                detail::visit_plane(
+                    l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
+                        T const c = -b * buf[s];
+                        fmu[s] += c;
+                        fnu[s_pmu] += c;
+                        fmu[s_pnu] -= c;
+                        fnu[s] -= c;
+                    });
+            }
+        }
+        return beta * (static_cast<T>(n_plaq) - accum);
+    }
+
     void
     compute_force_and_kick(LinkLattice<T> const& l, LinkLattice<T>& mom, T k_dt) const noexcept {
         std::size_t const d = l.ndims();

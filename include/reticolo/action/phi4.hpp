@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <limits>
+#include <vector>
 
 namespace reticolo::action {
 
@@ -97,6 +98,40 @@ struct Phi4 {
         });
     }
 
+    // Fused total action + force in ONE neighbour pass. The site action is
+    // rebuilt from the full 2d neighbour sum the force already loads (each
+    // bond counted twice, so the hopping weight halves to -kappa). Per-site
+    // values are staged in a scratch buffer and reduced in a separate linear
+    // pass — accumulating into a scalar inside the visit body would put a
+    // loop-carried FP dependency in the force loop and serialise it. Returns
+    // the action without updating the `last_s_full` cache — cache semantics
+    // stay with `s_full`. Used by the LLR WindowedAction, whose force scale
+    // needs S_base on every MD step.
+    [[nodiscard]] double s_full_and_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
+        T const k           = kappa;
+        T const lam         = lambda;
+        T* const out        = force.data();
+        std::size_t const n = l.nsites();
+        if (scratch.size() < n) {
+            scratch.resize(n);
+        }
+        T* const sb = scratch.data();
+        detail::visit_nn<T>(l, [k, lam, out, sb](std::size_t i, T phi, T nbrs) {
+            T const phi2 = phi * phi;
+            T const dev  = phi2 - T{1};
+            out[i]       = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * dev);
+            sb[i]        = (-k * phi * nbrs) + phi2 + (lam * dev * dev);
+        });
+        double s = 0.0;
+        {
+            RETICOLO_FP_REASSOCIATE
+            for (std::size_t i = 0; i < n; ++i) {
+                s += static_cast<double>(sb[i]);
+            }
+        }
+        return s;
+    }
+
     // Fused force + leapfrog kick: computes F(x) and applies mom(x) += k * F(x) in
     // one pass — the force lattice is never written or read.
     void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept {
@@ -109,6 +144,9 @@ struct Phi4 {
             m[i] += k_dt * F;
         });
     }
+
+    // Per-site action staging for `s_full_and_force`. Sized lazily to nsites.
+    mutable std::vector<T> scratch{};
 
     // Mutable cache slot — keep public to preserve aggregate-init. Read via
     // `last_s_full()`, never assign directly from outside the action.

@@ -200,7 +200,7 @@ struct WindowedAction {
             base.compute_force(l, force);
             scalar_t const s     = base.s_imag(l);
             scalar_t const scale = a + ((s - E_n) / (delta * delta));
-            Field& imag_force    = imag_scratch_(force.indexing());
+            Field& imag_force    = scratch_(force.indexing());
             base.compute_force_imag(l, imag_force);
             T* const fp         = force.data();
             T const* const ip   = imag_force.data();
@@ -209,8 +209,16 @@ struct WindowedAction {
                 fp[i] += scale * ip[i];
             }
         } else {
-            base.compute_force(l, force);
-            scalar_t const s     = base.s_full(l);
+            // Fused base kernel when available: one neighbour pass yields
+            // both S_base and the force, dropping the separate full-lattice
+            // `s_full` sweep per force call.
+            scalar_t s{};
+            if constexpr (requires { base.s_full_and_force(l, force); }) {
+                s = static_cast<scalar_t>(base.s_full_and_force(l, force));
+            } else {
+                base.compute_force(l, force);
+                s = static_cast<scalar_t>(base.s_full(l));
+            }
             scalar_t const scale = scalar_t{1} + a + ((s - E_n) / (delta * delta));
             T* const fp          = force.data();
             std::size_t const n  = flat_size(force);
@@ -237,7 +245,7 @@ struct WindowedAction {
                 base.compute_force_combined_and_kick(l, mom, scalar_t{1}, scale, k_dt);
             } else {
                 base.compute_force_and_kick(l, mom, k_dt);
-                Field& imag_force = imag_scratch_(mom.indexing());
+                Field& imag_force = scratch_(mom.indexing());
                 base.compute_force_imag(l, imag_force);
                 T* const mp         = mom.data();
                 T const* const ip   = imag_force.data();
@@ -248,24 +256,42 @@ struct WindowedAction {
                 }
             }
         } else {
-            scalar_t const s     = base.s_full(l);
-            scalar_t const scale = scalar_t{1} + a + ((s - E_n) / (delta * delta));
-            base.compute_force_and_kick(l, mom, k_dt * scale);
+            if constexpr (requires(Field& f) { base.s_full_and_force(l, f); }) {
+                // Fused: one neighbour pass yields S_base and the force into
+                // the scratch field; a linear merge applies the scaled kick.
+                // Replaces the separate full-lattice `s_full` sweep that the
+                // fallback pays on every MD step.
+                Field& f             = scratch_(mom.indexing());
+                auto const s         = static_cast<scalar_t>(base.s_full_and_force(l, f));
+                scalar_t const scale = scalar_t{1} + a + ((s - E_n) / (delta * delta));
+                scalar_t const c     = k_dt * scale;
+                T* const mp          = mom.data();
+                T const* const fp    = f.data();
+                std::size_t const n  = flat_size(mom);
+                for (std::size_t i = 0; i < n; ++i) {
+                    mp[i] += c * fp[i];
+                }
+            } else {
+                scalar_t const s     = base.s_full(l);
+                scalar_t const scale = scalar_t{1} + a + ((s - E_n) / (delta * delta));
+                base.compute_force_and_kick(l, mom, k_dt * scale);
+            }
         }
     }
 
-    // Lazy scratch buffer for the complex-LLR imag-force pass (mode B only).
-    // Allocated on first force call and reused; avoids the per-MD-step
-    // malloc/free that used to dominate the bose_gas_llr force path.
-    // `mutable` because the force methods are const.
-    mutable std::optional<Field> imag_scratch_storage{};
+    // Lazy scratch field: the complex-LLR imag-force pass (mode B) and the
+    // mode-A fused force+merge path stage their force here. Allocated on
+    // first force call and reused; avoids the per-MD-step malloc/free that
+    // used to dominate the bose_gas_llr force path. `mutable` because the
+    // force methods are const.
+    mutable std::optional<Field> scratch_storage{};
 
 private:
-    [[nodiscard]] Field& imag_scratch_(std::shared_ptr<Indexing const> idx) const noexcept {
-        if (!imag_scratch_storage) {
-            imag_scratch_storage.emplace(std::move(idx));
+    [[nodiscard]] Field& scratch_(std::shared_ptr<Indexing const> idx) const noexcept {
+        if (!scratch_storage) {
+            scratch_storage.emplace(std::move(idx));
         }
-        return *imag_scratch_storage;
+        return *scratch_storage;
     }
 };
 
