@@ -34,8 +34,7 @@ double plane_sum_reference(MatrixLinkLattice<G, T> const& u) {
             T const* nb = u.mu_block_data(nu);
             for (std::size_t s = 0; s < ns; ++s) {
                 Site const x{s};
-                accum += G::plaq_re_tr(
-                    mb, nb, s, u.next(x, mu).value(), u.next(x, nu).value(), ns);
+                accum += G::plaq_re_tr(mb, nb, s, u.next(x, mu).value(), u.next(x, nu).value(), ns);
             }
         }
     }
@@ -66,8 +65,7 @@ void fill_random(MatrixLinkLattice<G, T>& u, FastRng& rng) {
 
 }  // namespace
 
-TEST_CASE("batched plane Re Tr sum matches per-plaquette reference",
-          "[gauge][s_full]") {
+TEST_CASE("batched plane Re Tr sum matches per-plaquette reference", "[gauge][s_full]") {
     FastRng rng{20260610ULL};
 
     SECTION("SU3 double") {

@@ -267,8 +267,10 @@ template <bool Acc, std::size_t B, class T>
 // Batched TA(M): diagonal becomes ±i·(Im_{00} − Im_{11})/2; off-diag is the
 // anti-hermitian completion. Same math as traceless_antiherm_2x2.
 template <std::size_t B, class T>
-[[gnu::always_inline]] inline void traceless_antiherm_2x2_batched(
-    T (&ta_re)[4][B], T (&ta_im)[4][B], T const (&in_re)[4][B], T const (&in_im)[4][B]) noexcept {
+[[gnu::always_inline]] inline void traceless_antiherm_2x2_batched(T (&ta_re)[4][B],
+                                                                  T (&ta_im)[4][B],
+                                                                  T const (&in_re)[4][B],
+                                                                  T const (&in_im)[4][B]) noexcept {
     for (std::size_t b = 0; b < B; ++b) {
         T const diag_im = T{0.5} * (in_im[0][b] - in_im[3][b]);
         ta_re[0][b]     = T{0};

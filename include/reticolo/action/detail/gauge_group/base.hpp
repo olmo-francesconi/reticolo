@@ -26,10 +26,9 @@ namespace reticolo::gauge_group {
 
 template <class T>
 [[nodiscard]] consteval std::size_t gauge_k_batch_() noexcept {
-    std::size_t const lanes =
-        std::is_same_v<T, float> ? math::k_vec_width_f : math::k_vec_width_d;
-    std::size_t const w   = lanes > 8 ? lanes : std::size_t{8};
-    std::size_t const cap = static_cast<std::size_t>(RETICOLO_GAUGE_K_BATCH_MAX);
+    std::size_t const lanes = std::is_same_v<T, float> ? math::k_vec_width_f : math::k_vec_width_d;
+    std::size_t const w     = lanes > 8 ? lanes : std::size_t{8};
+    std::size_t const cap   = static_cast<std::size_t>(RETICOLO_GAUGE_K_BATCH_MAX);
     return w < cap ? w : cap;
 }
 
@@ -47,11 +46,8 @@ inline constexpr std::size_t k_gauge_batch = gauge_k_batch_<T>();
 // row-crossing batches when L0 % B ≠ 0) pay the scalar gather.
 
 template <std::size_t E, std::size_t B, class T>
-[[gnu::always_inline]] inline void load_links_batched(T (&m_re)[E][B],
-                                                      T (&m_im)[E][B],
-                                                      T const* blk,
-                                                      std::size_t ns,
-                                                      std::size_t s0) noexcept {
+[[gnu::always_inline]] inline void load_links_batched(
+    T (&m_re)[E][B], T (&m_im)[E][B], T const* blk, std::size_t ns, std::size_t s0) noexcept {
     for (std::size_t k = 0; k < E; ++k) {
         std::size_t const off_re = (2 * k) * ns;
         std::size_t const off_im = off_re + ns;

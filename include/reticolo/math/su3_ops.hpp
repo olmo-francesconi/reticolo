@@ -242,8 +242,10 @@ template <bool Acc, std::size_t B, class T>
 // Batched TA(M): diagonal = i·(Im_{ii} − Tr/3); off-diag (i<j) is the
 // anti-hermitian completion. Same math as traceless_antiherm_3x3.
 template <std::size_t B, class T>
-[[gnu::always_inline]] inline void traceless_antiherm_3x3_batched(
-    T (&ta_re)[9][B], T (&ta_im)[9][B], T const (&in_re)[9][B], T const (&in_im)[9][B]) noexcept {
+[[gnu::always_inline]] inline void traceless_antiherm_3x3_batched(T (&ta_re)[9][B],
+                                                                  T (&ta_im)[9][B],
+                                                                  T const (&in_re)[9][B],
+                                                                  T const (&in_im)[9][B]) noexcept {
     for (std::size_t b = 0; b < B; ++b) {
         T const t_over_3 = (in_im[0][b] + in_im[4][b] + in_im[8][b]) / T{3};
         ta_re[0][b]      = T{0};
@@ -887,7 +889,7 @@ inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept 
                 double const f2r = f2_re_buf[s0 + b];
                 double const f2i = f2_im_buf[s0 + b];
                 v_re[k][b]       = ((f1r * q_re[k][b]) - (f1i * q_im[k][b])) +
-                               ((f2r * q2_re[k][b]) - (f2i * q2_im[k][b]));
+                             ((f2r * q2_re[k][b]) - (f2i * q2_im[k][b]));
                 v_im[k][b] = ((f1r * q_im[k][b]) + (f1i * q_re[k][b])) +
                              ((f2r * q2_im[k][b]) + (f2i * q2_re[k][b]));
             }

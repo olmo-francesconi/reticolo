@@ -190,9 +190,9 @@ private:
     [[gnu::always_inline]] static inline void compute_force_batched_(
         MatrixLinkLattice<SU2, T> const& u, MatrixLinkLattice<SU2, T>& out, double scale) noexcept {
         constexpr std::size_t k_batch = k_gauge_batch<T>;
-        std::size_t const d  = u.ndims();
-        std::size_t const ns = u.nsites();
-        Indexing const& idx  = u.indexing_ref();
+        std::size_t const d           = u.ndims();
+        std::size_t const ns          = u.nsites();
+        Indexing const& idx           = u.indexing_ref();
 
         std::size_t const n_batches = ns / k_batch;
         std::size_t const tail_base = n_batches * k_batch;
@@ -301,11 +301,10 @@ private:
     // its straight-line FP ops don't double the I-cache footprint of every
     // force instantiation.
     template <bool Fused, class T>
-    [[gnu::noinline]] static void
-    compute_force_impl_tail_(MatrixLinkLattice<SU2, T> const& u,
-                             MatrixLinkLattice<SU2, T>& out,
-                             double scale,
-                             std::size_t s_start) noexcept {
+    [[gnu::noinline]] static void compute_force_impl_tail_(MatrixLinkLattice<SU2, T> const& u,
+                                                           MatrixLinkLattice<SU2, T>& out,
+                                                           double scale,
+                                                           std::size_t s_start) noexcept {
         std::size_t const d  = u.ndims();
         std::size_t const ns = u.nsites();
         Indexing const& idx  = u.indexing_ref();
