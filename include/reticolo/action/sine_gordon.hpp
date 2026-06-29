@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/action/detail/helpers.hpp>
+#include <reticolo/action/detail/sine_gordon_formula.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
@@ -70,16 +71,20 @@ struct SineGordon {
             for (std::size_t i = 0; i < n; ++i) {
                 cos_sum += cs[i];
             }
-            double const hopping = detail::reduce_fwd<T, double>(l, [k](T phi, T fwd_sum) {
-                return static_cast<double>((T{-2} * k * phi * fwd_sum) + (phi * phi));
+            // cos folded to 0 here — the -alpha·cos term is the Sleef-batched
+            // cos_sum added below; the per-site hopping+mass goes through the
+            // shared formula.
+            double const hopping = detail::reduce_fwd<T, double>(l, [k, alp](T phi, T fwd_sum) {
+                return static_cast<double>(
+                    detail::sine_gordon_action_site<T>(phi, fwd_sum, T{0}, k, alp));
             });
             s                    = hopping - (static_cast<double>(alp) * cos_sum);
         } else {
             T const k   = kappa;
             T const alp = alpha;
             s           = detail::reduce_fwd<T, double>(l, [k, alp](T phi, T fwd_sum) {
-                return static_cast<double>((T{-2} * k * phi * fwd_sum) + (phi * phi) -
-                                           (alp * std::cos(phi)));
+                return static_cast<double>(
+                    detail::sine_gordon_action_site<T>(phi, fwd_sum, std::cos(phi), k, alp));
             });
         }
         last_s_full_ = s;
@@ -101,11 +106,11 @@ struct SineGordon {
             math::sin_batch(scratch.data(), l.data(), n);
             T const* const sp = scratch.data();
             detail::visit_nn<T>(l, [k, alp, out, sp](std::size_t i, T phi, T nbrs) {
-                out[i] = (T{2} * k * nbrs) - (T{2} * phi) - (alp * sp[i]);
+                out[i] = detail::sine_gordon_force_site<T>(phi, nbrs, sp[i], k, alp);
             });
         } else {
             detail::visit_nn<T>(l, [k, alp, out](std::size_t i, T phi, T nbrs) {
-                out[i] = (T{2} * k * nbrs) - (T{2} * phi) - (alp * std::sin(phi));
+                out[i] = detail::sine_gordon_force_site<T>(phi, nbrs, std::sin(phi), k, alp);
             });
         }
     }
@@ -121,13 +126,11 @@ struct SineGordon {
             math::sin_batch(scratch.data(), l.data(), n);
             T const* const sp = scratch.data();
             detail::visit_nn<T>(l, [k, alp, k_dt, m, sp](std::size_t i, T phi, T nbrs) {
-                T const F = (T{2} * k * nbrs) - (T{2} * phi) - (alp * sp[i]);
-                m[i] += k_dt * F;
+                m[i] += k_dt * detail::sine_gordon_force_site<T>(phi, nbrs, sp[i], k, alp);
             });
         } else {
             detail::visit_nn<T>(l, [k, alp, k_dt, m](std::size_t i, T phi, T nbrs) {
-                T const F = (T{2} * k * nbrs) - (T{2} * phi) - (alp * std::sin(phi));
-                m[i] += k_dt * F;
+                m[i] += k_dt * detail::sine_gordon_force_site<T>(phi, nbrs, std::sin(phi), k, alp);
             });
         }
     }

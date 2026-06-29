@@ -2,6 +2,7 @@
 
 #include <reticolo/action/detail/phi4_formula.hpp>
 #include <reticolo/action/phi4.hpp>
+#include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/macros.hpp>
 
 // Device per-site functors for Phi4 + the host-action → device-functor trait.
@@ -48,7 +49,8 @@ public:
     }
     RETICOLO_HD void accumulate(int /*mu*/, T nbr) { fwd_ += nbr; }
     [[nodiscard]] RETICOLO_HD double finalize() const {
-        return static_cast<double>(action::detail::phi4_action_site<T>(phi_, fwd_, kappa_, lambda_));
+        return static_cast<double>(
+            action::detail::phi4_action_site<T>(phi_, fwd_, kappa_, lambda_));
     }
 
 private:
@@ -58,12 +60,10 @@ private:
     T fwd_ = T{0};
 };
 
-// Maps a host action type to its device functor pair + a builder from the host
-// action's couplings. A new device-ported action = a functor pair + one
-// specialization here; cuda::DeviceAction stays generic.
-template <class HostAction>
-struct device_functors;
-
+// Maps action::Phi4 to its device functor pair (the primary template lives in
+// device_functors.hpp). A new device-ported action = a functor pair + one
+// specialization in its own cuda/actions/<name>.hpp; cuda::DeviceAction stays
+// generic.
 template <class T>
 struct device_functors<action::Phi4<T>> {
     using force  = Phi4ForceFunctor<T>;

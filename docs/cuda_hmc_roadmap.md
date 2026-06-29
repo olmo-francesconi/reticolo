@@ -392,16 +392,64 @@ Exit criteria:
   — force-vs-FD + reversibility can all pass while a wrong momentum variance
   or broken MH biases the ensemble; this is the only joint catch.
 
+**Status: DONE** (16/16 CUDA gates green on Tesla P100, sm_60, CUDA 12.8, GCC-13).
+Includes 2d (full-MD graph capture/replay-vs-eager) and **2e — host-free
+trajectory streaming**: the *entire* trajectory (sample → H0 → MD → H1 →
+device-side Metropolis accept → conditional rollback → device counter bump) is
+captured in one CUDA graph and replayed with a single `cudaGraphLaunch`. Nothing
+returns to the host between trajectories; `cuda::Hmc::run(k)` replays `k`
+trajectories with zero host syncs, the host touches the chain only at
+measurement (`sync()`). The MH accept draws its own Philox uniform on a separate
+key stream (`seed ^ salt`); the trajectory counter is device-resident and bumped
+inside the captured body (capture-trap-safe). Determinism gate: two `run(32)`
+chains from the same seed agree bit-for-bit.
+
+**Performance baseline (regression anchor)** — Phi4 HMC, f64, τ=1.0, n_md=10,
+Leapfrog, host-free `run(k)` steady state, Tesla P100-PCIE-16GB:
+
+| dims | V | ms/traj | traj/s |
+|------|------|---------|--------|
+| 4⁴   | 256       | 0.144 | 6964 |
+| 8⁴   | 4096      | 0.152 | 6590 |
+| 12⁴  | 20736     | 0.208 | 4813 |
+| 16⁴  | 65536     | 0.518 | 1932 |
+| 24⁴  | 331776    | 2.062 | 485  |
+| 32⁴  | 1048576   | 6.260 | 160  |
+
+Read: small volumes are **launch-bound** — the ~0.144 ms/traj floor is the graph
+replay itself (n_md×(force + 2 kicks + 2 drifts) + 4 reductions + accept/resolve,
+all sub-saturation), and host-free streaming dropped it from the ~0.17 ms/traj
+device-scalar-reduction baseline (~15%, the removed per-step host sync). Large
+volumes are **compute/HBM-bound** — 6.26 ms at 32⁴ is the force+reduction work,
+where graphs/host-free barely move the needle (as expected). The launch-overhead
+fraction (graphs target) is what 2d/2e attacked and is now amortized; the
+inter-kernel HBM-traffic fraction (the fusion / opt-in mega-kernel decision) is
+still unmeasured — defer to an Nsight pass before committing to fusion. Block
+size is a uniform untuned 256 everywhere (no `__launch_bounds__`, no per-GPU
+tuning) — a known ±10–20% knob, also deferred to profiling.
+
 ### Phase 3 — scalar coverage  *(exit: force-vs-FD + reversibility per action; [nightly] ⟨e^−ΔH⟩)*
-- Phi6, SineGordon via the same skeletons. **(review)** SineGordon's shared
-  functor uses `std::sin/std::cos` (`__host__ __device__` under nvcc), Sleef
-  stays only in the host kernel loop — so invariant "one formula" holds.
-- **XY needs the per-neighbour stencil variant** (not sum-stencil) — a second
-  stencil instantiation, flagged not folded.
-- f32 instantiations for bandwidth-bound scalars (f32 reversibility uses
-  **bounded** tolerance, not roundoff; never gets the order-scaling test).
-- **BoseGas is its own sub-workstream**: `cuda::std::complex`, split-last +
-  time-slab patterns, `s_imag`/`compute_force_imag` — not a drop-in functor.
+- **Phi6, SineGordon, XY — DONE (3a–3c).** Each is a `device_functors<Action<T>>`
+  specialization + a functor pair calling a shared `RETICOLO_HD` per-site formula
+  in `action::detail::<name>_formula.hpp`; the CPU actions were rewired to call
+  the same formulas (one source of truth). Phi6 is pure-poly so it matches the
+  device to roundoff (1e-10); SineGordon and XY are transcendental and match to a
+  bounded tolerance (1e-9 — device `sin`/`cos` vs Sleef/libm, ~1 ULP/site). The
+  shared formulas take the transcendental as an argument (SineGordon) so the CPU
+  f64 path keeps its Sleef-batched `sin`/`cos` while the algebra stays single-
+  source. Gates: `DeviceAction<{Phi6,SineGordon,Xy}>` vs CPU `s_full` + force in
+  `scalar_probe.cu`. **Correction to the original plan: XY needed NO second
+  stencil** — `stencil_kernel`/`reduce_fwd_site_kernel` already call
+  `accumulate(mu, nbr)` per-bond (passing each neighbour value, not a pre-summed
+  one), so XY's `sin(θ−nbr)` accumulation drops straight in. The "sum-stencil vs
+  per-neighbour" distinction the plan worried about never materialized.
+- **(remaining 3d) f32 instantiations** for bandwidth-bound scalars — a second
+  instantiation through the whole stack (axpy/reduce/field in f32), not just a
+  functor; f32 reversibility uses **bounded** tolerance, not roundoff, and never
+  gets the order-scaling test.
+- **(remaining) BoseGas is its own sub-workstream**: `cuda::std::complex`,
+  split-last + time-slab patterns, `s_imag`/`compute_force_imag` — not a drop-in
+  functor.
 
 ### Phase 4 — U(1) gauge  *(exit: force-vs-FD + reversibility on `CompactU1`; [nightly] plaquette at known β)*
 `LinkLayout` field; `plaquette` skeleton with the **U(1) force re-derived as a

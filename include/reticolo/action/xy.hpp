@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/action/detail/xy_formula.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
@@ -70,7 +71,8 @@ struct Xy {
             T const theta          = data[i];
             std::size_t const base = i * d;
             for (std::size_t mu = 0; mu < d; ++mu) {
-                total += static_cast<double>(std::cos(theta - data[next[base + mu]]));
+                total +=
+                    static_cast<double>(detail::xy_action_bond<T>(theta, data[next[base + mu]]));
             }
         }
         double const s = -static_cast<double>(beta) * total;
@@ -96,8 +98,8 @@ struct Xy {
             T sum                  = T{0};
             std::size_t const base = i * d;
             for (std::size_t mu = 0; mu < d; ++mu) {
-                sum += std::sin(theta - data[next[base + mu]]);
-                sum += std::sin(theta - data[prev[base + mu]]);
+                sum += detail::xy_force_bond<T>(theta, data[next[base + mu]]);
+                sum += detail::xy_force_bond<T>(theta, data[prev[base + mu]]);
             }
             out[i] = -beta * sum;
         }

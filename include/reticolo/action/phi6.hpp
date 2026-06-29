@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/action/detail/helpers.hpp>
+#include <reticolo/action/detail/phi6_formula.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
@@ -71,11 +72,7 @@ struct Phi6 {
         T const lam    = lambda;
         T const g      = g6;
         double const s = detail::reduce_fwd<T, double>(l, [k, lam, g](T phi, T fwd_sum) {
-            T const phi2 = phi * phi;
-            T const dev  = phi2 - T{1};
-            T const phi6 = phi2 * phi2 * phi2;
-            T const site = (T{-2} * k * phi * fwd_sum) + phi2 + (lam * dev * dev) + (g * phi6);
-            return static_cast<double>(site);
+            return static_cast<double>(detail::phi6_action_site<T>(phi, fwd_sum, k, lam, g));
         });
         last_s_full_   = s;
         return s;
@@ -93,10 +90,7 @@ struct Phi6 {
         T const g    = g6;
         T* const out = force.data();
         detail::visit_nn<T>(l, [k, lam, g, out](std::size_t i, T phi, T nbrs) {
-            T const phi2 = phi * phi;
-            T const phi5 = phi2 * phi2 * phi;
-            out[i]       = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * (phi2 - T{1})) -
-                     (T{6} * g * phi5);
+            out[i] = detail::phi6_force_site<T>(phi, nbrs, k, lam, g);
         });
     }
 
@@ -107,11 +101,7 @@ struct Phi6 {
         T const g   = g6;
         T* const m  = mom.data();
         detail::visit_nn<T>(l, [k, lam, g, k_dt, m](std::size_t i, T phi, T nbrs) {
-            T const phi2 = phi * phi;
-            T const phi5 = phi2 * phi2 * phi;
-            T const F    = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * (phi2 - T{1})) -
-                        (T{6} * g * phi5);
-            m[i] += k_dt * F;
+            m[i] += k_dt * detail::phi6_force_site<T>(phi, nbrs, k, lam, g);
         });
     }
 

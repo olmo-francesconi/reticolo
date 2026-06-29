@@ -6,15 +6,16 @@
 #include <reticolo/cuda/phi4_probe.hpp>
 #include <reticolo/cuda/reduce.hpp>
 #include <reticolo/cuda/rng_probe.hpp>
+#include <reticolo/cuda/scalar_probe.hpp>
 #include <reticolo/cuda/selftest.hpp>
 #include <reticolo/cuda/stencil_probe.hpp>
-
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <cstddef>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // CUDA tests. Only registered when RETICOLO_ENABLE_CUDA is on (see
 // tests/CMakeLists.txt); all require a GPU at run time.
@@ -29,9 +30,9 @@ TEST_CASE("cuda backend self-test round-trips through the device", "[cuda]") {
 // reference neighbour table exactly — checked on the host (next/prev are
 // __host__ __device__). Covers a 4D cube and a non-cube, non-power-of-two shape.
 TEST_CASE("cuda DeviceTopology matches the reference Indexing", "[cuda]") {
-    for (std::vector<std::size_t> shape : {std::vector<std::size_t>{4, 4, 4, 4},
-                                           std::vector<std::size_t>{6, 4, 5}}) {
-        auto const idx = reticolo::Indexing::acquire(shape);
+    for (std::vector<std::size_t> shape :
+         {std::vector<std::size_t>{4, 4, 4, 4}, std::vector<std::size_t>{6, 4, 5}}) {
+        auto const idx  = reticolo::Indexing::acquire(shape);
         auto const topo = reticolo::cuda::make_device_topology(shape);
         REQUIRE(topo.nsites == static_cast<long>(idx->nsites()));
 
@@ -161,4 +162,18 @@ TEST_CASE("cuda graph replay matches eager MD", "[cuda]") {
 // per-step sync) is deterministic and produces a sane chain.
 TEST_CASE("cuda host-free HMC run is deterministic", "[cuda]") {
     REQUIRE(reticolo::cuda::hmc_device_run_deterministic());
+}
+
+// Phase 3: each new scalar action's device path reproduces the CPU action's
+// s_full + force via the shared HD formula (one source of truth).
+TEST_CASE("cuda DeviceAction<Phi6> matches CPU action::Phi6", "[cuda]") {
+    REQUIRE(reticolo::cuda::phi6_cpu_matches_device());
+}
+
+TEST_CASE("cuda DeviceAction<SineGordon> matches CPU action::SineGordon", "[cuda]") {
+    REQUIRE(reticolo::cuda::sine_gordon_cpu_matches_device());
+}
+
+TEST_CASE("cuda DeviceAction<Xy> matches CPU action::Xy", "[cuda]") {
+    REQUIRE(reticolo::cuda::xy_cpu_matches_device());
 }
