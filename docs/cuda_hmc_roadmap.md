@@ -208,12 +208,31 @@ matching the CPU RNG stream, which Philox doesn't anyway).
 
 ## Graph capture — the latency mechanism, and its one sharp trap
 
-Atom reuse means a trajectory enqueues dozens of tiny launches; capture the
-region **`H0 … Integ::run … H1`** into a CUDA graph and replay it per
-trajectory (copy back only the ΔH scalar). Host control flow captures
-correctly: the `for(step<n_md)` runs at capture time and emits an unrolled
+**Why.** Every kernel launch costs ~5–20 µs of CPU-side driver overhead
+before the GPU does anything. With the reused integrator, one Omelyan4
+trajectory at `n_md=20` enqueues ~180 atom launches plus the reductions; on a
+small/bandwidth-bound lattice where each kernel *runs* for only a few µs, that
+overhead is most of the wall-clock — you would be benchmarking the driver,
+not the GPU. This launch storm is the price of the genericity (reusing
+`Integrator::run` means it emits the same fine-grained atom calls it does on
+CPU, now as launches).
+
+**What a graph is.** A pre-recorded DAG of GPU operations built once and
+replayed with a single `cudaGraphLaunch` — the per-op launch overhead is paid
+at build time, not per trajectory. The trajectory is the ideal fit: the
+*sequence* of operations is identical every trajectory; only the *numbers in
+the buffers* change. Static topology, mutable data.
+
+**How — stream capture.** You don't hand-build the DAG. You wrap the reused
+integrator in `cudaStreamBeginCapture(stream) … cudaStreamEndCapture`: the
+enqueued kernels are *recorded*, not executed, while the host C++ around them
+runs normally. Capture the region **`H0 … Integ::run … H1`** and replay it per
+trajectory, copying back only the ΔH scalar. Host control flow captures
+correctly: the `for(step<n_md)` runs at capture time and emits an **unrolled**
 node sequence; the `step+1<n_md ? dt : half_dt` ternary bakes a host scalar
-into each node; `if constexpr` is compile-time and never reaches capture.
+into each node; `if constexpr` is compile-time and never reaches capture. This
+is exactly why the reuse works — unmodified host integrator code, turned into
+a replayable graph.
 
 **(review) [CRITICAL invariant] Nothing that varies per trajectory may be a
 baked kernel literal inside the captured region.** The Philox key includes
@@ -238,6 +257,54 @@ deliverable — not "reuse unchanged"):
   the fields/topology, and no `DeviceField` may be reallocated while a graph
   is live (run-lifetime buffers + move-preserves-pointer make this safe, but
   it is an unstated invariant — state it).
+
+## Graphs vs. fusion: two orthogonal optimizations (and what "specialised integrators" should mean)
+
+Graphs and kernel fusion fix **different** costs and are not alternatives:
+
+- **Graphs remove launch overhead** but not memory traffic — between the
+  force kernel and the next drift, `U/P/F` still round-trip through HBM.
+- **Fusion removes inter-kernel HBM traffic** by keeping state in
+  registers/shared across sub-steps — but does nothing graphs don't for
+  launch count.
+
+For bandwidth-bound scalar actions, the HBM round-trip can dominate *even
+after* graphs. That — not launch overhead — is the only thing a specialised
+kernel buys. So the design treats fusion as an **opt-in optimization layer
+behind the same `launch_*` interface**, default off, justified by profiling
+(Phase 2 reports both the launch-overhead fraction *and* the inter-kernel
+HBM-traffic fraction; only a large latter justifies building a fused kernel).
+
+The spectrum, with verdicts:
+
+- **Per-integrator host orchestration in `.cu`** (hand-written
+  `leapfrog_run`/`omelyan4_run` still launching separate kernels): gains
+  nothing over graphs, loses the free-integrator property. **Never.**
+- **Fused force+kick** (`compute_force_and_kick`): already planned; one
+  full-lattice pass, no grid sync needed. The safe first rung.
+- **Fused per-step**: blocked by physics — drift must update *all* sites
+  before the next force reads neighbours, a grid-wide barrier a normal kernel
+  can't cross. So ≥2 kernels/step (force-kick, drift) is the floor without
+  cooperative launch.
+- **Cooperative mega-kernel** (whole trajectory in one kernel, `grid.sync()`
+  as the barrier, `(φ,p)` in registers across steps): the only thing that
+  truly kills inter-step HBM traffic. Three teeth: (1) occupancy ceiling —
+  the lattice must fit one co-resident wave, else fall back to multi-kernel;
+  (2) neighbours still go through global/shared, so the win is partial; (3)
+  register pressure makes it **counterproductive for SU(3)** (force alone is
+  ~80–120 regs). Realistic scope: small/medium **scalar** lattices only.
+
+**(decision) The integrator stays generic even inside a fused kernel — pass
+the step schedule as DATA, not code.** Every integrator is a sequence of
+`(KICK, c·dt)`/`(DRIFT, c·dt)` ops (Leapfrog `KDK`, Omelyan4 the 9-op
+BABAB…); the host already computes these coefficients. A fused/mega-kernel
+takes a small `step_schedule[]` array and loops over it (`grid.sync()` between
+ops). Then `Omelyan4` is still zero CUDA code — a different schedule, not a
+different kernel — and the action functor + access pattern remain the single
+source of truth. **Hard rule: no `LeapfrogKernel`/`Omelyan4Kernel` types ever;
+any fused kernel is templated on the action functor and consumes the
+integrator schedule as data.** This is what keeps "specialised for speed" and
+"project-wide generic" from being in conflict.
 
 ## Instantiation matrix
 
@@ -317,7 +384,10 @@ Exit criteria:
   (host-computed vs device), and replay does **not** repeat momenta (guards
   the CRITICAL capture invariant).
 - **(review) Performance baseline**: record traj/s for the reference Phi4
-  lattice to a tracked file — the regression anchor for later phases.
+  lattice to a tracked file — the regression anchor for later phases. Report
+  **both** the launch-overhead fraction (graphs target) and the inter-kernel
+  HBM-traffic fraction (fusion target); the latter alone decides whether the
+  opt-in mega-kernel is worth building.
 - **(review) [nightly]** `⟨exp(−ΔH)⟩=1` + free-field acceptance vs `erfc(dt)`
   — force-vs-FD + reversibility can all pass while a wrong momentum variance
   or broken MH biases the ensemble; this is the only joint catch.
@@ -399,6 +469,8 @@ consolidate the nightly harness.
 | index wrap: bit-mask / arithmetic / gathered table | bit-mask (pow2), table (general d≥3) | Phase 1 microbench |
 | `ndim` template vs runtime | runtime (compile-time only for SU(3) force) | Phase 1 |
 | graph capture vs explicit graph-builder | capture + buffer-fed scalars | Phase 2 |
+| kernel fusion beyond force+kick (mega-kernel) | off; opt-in if HBM-traffic fraction dominates after graphs | Phase 2 profiling → revisit |
+| fused-kernel integrator handling | schedule-as-data (never per-integrator kernels) | design rule |
 | reduction: hand-rolled vs cub | hand-rolled (fused/segmented), cub (single-op) | Phase 1 |
 | SU(3) thread mapping | TBD (`ThreadPerLink`/`WarpPerLink` policy) | Phase 5 profiling |
 | f32 link support | no (f64 only) | revisit post-Phase 5 |
