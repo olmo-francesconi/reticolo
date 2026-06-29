@@ -5,6 +5,7 @@
 #include <reticolo/io/writer.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <vector>
 
@@ -57,6 +58,45 @@ template <class Field>
 [[nodiscard]] inline std::vector<std::size_t> load_field_shape(std::filesystem::path const& path) {
     Reader r{path};
     return r.field_shape("/field");
+}
+
+// Counter-based variant for backends whose RNG is a counter-based generator
+// (Philox) rather than a stateful FastRng: the complete per-run RNG state is
+// (seed, trajectory counter). Used by the CUDA HmcEngine, whose device RNG is
+// not a FastRng — so the FastRng `/rng` uint64[4] layout does not apply. Layout:
+//
+//     /field        same as save_config
+//     /rng@seed      uint64  Philox key
+//     /rng@counter   uint64  trajectory counter (next Philox counter on resume)
+//     /traj@i        next trajectory/block index (long long)
+//
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): each arg is distinctly named.
+template <class Field>
+void save_config_counter(std::filesystem::path const& path,
+                         Field const& lat,
+                         std::uint64_t seed,
+                         std::uint64_t counter,
+                         long long traj_i,
+                         int argc                = 0,
+                         char const* const* argv = nullptr,
+                         cli::Parser const* p    = nullptr) {
+    Writer w{path, argc, argv, p};
+    w.field("/field", lat);
+    w.attr<unsigned long long>("/rng@seed", seed);
+    w.attr<unsigned long long>("/rng@counter", counter);
+    w.attr<long long>("/traj@i", traj_i);
+}
+
+template <class Field>
+[[nodiscard]] long long load_config_counter(std::filesystem::path const& path,
+                                            Field& lat,
+                                            std::uint64_t& seed,
+                                            std::uint64_t& counter) {
+    Reader r{path};
+    r.field("/field", lat);
+    seed    = r.attr<unsigned long long>("/rng@seed");
+    counter = r.attr<unsigned long long>("/rng@counter");
+    return r.attr<long long>("/traj@i");
 }
 
 }  // namespace reticolo::io

@@ -150,6 +150,29 @@ public:
                                 : static_cast<double>(accepted) / static_cast<double>(traj_count_);
     }
 
+    // --- checkpoint hooks ---------------------------------------------------
+    // The complete per-run RNG state is (seed_, device trajectory counter): the
+    // Philox stream is stateless given (seed, counter, pair). Saving these two +
+    // the field lets a resumed run reproduce an uninterrupted one bit-for-bit.
+    [[nodiscard]] std::uint64_t seed() const { return seed_; }
+
+    // The authoritative Philox counter (device-resident, bumped per trajectory).
+    // Reads back from the device — syncs.
+    [[nodiscard]] std::uint64_t rng_counter() {
+        std::uint64_t c = 0;
+        traj_buf_.copy_to_host(&c, md_stream_);
+        sync();
+        return c;
+    }
+
+    // Restore the Philox counter on resume so the next trajectory draws the same
+    // momenta / MH uniforms as the uninterrupted run would have. The acceptance
+    // accumulator (acc_buf_ / traj_count_) intentionally restarts this session.
+    void set_rng_counter(std::uint64_t c) {
+        traj_buf_.copy_from_host(&c, md_stream_);
+        sync();
+    }
+
 private:
     [[nodiscard]] static cudaStream_t make_stream_() {
         cudaStream_t s = nullptr;
