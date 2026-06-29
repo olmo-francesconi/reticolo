@@ -2,6 +2,7 @@
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/gauge_probe.hpp>
+#include <reticolo/cuda/phi4_probe.hpp>
 #include <reticolo/cuda/reduce.hpp>
 #include <reticolo/cuda/selftest.hpp>
 #include <reticolo/cuda/stencil_probe.hpp>
@@ -86,4 +87,16 @@ TEST_CASE("cuda gauge headers compile and run under nvcc", "[cuda]") {
 // finite differences. Validates the scalar device action protocol end-to-end.
 TEST_CASE("cuda stencil force matches finite-difference of reduce_fwd action", "[cuda]") {
     REQUIRE(reticolo::cuda::stencil_force_matches_fd());
+}
+
+// Phase 2a: a scalar field survives the host↔device round-trip unchanged.
+TEST_CASE("cuda DeviceField round-trips a scalar field", "[cuda]") {
+    REQUIRE(reticolo::cuda::phi4_roundtrip_ok());
+}
+
+// Phase 2a: the generic DeviceAction over the real Phi4 functor pair
+// reproduces the CPU action::Phi4 s_full and force to roundoff — the shared
+// HD formula is genuinely one source of truth across CPU and device.
+TEST_CASE("cuda DeviceAction<Phi4> matches CPU action::Phi4 to roundoff", "[cuda]") {
+    REQUIRE(reticolo::cuda::phi4_cpu_matches_device());
 }

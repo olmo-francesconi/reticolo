@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/action/detail/helpers.hpp>
+#include <reticolo/action/detail/phi4_formula.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
@@ -74,10 +75,7 @@ struct Phi4 {
         T const k      = kappa;
         T const lam    = lambda;
         double const s = detail::reduce_fwd<T, double>(l, [k, lam](T phi, T fwd_sum) {
-            T const phi2 = phi * phi;
-            T const dev  = phi2 - T{1};
-            T const site = (T{-2} * k * phi * fwd_sum) + phi2 + (lam * dev * dev);
-            return static_cast<double>(site);
+            return static_cast<double>(detail::phi4_action_site<T>(phi, fwd_sum, k, lam));
         });
         last_s_full_   = s;
         return s;
@@ -93,8 +91,7 @@ struct Phi4 {
         T const lam  = lambda;
         T* const out = force.data();
         detail::visit_nn<T>(l, [k, lam, out](std::size_t i, T phi, T nbrs) {
-            T const phi2 = phi * phi;
-            out[i]       = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * (phi2 - T{1}));
+            out[i] = detail::phi4_force_site<T>(phi, nbrs, k, lam);
         });
     }
 
@@ -119,7 +116,7 @@ struct Phi4 {
         detail::visit_nn<T>(l, [k, lam, out, sb](std::size_t i, T phi, T nbrs) {
             T const phi2 = phi * phi;
             T const dev  = phi2 - T{1};
-            out[i]       = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * dev);
+            out[i]       = detail::phi4_force_site<T>(phi, nbrs, k, lam);
             sb[i]        = (-k * phi * nbrs) + phi2 + (lam * dev * dev);
         });
         double s = 0.0;
@@ -139,9 +136,7 @@ struct Phi4 {
         T const lam = lambda;
         T* const m  = mom.data();
         detail::visit_nn<T>(l, [k, lam, k_dt, m](std::size_t i, T phi, T nbrs) {
-            T const phi2 = phi * phi;
-            T const F    = (T{2} * k * nbrs) - (T{2} * phi) - (T{4} * lam * phi * (phi2 - T{1}));
-            m[i] += k_dt * F;
+            m[i] += k_dt * detail::phi4_force_site<T>(phi, nbrs, k, lam);
         });
     }
 

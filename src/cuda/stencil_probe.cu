@@ -1,29 +1,28 @@
+#include <reticolo/cuda/actions/phi4.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/reduce_fwd.cuh>
 #include <reticolo/cuda/stencil.cuh>
 #include <reticolo/cuda/stencil_probe.hpp>
-#include <reticolo/cuda/test_functors.hpp>
 
 #include <cmath>
 #include <cstddef>
 #include <vector>
 
 // Phase 1 (M1): force-vs-finite-difference gate for the scalar device protocol.
-// Instantiates stencil<Phi4Force> and reduce_fwd<Phi4Energy> over a shared
-// (kappa, lambda) and checks that the stencil force equals -dS/dphi computed by
-// central differences of the reduce_fwd action. Validates BOTH skeletons and
-// that their access policies (all-2d force vs forward-only action) are mutually
-// consistent — a missing or double-counted neighbour breaks the identity by
-// O(kappa), far above the FD tolerance.
+// Instantiates stencil<Phi4ForceFunctor> and reduce_fwd<Phi4EnergyFunctor> over
+// a shared (kappa, lambda) and checks that the stencil force equals -dS/dphi
+// computed by central differences of the reduce_fwd action. Validates BOTH
+// skeletons and that their access policies (all-2d force vs forward-only
+// action) are mutually consistent — a missing or double-counted neighbour
+// breaks the identity by O(kappa), far above the FD tolerance. The functors
+// call the SHARED HD per-site formula (action::detail::phi4_*), so this also
+// exercises the real device Phi4 math, not a stand-in.
 
 namespace reticolo::cuda {
 
 bool stencil_force_matches_fd() {
-    using test::Phi4Energy;
-    using test::Phi4Force;
-
     std::vector<std::size_t> const shape{6, 4, 5};
     auto const topo = make_device_topology(shape);
     auto const n = static_cast<std::size_t>(topo.nsites);
@@ -35,12 +34,8 @@ bool stencil_force_matches_fd() {
         h[i] = 0.5 * std::sin(0.3 * static_cast<double>(i) + 1.0);
     }
 
-    Phi4Force fforce;
-    fforce.kappa = 0.12;
-    fforce.lambda = 0.7;
-    Phi4Energy fen;
-    fen.kappa = 0.12;
-    fen.lambda = 0.7;
+    Phi4ForceFunctor<double> const fforce{0.12, 0.7};
+    Phi4EnergyFunctor<double> const fen{0.12, 0.7};
 
     DeviceBuffer<double> dfield{n};
     DeviceBuffer<double> dforce{n};
