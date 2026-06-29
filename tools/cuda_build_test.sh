@@ -40,3 +40,10 @@ cmake -S . -B "${build_dir}" -G Ninja \
 
 cmake --build "${build_dir}" --target "${target}" -j "$(nproc 2>/dev/null || echo 2)"
 ctest --test-dir "${build_dir}" -R "${filter}" --output-on-failure
+
+# Optional GPU perf baseline (RETICOLO_BENCH=1): build + run the bench binary.
+if [[ -n "${RETICOLO_BENCH:-}" ]]; then
+  echo "=== bench_cuda_hmc ==="
+  cmake --build "${build_dir}" --target bench_cuda_hmc -j "$(nproc 2>/dev/null || echo 2)"
+  "${build_dir}/src/cuda/bench_cuda_hmc"
+fi

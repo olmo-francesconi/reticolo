@@ -42,5 +42,6 @@ sh(f"rm -rf /tmp/reticolo && git clone --depth 1 --branch {BRANCH} {REPO} /tmp/r
 os.environ["CC"] = "gcc-13"
 os.environ["CXX"] = "g++-13"
 os.environ["CUDAHOSTCXX"] = "g++-13"
+os.environ["RETICOLO_BENCH"] = "1"  # also build + run the GPU perf baseline
 sh("cd /tmp/reticolo && bash tools/cuda_build_test.sh")
 print("CUDA build & test OK", flush=True)
