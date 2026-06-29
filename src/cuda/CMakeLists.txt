@@ -10,7 +10,7 @@
 
 find_package(CUDAToolkit REQUIRED)
 
-add_library(reticolo_cuda STATIC selftest.cu)
+add_library(reticolo_cuda STATIC selftest.cu reduce.cu)
 add_library(reticolo::cuda ALIAS reticolo_cuda)
 
 target_include_directories(reticolo_cuda PUBLIC
