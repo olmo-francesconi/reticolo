@@ -156,3 +156,9 @@ TEST_CASE("cuda Philox normals have N(0,1) moments", "[cuda]") {
 TEST_CASE("cuda graph replay matches eager MD", "[cuda]") {
     REQUIRE(reticolo::cuda::graph_replay_matches_eager());
 }
+
+// Phase 2e: host-free trajectory streaming (device-side Metropolis accept, no
+// per-step sync) is deterministic and produces a sane chain.
+TEST_CASE("cuda host-free HMC run is deterministic", "[cuda]") {
+    REQUIRE(reticolo::cuda::hmc_device_run_deterministic());
+}

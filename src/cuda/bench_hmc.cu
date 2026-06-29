@@ -10,12 +10,9 @@
 #include <reticolo/action/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
-#include <reticolo/core/rng.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/hmc.cuh>
-
-#include <cuda_runtime.h>
 
 #include <chrono>
 #include <cstddef>
@@ -24,9 +21,10 @@
 #include <utility>
 #include <vector>
 
+#include <cuda_runtime.h>
+
 namespace {
 
-using reticolo::FastRng;
 using reticolo::Lattice;
 using reticolo::action::Phi4;
 using reticolo::cuda::DeviceAction;
@@ -47,21 +45,16 @@ double bench_gpu(std::vector<std::size_t> const& shape) {
     field.copy_from_host(zero);
     cudaDeviceSynchronize();
 
-    FastRng rng{12345};
     Phi4<double> action{.kappa = kKappa, .lambda = kLambda};
     DeviceAction<Phi4<double>, DeviceField<double>> dact{action, field.topology()};
-    reticolo::cuda::Hmc<DeviceAction<Phi4<double>, DeviceField<double>>, FastRng> hmc{
-        std::move(dact), field, rng, kTau, kNmd, 12345ULL};
+    reticolo::cuda::Hmc<DeviceAction<Phi4<double>, DeviceField<double>>> hmc{
+        std::move(dact), field, kTau, kNmd, 12345ULL};
 
-    for (int i = 0; i < kWarmup; ++i) {  // first step captures the MD graph
-        (void)hmc.step();
-    }
-    cudaDeviceSynchronize();
+    hmc.run(kWarmup);  // first replay captures the full-trajectory graph
+    hmc.sync();
     auto const t0 = clock_type::now();
-    for (int i = 0; i < kIters; ++i) {
-        (void)hmc.step();
-    }
-    cudaDeviceSynchronize();
+    hmc.run(kIters);  // host-free: kIters graph replays, no per-step sync
+    hmc.sync();
     return std::chrono::duration<double>(clock_type::now() - t0).count() / kIters;
 }
 

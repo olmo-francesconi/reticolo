@@ -21,4 +21,9 @@ namespace reticolo::cuda {
 // eager MD field bit-for-bit from the same (q0, p0).
 [[nodiscard]] bool graph_replay_matches_eager();
 
+// Phase 2e: K host-free trajectories (graph replay + device-side Metropolis
+// accept, no per-step sync) are deterministic — two runs from the same seed
+// agree bit-for-bit — with a sane acceptance and a finite field.
+[[nodiscard]] bool hmc_device_run_deterministic();
+
 }  // namespace reticolo::cuda

@@ -63,7 +63,7 @@ double hamiltonian(DAct const& act, DField const& field, DField const& mom) {
 bool hmc_reversibility_ok() {
     std::vector<std::size_t> const shape{6, 4, 5};
     Lattice<double> const init = smooth_field(shape);
-    auto const n = init.nsites();
+    auto const n               = init.nsites();
 
     DField field{shape};
     DField mom{field.topology()};
@@ -81,7 +81,7 @@ bool hmc_reversibility_ok() {
     field.copy_to_host(f0);
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
-    using Integ = alg::integ::Leapfrog;
+    using Integ          = alg::integ::Leapfrog;
     constexpr double tau = 1.0;
     constexpr int n_md   = 12;
 
@@ -107,7 +107,7 @@ template <class Integ>
 double mean_abs_dH(double tau, int n_md, int n_samples, unsigned seed) {
     std::vector<std::size_t> const shape{4, 4, 4, 4};
     Lattice<double> const init = smooth_field(shape);
-    auto const n = init.nsites();
+    auto const n               = init.nsites();
 
     DField field{shape};
     DField mom{field.topology()};
@@ -142,10 +142,10 @@ double observed_order(double tau, int n_md_coarse, int n_samples, unsigned seed)
 }  // namespace
 
 bool integrator_order_ok() {
-    constexpr double tau   = 1.0;
-    constexpr int n_md     = 8;  // coarse dt = 1/8; fine = 1/16 (both above the f64 floor)
-    constexpr int samples  = 16;
-    constexpr unsigned sd  = 2026;
+    constexpr double tau  = 1.0;
+    constexpr int n_md    = 8;  // coarse dt = 1/8; fine = 1/16 (both above the f64 floor)
+    constexpr int samples = 16;
+    constexpr unsigned sd = 2026;
 
     double const p_lf = observed_order<alg::integ::Leapfrog>(tau, n_md, samples, sd);
     double const p_o2 = observed_order<alg::integ::Omelyan2>(tau, n_md, samples, sd);
@@ -162,9 +162,8 @@ bool hmc_step_runs() {
     DField field{shape};
     field.copy_from_host(init);
     DAct act{make_action(), field.topology()};
-    FastRng rng{123};
 
-    Hmc<DAct, FastRng> hmc{std::move(act), field, rng, 1.0, 10};
+    Hmc<DAct> hmc{std::move(act), field, 1.0, 10};
     for (int step = 0; step < 5; ++step) {
         HmcResult const r = hmc.step();
         if (!std::isfinite(r.dH)) {
@@ -177,6 +176,45 @@ bool hmc_step_runs() {
     RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
     for (std::size_t i = 0; i < out.nsites(); ++i) {
         if (!std::isfinite(out.data()[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Phase 2e: run K trajectories fully host-free (one graph replay each, no
+// per-step sync, device-side Metropolis accept). Two independent runs from the
+// same seed and same initial config must agree bit-for-bit — the whole chain
+// (momenta, MD, accept uniform, rollback, counter bump) is deterministic on the
+// device — and the acceptance must be a sane fraction with a finite field.
+bool hmc_device_run_deterministic() {
+    std::vector<std::size_t> const shape{6, 4, 5};
+    Lattice<double> const init = smooth_field(shape);
+    constexpr int kTraj        = 32;
+
+    auto run_chain = [&](Lattice<double>& out) -> double {
+        DField field{shape};
+        field.copy_from_host(init);
+        DAct act{make_action(), field.topology()};
+        Hmc<DAct> hmc{std::move(act), field, 1.0, 10, 2026ULL};
+        hmc.run(kTraj);  // host-free: K replays, no sync between them
+        double const acc = hmc.acceptance();
+        hmc.sync();
+        field.copy_to_host(out);
+        RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+        return acc;
+    };
+
+    Lattice<double> a{shape};
+    Lattice<double> b{shape};
+    double const acc_a = run_chain(a);
+    double const acc_b = run_chain(b);
+
+    if (acc_a <= 0.0 || acc_a > 1.0 || acc_a != acc_b) {
+        return false;
+    }
+    for (std::size_t i = 0; i < a.nsites(); ++i) {
+        if (!std::isfinite(a.data()[i]) || a.data()[i] != b.data()[i]) {
             return false;
         }
     }
