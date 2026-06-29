@@ -54,6 +54,7 @@ reticolo_add_test(test_metropolis_checkerboard      physics/test_metropolis_chec
 reticolo_add_test(test_phi4_hmc_mixed_precision      physics/test_phi4_hmc_mixed_precision.cpp)
 reticolo_add_test(test_wolff_cluster                physics/test_wolff_cluster.cpp)
 reticolo_add_test(test_api_uniformity               unit/test_api_uniformity.cpp)
+reticolo_add_test(test_philox                        unit/test_philox.cpp)
 
 if(RETICOLO_ENABLE_CUDA)
     reticolo_add_test(test_cuda_selftest            cuda/test_cuda_selftest.cpp)

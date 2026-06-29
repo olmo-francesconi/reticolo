@@ -5,6 +5,7 @@
 #include <reticolo/cuda/hmc_probe.hpp>
 #include <reticolo/cuda/phi4_probe.hpp>
 #include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/rng_probe.hpp>
 #include <reticolo/cuda/selftest.hpp>
 #include <reticolo/cuda/stencil_probe.hpp>
 
@@ -116,4 +117,19 @@ TEST_CASE("cuda integrator order is 2/2/4", "[cuda]") {
 // Phase 2b: cuda::Hmc::step() (sample → MD → ΔH → host MH) runs and stays finite.
 TEST_CASE("cuda Hmc step runs end-to-end", "[cuda]") {
     REQUIRE(reticolo::cuda::hmc_step_runs());
+}
+
+// Phase 2c: device Philox uniforms are bit-identical to the host primitive.
+TEST_CASE("cuda Philox device matches host bit-for-bit", "[cuda]") {
+    REQUIRE(reticolo::cuda::philox_host_matches_device());
+}
+
+// Phase 2c: advancing the trajectory counter changes momenta; same counter repeats.
+TEST_CASE("cuda Philox trajectory counter advances the stream", "[cuda]") {
+    REQUIRE(reticolo::cuda::philox_traj_distinct());
+}
+
+// Phase 2c: a large device fill is ~N(0,1).
+TEST_CASE("cuda Philox normals have N(0,1) moments", "[cuda]") {
+    REQUIRE(reticolo::cuda::philox_moments_ok());
 }

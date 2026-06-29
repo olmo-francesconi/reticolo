@@ -32,6 +32,8 @@
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
 #include <reticolo/core/mt19937_rng.hpp>
+#include <reticolo/core/philox.hpp>
+#include <reticolo/core/philox_rng.hpp>
 #include <reticolo/core/ranlux_rng.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>

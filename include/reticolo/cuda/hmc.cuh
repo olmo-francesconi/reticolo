@@ -15,16 +15,18 @@
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
+#include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/rng_philox.cuh>
 
 #include <cuda_runtime.h>
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <utility>
-#include <vector>
 
 namespace reticolo::cuda {
 
@@ -36,7 +38,7 @@ struct HmcResult {
 template <class A, class R, class Integ = alg::integ::Leapfrog, class Field = DeviceField<double>>
 class Hmc {
 public:
-    Hmc(A action, Field& field, R& rng, double tau, int n_md)
+    Hmc(A action, Field& field, R& rng, double tau, int n_md, std::uint64_t seed = 0xC0FFEEULL)
         : action_{std::move(action)},
           field_{field},
           rng_{rng},
@@ -45,7 +47,8 @@ public:
           old_{field.topology()},
           tau_{tau},
           n_md_{n_md},
-          hbuf_(field.size()) {}
+          seed_{seed},
+          traj_buf_{1} {}
 
     HmcResult step() {
         sample_momenta_();
@@ -68,9 +71,13 @@ public:
     [[nodiscard]] double hamiltonian() { return hamiltonian_(); }
 
 private:
+    // Device Philox fill keyed by (seed, trajectory). The counter lives in a
+    // device buffer (capture-ready); incremented per trajectory so replay never
+    // repeats momenta. The host RNG `rng_` is used only for the MH uniform.
     void sample_momenta_() {
-        rng_.normal_fill(hbuf_.data(), hbuf_.size());
-        mom_.copy_from_host(hbuf_.data());
+        traj_buf_.copy_from_host(&traj_);
+        fill_normals(mom_.data(), static_cast<long>(mom_.size()), seed_, traj_buf_.data());
+        ++traj_;
         RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
     }
 
@@ -95,7 +102,9 @@ private:
     Field old_;
     double tau_;
     int n_md_;
-    std::vector<double> hbuf_;
+    std::uint64_t seed_;
+    std::uint64_t traj_ = 0;
+    DeviceBuffer<std::uint64_t> traj_buf_;
 };
 
 }  // namespace reticolo::cuda
