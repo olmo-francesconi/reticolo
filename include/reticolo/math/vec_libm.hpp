@@ -3,6 +3,13 @@
 #include <cmath>
 #include <cstddef>
 
+// Sleef-backed vectorised libm for the CPU build. Under nvcc (__CUDACC__) we
+// must NOT pull <sleef.h> or the x86/NEON SIMD intrinsics into the translation
+// unit — they don't survive nvcc's device pass — so the #else branch at the
+// bottom provides scalar std-based fallbacks (host + device) with the same
+// signatures. The CPU path below is unchanged.
+#ifndef __CUDACC__
+
 #include <sleef.h>
 
 #if defined(__ARM_NEON) || defined(__aarch64__)
@@ -434,3 +441,57 @@ inline void exp_batch(double* dst, double const* src, std::size_t n) noexcept {
 }
 
 }  // namespace reticolo::math
+
+#else  // __CUDACC__ — scalar std fallbacks, compilable on host AND device.
+
+// nvcc translation units (the CUDA backend) get a Sleef-free, intrinsic-free
+// implementation. These are correct but scalar; device kernels that need fast
+// transcendentals call libdevice directly rather than these batch helpers.
+// `__host__ __device__` is spelled literally here because this branch only ever
+// compiles under nvcc — no dependency on the cuda backend's macro header.
+
+namespace reticolo::math {
+
+inline constexpr std::size_t k_vec_width_d = 1;
+inline constexpr std::size_t k_vec_width_f = 1;
+
+template <class T>
+__host__ __device__ inline void cos_batch(T* dst, T const* src, std::size_t n) noexcept {
+    for (std::size_t i = 0; i < n; ++i) {
+        dst[i] = std::cos(src[i]);
+    }
+}
+
+template <class T>
+__host__ __device__ inline void sin_batch(T* dst, T const* src, std::size_t n) noexcept {
+    for (std::size_t i = 0; i < n; ++i) {
+        dst[i] = std::sin(src[i]);
+    }
+}
+
+template <class T>
+__host__ __device__ inline void acos_batch(T* dst, T const* src, std::size_t n) noexcept {
+    for (std::size_t i = 0; i < n; ++i) {
+        dst[i] = std::acos(src[i]);
+    }
+}
+
+template <class T>
+__host__ __device__ inline void
+sincos_batch(T* dst_sin, T* dst_cos, T const* src, std::size_t n) noexcept {
+    for (std::size_t i = 0; i < n; ++i) {
+        dst_sin[i] = std::sin(src[i]);
+        dst_cos[i] = std::cos(src[i]);
+    }
+}
+
+template <class T>
+__host__ __device__ inline void exp_batch(T* dst, T const* src, std::size_t n) noexcept {
+    for (std::size_t i = 0; i < n; ++i) {
+        dst[i] = std::exp(src[i]);
+    }
+}
+
+}  // namespace reticolo::math
+
+#endif  // __CUDACC__

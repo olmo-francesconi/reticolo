@@ -1,6 +1,7 @@
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>
+#include <reticolo/cuda/gauge_probe.hpp>
 #include <reticolo/cuda/reduce.hpp>
 #include <reticolo/cuda/selftest.hpp>
 
@@ -70,4 +71,11 @@ TEST_CASE("cuda reduce_sum_f64 and axpy_f64 are correct", "[cuda]") {
     axpy_f64(2.0, dx.data(), dy.data(), n);
     double const dev_y_sum = reduce_sum_f64(dy.data(), n);
     REQUIRE(dev_y_sum == Catch::Approx(static_cast<double>(n) + 2.0 * host_sum).epsilon(1e-12));
+}
+
+// Phase 1 (M1): the gauge action/drift headers compile under nvcc (Sleef now
+// guarded out of vec_libm.hpp) and produce finite output. That this links at
+// all means src/cuda/gauge_probe.cu compiled the transcendental paths.
+TEST_CASE("cuda gauge headers compile and run under nvcc", "[cuda]") {
+    REQUIRE(reticolo::cuda::gauge_headers_compile());
 }

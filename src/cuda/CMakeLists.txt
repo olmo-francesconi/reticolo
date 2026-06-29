@@ -2,15 +2,14 @@
 # include <cuda_runtime.h> / cuRAND / cub. CUDA headers must never leak into
 # reticolo::core, mirroring how reticolo::io quarantines <hdf5.h>.
 #
-# Phase 0: toolchain skeleton + a self-test TU. The target is intentionally
-# self-contained and does NOT yet link reticolo::core — pulling core action
-# headers into an nvcc TU is blocked until M1 isolates <sleef.h> from the math
-# (see docs/cuda_hmc_roadmap.md). It carries only its own public headers under
-# include/reticolo/cuda/.
+# It uses reticolo::core headers (header-only — nothing to link) via the include
+# dir below. As of M1, <sleef.h> and the SIMD intrinsics are guarded out of
+# vec_libm.hpp under __CUDACC__, so the gauge math headers parse under nvcc
+# (proven by gauge_probe.cu). See docs/cuda_hmc_roadmap.md.
 
 find_package(CUDAToolkit REQUIRED)
 
-add_library(reticolo_cuda STATIC selftest.cu reduce.cu)
+add_library(reticolo_cuda STATIC selftest.cu reduce.cu gauge_probe.cu)
 add_library(reticolo::cuda ALIAS reticolo_cuda)
 
 target_include_directories(reticolo_cuda PUBLIC
