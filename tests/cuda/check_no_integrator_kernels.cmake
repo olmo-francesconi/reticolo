@@ -4,8 +4,8 @@
 #
 # hmc_probe.cu / f32_probe.cu / u1_probe.cu / su2_probe.cu / su3_probe.cu (test
 # harnesses) and bench_hmc.cu (perf harness) are excluded by name: they
-# legitimately instantiate / reference the generic integrator to prove reuse or
-# benchmark it — that is not integrator-specific kernel code.
+# legitimately *instantiate* the generic integrator (alg::integ::Leapfrog) as a
+# type parameter — that is reuse, not a reimplemented integrator-specific kernel.
 #
 # Invoked as: cmake -DSRC_DIR=<src/cuda> -P check_no_integrator_kernels.cmake
 
