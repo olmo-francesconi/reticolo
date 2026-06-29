@@ -4,6 +4,7 @@
 #include <reticolo/cuda/gauge_probe.hpp>
 #include <reticolo/cuda/reduce.hpp>
 #include <reticolo/cuda/selftest.hpp>
+#include <reticolo/cuda/stencil_probe.hpp>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -78,4 +79,11 @@ TEST_CASE("cuda reduce_sum_f64 and axpy_f64 are correct", "[cuda]") {
 // all means src/cuda/gauge_probe.cu compiled the transcendental paths.
 TEST_CASE("cuda gauge headers compile and run under nvcc", "[cuda]") {
     REQUIRE(reticolo::cuda::gauge_headers_compile());
+}
+
+// Phase 1 exit gate: the generic stencil + reduce_fwd device skeletons, driven
+// by a dummy Phi4-shaped functor pair, satisfy force == -dS/dphi by central
+// finite differences. Validates the scalar device action protocol end-to-end.
+TEST_CASE("cuda stencil force matches finite-difference of reduce_fwd action", "[cuda]") {
+    REQUIRE(reticolo::cuda::stencil_force_matches_fd());
 }
