@@ -497,7 +497,8 @@ forward-plane `β·Σ(1−cos)` → `reduce_sum`). The CPU scatter is **not** po
 | Phi6 f64       | 0.153 | 0.519 | 6.251 |
 | SineGordon f64 | 0.161 | 0.533 | 6.379 |
 | Xy f64         | 0.200 | 0.648 | 7.157 |
-| CompactU1 f64  | 0.299 | 2.119 | (DOF = 4·V) |
+| CompactU1 f64  | 0.299 | 2.119 | 29.984 (DOF = 4·V) |
+| Wilson<SU2> f64 | 0.559 | 7.006 | 121.929 (DOF = 32·V) |
 
 Reading (the input for any fusion/tuning decision): **the kernels are
 HBM-bandwidth-bound, not compute-bound** — Phi6 ≈ Phi4 at every volume (a free
@@ -510,20 +511,31 @@ is still the untuned 256 everywhere — an Nsight occupancy pass is the obvious
 lever now that we know it is memory-bound.
 
 ### Phase 5 — SU(2)/SU(3) gauge  *(exit: force-vs-FD + reversibility f64 at 1e-9 (port `test_su3_hmc_reversibility.cpp`); momentum-moment test for Gell-Mann variance + anti-hermiticity; [nightly] ⟨e^−ΔH⟩ + plaquette at β; **perf target met**)*
-- **SU(2) — BUILT, pending Kaggle validation.** `MatrixLayout<SU2>` (nc=8,
-  `[ndim][nc][nsites]` = host `MatrixLinkLattice<SU2>` order, flat copy exact).
-  Generic SU(N) kernels (`gauge_sun.cuh`) templated on a device-traits type
-  `GD = group_device<G>::type` (`SU2Device` in `gauge/su2_device.cuh`, RETICOLO_HD
-  register-local 2×2 ops validated vs `math::su2`): per-site plaquette energy,
-  per-link staple-gather force `scale·TA[U·V]`, group-exp drift `U←exp(dt·P)·U`
-  (ADL `drift_field` atom over `MatrixLayout<G>`), Gell-Mann momentum sampler
-  (h_a~N(0,½)). `device_functors<Wilson<SU2>>` plugs into the unchanged
-  `DeviceAction`/`Hmc`; momentum sampling is now a 4th trait launcher
+- **SU(2) — DONE** (31/31 CUDA gates green on Tesla P100). `MatrixLayout<SU2>`
+  (nc=8, `[ndim][nc][nsites]` = host `MatrixLinkLattice<SU2>` order, flat copy
+  exact). Generic SU(N) kernels (`gauge_sun.cuh`) templated on a device-traits
+  type `GD = group_device<G>::type` (`SU2Device` in `gauge/su2_device.cuh`,
+  RETICOLO_HD register-local 2×2 ops validated vs `math::su2`): per-site
+  plaquette energy, per-link staple-gather force `scale·TA[U·V]`, group-exp drift
+  `U←exp(dt·P)·U` (ADL `drift_field` atom over `MatrixLayout<G>`), Gell-Mann
+  momentum sampler (h_a~N(0,½)). `device_functors<Wilson<SU2>>` plugs into the
+  unchanged `DeviceAction`/`Hmc`; momentum sampling is now a 4th trait launcher
   (`sample_momenta`) so the scalar/U(1) iid-normal draw and the gauge algebra
   draw share one `Hmc` path. Gates in `src/cuda/su2_probe.cu`: device-ops-vs-CPU,
   s_full+force vs CPU `Wilson<SU2>` (1e-9), MD energy conservation (2nd-order
-  ratio), reversibility (1e-9), momentum moments, host-free HMC smoke.
-- SU(3) — follow-on once SU(2) is green (same kernels, `SU3Device` traits).
+  ratio), reversibility (1e-9), momentum moments, host-free HMC smoke. The matrix
+  `drift_field` overload re-proves the integrator seam for matrix fields (Phase 2
+  only proved it for scalar atoms).
+- **GPU-vs-CPU baseline (Wilson<SU2>, Leapfrog).** Shared 4D L=8 point: P100
+  0.559 ms/traj (n_md=10, full host-free HMC) vs M1 single core 33.63 ms/traj
+  (n_md=20, MD-only — single-replica HMC is serial by design). Normalized to
+  `link·force-evals/s` (links × force-evals/s, n_md/integrator-invariant): M1
+  1.02e7 → P100 3.22e8 = **~31×**. Gap widens with volume (P100 underutilized at
+  L=8, peaks ~4.1e8 link·force-evals/s at L=16): ~40× at 4D L=16, ~37× at L=32
+  (CPU L≥16 linear-in-volume extrapolation from the measured L=8). SU(2) does
+  ~13× the elementwise work of scalar Phi4 at equal V (4 dirs × 8 reals + 2×2
+  matmul staples) yet stays bandwidth-bound — block size still the untuned 256.
+- SU(3) — follow-on (same kernels, `SU3Device` traits: nc=18, n_gen=8).
 - `MatrixLayout<G>` field; gather `plaquette`; fused `expi_lmul`.
 - Profile `ThreadPerLink` vs `WarpPerLink` + shared-mem staple staging.
 - **(review)** State a concrete throughput target (e.g. achieved memory BW vs
