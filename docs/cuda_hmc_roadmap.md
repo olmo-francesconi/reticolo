@@ -499,6 +499,7 @@ forward-plane `β·Σ(1−cos)` → `reduce_sum`). The CPU scatter is **not** po
 | Xy f64         | 0.200 | 0.648 | 7.157 |
 | CompactU1 f64  | 0.299 | 2.119 | 29.984 (DOF = 4·V) |
 | Wilson<SU2> f64 | 0.559 | 7.006 | 121.929 (DOF = 32·V) |
+| Wilson<SU3> f64 | 1.349 | 16.133 | 270.884 (DOF = 72·V) |
 
 Reading (the input for any fusion/tuning decision): **the kernels are
 HBM-bandwidth-bound, not compute-bound** — Phi6 ≈ Phi4 at every volume (a free
@@ -526,24 +527,43 @@ lever now that we know it is memory-bound.
   ratio), reversibility (1e-9), momentum moments, host-free HMC smoke. The matrix
   `drift_field` overload re-proves the integrator seam for matrix fields (Phase 2
   only proved it for scalar atoms).
-- **GPU-vs-CPU baseline (Wilson<SU2>, Leapfrog).** Shared 4D L=8 point: P100
-  0.559 ms/traj (n_md=10, full host-free HMC) vs M1 single core 33.63 ms/traj
-  (n_md=20, MD-only — single-replica HMC is serial by design). Normalized to
-  `link·force-evals/s` (links × force-evals/s, n_md/integrator-invariant): M1
-  1.02e7 → P100 3.22e8 = **~31×**. Gap widens with volume (P100 underutilized at
-  L=8, peaks ~4.1e8 link·force-evals/s at L=16): ~40× at 4D L=16, ~37× at L=32
-  (CPU L≥16 linear-in-volume extrapolation from the measured L=8). SU(2) does
-  ~13× the elementwise work of scalar Phi4 at equal V (4 dirs × 8 reals + 2×2
-  matmul staples) yet stays bandwidth-bound — block size still the untuned 256.
-- SU(3) — follow-on (same kernels, `SU3Device` traits: nc=18, n_gen=8).
-- `MatrixLayout<G>` field; gather `plaquette`; fused `expi_lmul`.
-- Profile `ThreadPerLink` vs `WarpPerLink` + shared-mem staple staging.
-- **(review)** State a concrete throughput target (e.g. achieved memory BW vs
-  HBM peak for the action kernel; GPU-vs-CPU traj/s on a reference 16³×32
-  lattice), not "Nsight gates met."
-- SU(N) links stay f64 (group-drift policy).
-- **(review)** This phase **re-proves the integrator seam for matrix fields**
-  (the `expi_lmul` drift overload) — Phase 2 only proved it for scalar atoms.
+- **SU(3) — DONE** (37/37 CUDA gates green on Tesla P100). Same generic SU(N)
+  kernels with `GD = SU3Device` (`gauge/su3_device.cuh`, nc=18, n_gen=8): the
+  register-local 3×3 ops and the Morningstar-Peardon Cayley-Hamilton group exp
+  are copied verbatim from `math::su3` (RETICOLO_HD), validated bit-faithful by
+  `su3_probe.cu` (device-ops-vs-CPU, s_full+force vs CPU `Wilson<SU3>` 1e-9,
+  energy conservation, reversibility, momentum moments=n_gen, host-free HMC).
+  Zero new kernels and no `DeviceAction`/`Hmc` change — SU(2)→SU(3) is purely a
+  new traits struct + `group_device<SU3>` specialization.
+- **GPU-vs-CPU baseline (Wilson<SU{2,3}>, Leapfrog), all measured.** Normalized
+  to `link·force-evals/s` (links × force-evals/s, n_md/integrator-invariant; M1
+  single core, n_md=20 MD-only — single-replica HMC is serial by design — vs P100
+  n_md=10 full host-free HMC). The M1 falls out of cache at L≥16 so the speedup
+  *rises* with volume and then plateaus:
+
+  | action | 4D L=8 | 4D L=16 | 4D L=32 |
+  |---|---|---|---|
+  | SU(2): M1 ms → P100 ms | 33.6 → 0.56 | 780.6 → 6.97 | 13821 → 121.9 |
+  | SU(2): speedup (link·fe/s) | ~31× | **~59×** | **~59×** |
+  | SU(3): M1 ms → P100 ms | 112.1 → 1.35 | 2522 → 16.13 | 42599 → 270.9 |
+  | SU(3): speedup (link·fe/s) | ~44× | **~82×** | **~82×** |
+
+  M1 link·fe/s: SU(2) 1.02e7 (L=8, in cache) → 6.4e6 (L=32); SU(3) 3.07e6 →
+  2.07e6. P100 link·fe/s: SU(2) ~3.8–4.1e8, SU(3) ~1.7–1.8e8. SU(3)'s denser 3×3
+  + Cayley-Hamilton work gives the larger GPU win. Still bandwidth-bound: on the
+  P100 at L=16, SU(3)/SU(2) = 16.13/6.97 = 2.31× ≈ the DOF ratio 18/8 = 2.25× —
+  even the heavy matrix exp is hidden behind HBM traffic. Block size is the
+  untuned 256 everywhere; an Nsight occupancy pass is the obvious lever.
+- **DEFERRED** — Profile `ThreadPerLink` vs `WarpPerLink` + shared-mem staple
+  staging. Not started; the bench shows the win is in occupancy/block-size, not
+  the thread-mapping (kernels are bandwidth-bound, one thread per link).
+- **DONE (concrete target)** — measured GPU-vs-CPU above (~59× SU(2) / ~82× SU(3)
+  vs one M1 core, n_md-normalized). The remaining lever is the untuned 256 block
+  (Nsight occupancy pass), tracked as the deferred tuning item — not a blocker.
+- SU(N) links stay f64 (group-drift policy). ✓
+- **DONE** — this phase re-proved the integrator seam for matrix fields (the
+  `MatrixLayout<G>` `drift_field` group-exp overload, selected over the generic
+  axpy drift by partial ordering); Phase 2 only proved it for scalar atoms.
 
 ### Phase 6 — observables, measurement overlap, checkpoint/restart
 *(exit: CUDA app HDF5 matches host schema; only scalars cross PCIe;
