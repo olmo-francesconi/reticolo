@@ -5,10 +5,12 @@
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
+#include <reticolo/cuda/graph.hpp>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/hmc_probe.hpp>
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/stream.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -179,6 +181,68 @@ bool hmc_step_runs() {
         }
     }
     return true;
+}
+
+bool graph_replay_matches_eager() {
+    std::vector<std::size_t> const shape{6, 4, 5};
+    Lattice<double> const q0 = smooth_field(shape);
+    auto const n             = q0.nsites();
+    std::vector<double> p0(n);
+    FastRng rng{5};
+    rng.normal_fill(p0.data(), n);
+
+    constexpr double tau = 1.0;
+    constexpr int n_md   = 12;
+    using Integ          = alg::integ::Leapfrog;
+
+    // Eager reference MD from (q0, p0), on the default stream.
+    Lattice<double> eager_out{shape};
+    {
+        DField field{shape};
+        DField mom{field.topology()};
+        DField force{field.topology()};
+        DAct const act{make_action(), field.topology()};
+        field.copy_from_host(q0);
+        mom.copy_from_host(p0.data());
+        RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
+        Integ::run(act, field, mom, force, tau, n_md);
+        field.copy_to_host(eager_out);
+        RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+    }
+
+    // Captured MD on a dedicated stream. Iter 0 captures + launches; iter 1
+    // replays the cached graphExec (body not re-run). Both reset to (q0, p0)
+    // and must reproduce the eager field bit-for-bit.
+    cudaStream_t s = nullptr;
+    RETICOLO_CUDA_CHECK(cudaStreamCreateWithFlags(&s, cudaStreamNonBlocking));
+    DField field{shape};
+    DField mom{field.topology()};
+    DField force{field.topology()};
+    DAct const act{make_action(), field.topology()};
+    TrajectoryGraph graph{s};
+
+    bool ok = true;
+    for (int iter = 0; iter < 2; ++iter) {
+        field.copy_from_host(q0);
+        mom.copy_from_host(p0.data());
+        RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
+        {
+            ScopedStream const scope{s};
+            graph.run([&] { Integ::run(act, field, mom, force, tau, n_md); });
+        }
+        RETICOLO_CUDA_CHECK(cudaStreamSynchronize(s));
+
+        Lattice<double> g_out{shape};
+        field.copy_to_host(g_out);
+        RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+        for (std::size_t i = 0; i < n; ++i) {
+            if (g_out.data()[i] != eager_out.data()[i]) {
+                ok = false;
+            }
+        }
+    }
+    cudaStreamDestroy(s);
+    return ok;
 }
 
 }  // namespace reticolo::cuda

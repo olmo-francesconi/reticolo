@@ -17,4 +17,8 @@ namespace reticolo::cuda {
 // several steps with finite ΔH and a field that stays finite.
 [[nodiscard]] bool hmc_step_runs();
 
+// Phase 2d: a graph-captured MD trajectory (and its replay) reproduces the
+// eager MD field bit-for-bit from the same (q0, p0).
+[[nodiscard]] bool graph_replay_matches_eager();
+
 }  // namespace reticolo::cuda

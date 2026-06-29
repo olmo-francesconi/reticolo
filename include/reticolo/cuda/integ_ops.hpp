@@ -2,6 +2,7 @@
 
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/stream.hpp>
 
 #include <cuda_runtime.h>
 
@@ -22,13 +23,13 @@ namespace reticolo::cuda {
 template <class Layout>
 inline void drift_field(DeviceField<double, Layout>& field,
                         DeviceField<double, Layout> const& mom, double cdt) {
-    axpy_f64(cdt, mom.data(), field.data(), static_cast<long>(field.size()));
+    axpy_f64(cdt, mom.data(), field.data(), static_cast<long>(field.size()), current_stream());
 }
 
 template <class Layout>
 inline void kick_add(DeviceField<double, Layout>& mom, DeviceField<double, Layout> const& force,
                      double kdt) {
-    axpy_f64(kdt, force.data(), mom.data(), static_cast<long>(mom.size()));
+    axpy_f64(kdt, force.data(), mom.data(), static_cast<long>(mom.size()), current_stream());
 }
 
 }  // namespace reticolo::cuda

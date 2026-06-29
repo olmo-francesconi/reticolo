@@ -133,3 +133,9 @@ TEST_CASE("cuda Philox trajectory counter advances the stream", "[cuda]") {
 TEST_CASE("cuda Philox normals have N(0,1) moments", "[cuda]") {
     REQUIRE(reticolo::cuda::philox_moments_ok());
 }
+
+// Phase 2d: a graph-captured MD trajectory + its replay reproduce eager MD
+// bit-for-bit from the same (q0, p0).
+TEST_CASE("cuda graph replay matches eager MD", "[cuda]") {
+    REQUIRE(reticolo::cuda::graph_replay_matches_eager());
+}

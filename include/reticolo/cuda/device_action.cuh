@@ -15,6 +15,7 @@
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/reduce_fwd.cuh>
 #include <reticolo/cuda/stencil.cuh>
+#include <reticolo/cuda/stream.hpp>
 
 #include <cuda_runtime.h>
 
@@ -27,26 +28,25 @@ class DeviceAction {
 public:
     using traits = device_functors<HostAction>;
 
-    DeviceAction(HostAction host, DeviceTopology topo, cudaStream_t stream = nullptr)
-        : host_{host},
-          topo_{topo},
-          scratch_{static_cast<std::size_t>(topo.nsites)},
-          stream_{stream} {}
+    DeviceAction(HostAction host, DeviceTopology topo)
+        : host_{host}, topo_{topo}, scratch_{static_cast<std::size_t>(topo.nsites)} {}
 
+    // Launches on the thread-local current stream (cuda/stream.hpp), so a
+    // compute_force inside a captured MD trajectory lands on the capture stream.
     [[nodiscard]] double s_full(Field const& field) const {
         return reduce_fwd_launch(traits::make_energy(host_), field.data(), scratch_.data(), topo_,
-                                 stream_);
+                                 current_stream());
     }
 
     void compute_force(Field const& field, Field& force) const {
-        stencil_launch(traits::make_force(host_), field.data(), force.data(), topo_, stream_);
+        stencil_launch(traits::make_force(host_), field.data(), force.data(), topo_,
+                       current_stream());
     }
 
 private:
     HostAction host_;
     DeviceTopology topo_;
     mutable DeviceBuffer<double> scratch_;
-    cudaStream_t stream_;
 };
 
 }  // namespace reticolo::cuda
