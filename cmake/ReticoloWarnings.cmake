@@ -3,6 +3,12 @@
 # Apply with `reticolo_configure_warnings(<target>)`. The target may be
 # INTERFACE, STATIC, or executable; flags are added as INTERFACE for
 # INTERFACE targets and PRIVATE otherwise.
+#
+# All flags are guarded by `$<COMPILE_LANGUAGE:CXX>` so they apply only to C++
+# compiles, never CUDA. This matters transitively: reticolo::core is INTERFACE
+# and reticolo::io PUBLIC-links it, so a nvcc-compiled target that links io would
+# otherwise inherit host -Wall/-Werror on its .cu compile and break. nvcc carries
+# its own diagnostics; the host warning policy is a C++-only concern.
 
 function(reticolo_configure_warnings target)
     get_target_property(_type ${target} TYPE)
@@ -48,19 +54,24 @@ function(reticolo_configure_warnings target)
 
     set(_msvc_warnings /W4 /permissive-)
 
+    # Guard every flag by COMPILE_LANGUAGE:CXX (see header comment) so CUDA
+    # compiles that link these targets never inherit the host warning policy.
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        target_compile_options(${target} ${_scope} ${_gnu_clang_warnings} ${_clang_quiet})
+        target_compile_options(${target} ${_scope}
+            "$<$<COMPILE_LANGUAGE:CXX>:${_gnu_clang_warnings};${_clang_quiet}>")
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(${target} ${_scope} ${_gnu_clang_warnings} ${_gcc_extra})
+        target_compile_options(${target} ${_scope}
+            "$<$<COMPILE_LANGUAGE:CXX>:${_gnu_clang_warnings};${_gcc_extra}>")
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        target_compile_options(${target} ${_scope} ${_msvc_warnings})
+        target_compile_options(${target} ${_scope}
+            "$<$<COMPILE_LANGUAGE:CXX>:${_msvc_warnings}>")
     endif()
 
     if(RETICOLO_WARNINGS_AS_ERRORS)
         if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-            target_compile_options(${target} ${_scope} -Werror)
+            target_compile_options(${target} ${_scope} "$<$<COMPILE_LANGUAGE:CXX>:-Werror>")
         elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-            target_compile_options(${target} ${_scope} /WX)
+            target_compile_options(${target} ${_scope} "$<$<COMPILE_LANGUAGE:CXX>:/WX>")
         endif()
     endif()
 endfunction()
