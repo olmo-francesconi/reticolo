@@ -29,3 +29,6 @@ __pycache__/
 *.py[cod]
 .venv/
 .ipynb_checkpoints/
+
+# kaggle runner: downloaded kernel logs
+tools/kaggle/output/
