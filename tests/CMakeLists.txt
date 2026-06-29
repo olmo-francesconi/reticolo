@@ -55,6 +55,10 @@ reticolo_add_test(test_phi4_hmc_mixed_precision      physics/test_phi4_hmc_mixed
 reticolo_add_test(test_wolff_cluster                physics/test_wolff_cluster.cpp)
 reticolo_add_test(test_api_uniformity               unit/test_api_uniformity.cpp)
 
+if(RETICOLO_ENABLE_CUDA)
+    reticolo_add_test(test_cuda_selftest            cuda/test_cuda_selftest.cpp)
+endif()
+
 if(RETICOLO_BUILD_IO)
     reticolo_add_test(test_writer_roundtrip         io/test_writer_roundtrip.cpp)
     reticolo_add_test(test_writer_metadata          io/test_writer_metadata.cpp)

@@ -67,6 +67,15 @@
                 "CMAKE_CXX_FLAGS":     "-fsanitize=address,undefined -fno-omit-frame-pointer",
                 "RETICOLO_TUNE_NATIVE": "OFF"
             }
+        },
+        {
+            "name":         "cuda-linux",
+            "inherits":     "linux-gcc",
+            "description":  "Linux GCC host + CUDA backend (nvcc); needs a CUDA toolkit",
+            "cacheVariables": {
+                "RETICOLO_ENABLE_CUDA":     "ON",
+                "CMAKE_CUDA_ARCHITECTURES": "80;90"
+            }
         }
     ],
 
@@ -75,7 +84,8 @@
         { "name": "macos-llvm",       "configurePreset": "macos-llvm"       },
         { "name": "linux-gcc",        "configurePreset": "linux-gcc"        },
         { "name": "linux-clang",      "configurePreset": "linux-clang"      },
-        { "name": "debug",            "configurePreset": "debug"            }
+        { "name": "debug",            "configurePreset": "debug"            },
+        { "name": "cuda-linux",       "configurePreset": "cuda-linux"       }
     ],
 
     "testPresets": [
@@ -83,6 +93,7 @@
         { "name": "macos-llvm",       "configurePreset": "macos-llvm",       "output": { "outputOnFailure": true } },
         { "name": "linux-gcc",        "configurePreset": "linux-gcc",        "output": { "outputOnFailure": true } },
         { "name": "linux-clang",      "configurePreset": "linux-clang",      "output": { "outputOnFailure": true } },
-        { "name": "debug",            "configurePreset": "debug",            "output": { "outputOnFailure": true } }
+        { "name": "debug",            "configurePreset": "debug",            "output": { "outputOnFailure": true } },
+        { "name": "cuda-linux",       "configurePreset": "cuda-linux",       "output": { "outputOnFailure": true } }
     ]
 }
