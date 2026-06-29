@@ -12,6 +12,7 @@
 #include <reticolo/action/phi4.hpp>
 #include <reticolo/action/phi6.hpp>
 #include <reticolo/action/sine_gordon.hpp>
+#include <reticolo/action/wilson.hpp>
 #include <reticolo/action/xy.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/log.hpp>
@@ -19,9 +20,11 @@
 #include <reticolo/cuda/actions/phi4.hpp>
 #include <reticolo/cuda/actions/phi6.hpp>
 #include <reticolo/cuda/actions/sine_gordon.hpp>
+#include <reticolo/cuda/actions/wilson.hpp>
 #include <reticolo/cuda/actions/xy.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
+#include <reticolo/cuda/gauge/su2_device.cuh>
 #include <reticolo/cuda/hmc.cuh>
 
 #include <chrono>
@@ -37,6 +40,7 @@ namespace {
 using reticolo::cuda::DeviceAction;
 using reticolo::cuda::DeviceField;
 using reticolo::cuda::LinkLayout;
+using reticolo::cuda::MatrixLayout;
 namespace act = reticolo::action;
 
 using clock_type = std::chrono::steady_clock;
@@ -105,6 +109,9 @@ int main() {
         bench<act::Xy<double>, DeviceField<double>>("Xy<f64>", s4, {.beta = 0.5});
         bench<act::CompactU1<double>, DeviceField<double, LinkLayout>>(
             "CompactU1<f64>", s4, {.beta = 1.0});
+        bench<act::Wilson<reticolo::gauge_group::SU2, double>,
+              DeviceField<double, MatrixLayout<reticolo::gauge_group::SU2>>>(
+            "Wilson<SU2>", s4, {.beta = 2.4});
         std::printf("---------------------------------------------------------------------\n");
     }
     return 0;
