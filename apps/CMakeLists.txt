@@ -36,5 +36,25 @@ reticolo_add_app(bench_phase_quenched  bench_phase_quenched.cpp)
 reticolo_add_app(bench_metropolis_sweep bench_metropolis_sweep.cpp)
 reticolo_add_app(bench_precision_hmc   bench_precision_hmc.cpp)
 
+# CUDA-backed apps: native .cu twins of the CPU reference sims, compiled by
+# nvcc. They use cuda::Hmc / DeviceField directly and io::Writer directly —
+# io::Writer PIMPLs HDF5 so nvcc never sees <hdf5.h>, it just links the prebuilt
+# reticolo::io archive. Linking the umbrella is safe now that the host warning
+# flags are $<COMPILE_LANGUAGE:CXX>-guarded (cmake/ReticoloWarnings.cmake), so
+# nvcc does not inherit -Werror on the .cu compile.
+if(RETICOLO_ENABLE_CUDA)
+    function(reticolo_add_cuda_app name)
+        add_executable(${name} ${ARGN})
+        target_link_libraries(${name} PRIVATE reticolo::reticolo)
+        reticolo_configure_warnings(${name})  # CXX-guarded; inert on .cu sources
+        set_target_properties(${name} PROPERTIES
+            CUDA_STANDARD              20
+            CUDA_STANDARD_REQUIRED     ON
+            CUDA_SEPARABLE_COMPILATION ON)
+    endfunction()
+    reticolo_add_cuda_app(phi4_cuda_hmc  phi4_cuda_hmc.cu)
+    reticolo_add_cuda_app(su2_cuda_hmc   su2_cuda_hmc.cu)
+endif()
+
 # OpenMP is inherited transitively through reticolo::core — no per-app link
 # needed. Pragmas in headers/apps are inert when -fopenmp is off.
