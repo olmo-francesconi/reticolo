@@ -18,7 +18,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdio>
-#include <filesystem>
 #include <string>
 
 namespace {
@@ -40,7 +39,7 @@ int main(int argc, char** argv) {
 
     // ---- CLI ----
     cli::Parser p{"phi4_hmc", "Hybrid Monte Carlo for the phi^4 scalar field"};
-    auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
+    auto const cf          = app::common_flags(p, {.out = "phi4.h5"});
     auto const& kappa      = p.opt<double>("kappa", 0.18, "hopping parameter");
     auto const& lambda     = p.opt<double>("lambda", 1.0, "quartic coupling");
     auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
@@ -49,11 +48,6 @@ int main(int argc, char** argv) {
     auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation trajectories");
     auto const& n_prod     = p.opt<int>("n_prod", 1000, "production trajectories");
     auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N trajectories");
-    auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& workspace =
-        p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
-    auto const& outfile = p.opt<std::string>(
-        "out", std::string{"phi4.h5"}, "HDF5 output file name, inside workspace");
     auto const& ckpt_every =
         p.opt<int>("checkpoint_every", 0, "write a config every N prod trajectories (0 = off)");
     auto const& resume_path =
@@ -61,13 +55,13 @@ int main(int argc, char** argv) {
     if (!p.parse(argc, argv))
         return 0;
 
-    log::start(workspace, outfile);
-    std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
+    log::start(cf.workspace, cf.out);
+    std::string const outpath = app::out_path(cf);
 
     // ---- State: lattice, RNG, action ----
-    Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
     Lattice<double> phi{shape};
-    FastRng rng{seed};
+    FastRng rng{cf.seed};
     long long start_i   = 0;
     bool const resuming = !resume_path.empty();
     if (resuming) {

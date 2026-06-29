@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <filesystem>
 #include <format>
 #include <memory>
 #include <string>
@@ -25,7 +24,7 @@ int main(int argc, char** argv) {
         llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, LinkLattice<double>>;
 
     cli::Parser p{"u1_llr_smoothed", "Smoothed LLR for compact U(1) Wilson action"};
-    auto const& L     = p.opt<int>("L,size", 4, "linear lattice extent");
+    auto const cf     = app::common_flags(p, {.L = 4, .out = "u1_llr_smoothed.h5"});
     auto const& ndim  = p.opt<int>("ndim", 4, "spatial dimensions");
     auto const& beta  = p.opt<double>("beta", 1.0, "Wilson coupling");
     auto const& e_min = p.opt<double>("E_min", 200.0, "lower window centre");
@@ -55,19 +54,14 @@ int main(int argc, char** argv) {
         "smooth_lambda0", 1.0, "shrinkage weight prefactor (lambda_s = lambda0/(s+1)^exp)");
     auto const& smooth_lambda_exp = p.opt<double>(
         "smooth_lambda_exp", 2.0, "shrinkage decay exponent; >1 keeps the perturbation summable");
-    auto const& seed = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& workspace =
-        p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
-    auto const& outfile = p.opt<std::string>(
-        "out", std::string{"u1_llr_smoothed.h5"}, "HDF5 output file name, inside workspace");
     if (!p.parse(argc, argv)) {
         return 0;
     }
 
-    log::start(workspace, outfile, /*replicas=*/true);
-    std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
+    log::start(cf.workspace, cf.out, /*replicas=*/true);
+    std::string const outpath = app::out_path(cf);
 
-    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
     Action const base{.beta = beta};
     log::act(base);
 
@@ -81,13 +75,13 @@ int main(int argc, char** argv) {
         double const e_n = e_min + (static_cast<double>(n) * d_e);
         reps.push_back(std::make_unique<ReplicaT>(
             base,
-            FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
+            FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
             ReplicaT::Spec{
                 .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
             alg::HmcSpec{.tau = tau, .n_md = n_md}));
     }
 
-    FastRng exch_rng{seed};
+    FastRng exch_rng{cf.seed};
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 

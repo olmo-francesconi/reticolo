@@ -48,8 +48,8 @@ TEST_CASE("Checkerboard Metropolis reproduces N(0, 1/sqrt(2))",
     std::size_t att_total = 0;
     for (int meas = 0; meas < n_meas; ++meas) {
         auto stats = mc.step();
-        acc_total += stats.accepted;
-        att_total += stats.attempts;
+        acc_total += stats.n_accepted;
+        att_total += stats.n_attempts;
         for (Site x : phi.sites()) {
             sum_phi += phi[x];
             sum_phi2 += phi[x] * phi[x];
@@ -126,8 +126,8 @@ TEST_CASE("Checkerboard on an action without an NN fast path falls back",
     std::size_t att = 0;
     for (int s = 0; s < 50; ++s) {
         auto stats = mc.step();
-        acc += stats.accepted;
-        att += stats.attempts;
+        acc += stats.n_accepted;
+        att += stats.n_attempts;
     }
 
     REQUIRE(att == 50 * phi.nsites());

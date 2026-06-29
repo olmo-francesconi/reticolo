@@ -53,6 +53,7 @@ reticolo_add_test(test_metropolis_gaussian_limit    physics/test_metropolis_gaus
 reticolo_add_test(test_metropolis_checkerboard      physics/test_metropolis_checkerboard.cpp)
 reticolo_add_test(test_phi4_hmc_mixed_precision      physics/test_phi4_hmc_mixed_precision.cpp)
 reticolo_add_test(test_wolff_cluster                physics/test_wolff_cluster.cpp)
+reticolo_add_test(test_api_uniformity               unit/test_api_uniformity.cpp)
 
 if(RETICOLO_BUILD_IO)
     reticolo_add_test(test_writer_roundtrip         io/test_writer_roundtrip.cpp)

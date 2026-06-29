@@ -10,7 +10,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <filesystem>
 #include <format>
 #include <memory>
 #include <string>
@@ -25,7 +24,7 @@ int main(int argc, char** argv) {
 
     // ---- CLI ----
     cli::Parser p{"su2_llr", "LLR with replica exchange for SU(2) Wilson action"};
-    auto const& L     = p.opt<int>("L,size", 4, "linear lattice extent");
+    auto const cf     = app::common_flags(p, {.L = 4, .out = "su2_llr.h5"});
     auto const& ndim  = p.opt<int>("ndim", 4, "spatial dimensions");
     auto const& beta  = p.opt<double>("beta", 2.3, "Wilson coupling");
     auto const& e_min = p.opt<double>("E_min", 200.0, "lower window centre");
@@ -42,20 +41,15 @@ int main(int argc, char** argv) {
     auto const& n_therm_rm =
         p.opt<int>("n_therm_rm", 100, "thermalisation trajectories per RM sweep");
     auto const& n_meas_rm = p.opt<int>("n_meas_rm", 500, "measurement trajectories per RM sweep");
-    auto const& seed      = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& workspace =
-        p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
-    auto const& outfile = p.opt<std::string>(
-        "out", std::string{"su2_llr.h5"}, "HDF5 output file name, inside workspace");
     if (!p.parse(argc, argv)) {
         return 0;
     }
 
-    log::start(workspace, outfile, /*replicas=*/true);
-    std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
+    log::start(cf.workspace, cf.out, /*replicas=*/true);
+    std::string const outpath = app::out_path(cf);
 
     // ---- Base action ----
-    Field::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    Field::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
     Action const base{.beta = beta};
     log::act(base);
 
@@ -71,7 +65,7 @@ int main(int argc, char** argv) {
         double const e_n = e_min + (static_cast<double>(n) * d_e);
         reps.push_back(std::make_unique<ReplicaT>(
             base,
-            FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
+            FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
             ReplicaT::Spec{
                 .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
             alg::HmcSpec{.tau = tau, .n_md = n_md}));
@@ -89,7 +83,7 @@ int main(int argc, char** argv) {
     }
 
     // ---- Output ----
-    FastRng exch_rng{seed};
+    FastRng exch_rng{cf.seed};
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 

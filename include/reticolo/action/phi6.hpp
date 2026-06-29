@@ -63,22 +63,26 @@ struct Phi6 {
         return hop + onsite;
     }
 
-    [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T const k    = kappa;
-        T const lam  = lambda;
-        T const g    = g6;
-        T const s    = detail::reduce_fwd<T>(l, [k, lam, g](T phi, T fwd_sum) {
+    // Per-site math in `T`, volume sum accumulated in (and returned as) `double`
+    // — a float sum over a large V loses ~log2(V) bits and corrupts the ΔH the
+    // HMC acceptance depends on. See Phi4::s_full for the rationale.
+    [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
+        T const k      = kappa;
+        T const lam    = lambda;
+        T const g      = g6;
+        double const s = detail::reduce_fwd<T, double>(l, [k, lam, g](T phi, T fwd_sum) {
             T const phi2 = phi * phi;
             T const dev  = phi2 - T{1};
             T const phi6 = phi2 * phi2 * phi2;
-            return (T{-2} * k * phi * fwd_sum) + phi2 + (lam * dev * dev) + (g * phi6);
+            T const site = (T{-2} * k * phi * fwd_sum) + phi2 + (lam * dev * dev) + (g * phi6);
+            return static_cast<double>(site);
         });
-        last_s_full_ = s;
+        last_s_full_   = s;
         return s;
     }
 
-    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
+    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
 
     // force(x) = -dS/dphi(x)
     //         = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x)
@@ -111,7 +115,7 @@ struct Phi6 {
         });
     }
 
-    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
+    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 };
 
 }  // namespace reticolo::action

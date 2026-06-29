@@ -5,7 +5,7 @@ target_link_libraries(reticolo_io
     PUBLIC  reticolo::core
             HDF5::HDF5
     # writer.cpp transitively includes <reticolo/cli/parser.hpp> to call
-    # Parser::stamp_into; cxxopts is header-only so PRIVATE is enough.
+    # Parser::stamp; cxxopts is header-only so PRIVATE is enough.
     PRIVATE cxxopts::cxxopts
 )
 

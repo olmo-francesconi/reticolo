@@ -58,8 +58,8 @@ Result measure(alg::Sweep sweep, Case c, double kappa, double lambda, double sig
     double sum2          = 0.0;
     for (int m = 0; m < n_meas; ++m) {
         auto const st = mc.step();
-        acc += st.accepted;
-        att += st.attempts;
+        acc += st.n_accepted;
+        att += st.n_attempts;
         for (Site x : phi.sites()) {
             sum2 += phi[x] * phi[x];
         }

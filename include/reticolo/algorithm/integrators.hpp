@@ -35,11 +35,13 @@ inline void kick_(A const& action, Field& field, Field& mom, Field& force, doubl
     // actually operates on (Lattice<F>, LinkLattice<F>, MatrixLinkLattice<G,T>).
     // The legacy scalar/link concepts are intentionally subsumed by this
     // requires-expression so adding a new field type doesn't require touching
-    // every integrator concept.
-    if constexpr (requires(A const& a, Field const& cf, Field& mf, F k) {
+    // every integrator concept. The kick coefficient is always the field's
+    // real scalar — a complex field carries real MD time steps, not complex.
+    using Real = real_scalar_t<F>;
+    if constexpr (requires(A const& a, Field const& cf, Field& mf, Real k) {
                       a.compute_force_and_kick(cf, mf, k);
                   }) {
-        action.compute_force_and_kick(field, mom, static_cast<F>(k_dt));
+        action.compute_force_and_kick(field, mom, static_cast<Real>(k_dt));
     } else {
         action.compute_force(field, force);
         kick_add(mom, force, k_dt);

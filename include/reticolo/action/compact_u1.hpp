@@ -104,11 +104,13 @@ struct CompactU1 {
         return -beta * cos_delta;
     }
 
-    [[nodiscard]] T s_full(LinkLattice<T> const& l) const noexcept {
+    // Per-plaquette cos in `T`, plaquette sum accumulated in (and returned as)
+    // `double` — see Phi4::s_full for the rationale.
+    [[nodiscard]] double s_full(LinkLattice<T> const& l) const noexcept {
         std::size_t const d      = l.ndims();
         std::size_t const n      = l.nsites();
         std::size_t const n_plaq = (d * (d - 1) / 2) * n;
-        T accum                  = T{0};
+        double accum             = 0.0;
         ensure_scratch_(n);
         T* const buf = scratch.data();
         for (std::size_t mu = 0; mu < d; ++mu) {
@@ -129,19 +131,19 @@ struct CompactU1 {
                     _Pragma("clang fp reassociate(on)")
 #endif
                         for (std::size_t s = 0; s < n; ++s) {
-                        accum += buf[s];
+                        accum += static_cast<double>(buf[s]);
                     }
                 }
             }
         }
         // Standard Wilson form: S = beta * sum (1 - cos theta_p).
-        T const s    = beta * (static_cast<T>(n_plaq) - accum);
-        last_s_full_ = s;
+        double const s = static_cast<double>(beta) * (static_cast<double>(n_plaq) - accum);
+        last_s_full_   = s;
         return s;
     }
 
-    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
+    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
 
     void compute_force(LinkLattice<T> const& l, LinkLattice<T>& force) const noexcept {
         std::fill(force.begin(), force.end(), T{0});
@@ -179,13 +181,13 @@ struct CompactU1 {
     // `compute_force` would do. Returns the action without updating the
     // `last_s_full` cache — cache semantics stay with `s_full`. Used by the
     // LLR WindowedAction, whose force scale needs S_base on every MD step.
-    [[nodiscard]] T s_full_and_force(LinkLattice<T> const& l,
-                                     LinkLattice<T>& force) const noexcept {
+    [[nodiscard]] double s_full_and_force(LinkLattice<T> const& l,
+                                          LinkLattice<T>& force) const noexcept {
         std::fill(force.begin(), force.end(), T{0});
         std::size_t const d      = l.ndims();
         std::size_t const n      = l.nsites();
         std::size_t const n_plaq = (d * (d - 1) / 2) * n;
-        T accum                  = T{0};
+        double accum             = 0.0;
         T const b                = beta;
         ensure_scratch_(2 * n);
         T* const buf  = scratch.data();      // plaquette angles, then sin in place
@@ -206,7 +208,7 @@ struct CompactU1 {
                     _Pragma("clang fp reassociate(on)")
 #endif
                         for (std::size_t s = 0; s < n; ++s) {
-                        accum += cbuf[s];
+                        accum += static_cast<double>(cbuf[s]);
                     }
                 }
                 detail::visit_plane(
@@ -219,7 +221,7 @@ struct CompactU1 {
                     });
             }
         }
-        return beta * (static_cast<T>(n_plaq) - accum);
+        return static_cast<double>(beta) * (static_cast<double>(n_plaq) - accum);
     }
 
     void
@@ -256,7 +258,7 @@ struct CompactU1 {
     // vector libm at the start of each plane's loop. Sized lazily to nsites.
     mutable std::vector<T> scratch{};
 
-    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
+    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 
 private:
     void ensure_scratch_(std::size_t n) const noexcept {

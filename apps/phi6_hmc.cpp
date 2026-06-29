@@ -13,7 +13,6 @@
 #include <reticolo/reticolo.hpp>
 
 #include <cstddef>
-#include <filesystem>
 #include <string>
 
 int main(int argc, char** argv) {
@@ -21,7 +20,7 @@ int main(int argc, char** argv) {
 
     // ---- CLI ----
     cli::Parser p{"phi6_hmc", "Hybrid Monte Carlo for the phi^6 scalar field"};
-    auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
+    auto const cf          = app::common_flags(p, {.out = "phi6.h5"});
     auto const& kappa      = p.opt<double>("kappa", 0.13, "hopping parameter");
     auto const& lambda     = p.opt<double>("lambda", 0.05, "quartic coupling");
     auto const& g6         = p.opt<double>("g6", 0.01, "sextic coupling");
@@ -31,26 +30,19 @@ int main(int argc, char** argv) {
     auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation trajectories");
     auto const& n_prod     = p.opt<int>("n_prod", 1000, "production trajectories");
     auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N trajectories");
-    auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& workspace =
-        p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
-    auto const& outfile = p.opt<std::string>(
-        "out", std::string{"phi6.h5"}, "HDF5 output file name, inside workspace");
     if (!p.parse(argc, argv))
         return 0;
 
-    log::start(workspace, outfile);
-    std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
+    io::Writer out = app::open_writer(p, cf, argc, argv);
 
     // ---- State: lattice, RNG, action ----
-    Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
     Lattice<double> phi{shape};
-    FastRng rng{seed};
+    FastRng rng{cf.seed};
     act::Phi6<double> phi6{.kappa = kappa, .lambda = lambda, .g6 = g6};
     log::act(phi6);
 
     // ---- Output: writer + series ----
-    io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
     out.start_phase("prod");
     auto s_therm  = out.series<double>("/therm/stats/s");

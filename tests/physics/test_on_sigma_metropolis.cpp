@@ -92,7 +92,7 @@ TEST_CASE("OnSigma at beta=0: Metropolis reaches isotropic distribution",
     // beta=0 means every proposal is accepted; one sweep already randomises.
     for (int s = 0; s < 20; ++s) {
         auto const stats = mc.step();
-        REQUIRE(stats.accepted == stats.attempts);
+        REQUIRE(stats.n_accepted == stats.n_attempts);
     }
 
     constexpr int n_meas = 2000;

@@ -56,28 +56,30 @@ struct Xy {
         return -beta * delta_s;
     }
 
-    [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
+    // Per-site cos in `T`, volume sum accumulated in (and returned as) `double`
+    // — see Phi4::s_full for why the total must not stay in the field type.
+    [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
         auto const& idx              = l.indexing_ref();
         T const* data                = l.data();
         Site::value_type const* next = idx.next_data();
         std::size_t const n          = idx.nsites();
         std::size_t const d          = idx.ndims();
 
-        T total = T{0};
+        double total = 0.0;
         for (std::size_t i = 0; i < n; ++i) {
             T const theta          = data[i];
             std::size_t const base = i * d;
             for (std::size_t mu = 0; mu < d; ++mu) {
-                total += std::cos(theta - data[next[base + mu]]);
+                total += static_cast<double>(std::cos(theta - data[next[base + mu]]));
             }
         }
-        T const s    = -beta * total;
-        last_s_full_ = s;
+        double const s = -static_cast<double>(beta) * total;
+        last_s_full_   = s;
         return s;
     }
 
-    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
+    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
 
     // force(x) = -dS/dtheta(x) = -beta * sum_{mu, +-} sin(theta(x) - theta(x+mu)).
     void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
@@ -136,7 +138,7 @@ struct Xy {
         return 1.0 - std::exp(w);
     }
 
-    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
+    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 };
 
 }  // namespace reticolo::action

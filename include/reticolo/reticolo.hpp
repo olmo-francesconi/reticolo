@@ -23,6 +23,7 @@
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/algorithm/metropolis.hpp>
 #include <reticolo/algorithm/wolff.hpp>
+#include <reticolo/app/setup.hpp>
 #include <reticolo/cli/parser.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/indexing.hpp>

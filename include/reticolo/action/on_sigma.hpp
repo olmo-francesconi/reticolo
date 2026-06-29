@@ -69,28 +69,30 @@ struct OnSigma {
         return -beta * delta_s;
     }
 
-    [[nodiscard]] T s_full(Lattice<value_type> const& l) const noexcept {
+    // Per-site dot in `T`, volume sum accumulated in (and returned as) `double`
+    // — see Phi4::s_full for the rationale.
+    [[nodiscard]] double s_full(Lattice<value_type> const& l) const noexcept {
         auto const& idx              = l.indexing_ref();
         value_type const* data       = l.data();
         Site::value_type const* next = idx.next_data();
         std::size_t const n          = idx.nsites();
         std::size_t const d          = idx.ndims();
 
-        T total = T{0};
+        double total = 0.0;
         for (std::size_t i = 0; i < n; ++i) {
             auto const& phi        = data[i];
             std::size_t const base = i * d;
             for (std::size_t mu = 0; mu < d; ++mu) {
-                total += dot(phi, data[next[base + mu]]);
+                total += static_cast<double>(dot(phi, data[next[base + mu]]));
             }
         }
-        T const s    = -beta * total;
-        last_s_full_ = s;
+        double const s = -static_cast<double>(beta) * total;
+        last_s_full_   = s;
         return s;
     }
 
-    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
+    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
 
     // Uniform-on-sphere proposal via N-dim Gaussian normalisation. Independent
     // of the current value at x — global proposal works fine for O(N) at all
@@ -141,7 +143,7 @@ struct OnSigma {
         return 1.0 - std::exp(w);
     }
 
-    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
+    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 
 private:
     template <class R>

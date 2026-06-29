@@ -55,7 +55,7 @@ TEST_CASE("Parser supports --key value separated form (cxxopts default)", "[cli]
     REQUIRE(L == 16);
 }
 
-TEST_CASE("stamp_into before parse() throws", "[cli]") {
+TEST_CASE("stamp before parse() throws", "[cli]") {
     cli::Parser p{"phi4_hmc"};
     (void)p.opt<int>("L,size", 4);
     // We can't construct a Writer without a path that we don't want to create

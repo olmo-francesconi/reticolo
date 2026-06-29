@@ -12,19 +12,10 @@
 
 namespace reticolo::llr {
 
-// Strip std::complex<T> down to T; pass-through for non-complex types. Used so
-// that LLR window parameters (a, E_n, delta) stay real-valued even when the
-// field is complex.
+// LLR window parameters (a, E_n, delta) stay real-valued even when the field
+// is complex — `scalar_of_t` is the canonical `reticolo::real_scalar_t`.
 template <class T>
-struct scalar_of {
-    using type = T;
-};
-template <class T>
-struct scalar_of<std::complex<T>> {
-    using type = T;
-};
-template <class T>
-using scalar_of_t = typename scalar_of<T>::type;
+using scalar_of_t = real_scalar_t<T>;
 
 // LLR-tilted action with Gaussian-penalty window. One template for both
 // scalar (`Field = Lattice<T>`) and gauge (`Field = LinkLattice<T>`) base

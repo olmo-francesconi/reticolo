@@ -1,5 +1,6 @@
 #pragma once
 
+#include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
@@ -41,7 +42,10 @@ concept HasSEff = LocalAction<A, F> && requires(A const& a, Lattice<F> const& l)
     { a.s_full(l) } -> std::convertible_to<double>;
 };
 
-// Refinement: molecular-dynamics force. The kernel writes -dS/dphi into `force`.
+// Refinement: molecular-dynamics force. The kernel OVERWRITES `force` with
+// -dS/dphi — it fully produces the buffer and never reads its prior contents,
+// so callers don't pre-zero. (Actions that accumulate plane-by-plane internally
+// must zero on entry to honour this.)
 template <class A, class F>
 concept HasForce =
     LocalAction<A, F> && requires(A const& a, Lattice<F> const& l, Lattice<F>& force) {
@@ -54,7 +58,7 @@ concept HasForce =
 // when present; actions that only implement `compute_force` keep working unchanged.
 template <class A, class F>
 concept HasFusedKick =
-    HasForce<A, F> && requires(A const& a, Lattice<F> const& l, Lattice<F>& mom, F k) {
+    HasForce<A, F> && requires(A const& a, Lattice<F> const& l, Lattice<F>& mom, real_scalar_t<F> k) {
         { a.compute_force_and_kick(l, mom, k) };
     };
 
@@ -148,7 +152,8 @@ concept HasLinkForce =
 
 template <class A, class F>
 concept HasLinkFusedKick =
-    HasLinkForce<A, F> && requires(A const& a, LinkLattice<F> const& l, LinkLattice<F>& mom, F k) {
+    HasLinkForce<A, F> &&
+    requires(A const& a, LinkLattice<F> const& l, LinkLattice<F>& mom, real_scalar_t<F> k) {
         { a.compute_force_and_kick(l, mom, k) };
     };
 

@@ -36,11 +36,14 @@ struct MetropolisSpec {
 };
 
 struct MetropolisResult {
-    std::size_t accepted = 0;
-    std::size_t attempts = 0;
+    // Counts (not a bool) — named distinctly from HmcResult::accepted so the
+    // blessed cross-updater accessor stays `acceptance()`, never `.accepted`.
+    std::size_t n_accepted = 0;
+    std::size_t n_attempts = 0;
 
     [[nodiscard]] double acceptance() const noexcept {
-        return attempts == 0 ? 0.0 : static_cast<double>(accepted) / static_cast<double>(attempts);
+        return n_attempts == 0 ? 0.0
+                               : static_cast<double>(n_accepted) / static_cast<double>(n_attempts);
     }
 };
 
@@ -120,13 +123,13 @@ public:
                     F const new_v = propose_local_(phi, i);
                     auto const ds =
                         static_cast<double>(action_.ds_local_from_nbrs(phi, new_v, nbrs));
-                    ++stats.attempts;
+                    ++stats.n_attempts;
                     if (ds <= 0.0 || rng_.uniform() < std::exp(-ds)) {
                         if constexpr (action::HasSweepState<A, F>) {
                             action_.commit_accept(field_, Site{i}, new_v);
                         }
                         fdata[i] = new_v;
-                        ++stats.accepted;
+                        ++stats.n_accepted;
                     }
                 });
             ++step_count_;
@@ -143,13 +146,13 @@ public:
             F const old   = ref;
             F const new_v = propose_(old, loc...);
             auto const ds = static_cast<double>(action_.ds_local(field_, loc..., new_v));
-            ++stats.attempts;
+            ++stats.n_attempts;
             if (ds <= 0.0 || rng_.uniform() < std::exp(-ds)) {
                 if constexpr (action::HasSweepState<A, F> || gauge::HasLinkSweepState<A, F>) {
                     action_.commit_accept(field_, loc..., new_v);
                 }
                 ref = new_v;
-                ++stats.accepted;
+                ++stats.n_accepted;
             }
         });
         ++step_count_;
@@ -233,7 +236,7 @@ private:
         math::exp_batch(wexp.data(), mds.data(), m);
 
         for (std::size_t k = 0; k < m; ++k) {
-            ++stats.attempts;
+            ++stats.n_attempts;
             bool const accepted = (mds[k] >= 0.0) || (rng_.uniform() < wexp[k]);
             if (accepted) {
                 Site const s = color[k];
@@ -241,7 +244,7 @@ private:
                     action_.commit_accept(field_, s, prop[k]);
                 }
                 data[s.value()] = prop[k];
-                ++stats.accepted;
+                ++stats.n_accepted;
             }
         }
     }

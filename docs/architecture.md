@@ -186,8 +186,46 @@ p.parse(argc, argv);
 // kappa is now meaningful
 ```
 
-`io::Writer{path, argc, argv, &parser}` calls `parser.stamp_into(writer)`
+`io::Writer{path, argc, argv, &parser}` calls `parser.stamp(writer)`
 after init — apps never write the stamping loop.
+
+### App setup helpers (`app::`)
+
+The pre-loop scaffolding shared by every reference app — the universal flag
+block and the workspace/writer open — lives in `reticolo/app/setup.hpp` so it
+can't drift between apps:
+
+```cpp
+cli::Parser p{"u1_hmc", "..."};
+auto const f = app::common_flags(p, {.L = 4, .ndim = 4, .n_prod = 2000, .out = "u1_hmc.h5"});
+auto const& beta = p.opt<double>("beta", 1.0, "Wilson coupling");   // physics flags: app's own
+if (!p.parse(argc, argv)) return 0;
+io::Writer out = app::open_writer(p, f, argc, argv);                // log::start + Writer
+```
+
+`common_flags` single-sources the flag *names / types / help text* (`L,size`,
+`ndim`, `n_therm`, `n_prod`, `meas_every`, `seed`, `workspace`, `out`); the
+per-app *defaults* are passed in, because they legitimately differ (lattice
+extent, trajectory counts). This is setup only — the app still builds its own
+lattice / rng / action / updater and **owns its trajectory `for` loop**; there
+is no generic driver.
+
+### Canonical output schema
+
+So downstream Python reads the same paths across apps, reference apps follow one
+HDF5 layout:
+
+| Path                   | Meaning                                                   |
+| ---------------------- | -------------------------------------------------------- |
+| `/run@*`, `/vars@*`    | reproducibility metadata + every resolved CLI flag       |
+| `/<phase>/stats/dH`    | per-trajectory ΔH (HMC); `/stats/s` for S during `therm` |
+| `/<phase>/stats/accepted` | 0/1 acceptance flag (HMC), `int` series               |
+| `/<phase>/obs/<name>`  | per-config observables (`s`, `mag`, `plaq`, …)           |
+
+Phases are `therm` then `prod` for single-replica apps, `llr` for LLR apps.
+Plaquette normalisation is reported as `<cos θ_p>` everywhere: U(1) writes
+`S / (β · n_plaq)`; SU(N) writes `1 − S / (β · n_plaq)` — the constant offset is
+the action convention, the *stored observable* is the mean plaquette in both.
 
 ## Observers
 

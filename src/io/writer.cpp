@@ -406,7 +406,7 @@ Writer::Writer(std::filesystem::path const& path,
                cli::Parser const* params)
     : impl_{std::make_unique<Impl>(path, argc, argv)} {
     if (params != nullptr) {
-        params->stamp_into(*this);
+        params->stamp(*this);
     }
     log::info("io", "opened {}", path.string());
 }

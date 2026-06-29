@@ -19,7 +19,6 @@
 #include <reticolo/reticolo.hpp>
 
 #include <cstddef>
-#include <filesystem>
 #include <numbers>
 #include <string>
 
@@ -28,36 +27,29 @@ int main(int argc, char** argv) {
 
     // ---- CLI ----
     cli::Parser p{"xy_wolff", "Wolff cluster + Metropolis hybrid for the XY model"};
-    auto const& L          = p.opt<int>("L,size", 16, "linear lattice extent (2D)");
+    auto const cf          = app::common_flags(p, {.L = 16, .out = "xy_wolff.h5"});
     auto const& beta       = p.opt<double>("beta", 1.12, "inverse temperature");
     auto const& sigma      = p.opt<double>("sigma", 0.5, "Metropolis Gaussian step width");
     auto const& n_cluster  = p.opt<int>("n_cluster", 4, "Wolff updates per measurement");
     auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation measurements");
     auto const& n_prod     = p.opt<int>("n_prod", 2000, "production measurements");
     auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N measurements");
-    auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& workspace =
-        p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
-    auto const& outfile = p.opt<std::string>(
-        "out", std::string{"xy_wolff.h5"}, "HDF5 output file name, inside workspace");
     if (!p.parse(argc, argv))
         return 0;
 
-    log::start(workspace, outfile);
-    std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
+    io::Writer out = app::open_writer(p, cf, argc, argv);
 
     // ---- State: lattice (hot-started), RNG, action ----
-    auto const l_sz = static_cast<std::size_t>(L);
+    auto const l_sz = static_cast<std::size_t>(cf.L);
     Lattice<double> theta{{l_sz, l_sz}};
-    FastRng rng{seed};
+    FastRng rng{cf.seed};
     for (Site const x : theta.sites()) {
         theta[x] = 2.0 * std::numbers::pi * rng.uniform();
     }
     act::Xy<double> xy{.beta = beta};
     log::act(xy);
 
-    // ---- Output: writer + series ----
-    io::Writer out{outpath, argc, argv, &p};
+    // ---- Output: series ----
     out.start_phase("therm");
     out.start_phase("prod");
     auto cluster_therm = out.series<std::size_t>("/therm/stats/cluster");

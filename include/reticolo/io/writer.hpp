@@ -129,7 +129,9 @@ public:
     void field(std::string_view path, MatrixLinkLattice<G, T> const& lat);
 
     // Write the RNG's full state (state words + cached normal) under `path`.
-    // The corresponding Reader::rng_state restores it bit-exact.
+    // The corresponding Reader::rng_state restores it bit-exact. Checkpoint /
+    // resume is FastRng-only: only FastRng exposes the state introspection
+    // (`state()`, `from_state`) this serialises — RanluxRng / Mt19937Rng don't.
     void rng_state(std::string_view path, FastRng const& rng);
 
     [[nodiscard]] std::filesystem::path const& path() const noexcept;

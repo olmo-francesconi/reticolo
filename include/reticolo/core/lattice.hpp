@@ -66,6 +66,10 @@ public:
     Lattice& operator=(Lattice&&) noexcept = default;
     ~Lattice()                             = default;
 
+    // A scalar field has one value per site, so the element accessor is
+    // `operator[](Site)`. The link field's accessor is `operator()(Site, mu)`
+    // — the differing arity (one DOF per site vs one per site-direction) is
+    // why the two field types use different operators by design.
     [[nodiscard]] T& operator[](Site s) noexcept { return data_[s.value()]; }
     [[nodiscard]] T const& operator[](Site s) const noexcept { return data_[s.value()]; }
 

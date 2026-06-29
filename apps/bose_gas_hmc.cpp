@@ -8,7 +8,6 @@
 
 #include <complex>
 #include <cstddef>
-#include <filesystem>
 #include <string>
 
 int main(int argc, char** argv) {
@@ -17,7 +16,7 @@ int main(int argc, char** argv) {
 
     // ---- CLI ----
     cli::Parser p{"bose_gas_hmc", "Phase-quenched HMC for the 4D Bose gas (records S_R + S_I)"};
-    auto const& L          = p.opt<int>("L,size", 4, "linear lattice extent");
+    auto const cf          = app::common_flags(p, {.L = 4, .out = "bose_gas_hmc.h5"});
     auto const& ndim       = p.opt<int>("ndim", 4, "spacetime dimensions");
     auto const& mass       = p.opt<double>("mass", 1.0, "bare mass m");
     auto const& lambda     = p.opt<double>("lambda", 1.0, "quartic coupling lambda");
@@ -27,28 +26,21 @@ int main(int argc, char** argv) {
     auto const& n_therm    = p.opt<int>("n_therm", 500, "thermalisation trajectories");
     auto const& n_prod     = p.opt<int>("n_prod", 5000, "production trajectories");
     auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N trajectories");
-    auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& workspace =
-        p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
-    auto const& outfile = p.opt<std::string>(
-        "out", std::string{"bose_gas_hmc.h5"}, "HDF5 output file name, inside workspace");
     if (!p.parse(argc, argv)) {
         return 0;
     }
 
-    log::start(workspace, outfile);
-    std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
+    io::Writer out = app::open_writer(p, cf, argc, argv);
 
     // ---- State: lattice, RNG, action ----
     Lattice<std::complex<double>>::SizeVec shape(static_cast<std::size_t>(ndim),
-                                                 static_cast<std::size_t>(L));
+                                                 static_cast<std::size_t>(cf.L));
     Lattice<std::complex<double>> phi{shape};
-    FastRng rng{seed};
+    FastRng rng{cf.seed};
     Action const action{.mass = mass, .lambda = lambda, .mu = mu};
     log::act(action);
 
     // ---- Output: writer + series ----
-    io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");
     out.start_phase("prod");
     auto s_therm  = out.series<double>("/therm/stats/s");

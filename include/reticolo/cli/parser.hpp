@@ -22,7 +22,7 @@
 //   The reference is valid only AFTER `parse(argc, argv)` returns.
 // - `parse` is one cxxopts call under the hood. Throws on missing required,
 //   bad value, or unknown flag; prints help and exits on `--help` / `-h`.
-// - `stamp_into(io::Writer&)` iterates every registered slot and writes its
+// - `stamp(io::Writer&)` iterates every registered slot and writes its
 //   resolved value to `/vars@<name>`. The `Writer` constructor accepts a
 //   `Parser const*` so apps usually never call this explicitly.
 //
@@ -64,7 +64,7 @@ struct VarSlotBase {
 
     virtual void add_to(cxxopts::Options& opts) const          = 0;
     virtual void read_from(cxxopts::ParseResult const& result) = 0;
-    virtual void stamp_into(io::Writer& w) const               = 0;
+    virtual void stamp(io::Writer& w) const               = 0;
 
     // The canonical key cxxopts uses to look up this var: the long name if
     // "short,long" was given, otherwise the only name. Also used as the
@@ -102,7 +102,7 @@ struct VarSlot : VarSlotBase {
         value = result[key].template as<T>();
     }
 
-    void stamp_into(io::Writer& w) const override { w.attr<T>("/vars@" + canonical_name(), value); }
+    void stamp(io::Writer& w) const override { w.attr<T>("/vars@" + canonical_name(), value); }
 };
 
 }  // namespace detail
@@ -187,12 +187,12 @@ public:
 
     // Stamp every registered var at /vars@<name>. Called automatically by the
     // Writer constructor when given a Parser pointer.
-    void stamp_into(io::Writer& w) const {
+    void stamp(io::Writer& w) const {
         if (!parsed_) {
-            throw std::runtime_error{"cli::Parser::stamp_into called before parse()"};
+            throw std::runtime_error{"cli::Parser::stamp called before parse()"};
         }
         for (auto const& s : slots_) {
-            s->stamp_into(w);
+            s->stamp(w);
         }
     }
 

@@ -52,8 +52,10 @@ struct SineGordon {
         return hop + mass + pot;
     }
 
-    [[nodiscard]] T s_full(Lattice<T> const& l) const noexcept {
-        T s{};
+    // Per-site math in `T`, volume sum accumulated in (and returned as) `double`
+    // — see Phi4::s_full for the rationale.
+    [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
+        double s{};
         if constexpr (std::is_same_v<T, double>) {
             std::size_t const n = l.nsites();
             ensure_scratch_(n);
@@ -64,26 +66,28 @@ struct SineGordon {
             // Walk sites in the same row-major order as reduce_fwd; we
             // accumulate -alpha*cos contributions via the scratch index
             // since reduce_fwd's body has no i.
-            T cos_sum = T{0};
+            double cos_sum = 0.0;
             for (std::size_t i = 0; i < n; ++i) {
                 cos_sum += cs[i];
             }
-            T const hopping = detail::reduce_fwd<T>(
-                l, [k](T phi, T fwd_sum) { return (T{-2} * k * phi * fwd_sum) + (phi * phi); });
-            s = hopping - (alp * cos_sum);
+            double const hopping = detail::reduce_fwd<T, double>(l, [k](T phi, T fwd_sum) {
+                return static_cast<double>((T{-2} * k * phi * fwd_sum) + (phi * phi));
+            });
+            s = hopping - (static_cast<double>(alp) * cos_sum);
         } else {
             T const k   = kappa;
             T const alp = alpha;
-            s           = detail::reduce_fwd<T>(l, [k, alp](T phi, T fwd_sum) {
-                return (T{-2} * k * phi * fwd_sum) + (phi * phi) - (alp * std::cos(phi));
+            s           = detail::reduce_fwd<T, double>(l, [k, alp](T phi, T fwd_sum) {
+                return static_cast<double>((T{-2} * k * phi * fwd_sum) + (phi * phi) -
+                                           (alp * std::cos(phi)));
             });
         }
         last_s_full_ = s;
         return s;
     }
 
-    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
+    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
 
     // force(x) = -dS/dphi(x)
     //         = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x) - alpha sin(phi(x))
@@ -133,7 +137,7 @@ struct SineGordon {
     // the public force/s_full methods can stay const.
     mutable std::vector<T> scratch{};
 
-    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
+    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 
 private:
     void ensure_scratch_(std::size_t n) const noexcept {

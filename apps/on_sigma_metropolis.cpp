@@ -17,7 +17,6 @@
 
 #include <array>
 #include <cstddef>
-#include <filesystem>
 #include <string>
 
 int main(int argc, char** argv) {
@@ -26,28 +25,22 @@ int main(int argc, char** argv) {
 
     // ---- CLI ----
     cli::Parser p{"on_sigma_metropolis", "Metropolis for the O(3) sigma model"};
-    auto const& L          = p.opt<int>("L,size", 8, "linear lattice extent");
+    auto const cf          = app::common_flags(p, {.L = 8, .out = "on_sigma.h5"});
     auto const& beta       = p.opt<double>("beta", 0.7, "inverse temperature");
     auto const& ndim       = p.opt<int>("ndim", 3, "spatial dimensions (2 or 3)");
     auto const& n_therm    = p.opt<int>("n_therm", 400, "thermalisation sweeps");
     auto const& n_prod     = p.opt<int>("n_prod", 2000, "production sweeps");
     auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N sweeps");
-    auto const& seed       = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-    auto const& workspace =
-        p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
-    auto const& outfile = p.opt<std::string>(
-        "out", std::string{"on_sigma.h5"}, "HDF5 output file name, inside workspace");
     if (!p.parse(argc, argv))
         return 0;
 
-    log::start(workspace, outfile);
-    std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
+    io::Writer out = app::open_writer(p, cf, argc, argv);
 
     // ---- State: lattice, RNG, action ----
     Lattice<std::array<double, k_n>>::SizeVec shape(static_cast<std::size_t>(ndim),
-                                                    static_cast<std::size_t>(L));
+                                                    static_cast<std::size_t>(cf.L));
     Lattice<std::array<double, k_n>> phi{shape};
-    FastRng rng{seed};
+    FastRng rng{cf.seed};
     act::OnSigma<k_n> on{.beta = beta};
     log::act(on);
 
@@ -57,8 +50,7 @@ int main(int argc, char** argv) {
         phi[x] = {1.0, 0.0, 0.0};
     }
 
-    // ---- Output: writer + series ----
-    io::Writer out{outpath, argc, argv, &p};
+    // ---- Output: series ----
     out.start_phase("therm");
     out.start_phase("prod");
     auto accept_therm = out.series<double>("/therm/stats/accept");

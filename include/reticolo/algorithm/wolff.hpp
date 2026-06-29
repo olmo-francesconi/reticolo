@@ -15,6 +15,11 @@
 
 namespace reticolo::alg {
 
+// Single-cluster Wolff has no required tunables today. The spec exists so every
+// updater shares the `(action, field, rng, spec, announce)` constructor shape —
+// grow it here (e.g. a multi-cluster count) when a knob is needed.
+struct WolffSpec {};
+
 struct WolffResult {
     std::size_t cluster_size = 0;
 
@@ -51,7 +56,11 @@ public:
 
     static constexpr std::string_view log_tag = "wolf";
 
-    Wolff(A const& action, Lattice<F>& field, R& rng, log::Mode announce = log::Mode::normal)
+    Wolff(A const& action,
+          Lattice<F>& field,
+          R& rng,
+          WolffSpec const& /*spec*/ = {},
+          log::Mode announce        = log::Mode::normal)
         : action_{action}, field_{field}, rng_{rng}, mark_(field.nsites(), 0) {
         stack_.reserve(field.nsites());
         cluster_sites_.reserve(field.nsites());

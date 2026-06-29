@@ -92,7 +92,8 @@ struct BoseGas {
                (T{2} * re_conj_mul_(new_v - phi, staple));
     }
 
-    [[nodiscard]] T s_full(Lattice<complex_t> const& l) const noexcept {
+    // Volume sum returned (and cached) as `double` — see Phi4::s_full.
+    [[nodiscard]] double s_full(Lattice<complex_t> const& l) const noexcept {
         std::size_t const d   = l.ndims();
         T const coef_mass     = (T{2} * static_cast<T>(d)) + (mass * mass);
         T const ch_minus_1    = cosh_mu_() - T{1};
@@ -106,13 +107,13 @@ struct BoseGas {
                 T const hop              = re_conj_mul_(phi, weighted);
                 return complex_t{(coef_mass * abs2) + (lam * abs2 * abs2) - (T{2} * hop), T{0}};
             });
-        T const s    = std::real(total);
-        last_s_full_ = s;
+        double const s = static_cast<double>(std::real(total));
+        last_s_full_   = s;
         return s;
     }
 
-    [[nodiscard]] T last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(T v) const noexcept { last_s_full_ = v; }
+    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
 
     void compute_force(Lattice<complex_t> const& l, Lattice<complex_t>& force) const noexcept {
         std::size_t const d  = l.ndims();
@@ -138,7 +139,7 @@ struct BoseGas {
     // combined-kick kernel below.
     void compute_force_and_kick(Lattice<complex_t> const& l,
                                 Lattice<complex_t>& mom,
-                                complex_t k_dt) const noexcept {
+                                T k_dt) const noexcept {
         std::size_t const d = l.ndims();
         T const coef_mass   = (T{2} * static_cast<T>(d)) + (mass * mass);
         T const ch_minus_1  = cosh_mu_() - T{1};
@@ -171,7 +172,7 @@ struct BoseGas {
         return new_t - old_t;
     }
 
-    [[nodiscard]] T s_imag(Lattice<complex_t> const& l) const noexcept {
+    [[nodiscard]] double s_imag(Lattice<complex_t> const& l) const noexcept {
         // S_I = 2 sum_x Im(phi*_x phi_{x+tau_hat}).
         // Last dim is "time" tau. Stride along tau is s_tau = nsites / L_tau,
         // so the (w_tau, ...) → (w_tau+1, ...) shift is a constant +s_tau in
@@ -182,22 +183,22 @@ struct BoseGas {
         std::size_t const n       = l.nsites();
         std::size_t const s_tau   = n / L_tau;
         complex_t const* const in = l.data();
-        T acc                     = T{0};
+        double acc                = 0.0;
         for (std::size_t w = 0; w < L_tau; ++w) {
             std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
             std::size_t const base   = w * s_tau;
             std::size_t const base_p = wp * s_tau;
             for (std::size_t k = 0; k < s_tau; ++k) {
-                acc += im_conj_mul_(in[base + k], in[base_p + k]);
+                acc += static_cast<double>(im_conj_mul_(in[base + k], in[base_p + k]));
             }
         }
-        T const s    = T{2} * acc;
-        last_s_imag_ = s;
+        double const s = 2.0 * acc;
+        last_s_imag_   = s;
         return s;
     }
 
-    [[nodiscard]] T last_s_imag() const noexcept { return last_s_imag_; }
-    void restore_last_s_imag(T v) const noexcept { last_s_imag_ = v; }
+    [[nodiscard]] double last_s_imag() const noexcept { return last_s_imag_; }
+    void restore_last_s_imag(double v) const noexcept { last_s_imag_ = v; }
 
     void compute_force_imag(Lattice<complex_t> const& l, Lattice<complex_t>& force) const noexcept {
         // F_I(x) = 2i ( phi_{x+tau_hat} - phi_{x-tau_hat} ) — only the
@@ -277,8 +278,8 @@ struct BoseGas {
         }
     }
 
-    mutable T last_s_full_ = std::numeric_limits<T>::quiet_NaN();
-    mutable T last_s_imag_ = std::numeric_limits<T>::quiet_NaN();
+    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
+    mutable double last_s_imag_ = std::numeric_limits<double>::quiet_NaN();
 
     // cosh(mu) memo slots — public (like the caches above) to preserve
     // aggregate-init; read only through `cosh_mu_()`. NaN key != NaN so the

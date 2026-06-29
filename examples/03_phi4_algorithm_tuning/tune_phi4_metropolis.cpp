@@ -81,8 +81,8 @@ int main(int argc, char** argv) {
         auto const stats = mc.step();
         auto const tb    = bench_clock::now();
         algo_s += std::chrono::duration<double>(tb - ta).count();
-        accepted += stats.accepted;
-        attempts += stats.attempts;
+        accepted += stats.n_accepted;
+        attempts += stats.n_attempts;
 
         auto const oa = bench_clock::now();
         s_series.append(phi4.s_full(phi));

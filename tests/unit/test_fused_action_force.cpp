@@ -99,8 +99,8 @@ TEST_CASE("CompactU1<float>: s_full_and_force matches s_full + compute_force",
         link = static_cast<float>((rng.uniform() - 0.5) * 2.0 * std::numbers::pi);
     }
 
-    float const s_ref   = action.s_full(u);
-    float const s_fused = action.s_full_and_force(u, f_fused);
+    double const s_ref   = action.s_full(u);
+    double const s_fused = action.s_full_and_force(u, f_fused);
     action.compute_force(u, f_ref);
 
     REQUIRE(s_fused == Catch::Approx(s_ref).epsilon(1e-4));
