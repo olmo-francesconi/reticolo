@@ -60,4 +60,3 @@ private:
 };
 
 }  // namespace reticolo::cuda
-</content>

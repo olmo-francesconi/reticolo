@@ -32,4 +32,3 @@ cmake -S . -B "${build_dir}" -G Ninja \
 
 cmake --build "${build_dir}" -j "$(nproc 2>/dev/null || echo 2)"
 ctest --test-dir "${build_dir}" -R "${filter}" --output-on-failure
-</content>

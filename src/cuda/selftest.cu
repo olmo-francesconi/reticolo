@@ -48,4 +48,3 @@ bool selftest() {
 }
 
 }  // namespace reticolo::cuda
-</content>

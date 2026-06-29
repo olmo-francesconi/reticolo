@@ -36,4 +36,3 @@ inline void check_cuda(cudaError_t err, char const* expr, char const* file, int 
             RETICOLO_CUDA_CHECK(cudaDeviceSynchronize()); \
         } while (0)
 #endif
-</content>

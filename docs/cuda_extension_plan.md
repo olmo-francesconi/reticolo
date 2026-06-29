@@ -341,4 +341,3 @@ device-vs-host `S` agreement (value, normalization, sign) before wiring the
 - **Memory budget:** four resident buffers (`U/P/F/old`) at f64 — confirm the
   largest target lattice fits; make the fused force+kick path (drops `F`) the
   default on device to save one buffer + a streaming pass.
-</content>

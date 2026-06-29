@@ -10,4 +10,3 @@ namespace reticolo::cuda {
 [[nodiscard]] bool selftest();
 
 }  // namespace reticolo::cuda
-</content>

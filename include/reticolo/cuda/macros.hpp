@@ -22,4 +22,3 @@
     #define RETICOLO_DEVICE
     #define RETICOLO_HOST
 #endif
-</content>

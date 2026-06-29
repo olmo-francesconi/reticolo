@@ -474,4 +474,3 @@ consolidate the nightly harness.
 | reduction: hand-rolled vs cub | hand-rolled (fused/segmented), cub (single-op) | Phase 1 |
 | SU(3) thread mapping | TBD (`ThreadPerLink`/`WarpPerLink` policy) | Phase 5 profiling |
 | f32 link support | no (f64 only) | revisit post-Phase 5 |
-</content>

@@ -182,5 +182,4 @@ arbitrary per-app template instantiations the way the CPU path is, so the
 backend needs explicit kernel instantiations per (action, group, precision).
 The concrete plan for that is in
 [`cuda_extension_plan.md`](cuda_extension_plan.md).
-</content>
 </invoke>

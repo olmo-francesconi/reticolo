@@ -27,4 +27,3 @@ set_target_properties(reticolo_cuda PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     POSITION_INDEPENDENT_CODE  ON
 )
-</content>

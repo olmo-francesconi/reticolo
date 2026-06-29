@@ -9,4 +9,3 @@
 TEST_CASE("cuda backend self-test round-trips through the device", "[cuda]") {
     REQUIRE(reticolo::cuda::selftest());
 }
-</content>
