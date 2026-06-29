@@ -29,9 +29,13 @@ using reticolo::test::scratch_path;
 
 namespace {
 
-using namespace reticolo;
-using DField = cuda::DeviceField<double>;
-using DAct   = cuda::DeviceAction<act::Phi4<double>, DField>;
+// NB: no namespace-scope `using namespace reticolo;` — it pulls the reticolo::log
+// namespace into global lookup, which collides with CUDA's ::log math function in
+// the math_functions.hpp inline bodies ("reference to 'log' is ambiguous"). The
+// apps dodge this by scoping the using-directive inside main(); we do the same in
+// the TEST_CASE body below.
+using DField = reticolo::cuda::DeviceField<double>;
+using DAct   = reticolo::cuda::DeviceAction<reticolo::action::Phi4<double>, DField>;
 
 constexpr int k_n_first  = 7;
 constexpr int k_n_second = 5;
@@ -54,8 +58,9 @@ void snapshot(DField const& field, std::vector<double>& dst) {
 }  // namespace
 
 TEST_CASE("cuda checkpoint round-trip reproduces an uninterrupted run", "[cuda][checkpoint]") {
+    using namespace reticolo;
     constexpr std::uint64_t k_seed = 12345;
-    act::Phi4<double> const phi4{.kappa = 0.18, .lambda = 1.0};
+    action::Phi4<double> const phi4{.kappa = 0.18, .lambda = 1.0};
 
     // (1) Straight run of k_n_first + k_n_second trajectories.
     std::vector<double> straight;

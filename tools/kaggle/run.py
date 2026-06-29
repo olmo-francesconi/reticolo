@@ -31,6 +31,8 @@ sh("apt-get -qq install -y software-properties-common")
 sh("add-apt-repository -y ppa:ubuntu-toolchain-r/test")
 sh("apt-get -qq update")
 sh("apt-get -qq install -y gcc-13 g++-13")
+# libhdf5-dev for reticolo::io (Phase 6 CUDA backend writes HDF5 + checkpoints).
+sh("apt-get -qq install -y libhdf5-dev")
 
 sh("pip install -q 'cmake>=3.25' ninja")
 # Clone and build under /tmp, NOT /kaggle/working — the latter is persisted as

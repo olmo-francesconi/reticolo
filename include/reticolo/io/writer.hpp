@@ -207,7 +207,7 @@ void Writer::field(std::string_view path, MatrixLinkLattice<G, T> const& lat) {
                      FieldKind::matrix_link,
                      lat.shape(),
                      G::n_real_components,
-                     G::name);
+                     G::name.data());
 }
 
 // Extern template declarations for the supported scalar set. The macro is the
