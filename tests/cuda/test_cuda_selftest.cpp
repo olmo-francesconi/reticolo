@@ -12,6 +12,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstddef>
 #include <vector>
 
@@ -75,6 +76,22 @@ TEST_CASE("cuda reduce_sum_f64 and axpy_f64 are correct", "[cuda]") {
     axpy_f64(2.0, dx.data(), dy.data(), n);
     double const dev_y_sum = reduce_sum_f64(dy.data(), n);
     REQUIRE(dev_y_sum == Catch::Approx(static_cast<double>(n) + 2.0 * host_sum).epsilon(1e-12));
+
+    // Device-scalar reductions (the HMC hot-loop path): match the host values
+    // and are deterministic. partials must hold k_reduce_max_grid doubles.
+    double host_sumsq = 0.0;
+    for (long i = 0; i < n; ++i) {
+        host_sumsq += hx[static_cast<std::size_t>(i)] * hx[static_cast<std::size_t>(i)];
+    }
+    DeviceBuffer<double> partials{static_cast<std::size_t>(k_reduce_max_grid)};
+    DeviceBuffer<double> out{2};
+    reduce_sum_into(out.data() + 0, dx.data(), n, partials.data());
+    reduce_sumsq_into(out.data() + 1, dx.data(), n, partials.data());
+    std::array<double, 2> h_out{};
+    out.copy_to_host(h_out.data());
+    REQUIRE(cudaDeviceSynchronize() == cudaSuccess);
+    REQUIRE(h_out[0] == Catch::Approx(host_sum).epsilon(1e-12));
+    REQUIRE(h_out[1] == Catch::Approx(host_sumsq).epsilon(1e-12));
 }
 
 // Phase 1 (M1): the gauge action/drift headers compile under nvcc (Sleef now

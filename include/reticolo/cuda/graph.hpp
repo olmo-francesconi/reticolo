@@ -60,6 +60,9 @@ public:
 private:
     template <class Body>
     void capture_(Body&& body) {
+        // Drain any prior eager work on the stream so capture begins cleanly
+        // (one-time cost — capture happens once).
+        RETICOLO_CUDA_CHECK(cudaStreamSynchronize(stream_));
         RETICOLO_CUDA_CHECK(cudaStreamBeginCapture(stream_, cudaStreamCaptureModeThreadLocal));
         std::forward<Body>(body)();
         cudaGraph_t graph = nullptr;

@@ -23,4 +23,18 @@ void axpy_f64(double a, double const* x, double* y, long n, cudaStream_t stream 
 // reduction stays one pass and run-to-run reproducible for reversibility.
 [[nodiscard]] double reduce_sumsq_f64(double const* x, long n, cudaStream_t stream = nullptr);
 
+// Capacity a `partials` scratch buffer must have for the *_into reductions.
+inline constexpr long k_reduce_max_grid = 1024;
+
+// Device-scalar reductions for the HMC hot loop: write the result to out[0] on
+// the device (no host sync, no per-call allocation). `partials` is a caller-
+// owned scratch buffer of at least k_reduce_max_grid doubles. A fixed-config
+// block reduction + a single-block final pass — deterministic run-to-run, which
+// reversibility requires. The whole trajectory enqueues these on one stream and
+// syncs once (vs the four malloc+sync round-trips reduce_sum/sumsq_f64 cost).
+void reduce_sum_into(double* out, double const* x, long n, double* partials,
+                     cudaStream_t stream = nullptr);
+void reduce_sumsq_into(double* out, double const* x, long n, double* partials,
+                       cudaStream_t stream = nullptr);
+
 }  // namespace reticolo::cuda

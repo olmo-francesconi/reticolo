@@ -43,6 +43,13 @@ public:
                        current_stream());
     }
 
+    // Device-scalar s_full for the hot loop: writes the action to out[0] with no
+    // host sync / no allocation (`partials` is caller-owned, k_reduce_max_grid).
+    void s_full_into(double* out, Field const& field, double* partials, cudaStream_t stream) const {
+        reduce_fwd_into(out, traits::make_energy(host_), field.data(), scratch_.data(), partials,
+                        topo_, stream);
+    }
+
 private:
     HostAction host_;
     DeviceTopology topo_;

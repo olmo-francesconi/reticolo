@@ -71,6 +71,28 @@ __global__ void block_sumsq_kernel(double const* x, long n, double* partial) {
     }
 }
 
+// Single-block final pass: sum `count` block-partials into out[0], on device.
+// Deterministic given a fixed grid / blockDim (the grid-stride load order and
+// the tree are fixed). Run-to-run reproducible — reversibility requires it.
+__global__ void final_reduce_kernel(double const* partials, int count, double* out) {
+    __shared__ double s[kBlock];
+    double acc = 0.0;
+    for (int i = threadIdx.x; i < count; i += blockDim.x) {
+        acc += partials[i];
+    }
+    s[threadIdx.x] = acc;
+    __syncthreads();
+    for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+        if (threadIdx.x < off) {
+            s[threadIdx.x] += s[threadIdx.x + off];
+        }
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) {
+        out[0] = s[0];
+    }
+}
+
 // Shared host finish: copy block partials back and sum in index order
 // (reproducible), then free the device scratch on `stream`.
 [[nodiscard]] double finish_partials(double* d_partial, int grid, cudaStream_t stream) {
@@ -127,6 +149,28 @@ double reduce_sumsq_f64(double const* x, long n, cudaStream_t stream) {
     block_sumsq_kernel<<<grid, kBlock, 0, stream>>>(x, n, d_partial);
     RETICOLO_CUDA_CHECK_LAUNCH();
     return finish_partials(d_partial, grid, stream);
+}
+
+void reduce_sum_into(double* out, double const* x, long n, double* partials, cudaStream_t stream) {
+    if (n <= 0) {
+        return;
+    }
+    int const grid = grid_for(n);
+    block_sum_kernel<<<grid, kBlock, 0, stream>>>(x, n, partials);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+    final_reduce_kernel<<<1, kBlock, 0, stream>>>(partials, grid, out);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+}
+
+void reduce_sumsq_into(double* out, double const* x, long n, double* partials, cudaStream_t stream) {
+    if (n <= 0) {
+        return;
+    }
+    int const grid = grid_for(n);
+    block_sumsq_kernel<<<grid, kBlock, 0, stream>>>(x, n, partials);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+    final_reduce_kernel<<<1, kBlock, 0, stream>>>(partials, grid, out);
+    RETICOLO_CUDA_CHECK_LAUNCH();
 }
 
 }  // namespace reticolo::cuda
