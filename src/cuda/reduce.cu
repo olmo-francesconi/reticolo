@@ -1,9 +1,9 @@
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/reduce.hpp>
 
-#include <cuda_runtime.h>
-
 #include <vector>
+
+#include <cuda_runtime.h>
 
 namespace reticolo::cuda {
 
@@ -20,7 +20,10 @@ constexpr int kMaxGrid = 1024;
     return static_cast<int>(g);
 }
 
-__global__ void axpy_kernel(double a, double const* x, double* y, long n) {
+// axpy in the field type T (f64 or f32): the MD drift/kick runs in field
+// precision, matching the CPU mixed-precision HMC.
+template <class T>
+__global__ void axpy_kernel(T a, T const* x, T* y, long n) {
     long const stride = static_cast<long>(gridDim.x) * blockDim.x;
     for (long i = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x; i < n; i += stride) {
         y[i] += a * x[i];
@@ -30,12 +33,16 @@ __global__ void axpy_kernel(double a, double const* x, double* y, long n) {
 // One partial sum per block: grid-stride accumulate, then a fixed in-block tree
 // reduction. With a fixed grid the set of partials is reproducible, and the
 // host finish sums them in index order — so the whole reduction is deterministic.
-__global__ void block_sum_kernel(double const* x, long n, double* partial) {
+// Input type `In` may be f32 (the field) but the accumulator is ALWAYS double:
+// a float volume sum loses ~log2(V) bits and corrupts the ΔH the HMC accept
+// depends on, exactly as on the CPU.
+template <class In>
+__global__ void block_sum_kernel(In const* x, long n, double* partial) {
     __shared__ double s[kBlock];
     long const stride = static_cast<long>(gridDim.x) * blockDim.x;
     double acc        = 0.0;
     for (long i = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x; i < n; i += stride) {
-        acc += x[i];
+        acc += static_cast<double>(x[i]);
     }
     s[threadIdx.x] = acc;
     __syncthreads();
@@ -50,13 +57,16 @@ __global__ void block_sum_kernel(double const* x, long n, double* partial) {
     }
 }
 
-// As block_sum_kernel but accumulating x[i]² — the kinetic-energy reduction.
-__global__ void block_sumsq_kernel(double const* x, long n, double* partial) {
+// As block_sum_kernel but accumulating x[i]² in double — the kinetic-energy
+// reduction. Each square is promoted to double before accumulation.
+template <class In>
+__global__ void block_sumsq_kernel(In const* x, long n, double* partial) {
     __shared__ double s[kBlock];
     long const stride = static_cast<long>(gridDim.x) * blockDim.x;
     double acc        = 0.0;
     for (long i = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x; i < n; i += stride) {
-        acc += x[i] * x[i];
+        double const v = static_cast<double>(x[i]);
+        acc += v * v;
     }
     s[threadIdx.x] = acc;
     __syncthreads();
@@ -115,7 +125,8 @@ __global__ void final_reduce_kernel(double const* partials, int count, double* o
 [[nodiscard]] double* alloc_partials(int grid, cudaStream_t stream) {
     double* d_partial = nullptr;
     RETICOLO_CUDA_CHECK(cudaMallocAsync(reinterpret_cast<void**>(&d_partial),
-                                        static_cast<std::size_t>(grid) * sizeof(double), stream));
+                                        static_cast<std::size_t>(grid) * sizeof(double),
+                                        stream));
     return d_partial;
 }
 
@@ -125,7 +136,15 @@ void axpy_f64(double a, double const* x, double* y, long n, cudaStream_t stream)
     if (n <= 0) {
         return;
     }
-    axpy_kernel<<<grid_for(n), kBlock, 0, stream>>>(a, x, y, n);
+    axpy_kernel<double><<<grid_for(n), kBlock, 0, stream>>>(a, x, y, n);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+}
+
+void axpy_f32(float a, float const* x, float* y, long n, cudaStream_t stream) {
+    if (n <= 0) {
+        return;
+    }
+    axpy_kernel<float><<<grid_for(n), kBlock, 0, stream>>>(a, x, y, n);
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 
@@ -133,9 +152,9 @@ double reduce_sum_f64(double const* x, long n, cudaStream_t stream) {
     if (n <= 0) {
         return 0.0;
     }
-    int const grid     = grid_for(n);
-    double* d_partial  = alloc_partials(grid, stream);
-    block_sum_kernel<<<grid, kBlock, 0, stream>>>(x, n, d_partial);
+    int const grid    = grid_for(n);
+    double* d_partial = alloc_partials(grid, stream);
+    block_sum_kernel<double><<<grid, kBlock, 0, stream>>>(x, n, d_partial);
     RETICOLO_CUDA_CHECK_LAUNCH();
     return finish_partials(d_partial, grid, stream);
 }
@@ -144,9 +163,20 @@ double reduce_sumsq_f64(double const* x, long n, cudaStream_t stream) {
     if (n <= 0) {
         return 0.0;
     }
-    int const grid     = grid_for(n);
-    double* d_partial  = alloc_partials(grid, stream);
-    block_sumsq_kernel<<<grid, kBlock, 0, stream>>>(x, n, d_partial);
+    int const grid    = grid_for(n);
+    double* d_partial = alloc_partials(grid, stream);
+    block_sumsq_kernel<double><<<grid, kBlock, 0, stream>>>(x, n, d_partial);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+    return finish_partials(d_partial, grid, stream);
+}
+
+double reduce_sumsq_f32(float const* x, long n, cudaStream_t stream) {
+    if (n <= 0) {
+        return 0.0;
+    }
+    int const grid    = grid_for(n);
+    double* d_partial = alloc_partials(grid, stream);
+    block_sumsq_kernel<float><<<grid, kBlock, 0, stream>>>(x, n, d_partial);
     RETICOLO_CUDA_CHECK_LAUNCH();
     return finish_partials(d_partial, grid, stream);
 }
@@ -156,18 +186,30 @@ void reduce_sum_into(double* out, double const* x, long n, double* partials, cud
         return;
     }
     int const grid = grid_for(n);
-    block_sum_kernel<<<grid, kBlock, 0, stream>>>(x, n, partials);
+    block_sum_kernel<double><<<grid, kBlock, 0, stream>>>(x, n, partials);
     RETICOLO_CUDA_CHECK_LAUNCH();
     final_reduce_kernel<<<1, kBlock, 0, stream>>>(partials, grid, out);
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 
-void reduce_sumsq_into(double* out, double const* x, long n, double* partials, cudaStream_t stream) {
+void reduce_sumsq_into(
+    double* out, double const* x, long n, double* partials, cudaStream_t stream) {
     if (n <= 0) {
         return;
     }
     int const grid = grid_for(n);
-    block_sumsq_kernel<<<grid, kBlock, 0, stream>>>(x, n, partials);
+    block_sumsq_kernel<double><<<grid, kBlock, 0, stream>>>(x, n, partials);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+    final_reduce_kernel<<<1, kBlock, 0, stream>>>(partials, grid, out);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+}
+
+void reduce_sumsq_into(double* out, float const* x, long n, double* partials, cudaStream_t stream) {
+    if (n <= 0) {
+        return;
+    }
+    int const grid = grid_for(n);
+    block_sumsq_kernel<float><<<grid, kBlock, 0, stream>>>(x, n, partials);
     RETICOLO_CUDA_CHECK_LAUNCH();
     final_reduce_kernel<<<1, kBlock, 0, stream>>>(partials, grid, out);
     RETICOLO_CUDA_CHECK_LAUNCH();

@@ -12,16 +12,21 @@ namespace reticolo::cuda {
 //
 // Defined in src/cuda/reduce.cu. Pointers are device pointers.
 
-// y[i] += a * x[i]
+// y[i] += a * x[i], in the field type. f32 is the Phase-3 mixed-precision MD
+// path (drift/kick run in field precision); the volume reductions still
+// accumulate in double (see below).
 void axpy_f64(double a, double const* x, double* y, long n, cudaStream_t stream = nullptr);
+void axpy_f32(float a, float const* x, float* y, long n, cudaStream_t stream = nullptr);
 
 // Σ x[i], accumulated in double with a fixed, reproducible order.
 [[nodiscard]] double reduce_sum_f64(double const* x, long n, cudaStream_t stream = nullptr);
 
 // Σ x[i]², same fixed-order determinism. The HMC kinetic term ½Σp² — kept a
 // separate primitive (rather than square-into-scratch + reduce_sum) so the
-// reduction stays one pass and run-to-run reproducible for reversibility.
+// reduction stays one pass and run-to-run reproducible for reversibility. The
+// f32 overload reads float momenta but accumulates the sum of squares in double.
 [[nodiscard]] double reduce_sumsq_f64(double const* x, long n, cudaStream_t stream = nullptr);
+[[nodiscard]] double reduce_sumsq_f32(float const* x, long n, cudaStream_t stream = nullptr);
 
 // Capacity a `partials` scratch buffer must have for the *_into reductions.
 inline constexpr long k_reduce_max_grid = 1024;
@@ -32,9 +37,12 @@ inline constexpr long k_reduce_max_grid = 1024;
 // block reduction + a single-block final pass — deterministic run-to-run, which
 // reversibility requires. The whole trajectory enqueues these on one stream and
 // syncs once (vs the four malloc+sync round-trips reduce_sum/sumsq_f64 cost).
-void reduce_sum_into(double* out, double const* x, long n, double* partials,
-                     cudaStream_t stream = nullptr);
-void reduce_sumsq_into(double* out, double const* x, long n, double* partials,
-                       cudaStream_t stream = nullptr);
+void reduce_sum_into(
+    double* out, double const* x, long n, double* partials, cudaStream_t stream = nullptr);
+void reduce_sumsq_into(
+    double* out, double const* x, long n, double* partials, cudaStream_t stream = nullptr);
+// f32 momenta overload: reads float, accumulates the sum of squares in double.
+void reduce_sumsq_into(
+    double* out, float const* x, long n, double* partials, cudaStream_t stream = nullptr);
 
 }  // namespace reticolo::cuda

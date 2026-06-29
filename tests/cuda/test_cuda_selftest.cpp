@@ -1,6 +1,7 @@
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>
+#include <reticolo/cuda/f32_probe.hpp>
 #include <reticolo/cuda/gauge_probe.hpp>
 #include <reticolo/cuda/hmc_probe.hpp>
 #include <reticolo/cuda/phi4_probe.hpp>
@@ -176,4 +177,14 @@ TEST_CASE("cuda DeviceAction<SineGordon> matches CPU action::SineGordon", "[cuda
 
 TEST_CASE("cuda DeviceAction<Xy> matches CPU action::Xy", "[cuda]") {
     REQUIRE(reticolo::cuda::xy_cpu_matches_device());
+}
+
+// Phase 3d: the device HMC stack in single precision — DeviceAction<Phi4<float>>
+// matches the CPU f32 action, and f32 Leapfrog MD is reversible (bounded tol).
+TEST_CASE("cuda DeviceAction<Phi4<float>> matches CPU to f32 tolerance", "[cuda]") {
+    REQUIRE(reticolo::cuda::phi4_f32_cpu_matches_device());
+}
+
+TEST_CASE("cuda f32 HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::hmc_f32_reversibility_ok());
 }

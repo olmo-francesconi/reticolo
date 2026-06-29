@@ -12,9 +12,9 @@
 #include <reticolo/core/philox.hpp>
 #include <reticolo/cuda/check.hpp>
 
-#include <cuda_runtime.h>
-
 #include <cstdint>
+
+#include <cuda_runtime.h>
 
 namespace reticolo::cuda {
 
@@ -22,8 +22,7 @@ namespace reticolo::cuda {
 // same reason stencil_kernel<F> is a template): a plain __global__ in a header
 // included by multiple TUs collides at device link under -rdc=true.
 template <class T = double>
-__global__ void fill_normals_kernel(T* out, long n, std::uint64_t seed,
-                                    std::uint64_t const* traj) {
+__global__ void fill_normals_kernel(T* out, long n, std::uint64_t seed, std::uint64_t const* traj) {
     long const pair    = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const n_pairs = (n + 1) / 2;
     if (pair >= n_pairs) {
@@ -38,15 +37,19 @@ __global__ void fill_normals_kernel(T* out, long n, std::uint64_t seed,
     }
 }
 
-inline void fill_normals(double* out, long n, std::uint64_t seed, std::uint64_t const* traj_dev,
+template <class T>
+inline void fill_normals(T* out,
+                         long n,
+                         std::uint64_t seed,
+                         std::uint64_t const* traj_dev,
                          cudaStream_t stream = nullptr) {
     if (n <= 0) {
         return;
     }
-    long const n_pairs = (n + 1) / 2;
+    long const n_pairs   = (n + 1) / 2;
     constexpr int kBlock = 256;
     auto const grid      = static_cast<unsigned>((n_pairs + kBlock - 1) / kBlock);
-    fill_normals_kernel<double><<<grid, kBlock, 0, stream>>>(out, n, seed, traj_dev);
+    fill_normals_kernel<T><<<grid, kBlock, 0, stream>>>(out, n, seed, traj_dev);
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 

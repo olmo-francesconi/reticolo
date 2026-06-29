@@ -443,10 +443,19 @@ tuning) — a known ±10–20% knob, also deferred to profiling.
   `accumulate(mu, nbr)` per-bond (passing each neighbour value, not a pre-summed
   one), so XY's `sin(θ−nbr)` accumulation drops straight in. The "sum-stencil vs
   per-neighbour" distinction the plan worried about never materialized.
-- **(remaining 3d) f32 instantiations** for bandwidth-bound scalars — a second
-  instantiation through the whole stack (axpy/reduce/field in f32), not just a
-  functor; f32 reversibility uses **bounded** tolerance, not roundoff, and never
-  gets the order-scaling test.
+- **3d — f32 DONE.** The device HMC stack instantiates in single precision: the
+  MD drift/kick run in field precision (`axpy_f32`), the field/momenta are
+  `DeviceField<float>`, but the volume reductions still accumulate the sum (and
+  sum-of-squares) in **double** — a float volume sum loses ~log2(V) bits and
+  corrupts ΔH, exactly as on the CPU. The reduce kernels are templated on input
+  type (`block_sum/sumsq_kernel<In>`) with f32 + f64 entry points; `cuda::Hmc`
+  and `DeviceAction` were already generic over `Field` and needed no change. Two
+  added entry points beyond the kernels: `axpy_f32` and an f32-momenta
+  `reduce_sumsq_into` overload; `fill_normals` became a template. Gates (bounded
+  tolerance, NOT roundoff — and no order-scaling test, the f32 caveat):
+  `DeviceAction<Phi4<float>>` vs CPU `s_full`+force (1e-5 / 1e-4), and f32
+  Leapfrog reversibility (1e-3). f32 for the transcendental/other scalar actions
+  is a free follow-on (same functors, `<float>`); only Phi4 is gated so far.
 - **(remaining) BoseGas is its own sub-workstream**: `cuda::std::complex`,
   split-last + time-slab patterns, `s_imag`/`compute_force_imag` — not a drop-in
   functor.
