@@ -1,5 +1,6 @@
 #include <reticolo/action/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/cuda/actions/phi4.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
@@ -54,8 +55,8 @@ bool phi4_cpu_matches_device() {
     Lattice<double> const host = make_field();
 
     action::Phi4<double> cpu{};
-    cpu.kappa  = kKappa;
-    cpu.lambda = kLambda;
+    cpu.kappa          = kKappa;
+    cpu.lambda         = kLambda;
     double const s_cpu = cpu.s_full(host);
     Lattice<double> f_cpu{kShape};
     cpu.compute_force(host, f_cpu);

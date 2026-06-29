@@ -3,6 +3,7 @@
 #include <reticolo/action/detail/phi4_formula.hpp>
 #include <reticolo/action/phi4.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
+#include <reticolo/cuda/actions/site_launchers.hpp>
 #include <reticolo/cuda/macros.hpp>
 
 // Device per-site functors for Phi4 + the host-action → device-functor trait.
@@ -60,16 +61,38 @@ private:
     T fwd_ = T{0};
 };
 
-// Maps action::Phi4 to its device functor pair (the primary template lives in
-// device_functors.hpp). A new device-ported action = a functor pair + one
-// specialization in its own cuda/actions/<name>.hpp; cuda::DeviceAction stays
-// generic.
+// Maps action::Phi4 to the device launchers DeviceAction calls (the primary
+// template lives in device_functors.hpp). A scalar action's trait wraps the
+// site-stencil skeletons (site_launchers.hpp) with its functor pair; a gauge
+// action's trait wraps the plaquette skeletons instead. DeviceAction delegates
+// to whichever the type resolves to and never branches.
 template <class T>
 struct device_functors<action::Phi4<T>> {
-    using force  = Phi4ForceFunctor<T>;
-    using energy = Phi4EnergyFunctor<T>;
-    static force make_force(action::Phi4<T> const& a) { return {a.kappa, a.lambda}; }
-    static energy make_energy(action::Phi4<T> const& a) { return {a.kappa, a.lambda}; }
+    static void compute_force(action::Phi4<T> const& a,
+                              T const* field,
+                              T* force,
+                              DeviceTopology const& topo,
+                              cudaStream_t s) {
+        detail::site_force(Phi4ForceFunctor<T>{a.kappa, a.lambda}, field, force, topo, s);
+    }
+    [[nodiscard]] static double s_full(action::Phi4<T> const& a,
+                                       T const* field,
+                                       double* scratch,
+                                       DeviceTopology const& topo,
+                                       cudaStream_t s) {
+        return detail::site_s_full(
+            Phi4EnergyFunctor<T>{a.kappa, a.lambda}, field, scratch, topo, s);
+    }
+    static void s_full_into(double* out,
+                            action::Phi4<T> const& a,
+                            T const* field,
+                            double* scratch,
+                            double* partials,
+                            DeviceTopology const& topo,
+                            cudaStream_t s) {
+        detail::site_s_full_into(
+            out, Phi4EnergyFunctor<T>{a.kappa, a.lambda}, field, scratch, partials, topo, s);
+    }
 };
 
 }  // namespace reticolo::cuda

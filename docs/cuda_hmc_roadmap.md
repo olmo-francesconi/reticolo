@@ -460,11 +460,32 @@ tuning) — a known ±10–20% knob, also deferred to profiling.
   split-last + time-slab patterns, `s_imag`/`compute_force_imag` — not a drop-in
   functor.
 
-### Phase 4 — U(1) gauge  *(exit: force-vs-FD + reversibility on `CompactU1`; [nightly] plaquette at known β)*
-`LinkLayout` field; `plaquette` skeleton with the **U(1) force re-derived as a
-per-link gather** (the CPU scatter cannot be reused). This validates the gather
-plaquette path before SU(N) — but **does not** validate the matrix path
-(`Wilson<U1>` is also scatter).
+### Phase 4 — U(1) gauge — DONE  *(exit: force-vs-FD + reversibility on `CompactU1`; [nightly] plaquette at known β)*
+`LinkLayout` field (`ndim·nsites`, direction-major = host `LinkLattice` order, so
+a flat raw-pointer round-trip is exact); `gauge_u1.cuh` plaquette skeleton with
+the **U(1) force re-derived as a per-link gather** — `plaq_force_gather_kernel`
+(one thread per link, `F = −β·Σ_{ν≠μ}[sin Q_ν(x) − sin Q_ν(x−ν)]`, reads
+neighbours, writes only its own link) and `plaq_energy_site_kernel` (per-site
+forward-plane `β·Σ(1−cos)` → `reduce_sum`). The CPU scatter is **not** ported.
+- **Unified `DeviceAction`.** Rather than a separate gauge wrapper, the
+  access pattern moved into the `device_functors<HostAction>` trait as static
+  launchers (`compute_force` / `s_full` / `s_full_into`); `DeviceAction` is now a
+  thin generic shell that delegates and never branches, constrained by a
+  `DeviceActionTraits` concept (clean error on a mis-shaped trait). Scalar traits
+  wrap the site-stencil skeletons (`site_launchers.hpp`); the gauge trait wraps
+  the plaquette skeletons. `cuda::Hmc` is unchanged — it ran on
+  `DeviceField<double, LinkLayout>` with no modification (momentum sampling,
+  reductions, device accept all generic over the buffer).
+- **One source of truth:** the plaquette *angle* is the shared `RETICOLO_HD`
+  helper `action::detail::u1_plaq` (CPU `CompactU1` rewired to it); the cos/sin
+  and the loop structure (gather vs the CPU's Sleef-batched scatter) deliberately
+  differ, as the gather-only device invariant requires.
+- **Gates (P100):** `DeviceAction<CompactU1>` vs CPU `s_full` (1e-10) + force
+  (1e-7); gather force vs central FD of `s_full` (independent of the CPU);
+  reversibility (roundoff); host-free `cuda::Hmc` smoke over the link field.
+  Plaquette-at-β equilibration is a simulation → nightly only, not a gate.
+- Validates the gather plaquette path before SU(N) — but **does not** validate
+  the matrix path (`Wilson<U1>` is also scatter).
 
 ### Phase 5 — SU(2)/SU(3) gauge  *(exit: force-vs-FD + reversibility f64 at 1e-9 (port `test_su3_hmc_reversibility.cpp`); momentum-moment test for Gell-Mann variance + anti-hermiticity; [nightly] ⟨e^−ΔH⟩ + plaquette at β; **perf target met**)*
 - `MatrixLayout<G>` field; gather `plaquette`; fused `expi_lmul`.

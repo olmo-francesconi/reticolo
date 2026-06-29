@@ -3,6 +3,7 @@
 #include <reticolo/action/detail/phi6_formula.hpp>
 #include <reticolo/action/phi6.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
+#include <reticolo/cuda/actions/site_launchers.hpp>
 #include <reticolo/cuda/macros.hpp>
 
 // Device per-site functors for Phi6 + the host-action → device-functor trait.
@@ -63,10 +64,31 @@ private:
 
 template <class T>
 struct device_functors<action::Phi6<T>> {
-    using force  = Phi6ForceFunctor<T>;
-    using energy = Phi6EnergyFunctor<T>;
-    static force make_force(action::Phi6<T> const& a) { return {a.kappa, a.lambda, a.g6}; }
-    static energy make_energy(action::Phi6<T> const& a) { return {a.kappa, a.lambda, a.g6}; }
+    static void compute_force(action::Phi6<T> const& a,
+                              T const* field,
+                              T* force,
+                              DeviceTopology const& topo,
+                              cudaStream_t s) {
+        detail::site_force(Phi6ForceFunctor<T>{a.kappa, a.lambda, a.g6}, field, force, topo, s);
+    }
+    [[nodiscard]] static double s_full(action::Phi6<T> const& a,
+                                       T const* field,
+                                       double* scratch,
+                                       DeviceTopology const& topo,
+                                       cudaStream_t s) {
+        return detail::site_s_full(
+            Phi6EnergyFunctor<T>{a.kappa, a.lambda, a.g6}, field, scratch, topo, s);
+    }
+    static void s_full_into(double* out,
+                            action::Phi6<T> const& a,
+                            T const* field,
+                            double* scratch,
+                            double* partials,
+                            DeviceTopology const& topo,
+                            cudaStream_t s) {
+        detail::site_s_full_into(
+            out, Phi6EnergyFunctor<T>{a.kappa, a.lambda, a.g6}, field, scratch, partials, topo, s);
+    }
 };
 
 }  // namespace reticolo::cuda

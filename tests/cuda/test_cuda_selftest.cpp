@@ -10,6 +10,7 @@
 #include <reticolo/cuda/scalar_probe.hpp>
 #include <reticolo/cuda/selftest.hpp>
 #include <reticolo/cuda/stencil_probe.hpp>
+#include <reticolo/cuda/u1_probe.hpp>
 
 #include <array>
 #include <cstddef>
@@ -187,4 +188,23 @@ TEST_CASE("cuda DeviceAction<Phi4<float>> matches CPU to f32 tolerance", "[cuda]
 
 TEST_CASE("cuda f32 HMC trajectory is reversible", "[cuda]") {
     REQUIRE(reticolo::cuda::hmc_f32_reversibility_ok());
+}
+
+// Phase 4: compact U(1) gauge on the device through the SAME unified
+// DeviceAction — the gauge access pattern (per-link gather force, per-site
+// plaquette action) lives only in the device_functors<CompactU1> trait.
+TEST_CASE("cuda DeviceAction<CompactU1> matches CPU action::CompactU1", "[cuda]") {
+    REQUIRE(reticolo::cuda::u1_cpu_matches_device());
+}
+
+TEST_CASE("cuda U(1) gather force matches finite-difference of s_full", "[cuda]") {
+    REQUIRE(reticolo::cuda::u1_force_matches_fd());
+}
+
+TEST_CASE("cuda U(1) HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::u1_hmc_reversibility_ok());
+}
+
+TEST_CASE("cuda U(1) host-free HMC runs on the link field", "[cuda]") {
+    REQUIRE(reticolo::cuda::u1_hmc_runs());
 }

@@ -10,6 +10,7 @@
 #include <reticolo/action/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
+#include <reticolo/cuda/actions/phi4.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/hmc.cuh>

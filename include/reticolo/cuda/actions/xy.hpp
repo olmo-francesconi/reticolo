@@ -3,6 +3,7 @@
 #include <reticolo/action/detail/xy_formula.hpp>
 #include <reticolo/action/xy.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
+#include <reticolo/cuda/actions/site_launchers.hpp>
 #include <reticolo/cuda/macros.hpp>
 
 // Device per-site functors for the XY (planar rotor) model + the host-action →
@@ -57,10 +58,30 @@ private:
 
 template <class T>
 struct device_functors<action::Xy<T>> {
-    using force  = XyForceFunctor<T>;
-    using energy = XyEnergyFunctor<T>;
-    static force make_force(action::Xy<T> const& a) { return force{a.beta}; }
-    static energy make_energy(action::Xy<T> const& a) { return energy{a.beta}; }
+    static void compute_force(action::Xy<T> const& a,
+                              T const* field,
+                              T* force,
+                              DeviceTopology const& topo,
+                              cudaStream_t s) {
+        detail::site_force(XyForceFunctor<T>{a.beta}, field, force, topo, s);
+    }
+    [[nodiscard]] static double s_full(action::Xy<T> const& a,
+                                       T const* field,
+                                       double* scratch,
+                                       DeviceTopology const& topo,
+                                       cudaStream_t s) {
+        return detail::site_s_full(XyEnergyFunctor<T>{a.beta}, field, scratch, topo, s);
+    }
+    static void s_full_into(double* out,
+                            action::Xy<T> const& a,
+                            T const* field,
+                            double* scratch,
+                            double* partials,
+                            DeviceTopology const& topo,
+                            cudaStream_t s) {
+        detail::site_s_full_into(
+            out, XyEnergyFunctor<T>{a.beta}, field, scratch, partials, topo, s);
+    }
 };
 
 }  // namespace reticolo::cuda

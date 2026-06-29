@@ -4,10 +4,10 @@
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 
-#include <cuda_runtime.h>
-
 #include <cstddef>
 #include <vector>
+
+#include <cuda_runtime.h>
 
 namespace reticolo::cuda {
 
@@ -17,6 +17,15 @@ namespace reticolo::cuda {
 // (Phase 5) plug in here without touching DeviceField.
 struct ScalarLayout {
     [[nodiscard]] static long flat_count(DeviceTopology const& t) { return t.nsites; }
+};
+
+// Gauge link field: ndim·nsites elements, direction-major (link (mu, x) at
+// flat index mu·nsites + x) — identical to the host LinkLattice<T> order, so a
+// flat copy round-trips exactly via the raw-pointer copy_from_host/to_host.
+struct LinkLayout {
+    [[nodiscard]] static long flat_count(DeviceTopology const& t) {
+        return static_cast<long>(t.ndim) * t.nsites;
+    }
 };
 
 // One resident device buffer plus its topology — the device counterpart of

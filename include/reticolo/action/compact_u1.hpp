@@ -1,5 +1,6 @@
 #pragma once
 
+#include <reticolo/action/detail/compact_u1_formula.hpp>
 #include <reticolo/action/detail/gauge_helpers.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/indexing.hpp>
@@ -120,7 +121,7 @@ struct CompactU1 {
                 // Pass 1: stash plaquette angles for the plane into the scratch.
                 detail::visit_plane(
                     l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                        buf[s] = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                        buf[s] = detail::u1_plaq(mb[s], nb[s_pmu], mb[s_pnu], nb[s]);
                     });
                 // Vector cos in place.
                 math::cos_batch(buf, buf, n);
@@ -160,7 +161,7 @@ struct CompactU1 {
                 T* const fnu = force.mu_data(nu);
                 detail::visit_plane(
                     l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                        buf[s] = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                        buf[s] = detail::u1_plaq(mb[s], nb[s_pmu], mb[s_pnu], nb[s]);
                     });
                 math::sin_batch(buf, buf, n);
                 detail::visit_plane(
@@ -200,7 +201,7 @@ struct CompactU1 {
                 T* const fnu = force.mu_data(nu);
                 detail::visit_plane(
                     l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                        buf[s] = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                        buf[s] = detail::u1_plaq(mb[s], nb[s_pmu], mb[s_pnu], nb[s]);
                     });
                 math::sincos_batch(buf, cbuf, buf, n);
                 {
@@ -239,7 +240,7 @@ struct CompactU1 {
                 T* const mnu = mom.mu_data(nu);
                 detail::visit_plane(
                     l, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                        buf[s] = mb[s] + nb[s_pmu] - mb[s_pnu] - nb[s];
+                        buf[s] = detail::u1_plaq(mb[s], nb[s_pmu], mb[s_pnu], nb[s]);
                     });
                 math::sin_batch(buf, buf, n);
                 detail::visit_plane(

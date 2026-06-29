@@ -3,6 +3,7 @@
 #include <reticolo/action/detail/sine_gordon_formula.hpp>
 #include <reticolo/action/sine_gordon.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
+#include <reticolo/cuda/actions/site_launchers.hpp>
 #include <reticolo/cuda/macros.hpp>
 
 #include <cmath>
@@ -64,10 +65,31 @@ private:
 
 template <class T>
 struct device_functors<action::SineGordon<T>> {
-    using force  = SineGordonForceFunctor<T>;
-    using energy = SineGordonEnergyFunctor<T>;
-    static force make_force(action::SineGordon<T> const& a) { return {a.kappa, a.alpha}; }
-    static energy make_energy(action::SineGordon<T> const& a) { return {a.kappa, a.alpha}; }
+    static void compute_force(action::SineGordon<T> const& a,
+                              T const* field,
+                              T* force,
+                              DeviceTopology const& topo,
+                              cudaStream_t s) {
+        detail::site_force(SineGordonForceFunctor<T>{a.kappa, a.alpha}, field, force, topo, s);
+    }
+    [[nodiscard]] static double s_full(action::SineGordon<T> const& a,
+                                       T const* field,
+                                       double* scratch,
+                                       DeviceTopology const& topo,
+                                       cudaStream_t s) {
+        return detail::site_s_full(
+            SineGordonEnergyFunctor<T>{a.kappa, a.alpha}, field, scratch, topo, s);
+    }
+    static void s_full_into(double* out,
+                            action::SineGordon<T> const& a,
+                            T const* field,
+                            double* scratch,
+                            double* partials,
+                            DeviceTopology const& topo,
+                            cudaStream_t s) {
+        detail::site_s_full_into(
+            out, SineGordonEnergyFunctor<T>{a.kappa, a.alpha}, field, scratch, partials, topo, s);
+    }
 };
 
 }  // namespace reticolo::cuda

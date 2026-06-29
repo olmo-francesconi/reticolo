@@ -9,7 +9,7 @@
 
 find_package(CUDAToolkit REQUIRED)
 
-add_library(reticolo_cuda STATIC selftest.cu reduce.cu gauge_probe.cu stencil_probe.cu phi4_probe.cu scalar_probe.cu f32_probe.cu hmc_probe.cu rng_probe.cu)
+add_library(reticolo_cuda STATIC selftest.cu reduce.cu gauge_probe.cu stencil_probe.cu phi4_probe.cu scalar_probe.cu f32_probe.cu u1_probe.cu hmc_probe.cu rng_probe.cu)
 add_library(reticolo::cuda ALIAS reticolo_cuda)
 
 target_include_directories(reticolo_cuda PUBLIC
