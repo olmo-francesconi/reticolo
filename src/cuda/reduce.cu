@@ -50,29 +50,30 @@ __global__ void block_sum_kernel(double const* x, long n, double* partial) {
     }
 }
 
-}  // namespace
-
-void axpy_f64(double a, double const* x, double* y, long n, cudaStream_t stream) {
-    if (n <= 0) {
-        return;
+// As block_sum_kernel but accumulating x[i]² — the kinetic-energy reduction.
+__global__ void block_sumsq_kernel(double const* x, long n, double* partial) {
+    __shared__ double s[kBlock];
+    long const stride = static_cast<long>(gridDim.x) * blockDim.x;
+    double acc        = 0.0;
+    for (long i = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x; i < n; i += stride) {
+        acc += x[i] * x[i];
     }
-    axpy_kernel<<<grid_for(n), kBlock, 0, stream>>>(a, x, y, n);
-    RETICOLO_CUDA_CHECK_LAUNCH();
+    s[threadIdx.x] = acc;
+    __syncthreads();
+    for (int off = blockDim.x / 2; off > 0; off >>= 1) {
+        if (threadIdx.x < off) {
+            s[threadIdx.x] += s[threadIdx.x + off];
+        }
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) {
+        partial[blockIdx.x] = s[0];
+    }
 }
 
-double reduce_sum_f64(double const* x, long n, cudaStream_t stream) {
-    if (n <= 0) {
-        return 0.0;
-    }
-    int const grid = grid_for(n);
-
-    double* d_partial = nullptr;
-    RETICOLO_CUDA_CHECK(
-        cudaMallocAsync(reinterpret_cast<void**>(&d_partial), static_cast<std::size_t>(grid) * sizeof(double), stream));
-
-    block_sum_kernel<<<grid, kBlock, 0, stream>>>(x, n, d_partial);
-    RETICOLO_CUDA_CHECK_LAUNCH();
-
+// Shared host finish: copy block partials back and sum in index order
+// (reproducible), then free the device scratch on `stream`.
+[[nodiscard]] double finish_partials(double* d_partial, int grid, cudaStream_t stream) {
     std::vector<double> partials(static_cast<std::size_t>(grid));
     RETICOLO_CUDA_CHECK(cudaMemcpyAsync(partials.data(),
                                         d_partial,
@@ -87,6 +88,45 @@ double reduce_sum_f64(double const* x, long n, cudaStream_t stream) {
         total += v;  // fixed index order → reproducible
     }
     return total;
+}
+
+[[nodiscard]] double* alloc_partials(int grid, cudaStream_t stream) {
+    double* d_partial = nullptr;
+    RETICOLO_CUDA_CHECK(cudaMallocAsync(reinterpret_cast<void**>(&d_partial),
+                                        static_cast<std::size_t>(grid) * sizeof(double), stream));
+    return d_partial;
+}
+
+}  // namespace
+
+void axpy_f64(double a, double const* x, double* y, long n, cudaStream_t stream) {
+    if (n <= 0) {
+        return;
+    }
+    axpy_kernel<<<grid_for(n), kBlock, 0, stream>>>(a, x, y, n);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+}
+
+double reduce_sum_f64(double const* x, long n, cudaStream_t stream) {
+    if (n <= 0) {
+        return 0.0;
+    }
+    int const grid     = grid_for(n);
+    double* d_partial  = alloc_partials(grid, stream);
+    block_sum_kernel<<<grid, kBlock, 0, stream>>>(x, n, d_partial);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+    return finish_partials(d_partial, grid, stream);
+}
+
+double reduce_sumsq_f64(double const* x, long n, cudaStream_t stream) {
+    if (n <= 0) {
+        return 0.0;
+    }
+    int const grid     = grid_for(n);
+    double* d_partial  = alloc_partials(grid, stream);
+    block_sumsq_kernel<<<grid, kBlock, 0, stream>>>(x, n, d_partial);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+    return finish_partials(d_partial, grid, stream);
 }
 
 }  // namespace reticolo::cuda

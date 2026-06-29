@@ -57,6 +57,9 @@ reticolo_add_test(test_api_uniformity               unit/test_api_uniformity.cpp
 
 if(RETICOLO_ENABLE_CUDA)
     reticolo_add_test(test_cuda_selftest            cuda/test_cuda_selftest.cpp)
+    add_test(NAME cuda_no_integrator_kernels
+             COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${PROJECT_SOURCE_DIR}/src/cuda
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/cuda/check_no_integrator_kernels.cmake)
 endif()
 
 if(RETICOLO_BUILD_IO)

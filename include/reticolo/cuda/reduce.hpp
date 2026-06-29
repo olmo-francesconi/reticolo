@@ -18,4 +18,9 @@ void axpy_f64(double a, double const* x, double* y, long n, cudaStream_t stream 
 // Σ x[i], accumulated in double with a fixed, reproducible order.
 [[nodiscard]] double reduce_sum_f64(double const* x, long n, cudaStream_t stream = nullptr);
 
+// Σ x[i]², same fixed-order determinism. The HMC kinetic term ½Σp² — kept a
+// separate primitive (rather than square-into-scratch + reduce_sum) so the
+// reduction stays one pass and run-to-run reproducible for reversibility.
+[[nodiscard]] double reduce_sumsq_f64(double const* x, long n, cudaStream_t stream = nullptr);
+
 }  // namespace reticolo::cuda

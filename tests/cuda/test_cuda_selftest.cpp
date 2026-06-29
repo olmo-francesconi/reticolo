@@ -2,6 +2,7 @@
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/gauge_probe.hpp>
+#include <reticolo/cuda/hmc_probe.hpp>
 #include <reticolo/cuda/phi4_probe.hpp>
 #include <reticolo/cuda/reduce.hpp>
 #include <reticolo/cuda/selftest.hpp>
@@ -99,4 +100,20 @@ TEST_CASE("cuda DeviceField round-trips a scalar field", "[cuda]") {
 // HD formula is genuinely one source of truth across CPU and device.
 TEST_CASE("cuda DeviceAction<Phi4> matches CPU action::Phi4 to roundoff", "[cuda]") {
     REQUIRE(reticolo::cuda::phi4_cpu_matches_device());
+}
+
+// Phase 2b: Leapfrog MD on DeviceField is time-reversible to roundoff.
+TEST_CASE("cuda HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::hmc_reversibility_ok());
+}
+
+// Phase 2b: the reused alg::integ tags give |ΔH| ~ dt^p with p = 2/2/4 on the
+// device — the integrator-genericity proof.
+TEST_CASE("cuda integrator order is 2/2/4", "[cuda]") {
+    REQUIRE(reticolo::cuda::integrator_order_ok());
+}
+
+// Phase 2b: cuda::Hmc::step() (sample → MD → ΔH → host MH) runs and stays finite.
+TEST_CASE("cuda Hmc step runs end-to-end", "[cuda]") {
+    REQUIRE(reticolo::cuda::hmc_step_runs());
 }

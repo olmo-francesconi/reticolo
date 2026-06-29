@@ -54,6 +54,15 @@ public:
         buf_.copy_to_host(l.data(), stream);
     }
 
+    // Raw host-pointer overloads (caller guarantees `size()` elements) — used to
+    // stage momenta drawn by the host RNG before the device RNG lands (Phase 2c).
+    void copy_from_host(T const* src, cudaStream_t stream = nullptr) {
+        buf_.copy_from_host(src, stream);
+    }
+    void copy_to_host(T* dst, cudaStream_t stream = nullptr) const {
+        buf_.copy_to_host(dst, stream);
+    }
+
 private:
     DeviceTopology topo_;
     DeviceBuffer<T> buf_;

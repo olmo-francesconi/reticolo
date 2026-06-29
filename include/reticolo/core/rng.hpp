@@ -106,10 +106,19 @@ public:
         double const u2           = uniform();
         double const r            = std::sqrt(-2.0 * std::log(u1));
         double const theta        = k_two_pi * u2;
-        Sleef_double_2 const sc   = Sleef_sincos_u10(theta);
-        cached_normal_            = r * sc.x;  // sin
-        has_cached_normal_        = true;
+#if defined(__CUDACC__)
+        // nvcc cannot see <sleef.h> (guarded out of vec_libm.hpp); FastRng runs
+        // host-side anyway, so the scalar std path is correct here. Same Sleef
+        // isolation invariant as vec_libm.hpp / the CUDA backend.
+        cached_normal_     = r * std::sin(theta);
+        has_cached_normal_ = true;
+        return r * std::cos(theta);
+#else
+        Sleef_double_2 const sc = Sleef_sincos_u10(theta);
+        cached_normal_          = r * sc.x;  // sin
+        has_cached_normal_      = true;
         return r * sc.y;  // cos
+#endif
     }
 
     // Batched-fill: writes `n` standard normals into `out`. Uses classical
