@@ -6,6 +6,8 @@
 #include <reticolo/cuda/actions/site_launchers.hpp>
 #include <reticolo/cuda/macros.hpp>
 
+#include <cstdint>
+
 // Device per-site functors for the XY (planar rotor) model + the host-action →
 // device-functor trait. Unlike the phi-type actions, each bond contributes a
 // transcendental of the angle DIFFERENCE theta(x) - theta(nbr), so the functor
@@ -81,6 +83,14 @@ struct device_functors<action::Xy<T>> {
                             cudaStream_t s) {
         detail::site_s_full_into(
             out, XyEnergyFunctor<T>{a.beta}, field, scratch, partials, topo, s);
+    }
+    static void sample_momenta(T* mom,
+                               long n,
+                               DeviceTopology const& topo,
+                               std::uint64_t seed,
+                               std::uint64_t const* traj,
+                               cudaStream_t s) {
+        detail::site_sample_momenta(mom, n, topo, seed, traj, s);
     }
 };
 

@@ -3,7 +3,10 @@
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/reduce.hpp>
 #include <reticolo/cuda/reduce_fwd.cuh>
+#include <reticolo/cuda/rng_philox.cuh>
 #include <reticolo/cuda/stencil.cuh>
+
+#include <cstdint>
 
 #include <cuda_runtime.h>
 
@@ -37,6 +40,19 @@ inline void site_s_full_into(double* out,
                              DeviceTopology const& topo,
                              cudaStream_t s) {
     reduce_fwd_into(out, e, field, scratch, partials, topo, s);
+}
+
+// Scalar / U(1) momentum sampler: one iid normal per field component. The
+// gauge actions override this with a Gell-Mann algebra draw; `topo` is unused
+// here (the count `n` is the buffer length) but kept for a uniform signature.
+template <class T>
+inline void site_sample_momenta(T* mom,
+                                long n,
+                                DeviceTopology const& /*topo*/,
+                                std::uint64_t seed,
+                                std::uint64_t const* traj,
+                                cudaStream_t s) {
+    fill_normals(mom, n, seed, traj, s);
 }
 
 }  // namespace reticolo::cuda::detail

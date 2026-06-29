@@ -487,7 +487,43 @@ forward-plane `β·Σ(1−cos)` → `reduce_sum`). The CPU scatter is **not** po
 - Validates the gather plaquette path before SU(N) — but **does not** validate
   the matrix path (`Wilson<U1>` is also scatter).
 
+**Cross-action throughput baseline (P100, host-free `cuda::Hmc`, Leapfrog
+τ=1.0 n_md=10, ms/traj):**
+
+| action | L=8 (V=4096) | L=16 (V=65536) | L=32 (V=1.05M) |
+|---|---|---|---|
+| Phi4 f64       | 0.151 | 0.518 | 6.257 |
+| Phi4 f32       | 0.150 | 0.499 | 5.615 |
+| Phi6 f64       | 0.153 | 0.519 | 6.251 |
+| SineGordon f64 | 0.161 | 0.533 | 6.379 |
+| Xy f64         | 0.200 | 0.648 | 7.157 |
+| CompactU1 f64  | 0.299 | 2.119 | (DOF = 4·V) |
+
+Reading (the input for any fusion/tuning decision): **the kernels are
+HBM-bandwidth-bound, not compute-bound** — Phi6 ≈ Phi4 at every volume (a free
+degree-6 term proves the ALU is idle waiting on memory). Small V (L=8) is
+launch-bound at the ~0.15 ms graph-replay floor (per-action cost hidden). f32
+helps only at large V (L=32 Phi4: 5.61 vs 6.26 ms, ~11% — the bandwidth regime);
+at small V it is a wash. Cost ordering at L≥16: Phi4≈Phi6 < SineGordon (sin/cos)
+< Xy (2 transcendentals/bond) < CompactU1 (4× DOF + plaquette gather). Block size
+is still the untuned 256 everywhere — an Nsight occupancy pass is the obvious
+lever now that we know it is memory-bound.
+
 ### Phase 5 — SU(2)/SU(3) gauge  *(exit: force-vs-FD + reversibility f64 at 1e-9 (port `test_su3_hmc_reversibility.cpp`); momentum-moment test for Gell-Mann variance + anti-hermiticity; [nightly] ⟨e^−ΔH⟩ + plaquette at β; **perf target met**)*
+- **SU(2) — BUILT, pending Kaggle validation.** `MatrixLayout<SU2>` (nc=8,
+  `[ndim][nc][nsites]` = host `MatrixLinkLattice<SU2>` order, flat copy exact).
+  Generic SU(N) kernels (`gauge_sun.cuh`) templated on a device-traits type
+  `GD = group_device<G>::type` (`SU2Device` in `gauge/su2_device.cuh`, RETICOLO_HD
+  register-local 2×2 ops validated vs `math::su2`): per-site plaquette energy,
+  per-link staple-gather force `scale·TA[U·V]`, group-exp drift `U←exp(dt·P)·U`
+  (ADL `drift_field` atom over `MatrixLayout<G>`), Gell-Mann momentum sampler
+  (h_a~N(0,½)). `device_functors<Wilson<SU2>>` plugs into the unchanged
+  `DeviceAction`/`Hmc`; momentum sampling is now a 4th trait launcher
+  (`sample_momenta`) so the scalar/U(1) iid-normal draw and the gauge algebra
+  draw share one `Hmc` path. Gates in `src/cuda/su2_probe.cu`: device-ops-vs-CPU,
+  s_full+force vs CPU `Wilson<SU2>` (1e-9), MD energy conservation (2nd-order
+  ratio), reversibility (1e-9), momentum moments, host-free HMC smoke.
+- SU(3) — follow-on once SU(2) is green (same kernels, `SU3Device` traits).
 - `MatrixLayout<G>` field; gather `plaquette`; fused `expi_lmul`.
 - Profile `ThreadPerLink` vs `WarpPerLink` + shared-mem staple staging.
 - **(review)** State a concrete throughput target (e.g. achieved memory BW vs

@@ -28,6 +28,17 @@ struct LinkLayout {
     }
 };
 
+// Matrix gauge field: ndim·nc·nsites reals, layout [ndim][nc][nsites] with
+// nc = G::n_real_components (8 for SU(2), 18 for SU(3)) — identical to the host
+// MatrixLinkLattice<G> order, so a flat raw round-trip is exact. Momenta and
+// force share this layout (anti-hermitian algebra elements).
+template <class G>
+struct MatrixLayout {
+    [[nodiscard]] static long flat_count(DeviceTopology const& t) {
+        return static_cast<long>(t.ndim) * static_cast<long>(G::n_real_components) * t.nsites;
+    }
+};
+
 // One resident device buffer plus its topology — the device counterpart of
 // Lattice<T>. Sibling fields (mom / force / old) are constructed from another
 // field's topology so all of them index identically; the topology is a small

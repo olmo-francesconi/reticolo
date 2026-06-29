@@ -10,6 +10,7 @@
 #include <reticolo/cuda/scalar_probe.hpp>
 #include <reticolo/cuda/selftest.hpp>
 #include <reticolo/cuda/stencil_probe.hpp>
+#include <reticolo/cuda/su2_probe.hpp>
 #include <reticolo/cuda/u1_probe.hpp>
 
 #include <array>
@@ -207,4 +208,33 @@ TEST_CASE("cuda U(1) HMC trajectory is reversible", "[cuda]") {
 
 TEST_CASE("cuda U(1) host-free HMC runs on the link field", "[cuda]") {
     REQUIRE(reticolo::cuda::u1_hmc_runs());
+}
+
+// Phase 5: SU(2) Wilson gauge on the device through the SAME unified
+// DeviceAction — the matrix access pattern (staple-gather force, plaquette
+// action, group-exp drift, Gell-Mann momentum) lives only in the
+// device_functors<Wilson<SU2>> trait, the MatrixLayout drift atom, and the
+// SU2Device register-local ops.
+TEST_CASE("cuda SU2Device matrix ops match math::su2", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_device_ops_match_cpu());
+}
+
+TEST_CASE("cuda DeviceAction<Wilson<SU2>> matches CPU action::Wilson<SU2>", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_cpu_matches_device());
+}
+
+TEST_CASE("cuda SU2 Leapfrog MD conserves energy (2nd order)", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_energy_conserved_ok());
+}
+
+TEST_CASE("cuda SU2 HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_hmc_reversibility_ok());
+}
+
+TEST_CASE("cuda SU2 Gell-Mann momenta have the right moments", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_momentum_moments_ok());
+}
+
+TEST_CASE("cuda SU2 host-free HMC runs on the matrix link field", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_hmc_runs());
 }

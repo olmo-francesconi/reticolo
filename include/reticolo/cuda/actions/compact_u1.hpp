@@ -5,6 +5,9 @@
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/gauge_u1.cuh>
 #include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/rng_philox.cuh>
+
+#include <cstdint>
 
 #include <cuda_runtime.h>
 
@@ -47,6 +50,18 @@ struct device_functors<action::CompactU1<T>> {
                             cudaStream_t s) {
         plaq_energy_launch(field, scratch, topo, static_cast<double>(a.beta), s);
         reduce_sum_into(out, scratch, topo.nsites, partials, s);
+    }
+
+    // U(1) is abelian: the link momentum is one iid normal per link component,
+    // identical to the scalar sampler (the gauge groups override this with a
+    // Gell-Mann algebra draw). `topo` is unused — `n` is the link-buffer length.
+    static void sample_momenta(T* mom,
+                               long n,
+                               DeviceTopology const& /*topo*/,
+                               std::uint64_t seed,
+                               std::uint64_t const* traj,
+                               cudaStream_t s) {
+        fill_normals(mom, n, seed, traj, s);
     }
 };
 

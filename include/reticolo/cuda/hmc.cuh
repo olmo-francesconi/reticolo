@@ -34,7 +34,6 @@
 #include <reticolo/cuda/graph.hpp>
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.hpp>
-#include <reticolo/cuda/rng_philox.cuh>
 #include <reticolo/cuda/stream.hpp>
 
 #include <array>
@@ -169,7 +168,7 @@ private:
         auto const site_grid = static_cast<unsigned>((n + kBlock - 1) / kBlock);
 
         copy_device_(old_, field_);  // save q0 for a possible rollback
-        fill_normals(mom_.data(), n, seed_, traj_buf_.data(), md_stream_);
+        action_.sample_momenta(mom_.data(), n, seed_, traj_buf_.data(), md_stream_);
 
         reduce_sumsq_into(eng_.data() + 0, mom_.data(), n, partials_.data(), md_stream_);  // 2·kin0
         action_.s_full_into(eng_.data() + 1, field_, partials_.data(), md_stream_);        // pot0

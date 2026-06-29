@@ -18,15 +18,16 @@
 
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 
 #include <cuda_runtime.h>
 
 namespace reticolo::cuda {
 
 // The trait contract DeviceAction relies on: a device_functors<HostAction> with
-// the three static launchers, for the field element type T. A missing or
-// mis-shaped (e.g. gauge) trait fails here with a readable message rather than
-// deep inside a kernel launch.
+// the four static launchers (force / s_full / s_full_into / sample_momenta), for
+// the field element type T. A missing or mis-shaped (e.g. gauge) trait fails
+// here with a readable message rather than deep inside a kernel launch.
 template <class HostAction, class T>
 concept DeviceActionTraits = requires(double* out,
                                       HostAction const& a,
@@ -35,10 +36,14 @@ concept DeviceActionTraits = requires(double* out,
                                       double* scratch,
                                       double* partials,
                                       DeviceTopology const& topo,
-                                      cudaStream_t s) {
+                                      cudaStream_t s,
+                                      std::uint64_t seed,
+                                      std::uint64_t const* traj,
+                                      long n) {
     device_functors<HostAction>::compute_force(a, field, force, topo, s);
     { device_functors<HostAction>::s_full(a, field, scratch, topo, s) } -> std::same_as<double>;
     device_functors<HostAction>::s_full_into(out, a, field, scratch, partials, topo, s);
+    device_functors<HostAction>::sample_momenta(force, n, topo, seed, traj, s);
 };
 
 template <class HostAction, class Field>
@@ -64,6 +69,16 @@ public:
     // host sync / no allocation (`partials` is caller-owned, k_reduce_max_grid).
     void s_full_into(double* out, Field const& field, double* partials, cudaStream_t stream) const {
         traits::s_full_into(out, host_, field.data(), scratch_.data(), partials, topo_, stream);
+    }
+
+    // Fill `mom` with fresh momenta — iid normals for scalar/U(1), a Gell-Mann
+    // algebra draw for gauge groups. `n` is the momentum buffer's element count.
+    void sample_momenta(typename Field::value_type* mom,
+                        long n,
+                        std::uint64_t seed,
+                        std::uint64_t const* traj,
+                        cudaStream_t stream) const {
+        traits::sample_momenta(mom, n, topo_, seed, traj, stream);
     }
 
 private:

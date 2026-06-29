@@ -7,6 +7,7 @@
 #include <reticolo/cuda/macros.hpp>
 
 #include <cmath>
+#include <cstdint>
 
 // Device per-site functors for SineGordon + the host-action → device-functor
 // trait. The on-site transcendental is evaluated with std::sin/std::cos, which
@@ -89,6 +90,14 @@ struct device_functors<action::SineGordon<T>> {
                             cudaStream_t s) {
         detail::site_s_full_into(
             out, SineGordonEnergyFunctor<T>{a.kappa, a.alpha}, field, scratch, partials, topo, s);
+    }
+    static void sample_momenta(T* mom,
+                               long n,
+                               DeviceTopology const& topo,
+                               std::uint64_t seed,
+                               std::uint64_t const* traj,
+                               cudaStream_t s) {
+        detail::site_sample_momenta(mom, n, topo, seed, traj, s);
     }
 };
 

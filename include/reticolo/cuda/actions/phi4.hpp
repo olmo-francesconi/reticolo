@@ -6,6 +6,8 @@
 #include <reticolo/cuda/actions/site_launchers.hpp>
 #include <reticolo/cuda/macros.hpp>
 
+#include <cstdint>
+
 // Device per-site functors for Phi4 + the host-action → device-functor trait.
 //
 // The functors follow the scalar device protocol: init(self) /
@@ -92,6 +94,14 @@ struct device_functors<action::Phi4<T>> {
                             cudaStream_t s) {
         detail::site_s_full_into(
             out, Phi4EnergyFunctor<T>{a.kappa, a.lambda}, field, scratch, partials, topo, s);
+    }
+    static void sample_momenta(T* mom,
+                               long n,
+                               DeviceTopology const& topo,
+                               std::uint64_t seed,
+                               std::uint64_t const* traj,
+                               cudaStream_t s) {
+        detail::site_sample_momenta(mom, n, topo, seed, traj, s);
     }
 };
 

@@ -2,9 +2,9 @@
 # reused type parameter (alg::integ::*), never reimplemented in a kernel. This
 # greps the CUDA kernel sources for integrator names and fails if any appear.
 #
-# hmc_probe.cu / f32_probe.cu / u1_probe.cu (test harnesses) and bench_hmc.cu
-# (perf harness) are excluded by name: they legitimately instantiate / reference
-# the generic integrator to prove reuse or benchmark it — that is not
+# hmc_probe.cu / f32_probe.cu / u1_probe.cu / su2_probe.cu (test harnesses) and
+# bench_hmc.cu (perf harness) are excluded by name: they legitimately instantiate
+# / reference the generic integrator to prove reuse or benchmark it — that is not
 # integrator-specific kernel code.
 #
 # Invoked as: cmake -DSRC_DIR=<src/cuda> -P check_no_integrator_kernels.cmake
@@ -14,7 +14,8 @@ set(offenders "")
 foreach(f ${cu_files})
     get_filename_component(name "${f}" NAME)
     if(name STREQUAL "hmc_probe.cu" OR name STREQUAL "f32_probe.cu" OR
-       name STREQUAL "u1_probe.cu" OR name STREQUAL "bench_hmc.cu")
+       name STREQUAL "u1_probe.cu" OR name STREQUAL "su2_probe.cu" OR
+       name STREQUAL "bench_hmc.cu")
         continue()
     endif()
     file(READ "${f}" content)
