@@ -52,36 +52,32 @@ TEST_CASE("s_full and its cache return double across actions", "[api][sfull]") {
     STATIC_REQUIRE(s_full_returns_double<act::SineGordon<float>, float>);
 
     // O(N): value type is an N-vector.
-    STATIC_REQUIRE(
-        std::is_same_v<decltype(std::declval<act::OnSigma<3> const&>().s_full(
-                           std::declval<Lattice<std::array<double, 3>> const&>())),
-                       double>);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<act::OnSigma<3> const&>().s_full(
+                                      std::declval<Lattice<std::array<double, 3>> const&>())),
+                                  double>);
 
     // Gauge link action.
-    STATIC_REQUIRE(
-        std::is_same_v<decltype(std::declval<act::CompactU1<double> const&>().s_full(
-                           std::declval<LinkLattice<double> const&>())),
-                       double>);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<act::CompactU1<double> const&>().s_full(
+                                      std::declval<LinkLattice<double> const&>())),
+                                  double>);
 }
 
 TEST_CASE("BoseGas s_full / s_imag and caches return double", "[api][sfull][bose]") {
     using C = std::complex<double>;
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<act::BoseGas<double> const&>().s_full(
+                                      std::declval<Lattice<C> const&>())),
+                                  double>);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<act::BoseGas<double> const&>().s_imag(
+                                      std::declval<Lattice<C> const&>())),
+                                  double>);
     STATIC_REQUIRE(
-        std::is_same_v<decltype(std::declval<act::BoseGas<double> const&>().s_full(
-                           std::declval<Lattice<C> const&>())),
+        std::is_same_v<decltype(std::declval<act::BoseGas<double> const&>().last_s_imag()),
                        double>);
-    STATIC_REQUIRE(
-        std::is_same_v<decltype(std::declval<act::BoseGas<double> const&>().s_imag(
-                           std::declval<Lattice<C> const&>())),
-                       double>);
-    STATIC_REQUIRE(
-        std::is_same_v<decltype(std::declval<act::BoseGas<double> const&>().last_s_imag()), double>);
 }
 
 // ---- #3: the fused MD kick takes a REAL scalar coefficient everywhere, so a
 // complex-field action no longer carries a complex k_dt. ----
-TEST_CASE("BoseGas fused kick takes a real coefficient and satisfies HasFusedKick",
-          "[api][kick]") {
+TEST_CASE("BoseGas fused kick takes a real coefficient and satisfies HasFusedKick", "[api][kick]") {
     using C = std::complex<double>;
     STATIC_REQUIRE(action::HasFusedKick<act::BoseGas<double>, C>);
     STATIC_REQUIRE(action::HasFusedKick<act::Phi4<double>, double>);
@@ -89,8 +85,10 @@ TEST_CASE("BoseGas fused kick takes a real coefficient and satisfies HasFusedKic
 
     // The kick coefficient parameter is a real double, not std::complex.
     using KickArg = double;
-    STATIC_REQUIRE(requires(act::BoseGas<double> const& a, Lattice<C> const& l, Lattice<C>& m,
-                            KickArg k) { a.compute_force_and_kick(l, m, k); });
+    STATIC_REQUIRE(
+        requires(act::BoseGas<double> const& a, Lattice<C> const& l, Lattice<C>& m, KickArg k) {
+            a.compute_force_and_kick(l, m, k);
+        });
 }
 
 TEST_CASE("BoseGas fused kick equals force-then-kick", "[api][kick][bose]") {
@@ -159,15 +157,15 @@ TEST_CASE("MetropolisResult exposes n_accepted/n_attempts and acceptance()", "[a
 // the output path. ----
 TEST_CASE("app::common_flags registers shared flags; out_path joins", "[api][app]") {
     cli::Parser p{"test_app", "api uniformity app helper"};
-    auto const cf     = app::common_flags(p, {.L = 6, .out = "foo.h5"});
-    auto const& ndim  = p.opt<int>("ndim", 3, "spatial dimensions");  // app-specific flag still ok
+    auto const cf    = app::common_flags(p, {.L = 6, .out = "foo.h5"});
+    auto const& ndim = p.opt<int>("ndim", 3, "spatial dimensions");  // app-specific flag still ok
 
     std::array<char const*, 3> argv{"test_app", "--size=12", "--workspace=/tmp/ws"};
     p.parse(static_cast<int>(argv.size()), argv.data());
 
-    REQUIRE(cf.L == 12);            // overridden on the command line
-    REQUIRE(cf.seed == 42ULL);      // helper default
-    REQUIRE(cf.out == "foo.h5");    // per-app default, not overridden
+    REQUIRE(cf.L == 12);          // overridden on the command line
+    REQUIRE(cf.seed == 42ULL);    // helper default
+    REQUIRE(cf.out == "foo.h5");  // per-app default, not overridden
     REQUIRE(cf.workspace == "/tmp/ws");
     REQUIRE(ndim == 3);
     REQUIRE(app::out_path(cf) == "/tmp/ws/foo.h5");

@@ -63,9 +63,8 @@ inline CommonFlags common_flags(cli::Parser& p, CommonDefaults const& d) {
 // `log::start(workspace, out[, replicas])` then `Writer{<workspace>/<out>, …}`.
 // LLR apps pass `replicas = true`. Returns the move-only Writer by value; the
 // app starts its own phases/series and owns its loop.
-[[nodiscard]] inline io::Writer
-open_writer(cli::Parser const& p, CommonFlags const& f, int argc, char** argv,
-            bool replicas = false) {
+[[nodiscard]] inline io::Writer open_writer(
+    cli::Parser const& p, CommonFlags const& f, int argc, char** argv, bool replicas = false) {
     log::start(f.workspace, f.out, replicas);
     return io::Writer{out_path(f), argc, argv, &p};
 }

@@ -61,7 +61,8 @@ int main(int argc, char** argv) {
     log::start(cf.workspace, cf.out, /*replicas=*/true);
     std::string const outpath = app::out_path(cf);
 
-    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
+    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim),
+                                       static_cast<std::size_t>(cf.L));
     Action const base{.beta = beta};
     log::act(base);
 

@@ -33,7 +33,8 @@ int main(int argc, char** argv) {
     io::Writer out = app::open_writer(p, cf, argc, argv);
 
     // ---- State: links, RNG, action ----
-    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
+    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim),
+                                       static_cast<std::size_t>(cf.L));
     LinkLattice<double> links{shape, 0.0};
     FastRng rng{cf.seed};
     Action const action{.beta = beta};

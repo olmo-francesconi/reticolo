@@ -54,7 +54,8 @@ int main(int argc, char** argv) {
     std::string const outpath = app::out_path(cf);
 
     // ---- Base action ----
-    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
+    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim),
+                                       static_cast<std::size_t>(cf.L));
     Action const base{.beta = beta};
     log::act(base);
 

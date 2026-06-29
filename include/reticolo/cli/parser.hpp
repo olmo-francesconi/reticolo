@@ -64,7 +64,7 @@ struct VarSlotBase {
 
     virtual void add_to(cxxopts::Options& opts) const          = 0;
     virtual void read_from(cxxopts::ParseResult const& result) = 0;
-    virtual void stamp(io::Writer& w) const               = 0;
+    virtual void stamp(io::Writer& w) const                    = 0;
 
     // The canonical key cxxopts uses to look up this var: the long name if
     // "short,long" was given, otherwise the only name. Also used as the

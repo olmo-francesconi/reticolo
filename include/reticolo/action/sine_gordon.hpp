@@ -73,7 +73,7 @@ struct SineGordon {
             double const hopping = detail::reduce_fwd<T, double>(l, [k](T phi, T fwd_sum) {
                 return static_cast<double>((T{-2} * k * phi * fwd_sum) + (phi * phi));
             });
-            s = hopping - (static_cast<double>(alp) * cos_sum);
+            s                    = hopping - (static_cast<double>(alp) * cos_sum);
         } else {
             T const k   = kappa;
             T const alp = alpha;

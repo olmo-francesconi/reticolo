@@ -58,7 +58,8 @@ concept HasForce =
 // when present; actions that only implement `compute_force` keep working unchanged.
 template <class A, class F>
 concept HasFusedKick =
-    HasForce<A, F> && requires(A const& a, Lattice<F> const& l, Lattice<F>& mom, real_scalar_t<F> k) {
+    HasForce<A, F> &&
+    requires(A const& a, Lattice<F> const& l, Lattice<F>& mom, real_scalar_t<F> k) {
         { a.compute_force_and_kick(l, mom, k) };
     };
 
