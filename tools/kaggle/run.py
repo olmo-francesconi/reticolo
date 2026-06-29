@@ -33,10 +33,14 @@ sh("apt-get -qq update")
 sh("apt-get -qq install -y gcc-13 g++-13")
 
 sh("pip install -q 'cmake>=3.25' ninja")
-sh(f"rm -rf reticolo && git clone --depth 1 --branch {BRANCH} {REPO}")
+# Clone and build under /tmp, NOT /kaggle/working — the latter is persisted as
+# the kernel's "output", so building there makes `kaggle kernels output` try to
+# download the whole Sleef/Catch2/object tree (100s of MB). Building in /tmp
+# keeps the output dir empty, so the log download is instant.
+sh(f"rm -rf /tmp/reticolo && git clone --depth 1 --branch {BRANCH} {REPO} /tmp/reticolo")
 
 os.environ["CC"] = "gcc-13"
 os.environ["CXX"] = "g++-13"
 os.environ["CUDAHOSTCXX"] = "g++-13"
-sh("cd reticolo && bash tools/cuda_build_test.sh")
+sh("cd /tmp/reticolo && bash tools/cuda_build_test.sh")
 print("CUDA build & test OK", flush=True)
