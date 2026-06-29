@@ -25,6 +25,7 @@
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/gauge/su2_device.cuh>
+#include <reticolo/cuda/gauge/su3_device.cuh>
 #include <reticolo/cuda/hmc.cuh>
 
 #include <chrono>
@@ -112,6 +113,9 @@ int main() {
         bench<act::Wilson<reticolo::gauge_group::SU2, double>,
               DeviceField<double, MatrixLayout<reticolo::gauge_group::SU2>>>(
             "Wilson<SU2>", s4, {.beta = 2.4});
+        bench<act::Wilson<reticolo::gauge_group::SU3, double>,
+              DeviceField<double, MatrixLayout<reticolo::gauge_group::SU3>>>(
+            "Wilson<SU3>", s4, {.beta = 6.0});
         std::printf("---------------------------------------------------------------------\n");
     }
     return 0;

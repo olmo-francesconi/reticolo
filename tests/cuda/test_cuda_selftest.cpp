@@ -11,6 +11,7 @@
 #include <reticolo/cuda/selftest.hpp>
 #include <reticolo/cuda/stencil_probe.hpp>
 #include <reticolo/cuda/su2_probe.hpp>
+#include <reticolo/cuda/su3_probe.hpp>
 #include <reticolo/cuda/u1_probe.hpp>
 
 #include <array>
@@ -237,4 +238,31 @@ TEST_CASE("cuda SU2 Gell-Mann momenta have the right moments", "[cuda]") {
 
 TEST_CASE("cuda SU2 host-free HMC runs on the matrix link field", "[cuda]") {
     REQUIRE(reticolo::cuda::su2_hmc_runs());
+}
+
+// Phase 5: SU(3) Wilson gauge — the same generic SU(N) kernels as SU(2) with
+// GD = SU3Device (nc=18, n_gen=8, Morningstar-Peardon 3×3 group exp). Nothing in
+// DeviceAction / Hmc / the kernels changed — only the device-traits struct.
+TEST_CASE("cuda SU3Device matrix ops match math::su3", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_device_ops_match_cpu());
+}
+
+TEST_CASE("cuda DeviceAction<Wilson<SU3>> matches CPU action::Wilson<SU3>", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_cpu_matches_device());
+}
+
+TEST_CASE("cuda SU3 Leapfrog MD conserves energy (2nd order)", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_energy_conserved_ok());
+}
+
+TEST_CASE("cuda SU3 HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_hmc_reversibility_ok());
+}
+
+TEST_CASE("cuda SU3 Gell-Mann momenta have the right moments", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_momentum_moments_ok());
+}
+
+TEST_CASE("cuda SU3 host-free HMC runs on the matrix link field", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_hmc_runs());
 }
