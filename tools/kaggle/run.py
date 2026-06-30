@@ -44,7 +44,16 @@ sh(f"rm -rf /tmp/reticolo && git clone --depth 1 --branch {BRANCH} {REPO} /tmp/r
 os.environ["CC"] = "gcc-13"
 os.environ["CXX"] = "g++-13"
 os.environ["CUDAHOSTCXX"] = "g++-13"
-os.environ["RETICOLO_BENCH"] = "1"    # also build + run the GPU perf baseline
-os.environ["RETICOLO_NIGHTLY"] = "1"  # and the CPU-vs-GPU physics harness
-sh("cd /tmp/reticolo && bash tools/cuda_build_test.sh")
-print("CUDA build & test OK", flush=True)
+
+if os.environ.get("RETICOLO_PROFILE"):
+    # Nsight profiling pass (phi4 + su3 scaling). Writes nsys/ncu reports + CSVs +
+    # throughput.jsonl to /kaggle/working/profile for download to the Mac. Links
+    # only reticolo::cuda, so no HDF5/cxxopts needed.
+    sh("cd /tmp/reticolo && bash tools/cuda_profile.sh /tmp/reticolo/build/cuda "
+       "/kaggle/working/profile")
+    print("CUDA profiling OK", flush=True)
+else:
+    os.environ["RETICOLO_BENCH"] = "1"    # also build + run the GPU perf baseline
+    os.environ["RETICOLO_NIGHTLY"] = "1"  # and the CPU-vs-GPU physics harness
+    sh("cd /tmp/reticolo && bash tools/cuda_build_test.sh")
+    print("CUDA build & test OK", flush=True)
