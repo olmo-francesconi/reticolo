@@ -103,21 +103,20 @@ cmake --build --preset macos-appleclang --target bench_readme
 ./build/macos-appleclang/apps/bench_readme
 ```
 
-All three RNGs satisfy the same `Rng` concept and plug into every call site.
+All four RNGs satisfy the same `Rng` concept and plug into every call site.
 `uniform()` is a single draw; `gaussian` is the batched `normal_fill` path HMC
 uses to sample momenta. Throughput in M draws/s:
 
-| RNG          | draw     |   mean |  p05 |   p95 |
-|--------------|----------|-------:|-----:|------:|
-| FastRng      | uniform  |  809.7 | 772.9 | 841.1 |
-| FastRng      | gaussian |  178.9 | 172.1 | 184.2 |
-| Mt19937_64   | uniform  |  266.2 | 259.0 | 272.5 |
-| Mt19937_64   | gaussian |   93.3 |  91.1 |  94.8 |
-| Ranlux48     | uniform  |    3.2 |   3.2 |   3.3 |
-| Ranlux48     | gaussian |    2.4 |   2.3 |   2.4 |
-
-(`Ranlux48` is two orders of magnitude slower by design — `std::ranlux48` keeps
-11 of every 389 values for decorrelation. `FastRng`, the default, is xoshiro256++.)
+| RNG          | draw     |   mean |   p05 |    p95 |
+|--------------|----------|-------:|------:|-------:|
+| FastRng      | uniform  |  851.6 | 823.8 |  874.6 |
+| FastRng      | gaussian |  186.9 | 181.1 |  190.8 |
+| Philox4x32   | uniform  |  220.7 | 215.3 |  224.2 |
+| Philox4x32   | gaussian |   61.5 |  60.5 |   62.3 |
+| Mt19937_64   | uniform  |  275.2 | 268.3 |  279.2 |
+| Mt19937_64   | gaussian |   95.4 |  93.1 |   97.1 |
+| Ranlux48     | uniform  |    3.3 |   3.3 |    3.4 |
+| Ranlux48     | gaussian |    2.4 |   2.4 |    2.5 |
 
 `compute_force` on a hot random 4D configuration, per degree of freedom (sites
 for scalar, links for gauge). Phi4 is the scalar baseline; the SU(2)/SU(3)

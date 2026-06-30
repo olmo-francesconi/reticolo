@@ -2,6 +2,7 @@
 
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/philox.hpp>
+#include <reticolo/core/rng.hpp>
 
 #include <algorithm>
 #include <array>
@@ -74,6 +75,32 @@ public:
         return r * std::cos(theta);
     }
 
+    // Batched standard-normal fill: writes `n` standard normals into `out`.
+    // Classical Box-Muller in pairs — the same algorithm as `normal()`, so the
+    // two paths share statistics. Drains the cached spare first, fills cos/sin
+    // pairs, and tops off an odd tail via `normal()`. Lets PhiloxRng drive the
+    // scalar/complex HMC momentum-sampling path (`alg::Hmc` calls normal_fill
+    // for double and float fields), not just the matrix-group path.
+    void normal_fill(double* out, std::size_t n) noexcept {
+        constexpr double k_two_pi = 6.283185307179586476925286766559;
+        std::size_t i             = 0;
+        if (has_cached_normal_ && i < n) {
+            out[i++]           = cached_normal_;
+            has_cached_normal_ = false;
+        }
+        for (; i + 1 < n; i += 2) {
+            double const u0    = std::max(uniform(), 1.0e-300);
+            double const u1    = uniform();
+            double const r     = std::sqrt(-2.0 * std::log(u0));
+            double const theta = k_two_pi * u1;
+            out[i]             = r * std::cos(theta);
+            out[i + 1]         = r * std::sin(theta);
+        }
+        if (i < n) {
+            out[i] = normal();
+        }
+    }
+
 private:
     void refill_() noexcept {
         Philox4x32::U32x2 const key{static_cast<std::uint32_t>(seed_),
@@ -96,5 +123,7 @@ private:
     double cached_normal_   = 0.0;
     bool has_cached_normal_ = false;
 };
+
+static_assert(Rng<PhiloxRng>);
 
 }  // namespace reticolo

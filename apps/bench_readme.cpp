@@ -102,6 +102,7 @@ int main() {
     std::printf("%-14s %-9s %12s %10s %10s %10s\n", "rng", "draw", "draws", "mean", "p05", "p95");
     std::printf("%-14s %-9s %12s %10s %10s %10s\n", "---", "----", "-----", "----", "---", "---");
     bench_rng<FastRng>("FastRng");
+    bench_rng<PhiloxRng>("Philox4x32");
     bench_rng<RanluxRng>("Ranlux48");
     bench_rng<Mt19937Rng>("Mt19937_64");
 
