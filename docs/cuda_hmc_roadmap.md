@@ -676,6 +676,52 @@ table above) ported after Phase 7, each via the path that table predicted.
 **Remaining unported:** OnSigma (constrained-integrator workstream), the non-HMC
 updaters (Metropolis / Wolff), and LLR replica batching (M7).
 
+### Phase 9 — profiling (phi4 + su3 scaling) — DONE
+
+Nsight profiling sweep of the two representative actions over lattice size, run
+on the Kaggle P100 and analysed on the Mac. Reusable harness:
+`src/cuda/profile_hmc.cu` (single-config driver: graph-replay throughput +
+isolated per-atom CUDA-event timings + an eager `--force-only` mode for ncu),
+`tools/cuda_profile.sh` (auto-installs `nsight-systems-cli`, sweeps phi4 L=8..64
+and su3 L=8..32, emits `.nsys-rep` + per-kernel CSVs + `throughput.jsonl`),
+`tools/profile/analyze.py` (Mac-side tables/plots). Driven by `RETICOLO_PROFILE=1`
+on the Kaggle lane.
+
+**Tooling reality on the managed GPU host:** `nsys` is trace-based and works once
+installed (it is not on the base image; the script installs it). **`ncu` is
+blocked** — installed, but the GPU performance counters are locked
+(`ERR_NVGPUCTRPERM`), unlockable only with root / a driver flag Kaggle does not
+grant. So DRAM-throughput / occupancy / roofline need a host with perf-counter
+permission; the time breakdown below is from `nsys` + in-binary CUDA events.
+
+**Throughput (host-free HMC, Leapfrog, n_md=10, ms/traj):** both actions scale
+**linearly in V** at production sizes (phi4 L32→64: V×16 → ×16.3; su3 L16→32:
+×16.8); small L is launch-latency-bound. Per-dof, su3 (~3.6 ns/dof) beats phi4
+(~6.0 ns/dof) at equal V — the 18-real link reads coherently, higher arithmetic
+intensity. (phi4 L=32 = 6.26 ms; su3 L=32 = 271 ms / 75.5M dof.)
+
+**Kernel breakdown (nsys, % of GPU kernel time at large L):**
+
+| action | force | s_full | drift/kick | sample | accept |
+|--------|------:|-------:|-----------:|-------:|-------:|
+| phi4 (L≥32) | **~68%** | ~15% | ~15% (axpy) | ~1% | <1% |
+| su3 (L≥24)  | **~68%** | ~4%  | **~26%** (group-exp drift + axpy kick) | ~1% | <1% |
+
+- The **force gather dominates (~68%)** for both → the optimization target.
+- su3's `s_full` is relatively cheap (plaquette energy amortised over far more
+  link data); su3's drift is heavier (group exp = real compute vs phi4's `axpy`).
+
+**Bandwidth (streaming model, force kernel):** phi4 ≈ 43 GB/s (5.9% of the 732
+GB/s P100 peak), su3 ≈ 78 GB/s (10.6%). The model counts only field-read +
+force-write; the gather re-reads neighbours (phi4 9 reads/site; su3 many links
+per staple), so true DRAM traffic / %-peak is higher — the exact figure needs
+`ncu` (blocked here). Force-dominance + linear scaling are consistent with a
+memory-bound kernel.
+
+**Takeaway / next optimization lever:** the force gather is ~⅔ of the time for
+both actions; the place to look is its memory access pattern (coalescing,
+neighbour reuse / shared-memory tiling). Not yet pursued.
+
 ## Cross-cutting invariants (every phase)
 
 1. **No `switch(action)` / `switch(integrator)` in device code** — compile-time
