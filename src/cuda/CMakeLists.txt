@@ -9,7 +9,14 @@
 
 find_package(CUDAToolkit REQUIRED)
 
-add_library(reticolo_cuda STATIC selftest.cu reduce.cu gauge_probe.cu stencil_probe.cu phi4_probe.cu scalar_probe.cu f32_probe.cu u1_probe.cu su2_probe.cu su3_probe.cu hmc_probe.cu rng_probe.cu)
+# reduce.cu is the only real-backend TU; everything under probes/ is the
+# per-phase validation harness driven by tests/cuda/test_cuda_selftest.cpp.
+add_library(reticolo_cuda STATIC
+    reduce.cu
+    probes/selftest.cu probes/gauge_probe.cu probes/stencil_probe.cu
+    probes/phi4_probe.cu probes/scalar_probe.cu probes/f32_probe.cu
+    probes/u1_probe.cu probes/su2_probe.cu probes/su3_probe.cu
+    probes/hmc_probe.cu probes/rng_probe.cu)
 add_library(reticolo::cuda ALIAS reticolo_cuda)
 
 target_include_directories(reticolo_cuda PUBLIC

@@ -4,7 +4,7 @@
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
-#include <reticolo/cuda/phi4_probe.hpp>
+#include <reticolo/cuda/probes/phi4_probe.hpp>
 
 #include <cmath>
 #include <cstddef>

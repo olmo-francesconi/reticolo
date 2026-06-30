@@ -8,8 +8,8 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/graph.hpp>
 #include <reticolo/cuda/hmc.cuh>
-#include <reticolo/cuda/hmc_probe.hpp>
 #include <reticolo/cuda/integ_ops.hpp>
+#include <reticolo/cuda/probes/hmc_probe.hpp>
 #include <reticolo/cuda/reduce.hpp>
 #include <reticolo/cuda/stream.hpp>
 

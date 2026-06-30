@@ -3,7 +3,7 @@
 #include <reticolo/action/detail/gauge_group/u1.hpp>
 #include <reticolo/action/wilson.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/cuda/gauge_probe.hpp>
+#include <reticolo/cuda/probes/gauge_probe.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -30,7 +30,9 @@ template <class G>
 
     double const s = w.s_full(u);  // plaquette ReTr  (U(1): cos batch)
     w.compute_force(u, force);     // staple force    (U(1): sin batch)
-    G::expi_lmul_slab(u.mu_block_data(0), mom.mu_block_data(0), 0.01,
+    G::expi_lmul_slab(u.mu_block_data(0),
+                      mom.mu_block_data(0),
+                      0.01,
                       u.nsites());  // group exp        (SU(3): acos/sincos batch)
 
     return std::isfinite(s);

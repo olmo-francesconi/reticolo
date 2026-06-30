@@ -8,7 +8,7 @@
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
-#include <reticolo/cuda/scalar_probe.hpp>
+#include <reticolo/cuda/probes/scalar_probe.hpp>
 
 #include <cmath>
 #include <cstddef>

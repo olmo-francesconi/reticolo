@@ -1,7 +1,7 @@
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/pinned.hpp>
-#include <reticolo/cuda/selftest.hpp>
+#include <reticolo/cuda/probes/selftest.hpp>
 
 #include <cstddef>
 

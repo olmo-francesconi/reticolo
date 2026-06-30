@@ -1,4 +1,4 @@
-#include <reticolo/action/detail/gauge_group/su2.hpp>
+#include <reticolo/action/detail/gauge_group/su3.hpp>
 #include <reticolo/action/wilson.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
@@ -8,47 +8,45 @@
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_field.hpp>
-#include <reticolo/cuda/gauge/su2_device.cuh>
+#include <reticolo/cuda/gauge/su3_device.cuh>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
+#include <reticolo/cuda/probes/su3_probe.hpp>
 #include <reticolo/cuda/reduce.hpp>
-#include <reticolo/cuda/su2_probe.hpp>
-#include <reticolo/math/su2_ops.hpp>
+#include <reticolo/math/su3_ops.hpp>
 
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 
-// Phase 5: SU(2) Wilson gauge HMC on the device. The matrix link field is
-// [ndim][nc][nsites] (MatrixLayout<SU2>, nc=8), identical to the host
-// MatrixLinkLattice<SU2> order — a flat copy round-trips. The force is the
-// per-link staple gather + TA[U·V], the action a per-site forward-plane sum,
-// the drift a group exponential. This TU validates the device matrix ops against
-// math::su2, the device action/force against the CPU Wilson<SU2>, MD energy
-// conservation + reversibility, the Gell-Mann momentum moments, and the generic
-// host-free Hmc instantiation. (Excluded from the no-integrator-kernels lint
-// gate: it names alg::integ::Leapfrog to instantiate the generic integrator over
-// the matrix field, as hmc_probe.cu / u1_probe.cu.)
+// Phase 5: SU(3) Wilson gauge HMC on the device. Same generic SU(N) kernels
+// (gauge_sun.cuh) as SU(2) — only GD = SU3Device differs (nc=18, n_gen=8, 3×3
+// Morningstar-Peardon group exp). The matrix link field is MatrixLayout<SU3>,
+// identical [ndim][nc][nsites] order to the host MatrixLinkLattice<SU3>. Gates:
+// device ops vs math::su3, action/force vs CPU Wilson<SU3>, MD energy
+// conservation + reversibility, Gell-Mann momentum moments, host-free HMC.
+// (Excluded from the no-integrator-kernels lint gate: names alg::integ::Leapfrog
+// to instantiate the generic integrator over the matrix field.)
 
 namespace reticolo::cuda {
 
 namespace {
 
-using SU2    = gauge_group::SU2;
-using Wil    = action::Wilson<SU2, double>;
-using DField = DeviceField<double, MatrixLayout<SU2>>;
+using SU3    = gauge_group::SU3;
+using Wil    = action::Wilson<SU3, double>;
+using DField = DeviceField<double, MatrixLayout<SU3>>;
 using DAct   = DeviceAction<Wil, DField>;
 
 std::vector<std::size_t> const kShape{4, 4, 4, 4};
-constexpr double kBeta = 2.4;
+constexpr double kBeta = 6.0;
 
 // Identity per link, then drift each direction by a random algebra element —
-// a non-trivial but valid SU(2) on every link (the canonical host hot start).
-void hot_start(MatrixLinkLattice<SU2, double>& u, FastRng& rng) {
+// a non-trivial but valid SU(3) on every link (the canonical host hot start).
+void hot_start(MatrixLinkLattice<SU3, double>& u, FastRng& rng) {
     std::size_t const d     = u.ndims();
     std::size_t const ns    = u.nsites();
-    std::size_t const total = d * SU2::n_real_components * ns;
+    std::size_t const total = d * SU3::n_real_components * ns;
     double* const data      = u.data();
     for (std::size_t i = 0; i < total; ++i) {
         data[i] = 0.0;
@@ -56,19 +54,20 @@ void hot_start(MatrixLinkLattice<SU2, double>& u, FastRng& rng) {
     for (std::size_t mu = 0; mu < d; ++mu) {
         double* const blk = u.mu_block_data(mu);
         for (std::size_t s = 0; s < ns; ++s) {
-            blk[(0 * ns) + s] = 1.0;  // Re U_{00}
-            blk[(6 * ns) + s] = 1.0;  // Re U_{11}
+            blk[(0 * ns) + s]  = 1.0;  // Re U_{00}
+            blk[(8 * ns) + s]  = 1.0;  // Re U_{11}
+            blk[(16 * ns) + s] = 1.0;  // Re U_{22}
         }
     }
-    std::vector<double> scratch(SU2::n_real_components * ns);
+    std::vector<double> scratch(SU3::n_real_components * ns);
     for (std::size_t mu = 0; mu < d; ++mu) {
-        math::su2::sample_algebra_slab(scratch.data(), rng, ns);
-        math::su2::expi_lmul_slab(u.mu_block_data(mu), scratch.data(), 0.5, ns);
+        math::su3::sample_algebra_slab(scratch.data(), rng, ns);
+        math::su3::expi_lmul_slab(u.mu_block_data(mu), scratch.data(), 0.5, ns);
     }
 }
 
-MatrixLinkLattice<SU2, double> make_links() {
-    MatrixLinkLattice<SU2, double> u{Indexing::SizeVec(kShape.begin(), kShape.end())};
+MatrixLinkLattice<SU3, double> make_links() {
+    MatrixLinkLattice<SU3, double> u{Indexing::SizeVec(kShape.begin(), kShape.end())};
     FastRng rng{2718};
     hot_start(u, rng);
     return u;
@@ -76,12 +75,10 @@ MatrixLinkLattice<SU2, double> make_links() {
 
 }  // namespace
 
-bool su2_device_ops_match_cpu() {
-    // Two arbitrary 2×2 complex matrices (8 reals each) — not unitary; the ops
-    // are linear-algebra primitives, validated on generic input.
+bool su3_device_ops_match_cpu() {
     FastRng rng{12345};
-    double a[8];
-    double b[8];
+    double a[18];
+    double b[18];
     for (double& x : a) {
         x = rng.normal();
     }
@@ -90,55 +87,54 @@ bool su2_device_ops_match_cpu() {
     }
 
     auto close = [](double const* p, double const* q) {
-        for (int k = 0; k < 8; ++k) {
-            if (std::abs(p[k] - q[k]) > 1e-12) {
+        for (int k = 0; k < 18; ++k) {
+            if (std::abs(p[k] - q[k]) > 1e-11) {
                 return false;
             }
         }
         return true;
     };
 
-    double dev[8];
-    double cpu[8];
+    double dev[18];
+    double cpu[18];
 
-    SU2Device::mul(dev, a, b);
-    math::su2::mul_2x2(cpu, a, b);
+    SU3Device::mul(dev, a, b);
+    math::su3::mul_3x3(cpu, a, b);
     if (!close(dev, cpu)) {
         return false;
     }
-    SU2Device::mul_adj(dev, a, b);
-    math::su2::mul_adj_2x2(cpu, a, b);
+    SU3Device::mul_adj(dev, a, b);
+    math::su3::mul_adj_3x3(cpu, a, b);
     if (!close(dev, cpu)) {
         return false;
     }
-    SU2Device::adj_mul(dev, a, b);
-    math::su2::adj_mul_2x2(cpu, a, b);
+    SU3Device::adj_mul(dev, a, b);
+    math::su3::adj_mul_3x3(cpu, a, b);
     if (!close(dev, cpu)) {
         return false;
     }
-    // traceless_antiherm on a hermitian-ish argument (U·V product shape).
-    double prod[8];
-    math::su2::mul_2x2(prod, a, b);
-    SU2Device::traceless_antiherm(dev, prod);
-    math::su2::traceless_antiherm_2x2(cpu, prod);
+    double prod[18];
+    math::su3::mul_3x3(prod, a, b);
+    SU3Device::traceless_antiherm(dev, prod);
+    math::su3::traceless_antiherm_3x3(cpu, prod);
     if (!close(dev, cpu)) {
         return false;
     }
-    // Group exponential V = exp(dt·P) for an anti-hermitian P (= TA of prod).
-    double p_alg[8];
-    math::su2::traceless_antiherm_2x2(p_alg, prod);
-    SU2Device::expi(0.37, p_alg, dev);
-    math::su2::exp_su2(cpu, p_alg, 0.37);
+    // Group exponential of a traceless anti-hermitian P (= TA of the product).
+    double p_alg[18];
+    math::su3::traceless_antiherm_3x3(p_alg, prod);
+    SU3Device::expi(0.37, p_alg, dev);
+    math::su3::exp_su3(cpu, p_alg, 0.37);
     return close(dev, cpu);
 }
 
-bool su2_cpu_matches_device() {
-    MatrixLinkLattice<SU2, double> const host = make_links();
+bool su3_cpu_matches_device() {
+    MatrixLinkLattice<SU3, double> const host = make_links();
 
     Wil cpu{};
     cpu.beta           = kBeta;
     double const s_cpu = cpu.s_full(host);
-    MatrixLinkLattice<SU2, double> f_cpu{host.indexing()};
+    MatrixLinkLattice<SU3, double> f_cpu{host.indexing()};
     cpu.compute_force(host, f_cpu);
 
     DField dfield{kShape};
@@ -165,14 +161,14 @@ bool su2_cpu_matches_device() {
     return true;
 }
 
-bool su2_energy_conserved_ok() {
-    MatrixLinkLattice<SU2, double> const init = make_links();
-    MatrixLinkLattice<SU2, double> p_host{init.indexing()};
+bool su3_energy_conserved_ok() {
+    MatrixLinkLattice<SU3, double> const init = make_links();
+    MatrixLinkLattice<SU3, double> p_host{init.indexing()};
     FastRng rng{77};
     std::size_t const d  = p_host.ndims();
     std::size_t const ns = p_host.nsites();
     for (std::size_t mu = 0; mu < d; ++mu) {
-        math::su2::sample_algebra_slab(p_host.mu_block_data(mu), rng, ns);
+        math::su3::sample_algebra_slab(p_host.mu_block_data(mu), rng, ns);
     }
 
     DAct const act{[] {
@@ -182,9 +178,6 @@ bool su2_energy_conserved_ok() {
                    }(),
                    make_device_topology(kShape)};
 
-    // |ΔH| of one trajectory from the SAME start, at step counts n and 2n.
-    // H = ½·Σp² + S; for a 2nd-order integrator |ΔH| ∝ dt², so halving the step
-    // (doubling n_md) should cut |ΔH| by ≈4×.
     auto delta_h = [&](int n_md) {
         DField field{kShape};
         DField mom{field.topology()};
@@ -207,14 +200,12 @@ bool su2_energy_conserved_ok() {
     if (!std::isfinite(dh_coarse) || !std::isfinite(dh_fine)) {
         return false;
     }
-    // Refinement must reduce |ΔH| toward the 2nd-order ratio of 4 (allow a wide
-    // band — the leading-error regime is approximate at finite step).
     double const ratio = dh_coarse / dh_fine;
     return ratio > 2.5 && ratio < 6.0;
 }
 
-bool su2_hmc_reversibility_ok() {
-    MatrixLinkLattice<SU2, double> const init = make_links();
+bool su3_hmc_reversibility_ok() {
+    MatrixLinkLattice<SU3, double> const init = make_links();
 
     DField field{kShape};
     DField mom{field.topology()};
@@ -228,13 +219,12 @@ bool su2_hmc_reversibility_ok() {
 
     field.copy_from_host(init.data());
 
-    // Sample a valid algebra momentum on the host (per direction), stage it in.
-    MatrixLinkLattice<SU2, double> p_host{init.indexing()};
+    MatrixLinkLattice<SU3, double> p_host{init.indexing()};
     FastRng rng{99};
     std::size_t const d  = p_host.ndims();
     std::size_t const ns = p_host.nsites();
     for (std::size_t mu = 0; mu < d; ++mu) {
-        math::su2::sample_algebra_slab(p_host.mu_block_data(mu), rng, ns);
+        math::su3::sample_algebra_slab(p_host.mu_block_data(mu), rng, ns);
     }
     mom.copy_from_host(p_host.data());
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
@@ -263,7 +253,7 @@ bool su2_hmc_reversibility_ok() {
     return true;
 }
 
-bool su2_momentum_moments_ok() {
+bool su3_momentum_moments_ok() {
     std::vector<std::size_t> const shape{8, 8, 8, 8};
     DField mom{shape};
     auto const n      = static_cast<long>(mom.size());
@@ -292,21 +282,18 @@ bool su2_momentum_moments_ok() {
         sum += v;
         sumsq += v * v;
     }
-    // Mean of all packed reals ≈ 0 (the structural zeros and the ±-paired
-    // generators cancel in expectation).
     double const mean = sum / static_cast<double>(n);
     if (std::abs(mean) > 0.02) {
         return false;
     }
-    // Per-link second moment: Σ(packed reals)² = 2·Σ_a h_a², h_a ~ N(0,½), so
-    // E = 2·n_gen·½ = n_gen = 3. (The device MH reads ½·Σreals² as the kinetic
-    // energy, i.e. ½·n_gen per link — the correct N(0,½)-per-generator measure.)
+    // Σ(packed reals)² = 2·Σ_a h_a², h_a ~ N(0,½), so per link E = 2·n_gen·½ =
+    // n_gen = 8 (the device MH reads ½·Σreals² as the kinetic energy).
     double const per_link = sumsq / static_cast<double>(nlinks);
-    double const expected = static_cast<double>(SU2Device::n_gen);
+    double const expected = static_cast<double>(SU3Device::n_gen);
     return std::abs(per_link - expected) < 0.1 * expected;
 }
 
-bool su2_hmc_runs() {
+bool su3_hmc_runs() {
     DField field{kShape};
     field.copy_from_host(make_links().data());
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
@@ -316,7 +303,7 @@ bool su2_hmc_runs() {
     DAct dact{w, field.topology()};
 
     Hmc<DAct, alg::integ::Leapfrog, DField> hmc{std::move(dact), field, 0.4, 10};
-    hmc.run(8);  // host-free: 8 SU(2) trajectories over the matrix link field
+    hmc.run(8);  // host-free: 8 SU(3) trajectories over the matrix link field
     double const acc = hmc.acceptance();
     hmc.sync();
 

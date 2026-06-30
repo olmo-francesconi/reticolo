@@ -6,8 +6,8 @@
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
-#include <reticolo/cuda/f32_probe.hpp>
 #include <reticolo/cuda/integ_ops.hpp>
+#include <reticolo/cuda/probes/f32_probe.hpp>
 #include <reticolo/cuda/reduce.hpp>
 
 #include <cmath>

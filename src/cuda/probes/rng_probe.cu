@@ -1,8 +1,8 @@
 #include <reticolo/core/philox.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
+#include <reticolo/cuda/probes/rng_probe.hpp>
 #include <reticolo/cuda/rng_philox.cuh>
-#include <reticolo/cuda/rng_probe.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -30,13 +30,15 @@ __global__ void uniforms_kernel(double* out, int k, std::uint64_t seed, std::uin
 }  // namespace
 
 bool philox_host_matches_device() {
-    constexpr int k          = 256;
+    constexpr int k              = 256;
     constexpr std::uint64_t seed = 0xABCDEFULL;
     constexpr std::uint64_t traj = 3;
 
     std::vector<double> host(static_cast<std::size_t>(2 * k));
     for (int i = 0; i < k; ++i) {
-        philox_uniform2(seed, traj, static_cast<std::uint64_t>(i),
+        philox_uniform2(seed,
+                        traj,
+                        static_cast<std::uint64_t>(i),
                         host[static_cast<std::size_t>(2 * i)],
                         host[static_cast<std::size_t>((2 * i) + 1)]);
     }

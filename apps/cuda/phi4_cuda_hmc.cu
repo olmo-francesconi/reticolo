@@ -1,29 +1,26 @@
-// SU(2) Wilson gauge HMC on the CUDA backend. The GPU twin of su2_hmc.cpp: same
-// CLI + output schema, the trajectory for-loop plainly here in main(). A .cu
-// compiled by nvcc — cuda::Hmc over a MatrixLayout<SU2> field for the device
-// work, io::Writer (HDF5 PIMPL'd, never seen by nvcc) for output. Trajectories
-// run host-free in blocks of `meas_every`; only the scalar action crosses PCIe,
-// and ⟨P⟩ = 1 − S_W/(β·n_plaq) is derived in-app.
+// HMC for the phi^4 scalar field on the CUDA backend. The GPU twin of
+// phi4_hmc.cpp: same CLI, same output schema, the trajectory for-loop plainly
+// here in main(). This is a .cu compiled by nvcc — it uses cuda::Hmc and
+// DeviceField directly for the device work, and io::Writer directly for output
+// (io::Writer PIMPLs HDF5, so nvcc never sees <hdf5.h>; it just links the
+// prebuilt reticolo::io archive). Trajectories run host-free in blocks of
+// `meas_every`; observables are reduced on-device and only scalars cross PCIe.
 //
 // Output schema:
 //  /run@*, /vars@*        — Writer reproducibility metadata + resolved flags
 //  /therm/stats/s         — S_full per thermalisation block
 //  /prod/obs/s            — S_full
-//  /prod/obs/plaq         — ⟨P⟩
+//  /prod/obs/mag          — |<phi>|
+//  /prod/obs/mag_sq       — (<phi>)^2
+//  /prod/obs/m2           — <phi^2>
 //  /prod/stats@acceptance — cumulative production acceptance
 
-#include <reticolo/cuda/actions/wilson.hpp>
-#include <reticolo/cuda/check.hpp>
-#include <reticolo/cuda/device_action.cuh>
-#include <reticolo/cuda/device_field.hpp>
-#include <reticolo/cuda/gauge/su2_device.cuh>
-#include <reticolo/cuda/hmc.cuh>
-#include <reticolo/cuda/integ_ops.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/cuda.hpp>
 #include <reticolo/reticolo.hpp>
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -46,20 +43,18 @@ std::string cfg_path(std::string const& out, long long i) {
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Group  = gauge_group::SU2;
-    using Action = action::Wilson<Group, double>;
-    using HField = MatrixLinkLattice<Group, double>;
-    using DField = cuda::DeviceField<double, cuda::MatrixLayout<Group>>;
-    using DAct   = cuda::DeviceAction<Action, DField>;
+    using DField = cuda::DeviceField<double>;
+    using DAct   = cuda::DeviceAction<act::Phi4<double>, DField>;
 
-    cli::Parser p{"su2_cuda_hmc", "SU(2) Wilson action HMC on the CUDA backend"};
-    auto const cf          = app::common_flags(p, {.L = 4, .out = "su2_cuda.h5"});
+    cli::Parser p{"phi4_cuda_hmc", "Hybrid Monte Carlo for phi^4 on the CUDA backend"};
+    auto const cf          = app::common_flags(p, {.out = "phi4_cuda.h5"});
+    auto const& kappa      = p.opt<double>("kappa", 0.18, "hopping parameter");
+    auto const& lambda     = p.opt<double>("lambda", 1.0, "quartic coupling");
     auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
-    auto const& beta       = p.opt<double>("beta", 2.3, "Wilson coupling");
     auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md       = p.opt<int>("n_md", 20, "MD steps per trajectory");
     auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation trajectories");
-    auto const& n_prod     = p.opt<int>("n_prod", 2000, "production trajectories");
+    auto const& n_prod     = p.opt<int>("n_prod", 1000, "production trajectories");
     auto const& meas_every = p.opt<int>("meas_every", 10, "trajectories per host-free block");
     auto const& ckpt_every =
         p.opt<int>("checkpoint_every", 0, "write a config every N prod trajectories (0 = off)");
@@ -72,9 +67,8 @@ int main(int argc, char** argv) {
     log::start(cf.workspace, cf.out);
     std::string const outpath = app::out_path(cf);
 
-    HField::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
-    HField host{shape};
-    std::size_t const ns = host.nsites();
+    Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
+    Lattice<double> host{shape};  // cold/resume staging + checkpoint copy-out
 
     std::uint64_t seed     = cf.seed;
     std::uint64_t counter0 = 0;
@@ -87,30 +81,23 @@ int main(int argc, char** argv) {
         start_i = io::load_config_counter(resume_path, host, seed, counter0);
         log::info("hmc", "resumed from {} at traj {}", resume_path, start_i);
     } else {
-        // Cold start: every link = 2×2 identity (Re U_00 = Re U_11 = 1).
-        std::fill(host.data(), host.data() + host.ncomponents(), 0.0);
-        for (std::size_t mu = 0; mu < static_cast<std::size_t>(ndim); ++mu) {
-            double* const blk = host.mu_block_data(mu);
-            for (std::size_t s = 0; s < ns; ++s) {
-                blk[(0 * ns) + s] = 1.0;
-                blk[(6 * ns) + s] = 1.0;
-            }
-        }
+        std::fill(host.data(), host.data() + host.nsites(), 0.0);  // cold start phi = 0
     }
 
-    Action const action{.beta = beta};
-    log::act(action);
+    act::Phi4<double> phi4{.kappa = kappa, .lambda = lambda};
+    log::act(phi4);
 
     DField field{shape};
     field.copy_from_host(host.data());
     RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
 
-    DAct meas{action, field.topology()};
+    DAct meas{phi4, field.topology()};  // measurement action (own scratch)
     cuda::Hmc<DAct, alg::integ::Leapfrog, DField> hmc{
-        DAct{action, field.topology()}, field, tau, n_md, seed};
+        DAct{phi4, field.topology()}, field, tau, n_md, seed};
     if (resuming) {
         hmc.set_rng_counter(counter0);
     }
+    auto const v = static_cast<double>(field.size());
 
     io::Writer out{outpath, argc, argv, &p};
     if (!resuming) {
@@ -119,11 +106,9 @@ int main(int argc, char** argv) {
     out.start_phase("prod");
     auto s_therm = resuming ? io::Series<double>{} : out.series<double>("/therm/stats/s");
     auto s_prod  = out.series<double>("/prod/obs/s");
-    auto plaq    = out.series<double>("/prod/obs/plaq");
-
-    std::size_t const n_plaq =
-        (static_cast<std::size_t>(ndim) * static_cast<std::size_t>(ndim - 1) / 2U) * ns;
-    double const plaq_norm = (beta == 0.0) ? 1.0 : (beta * static_cast<double>(n_plaq));
+    auto mag     = out.series<double>("/prod/obs/mag");
+    auto mag_sq  = out.series<double>("/prod/obs/mag_sq");
+    auto m_sq    = out.series<double>("/prod/obs/m2");
 
     if (!resuming) {
         log::info("hmc", "therm  {} trajectories", n_therm);
@@ -139,9 +124,12 @@ int main(int argc, char** argv) {
         int const k = static_cast<int>(std::min<long long>(meas_every, n_prod - i));
         hmc.run(k);
         hmc.sync();
-        double const s = meas.s_full(field);
-        s_prod.append(s);
-        plaq.append(1.0 - (s / plaq_norm));
+        s_prod.append(meas.s_full(field));
+        auto const n      = static_cast<long>(field.size());
+        double const mean = cuda::reduce_sum_f64(field.data(), n) / v;
+        mag.append(std::abs(mean));
+        mag_sq.append(mean * mean);
+        m_sq.append(cuda::reduce_sumsq_f64(field.data(), n) / v);
         long long const done = i + k;
         if (ckpt_every > 0 && done % ckpt_every == 0) {
             field.copy_to_host(host.data());

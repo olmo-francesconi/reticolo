@@ -52,8 +52,8 @@ if(RETICOLO_ENABLE_CUDA)
             CUDA_STANDARD_REQUIRED     ON
             CUDA_SEPARABLE_COMPILATION ON)
     endfunction()
-    reticolo_add_cuda_app(phi4_cuda_hmc  phi4_cuda_hmc.cu)
-    reticolo_add_cuda_app(su2_cuda_hmc   su2_cuda_hmc.cu)
+    reticolo_add_cuda_app(phi4_cuda_hmc  cuda/phi4_cuda_hmc.cu)
+    reticolo_add_cuda_app(su2_cuda_hmc   cuda/su2_cuda_hmc.cu)
 endif()
 
 # OpenMP is inherited transitively through reticolo::core — no per-app link

@@ -8,8 +8,8 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
+#include <reticolo/cuda/probes/u1_probe.hpp>
 #include <reticolo/cuda/reduce.hpp>
-#include <reticolo/cuda/u1_probe.hpp>
 
 #include <cmath>
 #include <cstddef>

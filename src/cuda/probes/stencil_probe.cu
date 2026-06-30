@@ -2,9 +2,9 @@
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>
+#include <reticolo/cuda/probes/stencil_probe.hpp>
 #include <reticolo/cuda/reduce_fwd.cuh>
 #include <reticolo/cuda/stencil.cuh>
-#include <reticolo/cuda/stencil_probe.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -25,7 +25,7 @@ namespace reticolo::cuda {
 bool stencil_force_matches_fd() {
     std::vector<std::size_t> const shape{6, 4, 5};
     auto const topo = make_device_topology(shape);
-    auto const n = static_cast<std::size_t>(topo.nsites);
+    auto const n    = static_cast<std::size_t>(topo.nsites);
 
     // Deterministic smooth field in roughly (-0.5, 0.5); no RNG so the test is
     // reproducible and the FD step stays well-conditioned.
@@ -47,13 +47,13 @@ bool stencil_force_matches_fd() {
     dforce.copy_to_host(force.data());
     RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
 
-    double const eps = 1e-4;
+    double const eps    = 1e-4;
     long const probes[] = {0, 7, 31, 53, topo.nsites - 1};
     for (long const j : probes) {
         auto const jj = static_cast<std::size_t>(j);
 
         std::vector<double> hp = h;
-        hp[jj] = h[jj] + eps;
+        hp[jj]                 = h[jj] + eps;
         dfield.copy_from_host(hp.data());
         double const s_plus = reduce_fwd_launch(fen, dfield.data(), dscratch.data(), topo);
 
@@ -61,7 +61,7 @@ bool stencil_force_matches_fd() {
         dfield.copy_from_host(hp.data());
         double const s_minus = reduce_fwd_launch(fen, dfield.data(), dscratch.data(), topo);
 
-        double const fd = (s_minus - s_plus) / (2.0 * eps);  // -dS/dphi
+        double const fd  = (s_minus - s_plus) / (2.0 * eps);  // -dS/dphi
         double const tol = 1e-5 * (1.0 + std::abs(force[jj])) + 1e-7;
         if (std::abs(fd - force[jj]) > tol) {
             return false;
