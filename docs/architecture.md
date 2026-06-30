@@ -303,10 +303,12 @@ GPU code is quarantined under a `cuda/` subfolder at every level — that folder
 ```
 include/reticolo/cuda/          device headers (the public backend API)
 include/reticolo/cuda/probes/   per-phase validation harnesses (not public)
-src/cuda/                       reduce.cu (real TU) + bench_hmc.cu
+src/cuda/                       reduce.cu — the only real backend TU
 src/cuda/probes/                the *_probe.cu + selftest.cu the harness drives
 tests/cuda/                     GPU tests
-apps/cuda/                      .cu apps (GPU); apps/ itself stays CPU-only
+apps/cuda/                      all runnable .cu binaries: the reference sims
+                                (umbrella-linked) + bench/profile (reticolo::cuda
+                                only); apps/ itself stays CPU-only
 ```
 
 The dependency is strictly one-way: **`cuda → core`, never `core → cuda`**. The

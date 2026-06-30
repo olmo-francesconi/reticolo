@@ -220,6 +220,18 @@ if(PROJECT_IS_TOP_LEVEL AND RETICOLO_BUILD_EXAMPLES AND EXISTS "${PROJECT_SOURCE
     add_subdirectory(examples)
 endif()
 
+# Aggregate `cuda` target: every apps/cuda executable + cuda test exe, collected
+# into RETICOLO_CUDA_TARGETS by the cuda helpers (apps/) and test registrations
+# (tests/). The linux-nvcc build preset builds just this, so the GPU surface stays
+# in sync automatically — no hand-picked target list to maintain.
+if(RETICOLO_ENABLE_CUDA)
+    get_property(_cuda_targets GLOBAL PROPERTY RETICOLO_CUDA_TARGETS)
+    if(_cuda_targets)
+        add_custom_target(cuda)
+        add_dependencies(cuda ${_cuda_targets})
+    endif()
+endif()
+
 message(STATUS "reticolo: version       ${PROJECT_VERSION}")
 message(STATUS "reticolo: commit        ${RETICOLO_GIT_COMMIT}")
 message(STATUS "reticolo: build type    ${CMAKE_BUILD_TYPE}")

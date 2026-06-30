@@ -43,21 +43,47 @@ reticolo_add_app(bench_precision_hmc   bench_precision_hmc.cpp)
 # flags are $<COMPILE_LANGUAGE:CXX>-guarded (cmake/ReticoloWarnings.cmake), so
 # nvcc does not inherit -Werror on the .cu compile.
 if(RETICOLO_ENABLE_CUDA)
-    function(reticolo_add_cuda_app name)
-        add_executable(${name} ${ARGN})
-        target_link_libraries(${name} PRIVATE reticolo::reticolo)
+    # Shared .cu target setup. reticolo_configure_warnings is $<COMPILE_LANGUAGE:CXX>
+    # -guarded (cmake/ReticoloWarnings.cmake), so the host -Wall/-Werror never reach
+    # nvcc — that is what lets a .cu app link the umbrella cleanly.
+    function(reticolo_cuda_props name)
         reticolo_configure_warnings(${name})  # CXX-guarded; inert on .cu sources
         set_target_properties(${name} PROPERTIES
             CUDA_STANDARD              20
             CUDA_STANDARD_REQUIRED     ON
             CUDA_SEPARABLE_COMPILATION ON)
     endfunction()
-    reticolo_add_cuda_app(phi4_cuda_hmc  cuda/phi4_cuda_hmc.cu)
-    reticolo_add_cuda_app(su2_cuda_hmc   cuda/su2_cuda_hmc.cu)
+
+    # Every cuda executable self-registers into the global RETICOLO_CUDA_TARGETS
+    # list; the top-level CMakeLists turns it into the aggregate `cuda` target that
+    # the linux-nvcc preset builds — so a new app joins with no list to maintain.
+
+    # Lean GPU drivers (bench / Nsight profiling): link ONLY reticolo::cuda — no
+    # io/cli, no HDF5 — so they build in a lean profiling config. Header-only core
+    # reaches them through reticolo::cuda's PUBLIC include dir.
+    function(reticolo_add_cuda_tool name)
+        add_executable(${name} ${ARGN})
+        target_link_libraries(${name} PRIVATE reticolo::cuda)
+        reticolo_cuda_props(${name})
+        set_property(GLOBAL APPEND PROPERTY RETICOLO_CUDA_TARGETS ${name})
+    endfunction()
+
+    # Reference sims: link the umbrella for io::Writer (HDF5, PIMPL'd) + cli::Parser.
+    function(reticolo_add_cuda_app name)
+        add_executable(${name} ${ARGN})
+        target_link_libraries(${name} PRIVATE reticolo::reticolo)
+        reticolo_cuda_props(${name})
+        set_property(GLOBAL APPEND PROPERTY RETICOLO_CUDA_TARGETS ${name})
+    endfunction()
+
+    reticolo_add_cuda_tool(bench_cuda_hmc   cuda/bench_cuda_hmc.cu)
+    reticolo_add_cuda_tool(profile_cuda_hmc cuda/profile_cuda_hmc.cu)
+    reticolo_add_cuda_app(phi4_cuda_hmc     cuda/phi4_cuda_hmc.cu)
+    reticolo_add_cuda_app(su2_cuda_hmc      cuda/su2_cuda_hmc.cu)
     # Nightly physics harness: runs CPU alg::Hmc and GPU cuda::Hmc side-by-side
     # and asserts the [nightly] identities (<exp(-dH)>=1, CPU-vs-GPU equivalence,
     # plaquette at beta). App-level, not a ctest gate (it runs full simulations).
-    reticolo_add_cuda_app(cuda_nightly   cuda/cuda_nightly.cu)
+    reticolo_add_cuda_app(cuda_nightly      cuda/cuda_nightly.cu)
 endif()
 
 # OpenMP is inherited transitively through reticolo::core — no per-app link

@@ -69,12 +69,15 @@
             }
         },
         {
-            "name":         "cuda-linux",
-            "inherits":     "linux-gcc",
-            "description":  "Linux GCC host + CUDA backend (nvcc); needs a CUDA toolkit",
+            "name":         "linux-nvcc",
+            "inherits":     "_base",
+            "description":  "Linux + CUDA backend (nvcc); needs a CUDA toolkit + GPU",
+            "condition":    { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "cacheVariables": {
                 "RETICOLO_ENABLE_CUDA":     "ON",
-                "CMAKE_CUDA_ARCHITECTURES": "80;90"
+                "RETICOLO_ENABLE_OPENMP":   "OFF",
+                "RETICOLO_BUILD_EXAMPLES":  "OFF",
+                "CMAKE_CUDA_ARCHITECTURES": "native"
             }
         }
     ],
@@ -85,7 +88,11 @@
         { "name": "linux-gcc",        "configurePreset": "linux-gcc"        },
         { "name": "linux-clang",      "configurePreset": "linux-clang"      },
         { "name": "debug",            "configurePreset": "debug"            },
-        { "name": "cuda-linux",       "configurePreset": "cuda-linux"       }
+        {
+            "name":            "linux-nvcc",
+            "configurePreset": "linux-nvcc",
+            "targets":         ["cuda"]
+        }
     ],
 
     "testPresets": [
@@ -94,6 +101,6 @@
         { "name": "linux-gcc",        "configurePreset": "linux-gcc",        "output": { "outputOnFailure": true } },
         { "name": "linux-clang",      "configurePreset": "linux-clang",      "output": { "outputOnFailure": true } },
         { "name": "debug",            "configurePreset": "debug",            "output": { "outputOnFailure": true } },
-        { "name": "cuda-linux",       "configurePreset": "cuda-linux",       "output": { "outputOnFailure": true } }
+        { "name": "linux-nvcc",       "configurePreset": "linux-nvcc",       "output": { "outputOnFailure": true }, "filter": { "include": { "name": "cuda" } } }
     ]
 }

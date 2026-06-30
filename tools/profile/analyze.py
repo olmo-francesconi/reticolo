@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyse the Nsight profiling sweep produced by tools/cuda_profile.sh.
+"""Analyse a Nsight profiling sweep (nsys CSVs + throughput.jsonl).
 
 Run on the Mac after downloading the Kaggle `profile/` artifacts:
 

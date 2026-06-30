@@ -110,15 +110,18 @@ Resume reads them back and calls `hmc.set_rng_counter(counter)` before running.
 ## Step 6 — build, test, run
 
 There is no local NVIDIA GPU in the dev setup; the backend is built and tested on
-a GPU host via the shared script (used by the Kaggle runner and any console GPU
-CI):
+a GPU host (Modal or the Kaggle runner) through the shared `linux-nvcc` CMake
+preset — the same preset workflow every other system uses:
 
 ```sh
-RETICOLO_CUDA_ARCH=native bash tools/cuda_build_test.sh
+cmake --preset linux-nvcc
+cmake --build --preset linux-nvcc
+ctest --preset linux-nvcc
 ```
 
-It configures with `RETICOLO_ENABLE_CUDA=ON` (IO + APPS on, OpenMP off), builds
-the CUDA-relevant targets, and runs `ctest -R cuda`. Add a smoke test by mirroring
+The preset bakes in `RETICOLO_ENABLE_CUDA=ON`, OpenMP off, examples off, and
+`CMAKE_CUDA_ARCHITECTURES=native` (it does not pin the host compiler, so `CC`/`CXX`
+still apply). Add a smoke test by mirroring
 [`tests/apps/test_phi4_cuda_hmc_smoke.cpp`](../tests/apps/test_phi4_cuda_hmc_smoke.cpp)
 (execs the binary, checks the HDF5 schema) — register it under the
 `RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS AND RETICOLO_ENABLE_CUDA` block in

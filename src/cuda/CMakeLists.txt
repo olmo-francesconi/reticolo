@@ -33,26 +33,3 @@ set_target_properties(reticolo_cuda PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     POSITION_INDEPENDENT_CODE  ON
 )
-
-# GPU perf baseline binary (built on demand: cmake --build --target bench_cuda_hmc).
-# Links ONLY reticolo::cuda — its PUBLIC include dir exposes the header-only core
-# (Lattice/Phi4/FastRng), and under nvcc vec_libm guards Sleef out, so no core
-# link is needed. Linking reticolo::core would leak its host -Werror/-Wall flags
-# onto the CUDA compile and nvcc rejects them.
-add_executable(bench_cuda_hmc bench_hmc.cu)
-target_link_libraries(bench_cuda_hmc PRIVATE reticolo::cuda)
-set_target_properties(bench_cuda_hmc PROPERTIES
-    CUDA_STANDARD              20
-    CUDA_STANDARD_REQUIRED     ON
-    CUDA_SEPARABLE_COMPILATION ON
-)
-
-# Single-config profiling driver for the Nsight tools (one (action, L) per run, so
-# nsys attributes kernel time per config). Same lean link as the bench.
-add_executable(profile_cuda_hmc profile_hmc.cu)
-target_link_libraries(profile_cuda_hmc PRIVATE reticolo::cuda)
-set_target_properties(profile_cuda_hmc PROPERTIES
-    CUDA_STANDARD              20
-    CUDA_STANDARD_REQUIRED     ON
-    CUDA_SEPARABLE_COMPILATION ON
-)

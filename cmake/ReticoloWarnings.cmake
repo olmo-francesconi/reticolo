@@ -38,6 +38,15 @@ function(reticolo_configure_warnings target)
     # at -O3 on std::vector::operator[] (cannot prove data() != nullptr after
     # sized construction). Real null derefs are caught by the asan/ubsan job.
 
+    # Without -fopenmp the `#pragma omp` in core/LLR headers is inert (the build
+    # "degrades to serial"). Clang ignores it silently; GCC raises -Wunknown-pragmas,
+    # which -Werror turns fatal. Suppress it for OpenMP-off builds (e.g. linux-nvcc,
+    # macos-appleclang) so the same sources compile on both compilers. Appended
+    # after -Wall so it wins.
+    if(NOT RETICOLO_ENABLE_OPENMP)
+        list(APPEND _gnu_clang_warnings -Wno-unknown-pragmas)
+    endif()
+
     # Clang's -Wpedantic flags __COUNTER__ via -Wc2y-extensions; Catch2's
     # TEST_CASE expansion lives in user TUs, so SYSTEM doesn't suppress it.
     # -Wno-unknown-warning-option goes first so older clang versions silently

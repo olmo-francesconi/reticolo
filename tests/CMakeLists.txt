@@ -58,6 +58,7 @@ reticolo_add_test(test_philox                        unit/test_philox.cpp)
 
 if(RETICOLO_ENABLE_CUDA)
     reticolo_add_test(test_cuda_selftest            cuda/test_cuda_selftest.cpp)
+    set_property(GLOBAL APPEND PROPERTY RETICOLO_CUDA_TARGETS test_cuda_selftest)
     if(RETICOLO_BUILD_IO)
         # Native .cu test: orchestrates cuda::Hmc + io::checkpoint in one TU. The
         # host warning flags are CXX-guarded, so nvcc tolerates the io link.
@@ -66,6 +67,7 @@ if(RETICOLO_ENABLE_CUDA)
             CUDA_STANDARD              20
             CUDA_STANDARD_REQUIRED     ON
             CUDA_SEPARABLE_COMPILATION ON)
+        set_property(GLOBAL APPEND PROPERTY RETICOLO_CUDA_TARGETS test_cuda_checkpoint)
     endif()
     add_test(NAME cuda_no_integrator_kernels
              COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${PROJECT_SOURCE_DIR}/src/cuda
@@ -107,5 +109,6 @@ if(RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS)
     # and a GPU at run time.
     if(RETICOLO_ENABLE_CUDA)
         reticolo_add_app_smoke(test_phi4_cuda_hmc_smoke    phi4_cuda_hmc        apps/test_phi4_cuda_hmc_smoke.cpp)
+        set_property(GLOBAL APPEND PROPERTY RETICOLO_CUDA_TARGETS test_phi4_cuda_hmc_smoke)
     endif()
 endif()
