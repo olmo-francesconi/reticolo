@@ -522,7 +522,7 @@ lever now that we know it is memory-bound.
   momentum sampler (h_a~N(0,½)). `device_functors<Wilson<SU2>>` plugs into the
   unchanged `DeviceAction`/`Hmc`; momentum sampling is now a 4th trait launcher
   (`sample_momenta`) so the scalar/U(1) iid-normal draw and the gauge algebra
-  draw share one `Hmc` path. Gates in `src/cuda/su2_probe.cu`: device-ops-vs-CPU,
+  draw share one `Hmc` path. Gates in `src/cuda/probes/su2_probe.cu`: device-ops-vs-CPU,
   s_full+force vs CPU `Wilson<SU2>` (1e-9), MD energy conservation (2nd-order
   ratio), reversibility (1e-9), momentum moments, host-free HMC smoke. The matrix
   `drift_field` overload re-proves the integrator seam for matrix fields (Phase 2
@@ -572,8 +572,9 @@ uninterrupted run)*
 
 **Status: DONE** (39/39 CUDA gates green on Tesla P100). Done **natively**, not
 through a façade: the CUDA apps are plain `.cu` twins of the host apps
-(`apps/phi4_cuda_hmc.cu`, `apps/su2_cuda_hmc.cu`) that include the full
-`<reticolo/reticolo.hpp>` umbrella, use `cuda::Hmc` + `DeviceField` for the
+(`apps/cuda/phi4_cuda_hmc.cu`, `apps/cuda/su2_cuda_hmc.cu`) that include the full
+`<reticolo/reticolo.hpp>` + `<reticolo/cuda/cuda.hpp>` umbrellas, use
+`cuda::Hmc` + `DeviceField` for the
 device work and `io::Writer` for output, and keep the trajectory for-loop
 plainly in `main()`. `io::Writer` PIMPLs HDF5, so nvcc never sees `<hdf5.h>`; it
 links the prebuilt `reticolo::io` archive. The enabling fix was guarding the

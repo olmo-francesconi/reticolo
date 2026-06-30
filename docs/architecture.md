@@ -11,9 +11,14 @@ the way it is.
   `hid_t` never leaves `src/io/writer.cpp` thanks to a PIMPL'd `io::Writer`
   and `extern template`'d `Series<T>`.
 - `reticolo::cli` — INTERFACE wrapper around cxxopts.
+- `reticolo::cuda` — STATIC, **optional** (`RETICOLO_ENABLE_CUDA=ON`), the only
+  target nvcc compiles and the only one that `#include <cuda_runtime.h>`. CUDA
+  never leaks into `reticolo::core`, mirroring how `reticolo::io` quarantines
+  HDF5. See [§ CUDA backend](#cuda-backend).
 
-The umbrella `reticolo::reticolo` aggregates all three. Apps link only the
-umbrella and include only `<reticolo/reticolo.hpp>`.
+The umbrella `reticolo::reticolo` aggregates the first three (plus `reticolo::cuda`
+when enabled). Apps link only the umbrella and include only
+`<reticolo/reticolo.hpp>` — a GPU app adds `<reticolo/cuda/cuda.hpp>`.
 
 Header-only is ideal for the core (cheap compile, perfect inlining into the
 templated updaters), but `<hdf5.h>` is 50+ KLOC of C headers that would
@@ -283,6 +288,73 @@ Two convention watch-outs:
 - In the paper convention (`s_full = -a·S - window`), `a` flips sign at
   the natural peak, so `a_init = -1` and DoS reconstruction uses `(1+a)`.
   Energy convention keeps `a_init = 0` and integrates `a` directly.
+
+## CUDA backend
+
+Optional GPU backend (`RETICOLO_ENABLE_CUDA=ON`, default OFF). The design rule
+is **one source of truth = the per-site formula**: the CPU and GPU never carry
+two copies of the physics.
+
+### The CPU/GPU boundary
+
+GPU code is quarantined under a `cuda/` subfolder at every level — that folder
+*is* the boundary:
+
+```
+include/reticolo/cuda/          device headers (the public backend API)
+include/reticolo/cuda/probes/   per-phase validation harnesses (not public)
+src/cuda/                       reduce.cu (real TU) + bench_hmc.cu
+src/cuda/probes/                the *_probe.cu + selftest.cu the harness drives
+tests/cuda/                     GPU tests
+apps/cuda/                      .cu apps (GPU); apps/ itself stays CPU-only
+```
+
+The dependency is strictly one-way: **`cuda → core`, never `core → cuda`**. The
+only GPU-awareness in `core` is two deliberate shims:
+
+- `core/hd.hpp` — the `RETICOLO_HD` macro (`__host__ __device__` under nvcc,
+  expands to nothing otherwise), so one annotated function compiles for both.
+- `core/rng.hpp` — a `__CUDACC__` guard exposing the shared counter-based Philox
+  on the device.
+
+Header naming inside `cuda/`: **`.cuh` = contains device kernels** (`__global__`/
+`__device__` bodies, nvcc-mandatory); **`.hpp` = host-callable API** (may use the
+CUDA runtime like `cudaMalloc`, but defines no kernels). Both are GPU-side —
+neither is includable from a pure-host TU.
+
+### How a formula reaches the GPU
+
+The seam is a four-hop chain (Phi4 shown):
+
+1. `action/detail/phi4_formula.hpp` — the per-site formula, `RETICOLO_HD`, the
+   single source of truth.
+2. `action::Phi4` (CPU) and `cuda::Phi4ForceFunctor` (GPU) **both call that same
+   formula** — they cannot silently diverge.
+3. `cuda/actions/phi4.hpp` — the `device_functors<action::Phi4<T>>` trait adapts
+   a *host* action struct into device launchers (force / s_full / sample_momenta).
+4. `cuda::DeviceAction<HostAction, Field>` + `cuda::Hmc<DAct, Integ, Field>` — the
+   generic device HMC, reusing the *same* `alg::integ::*` integrator tags as the
+   CPU `alg::Hmc`. No virtual dispatch, no `switch(action)` — the trait resolves
+   at compile time (a lint gate forbids integrator-specific kernel code).
+
+The *loop structure* may legitimately differ CPU↔device (U(1) scatter→gather;
+SU(N) expi slab→fused), but each such divergence has a device-vs-host math test.
+
+### Writing a GPU app
+
+A `.cu` app is the GPU twin of a CPU app — same CLI, same HDF5 schema, the
+trajectory `for` plainly in `main()`. It includes both umbrellas:
+
+```cpp
+#include <reticolo/reticolo.hpp>     // core + io + cli (host)
+#include <reticolo/cuda/cuda.hpp>    // the device stack (nvcc-only)
+```
+
+`io::Writer` PIMPLs HDF5, so nvcc never sees `<hdf5.h>`; the app just links the
+prebuilt `reticolo::io` archive. This works because the host `-Wall`/`-Werror`
+flags are `$<COMPILE_LANGUAGE:CXX>`-guarded (`cmake/ReticoloWarnings.cmake`) and
+OpenMP is off, so neither reaches the nvcc compile. See
+[`writing_a_cuda_app.md`](writing_a_cuda_app.md) for the full walk-through.
 
 ## apps/ and examples/
 
