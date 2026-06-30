@@ -2,10 +2,10 @@
 #include <reticolo/core/philox_rng.hpp>
 #include <reticolo/core/rng.hpp>
 
-#include <catch2/catch_test_macros.hpp>
-
 #include <cmath>
 #include <cstdint>
+
+#include <catch2/catch_test_macros.hpp>
 
 using namespace reticolo;
 
@@ -49,8 +49,8 @@ TEST_CASE("philox uniforms lie in the half-open unit interval and are reproducib
 
 TEST_CASE("philox normals have N(0,1) moments", "[rng][philox]") {
     constexpr long n = 200000;
-    double sum   = 0.0;
-    double sumsq = 0.0;
+    double sum       = 0.0;
+    double sumsq     = 0.0;
     for (long i = 0; i < n / 2; ++i) {
         double a = 0.0;
         double b = 0.0;
@@ -77,8 +77,8 @@ TEST_CASE("PhiloxRng satisfies the Rng concept and is well-behaved", "[rng][phil
 
     PhiloxRng moments{99};
     constexpr int m = 100000;
-    double sum   = 0.0;
-    double sumsq = 0.0;
+    double sum      = 0.0;
+    double sumsq    = 0.0;
     for (int i = 0; i < m; ++i) {
         double const x = moments.normal();
         sum += x;

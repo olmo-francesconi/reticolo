@@ -65,31 +65,32 @@ inline constexpr double k_u53_scale = 1.0 / 9007199254740992.0;
 
 // Two uniform doubles in [0, 1) from (seed, traj, index). Bit-identical across
 // any device (integer ops + an exact 53-bit→double scaling).
-RETICOLO_HD inline void philox_uniform2(std::uint64_t seed, std::uint64_t traj, std::uint64_t index,
-                                        double& u0, double& u1) {
+RETICOLO_HD inline void philox_uniform2(
+    std::uint64_t seed, std::uint64_t traj, std::uint64_t index, double& u0, double& u1) {
     Philox4x32::U32x2 const key{static_cast<std::uint32_t>(seed),
                                 static_cast<std::uint32_t>(seed >> 32U)};
-    Philox4x32::U32x4 const ctr{
-        static_cast<std::uint32_t>(traj), static_cast<std::uint32_t>(traj >> 32U),
-        static_cast<std::uint32_t>(index), static_cast<std::uint32_t>(index >> 32U)};
+    Philox4x32::U32x4 const ctr{static_cast<std::uint32_t>(traj),
+                                static_cast<std::uint32_t>(traj >> 32U),
+                                static_cast<std::uint32_t>(index),
+                                static_cast<std::uint32_t>(index >> 32U)};
     Philox4x32::U32x4 const o = Philox4x32::bijection(ctr, key);
     std::uint64_t const b0    = (static_cast<std::uint64_t>(o[1]) << 32U) | o[0];
     std::uint64_t const b1    = (static_cast<std::uint64_t>(o[3]) << 32U) | o[2];
-    u0 = static_cast<double>(b0 >> 11U) * k_u53_scale;
-    u1 = static_cast<double>(b1 >> 11U) * k_u53_scale;
+    u0                        = static_cast<double>(b0 >> 11U) * k_u53_scale;
+    u1                        = static_cast<double>(b1 >> 11U) * k_u53_scale;
 }
 
 // Two standard normals via Box-Muller. ~1 ULP across devices (transcendental).
-RETICOLO_HD inline void philox_normal2(std::uint64_t seed, std::uint64_t traj, std::uint64_t index,
-                                       double& n0, double& n1) {
+RETICOLO_HD inline void philox_normal2(
+    std::uint64_t seed, std::uint64_t traj, std::uint64_t index, double& n0, double& n1) {
     double u0 = 0.0;
     double u1 = 0.0;
     philox_uniform2(seed, traj, index, u0, u1);
     constexpr double k_two_pi = 6.283185307179586476925286766559;
     double const r            = std::sqrt(-2.0 * std::log(u0 > 1.0e-300 ? u0 : 1.0e-300));
     double const theta        = k_two_pi * u1;
-    n0 = r * std::cos(theta);
-    n1 = r * std::sin(theta);
+    n0                        = r * std::cos(theta);
+    n1                        = r * std::sin(theta);
 }
 
 }  // namespace reticolo

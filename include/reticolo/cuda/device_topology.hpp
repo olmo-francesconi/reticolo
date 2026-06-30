@@ -17,8 +17,8 @@ inline constexpr int kMaxDim = 6;
 // next/prev are RETICOLO_HD so they run on the device in kernels and on the
 // host in tests (where they can be checked against the reference `Indexing`).
 struct DeviceTopology {
-    int ndim          = 0;
-    long nsites       = 0;
+    int ndim             = 0;
+    long nsites          = 0;
     long shape[kMaxDim]  = {};
     long stride[kMaxDim] = {};
 
@@ -36,9 +36,9 @@ struct DeviceTopology {
 // x-fastest layout). Host-only; not called from device code.
 [[nodiscard]] inline DeviceTopology make_device_topology(std::vector<std::size_t> const& shape) {
     DeviceTopology t;
-    t.ndim   = static_cast<int>(shape.size());
-    long st  = 1;
-    long ns  = 1;
+    t.ndim  = static_cast<int>(shape.size());
+    long st = 1;
+    long ns = 1;
     for (int mu = 0; mu < t.ndim; ++mu) {
         t.shape[mu]  = static_cast<long>(shape[static_cast<std::size_t>(mu)]);
         t.stride[mu] = st;

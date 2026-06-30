@@ -10,14 +10,14 @@
 // signatures. The CPU path below is unchanged.
 #ifndef __CUDACC__
 
-#include <sleef.h>
+    #include <sleef.h>
 
-#if defined(__ARM_NEON) || defined(__aarch64__)
-    #include <arm_neon.h>
-#endif
-#if defined(__AVX512F__) || defined(__AVX2__) || defined(__AVX__) || defined(__SSE2__)
-    #include <immintrin.h>
-#endif
+    #if defined(__ARM_NEON) || defined(__aarch64__)
+        #include <arm_neon.h>
+    #endif
+    #if defined(__AVX512F__) || defined(__AVX2__) || defined(__AVX__) || defined(__SSE2__)
+        #include <immintrin.h>
+    #endif
 
 // Portable vectorised libm wrappers backed by Sleef.
 //
@@ -76,67 +76,67 @@ inline auto const sleef_dispatch_warmup = [] {
 
 }  // namespace detail
 
-// Width of the vector path picked at compile time, in doubles per vector.
-// Used by callers that want to size their row scratch buffer to a multiple
-// of the vector width — not required for correctness (the helpers handle
-// any `n`), only to keep the inner loop free of partial tail iterations.
-#ifdef __AVX512F__
+    // Width of the vector path picked at compile time, in doubles per vector.
+    // Used by callers that want to size their row scratch buffer to a multiple
+    // of the vector width — not required for correctness (the helpers handle
+    // any `n`), only to keep the inner loop free of partial tail iterations.
+    #ifdef __AVX512F__
 inline constexpr std::size_t k_vec_width_d = 8;
-#elif defined(__AVX2__) || defined(__AVX__)
+    #elif defined(__AVX2__) || defined(__AVX__)
 inline constexpr std::size_t k_vec_width_d = 4;
-#elif defined(__ARM_NEON) || defined(__aarch64__)
+    #elif defined(__ARM_NEON) || defined(__aarch64__)
 inline constexpr std::size_t k_vec_width_d = 2;
-#elif defined(__SSE2__)
+    #elif defined(__SSE2__)
 inline constexpr std::size_t k_vec_width_d = 2;
-#else
+    #else
 inline constexpr std::size_t k_vec_width_d = 1;
-#endif
+    #endif
 
-// Width of the vector path in floats per vector (= 2× the double width). Used
-// to size site-batch kernels so a float batch fills whole SIMD registers.
-#ifdef __AVX512F__
+    // Width of the vector path in floats per vector (= 2× the double width). Used
+    // to size site-batch kernels so a float batch fills whole SIMD registers.
+    #ifdef __AVX512F__
 inline constexpr std::size_t k_vec_width_f = 16;
-#elif defined(__AVX2__) || defined(__AVX__)
+    #elif defined(__AVX2__) || defined(__AVX__)
 inline constexpr std::size_t k_vec_width_f = 8;
-#elif defined(__ARM_NEON) || defined(__aarch64__)
+    #elif defined(__ARM_NEON) || defined(__aarch64__)
 inline constexpr std::size_t k_vec_width_f = 4;
-#elif defined(__SSE2__)
+    #elif defined(__SSE2__)
 inline constexpr std::size_t k_vec_width_f = 4;
-#else
+    #else
 inline constexpr std::size_t k_vec_width_f = 1;
-#endif
+    #endif
 
 // --------------- cos_batch ---------------------------------------------------
 
 inline void cos_batch(double* dst, double const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#ifdef __AVX512F__
+    #ifdef __AVX512F__
     for (; i + 8 <= n; i += 8) {
         __m512d const v = _mm512_loadu_pd(src + i);
         _mm512_storeu_pd(dst + i, Sleef_cosd8_u10avx512f(v));
     }
-#elif defined(__AVX2__)
+    #elif defined(__AVX2__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_cosd4_u10avx2(v));
     }
-#elif defined(__AVX__)
+    #elif defined(__AVX__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_cosd4_u10avx(v));
     }
-#elif defined(__ARM_NEON) || defined(__aarch64__)
+    #elif defined(__ARM_NEON) || defined(__aarch64__)
     // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 2` in the for header
     for (; i + 2 <= n; i += 2) {
         float64x2_t const v = vld1q_f64(src + i);
         vst1q_f64(dst + i, Sleef_cosd2_u10advsimd(v));
     }
-#elif defined(__SSE2__)
+    #elif defined(__SSE2__)
     for (; i + 2 <= n; i += 2) {
         __m128d const v = _mm_loadu_pd(src + i);
         _mm_storeu_pd(dst + i, Sleef_cosd2_u10sse2(v));
     }
-#endif
+    #endif
     for (; i < n; ++i) {
         dst[i] = Sleef_cos_u10(src[i]);
     }
@@ -148,33 +148,33 @@ inline void cos_batch(double* dst, double const* src, std::size_t n) noexcept {
 
 inline void cos_batch(float* dst, float const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#ifdef __AVX512F__
+    #ifdef __AVX512F__
     for (; i + 16 <= n; i += 16) {
         __m512 const v = _mm512_loadu_ps(src + i);
         _mm512_storeu_ps(dst + i, Sleef_cosf16_u10avx512f(v));
     }
-#elif defined(__AVX2__)
+    #elif defined(__AVX2__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v = _mm256_loadu_ps(src + i);
         _mm256_storeu_ps(dst + i, Sleef_cosf8_u10avx2(v));
     }
-#elif defined(__AVX__)
+    #elif defined(__AVX__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v = _mm256_loadu_ps(src + i);
         _mm256_storeu_ps(dst + i, Sleef_cosf8_u10avx(v));
     }
-#elif defined(__ARM_NEON) || defined(__aarch64__)
+    #elif defined(__ARM_NEON) || defined(__aarch64__)
     // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 4` in the for header
     for (; i + 4 <= n; i += 4) {
         float32x4_t const v = vld1q_f32(src + i);
         vst1q_f32(dst + i, Sleef_cosf4_u10advsimd(v));
     }
-#elif defined(__SSE2__)
+    #elif defined(__SSE2__)
     for (; i + 4 <= n; i += 4) {
         __m128 const v = _mm_loadu_ps(src + i);
         _mm_storeu_ps(dst + i, Sleef_cosf4_u10sse2(v));
     }
-#endif
+    #endif
     for (; i < n; ++i) {
         dst[i] = Sleef_cosf_u10(src[i]);
     }
@@ -184,33 +184,33 @@ inline void cos_batch(float* dst, float const* src, std::size_t n) noexcept {
 
 inline void sin_batch(double* dst, double const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#ifdef __AVX512F__
+    #ifdef __AVX512F__
     for (; i + 8 <= n; i += 8) {
         __m512d const v = _mm512_loadu_pd(src + i);
         _mm512_storeu_pd(dst + i, Sleef_sind8_u10avx512f(v));
     }
-#elif defined(__AVX2__)
+    #elif defined(__AVX2__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_sind4_u10avx2(v));
     }
-#elif defined(__AVX__)
+    #elif defined(__AVX__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_sind4_u10avx(v));
     }
-#elif defined(__ARM_NEON) || defined(__aarch64__)
+    #elif defined(__ARM_NEON) || defined(__aarch64__)
     // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 2` in the for header
     for (; i + 2 <= n; i += 2) {
         float64x2_t const v = vld1q_f64(src + i);
         vst1q_f64(dst + i, Sleef_sind2_u10advsimd(v));
     }
-#elif defined(__SSE2__)
+    #elif defined(__SSE2__)
     for (; i + 2 <= n; i += 2) {
         __m128d const v = _mm_loadu_pd(src + i);
         _mm_storeu_pd(dst + i, Sleef_sind2_u10sse2(v));
     }
-#endif
+    #endif
     for (; i < n; ++i) {
         dst[i] = Sleef_sin_u10(src[i]);
     }
@@ -220,33 +220,33 @@ inline void sin_batch(double* dst, double const* src, std::size_t n) noexcept {
 
 inline void sin_batch(float* dst, float const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#ifdef __AVX512F__
+    #ifdef __AVX512F__
     for (; i + 16 <= n; i += 16) {
         __m512 const v = _mm512_loadu_ps(src + i);
         _mm512_storeu_ps(dst + i, Sleef_sinf16_u10avx512f(v));
     }
-#elif defined(__AVX2__)
+    #elif defined(__AVX2__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v = _mm256_loadu_ps(src + i);
         _mm256_storeu_ps(dst + i, Sleef_sinf8_u10avx2(v));
     }
-#elif defined(__AVX__)
+    #elif defined(__AVX__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v = _mm256_loadu_ps(src + i);
         _mm256_storeu_ps(dst + i, Sleef_sinf8_u10avx(v));
     }
-#elif defined(__ARM_NEON) || defined(__aarch64__)
+    #elif defined(__ARM_NEON) || defined(__aarch64__)
     // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 4` in the for header
     for (; i + 4 <= n; i += 4) {
         float32x4_t const v = vld1q_f32(src + i);
         vst1q_f32(dst + i, Sleef_sinf4_u10advsimd(v));
     }
-#elif defined(__SSE2__)
+    #elif defined(__SSE2__)
     for (; i + 4 <= n; i += 4) {
         __m128 const v = _mm_loadu_ps(src + i);
         _mm_storeu_ps(dst + i, Sleef_sinf4_u10sse2(v));
     }
-#endif
+    #endif
     for (; i < n; ++i) {
         dst[i] = Sleef_sinf_u10(src[i]);
     }
@@ -259,33 +259,33 @@ inline void sin_batch(float* dst, float const* src, std::size_t n) noexcept {
 
 inline void acos_batch(double* dst, double const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#ifdef __AVX512F__
+    #ifdef __AVX512F__
     for (; i + 8 <= n; i += 8) {
         __m512d const v = _mm512_loadu_pd(src + i);
         _mm512_storeu_pd(dst + i, Sleef_acosd8_u10avx512f(v));
     }
-#elif defined(__AVX2__)
+    #elif defined(__AVX2__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_acosd4_u10avx2(v));
     }
-#elif defined(__AVX__)
+    #elif defined(__AVX__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_acosd4_u10avx(v));
     }
-#elif defined(__ARM_NEON) || defined(__aarch64__)
+    #elif defined(__ARM_NEON) || defined(__aarch64__)
     // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 2` in the for header
     for (; i + 2 <= n; i += 2) {
         float64x2_t const v = vld1q_f64(src + i);
         vst1q_f64(dst + i, Sleef_acosd2_u10advsimd(v));
     }
-#elif defined(__SSE2__)
+    #elif defined(__SSE2__)
     for (; i + 2 <= n; i += 2) {
         __m128d const v = _mm_loadu_pd(src + i);
         _mm_storeu_pd(dst + i, Sleef_acosd2_u10sse2(v));
     }
-#endif
+    #endif
     for (; i < n; ++i) {
         dst[i] = Sleef_acos_u10(src[i]);
     }
@@ -301,28 +301,28 @@ inline void acos_batch(double* dst, double const* src, std::size_t n) noexcept {
 inline void
 sincos_batch(double* dst_sin, double* dst_cos, double const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#ifdef __AVX512F__
+    #ifdef __AVX512F__
     for (; i + 8 <= n; i += 8) {
         __m512d const v          = _mm512_loadu_pd(src + i);
         Sleef___m512d_2 const sc = Sleef_sincosd8_u10avx512f(v);
         _mm512_storeu_pd(dst_sin + i, sc.x);
         _mm512_storeu_pd(dst_cos + i, sc.y);
     }
-#elif defined(__AVX2__)
+    #elif defined(__AVX2__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v          = _mm256_loadu_pd(src + i);
         Sleef___m256d_2 const sc = Sleef_sincosd4_u10avx2(v);
         _mm256_storeu_pd(dst_sin + i, sc.x);
         _mm256_storeu_pd(dst_cos + i, sc.y);
     }
-#elif defined(__AVX__)
+    #elif defined(__AVX__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v          = _mm256_loadu_pd(src + i);
         Sleef___m256d_2 const sc = Sleef_sincosd4_u10avx(v);
         _mm256_storeu_pd(dst_sin + i, sc.x);
         _mm256_storeu_pd(dst_cos + i, sc.y);
     }
-#elif defined(__ARM_NEON) || defined(__aarch64__)
+    #elif defined(__ARM_NEON) || defined(__aarch64__)
     // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 2` in the for header
     for (; i + 2 <= n; i += 2) {
         float64x2_t const v          = vld1q_f64(src + i);
@@ -330,14 +330,14 @@ sincos_batch(double* dst_sin, double* dst_cos, double const* src, std::size_t n)
         vst1q_f64(dst_sin + i, sc.x);
         vst1q_f64(dst_cos + i, sc.y);
     }
-#elif defined(__SSE2__)
+    #elif defined(__SSE2__)
     for (; i + 2 <= n; i += 2) {
         __m128d const v          = _mm_loadu_pd(src + i);
         Sleef___m128d_2 const sc = Sleef_sincosd2_u10sse2(v);
         _mm_storeu_pd(dst_sin + i, sc.x);
         _mm_storeu_pd(dst_cos + i, sc.y);
     }
-#endif
+    #endif
     for (; i < n; ++i) {
         Sleef_double_2 const sc = Sleef_sincos_u10(src[i]);
         dst_sin[i]              = sc.x;
@@ -354,28 +354,28 @@ sincos_batch(double* dst_sin, double* dst_cos, double const* src, std::size_t n)
 
 inline void sincos_batch(float* dst_sin, float* dst_cos, float const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#ifdef __AVX512F__
+    #ifdef __AVX512F__
     for (; i + 16 <= n; i += 16) {
         __m512 const v          = _mm512_loadu_ps(src + i);
         Sleef___m512_2 const sc = Sleef_sincosf16_u10avx512f(v);
         _mm512_storeu_ps(dst_sin + i, sc.x);
         _mm512_storeu_ps(dst_cos + i, sc.y);
     }
-#elif defined(__AVX2__)
+    #elif defined(__AVX2__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v          = _mm256_loadu_ps(src + i);
         Sleef___m256_2 const sc = Sleef_sincosf8_u10avx2(v);
         _mm256_storeu_ps(dst_sin + i, sc.x);
         _mm256_storeu_ps(dst_cos + i, sc.y);
     }
-#elif defined(__AVX__)
+    #elif defined(__AVX__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v          = _mm256_loadu_ps(src + i);
         Sleef___m256_2 const sc = Sleef_sincosf8_u10avx(v);
         _mm256_storeu_ps(dst_sin + i, sc.x);
         _mm256_storeu_ps(dst_cos + i, sc.y);
     }
-#elif defined(__ARM_NEON) || defined(__aarch64__)
+    #elif defined(__ARM_NEON) || defined(__aarch64__)
     // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 4` in the for header
     for (; i + 4 <= n; i += 4) {
         float32x4_t const v          = vld1q_f32(src + i);
@@ -383,14 +383,14 @@ inline void sincos_batch(float* dst_sin, float* dst_cos, float const* src, std::
         vst1q_f32(dst_sin + i, sc.x);
         vst1q_f32(dst_cos + i, sc.y);
     }
-#elif defined(__SSE2__)
+    #elif defined(__SSE2__)
     for (; i + 4 <= n; i += 4) {
         __m128 const v          = _mm_loadu_ps(src + i);
         Sleef___m128_2 const sc = Sleef_sincosf4_u10sse2(v);
         _mm_storeu_ps(dst_sin + i, sc.x);
         _mm_storeu_ps(dst_cos + i, sc.y);
     }
-#endif
+    #endif
     for (; i < n; ++i) {
         Sleef_float_2 const sc = Sleef_sincosf_u10(src[i]);
         dst_sin[i]             = sc.x;
@@ -408,33 +408,33 @@ inline void sincos_batch(float* dst_sin, float* dst_cos, float const* src, std::
 
 inline void exp_batch(double* dst, double const* src, std::size_t n) noexcept {
     std::size_t i = 0;
-#ifdef __AVX512F__
+    #ifdef __AVX512F__
     for (; i + 8 <= n; i += 8) {
         __m512d const v = _mm512_loadu_pd(src + i);
         _mm512_storeu_pd(dst + i, Sleef_expd8_u10avx512f(v));
     }
-#elif defined(__AVX2__)
+    #elif defined(__AVX2__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_expd4_u10avx2(v));
     }
-#elif defined(__AVX__)
+    #elif defined(__AVX__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_expd4_u10avx(v));
     }
-#elif defined(__ARM_NEON) || defined(__aarch64__)
+    #elif defined(__ARM_NEON) || defined(__aarch64__)
     // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 2` in the for header
     for (; i + 2 <= n; i += 2) {
         float64x2_t const v = vld1q_f64(src + i);
         vst1q_f64(dst + i, Sleef_expd2_u10advsimd(v));
     }
-#elif defined(__SSE2__)
+    #elif defined(__SSE2__)
     for (; i + 2 <= n; i += 2) {
         __m128d const v = _mm_loadu_pd(src + i);
         _mm_storeu_pd(dst + i, Sleef_expd2_u10sse2(v));
     }
-#endif
+    #endif
     for (; i < n; ++i) {
         dst[i] = Sleef_exp_u10(src[i]);
     }

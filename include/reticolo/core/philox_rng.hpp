@@ -79,18 +79,20 @@ private:
         Philox4x32::U32x2 const key{static_cast<std::uint32_t>(seed_),
                                     static_cast<std::uint32_t>(seed_ >> 32U)};
         Philox4x32::U32x4 const ctr{static_cast<std::uint32_t>(counter_),
-                                    static_cast<std::uint32_t>(counter_ >> 32U), 0U, 0U};
+                                    static_cast<std::uint32_t>(counter_ >> 32U),
+                                    0U,
+                                    0U};
         Philox4x32::U32x4 const o = Philox4x32::bijection(ctr, key);
-        buf_[0] = (static_cast<state_type>(o[1]) << 32U) | o[0];
-        buf_[1] = (static_cast<state_type>(o[3]) << 32U) | o[2];
-        idx_    = 0;
+        buf_[0]                   = (static_cast<state_type>(o[1]) << 32U) | o[0];
+        buf_[1]                   = (static_cast<state_type>(o[3]) << 32U) | o[2];
+        idx_                      = 0;
         ++counter_;
     }
 
     state_type seed_;
     state_type counter_ = 0;
     std::array<state_type, 2> buf_{};
-    std::size_t idx_ = 2;  // forces a refill on first draw
+    std::size_t idx_        = 2;  // forces a refill on first draw
     double cached_normal_   = 0.0;
     bool has_cached_normal_ = false;
 };

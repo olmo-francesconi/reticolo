@@ -1,9 +1,9 @@
 #pragma once
 
-#include <cuda_runtime.h>
-
 #include <stdexcept>
 #include <string>
+
+#include <cuda_runtime.h>
 
 // CUDA error-checking discipline. Every CUDA / cuRAND / cub call goes through
 // RETICOLO_CUDA_CHECK; every kernel launch is followed by
@@ -30,9 +30,9 @@ inline void check_cuda(cudaError_t err, char const* expr, char const* file, int 
 #if defined(NDEBUG)
     #define RETICOLO_CUDA_CHECK_LAUNCH() RETICOLO_CUDA_CHECK(cudaGetLastError())
 #else
-    #define RETICOLO_CUDA_CHECK_LAUNCH()                 \
-        do {                                             \
-            RETICOLO_CUDA_CHECK(cudaGetLastError());     \
-            RETICOLO_CUDA_CHECK(cudaDeviceSynchronize()); \
+    #define RETICOLO_CUDA_CHECK_LAUNCH()                                                           \
+        do {                                                                                       \
+            RETICOLO_CUDA_CHECK(cudaGetLastError());                                               \
+            RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());                                          \
         } while (0)
 #endif

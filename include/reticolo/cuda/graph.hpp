@@ -2,9 +2,9 @@
 
 #include <reticolo/cuda/check.hpp>
 
-#include <cuda_runtime.h>
-
 #include <utility>
+
+#include <cuda_runtime.h>
 
 namespace reticolo::cuda {
 
@@ -75,8 +75,8 @@ private:
         }
     }
 
-    cudaStream_t stream_   = nullptr;
-    cudaGraphExec_t exec_  = nullptr;
+    cudaStream_t stream_  = nullptr;
+    cudaGraphExec_t exec_ = nullptr;
 };
 
 }  // namespace reticolo::cuda

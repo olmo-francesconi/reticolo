@@ -2,9 +2,9 @@
 
 #include <reticolo/cuda/check.hpp>
 
-#include <cuda_runtime.h>
-
 #include <cstddef>
+
+#include <cuda_runtime.h>
 
 namespace reticolo::cuda {
 

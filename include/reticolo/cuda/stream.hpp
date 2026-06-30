@@ -19,9 +19,13 @@ inline cudaStream_t& current_stream_ref() {
     return s;
 }
 
-[[nodiscard]] inline cudaStream_t current_stream() { return current_stream_ref(); }
+[[nodiscard]] inline cudaStream_t current_stream() {
+    return current_stream_ref();
+}
 
-inline void set_current_stream(cudaStream_t s) { current_stream_ref() = s; }
+inline void set_current_stream(cudaStream_t s) {
+    current_stream_ref() = s;
+}
 
 // RAII: set the current stream for a scope, restore the previous on exit.
 class ScopedStream {
