@@ -64,3 +64,11 @@ if [[ -n "${RETICOLO_BENCH:-}" ]]; then
   cmake --build "${build_dir}" --target bench_cuda_hmc -j "$(nproc 2>/dev/null || echo 2)"
   "${build_dir}/src/cuda/bench_cuda_hmc"
 fi
+
+# Optional nightly physics harness (RETICOLO_NIGHTLY=1, needs IO+APPS): build +
+# run the CPU-vs-GPU identity checks. Its non-zero exit fails the run.
+if [[ -n "${RETICOLO_NIGHTLY:-}" ]]; then
+  echo "=== cuda_nightly ==="
+  cmake --build "${build_dir}" --target cuda_nightly -j "$(nproc 2>/dev/null || echo 2)"
+  "${build_dir}/apps/cuda_nightly"
+fi

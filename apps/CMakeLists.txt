@@ -54,6 +54,10 @@ if(RETICOLO_ENABLE_CUDA)
     endfunction()
     reticolo_add_cuda_app(phi4_cuda_hmc  cuda/phi4_cuda_hmc.cu)
     reticolo_add_cuda_app(su2_cuda_hmc   cuda/su2_cuda_hmc.cu)
+    # Nightly physics harness: runs CPU alg::Hmc and GPU cuda::Hmc side-by-side
+    # and asserts the [nightly] identities (<exp(-dH)>=1, CPU-vs-GPU equivalence,
+    # plaquette at beta). App-level, not a ctest gate (it runs full simulations).
+    reticolo_add_cuda_app(cuda_nightly   cuda/cuda_nightly.cu)
 endif()
 
 # OpenMP is inherited transitively through reticolo::core — no per-app link
