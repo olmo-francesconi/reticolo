@@ -27,6 +27,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # The GPU preset `linux-nvcc` is intentionally absent: GitHub-hosted
+        # runners have no NVIDIA GPU and no CUDA toolkit, so it can neither build
+        # (nvcc) nor run the device tests (ctest needs a real GPU). The CUDA gate
+        # runs on a cloud GPU host and must be green before merging CUDA changes:
+        #   uv run tools/modal/app.py build      # configure + build + ctest, linux-nvcc preset
+        # (Kaggle equivalent: tools/kaggle/push.sh)
         include:
           - { os: macos-latest, preset: macos-appleclang }
           - { os: macos-latest, preset: macos-llvm }

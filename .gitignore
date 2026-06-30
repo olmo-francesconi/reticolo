@@ -35,3 +35,6 @@ tools/kaggle/output/
 
 # modal runner: pulled benchmark/run artifacts
 tools/modal/output/
+
+# Local Claude Code project instructions — never tracked
+CLAUDE.md
