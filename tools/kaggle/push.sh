@@ -79,6 +79,10 @@ for _ in $(seq 1 40); do
     esac
     sleep 10
 done
+# `status` can report ready while the new version is still propagating to the
+# mount layer, so a freshly-pushed kernel attaches the PREVIOUS version. Settle.
+echo "Dataset ready; settling before kernel push ..."
+sleep 30
 
 # Stage the kernel: run.py + metadata (GPU + internet on, private, src dataset).
 stage="$(mktemp -d)"
