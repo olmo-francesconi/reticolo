@@ -10,6 +10,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <numbers>
 #include <vector>
 
 namespace reticolo {
@@ -101,7 +102,7 @@ public:
             has_cached_normal_ = false;
             return cached_normal_;
         }
-        constexpr double k_two_pi = 6.283185307179586476925286766559;
+        constexpr double k_two_pi = 2.0 * std::numbers::pi;
         double const u1           = std::max(uniform(), 1.0e-300);
         double const u2           = uniform();
         double const r            = std::sqrt(-2.0 * std::log(u1));
@@ -148,7 +149,7 @@ public:
                 sin_buf.resize(n_pairs);
                 cos_buf.resize(n_pairs);
             }
-            constexpr double k_two_pi = 6.283185307179586476925286766559;
+            constexpr double k_two_pi = 2.0 * std::numbers::pi;
             for (std::size_t p = 0; p < n_pairs; ++p) {
                 double const u1 = std::max(uniform(), 1.0e-300);
                 double const u2 = uniform();

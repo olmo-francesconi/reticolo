@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <numbers>
 
 namespace reticolo {
 
@@ -65,7 +66,7 @@ public:
             has_cached_normal_ = false;
             return cached_normal_;
         }
-        constexpr double k_two_pi = 6.283185307179586476925286766559;
+        constexpr double k_two_pi = 2.0 * std::numbers::pi;
         double const u0           = std::max(uniform(), 1.0e-300);
         double const u1           = uniform();
         double const r            = std::sqrt(-2.0 * std::log(u0));
@@ -82,7 +83,7 @@ public:
     // scalar/complex HMC momentum-sampling path (`alg::Hmc` calls normal_fill
     // for double and float fields), not just the matrix-group path.
     void normal_fill(double* out, std::size_t n) noexcept {
-        constexpr double k_two_pi = 6.283185307179586476925286766559;
+        constexpr double k_two_pi = 2.0 * std::numbers::pi;
         std::size_t i             = 0;
         if (has_cached_normal_ && i < n) {
             out[i++]           = cached_normal_;

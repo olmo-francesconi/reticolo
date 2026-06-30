@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <format>
 #include <memory>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -86,7 +87,7 @@ int main(int argc, char** argv) {
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
-    constexpr double k_hot_sigma   = 3.141592653589793;
+    constexpr double k_hot_sigma   = std::numbers::pi;
     constexpr int k_warm_batches   = 50;
     constexpr int k_warm_batch_len = 10;
     std::size_t const n_rep_u      = static_cast<std::size_t>(n_rep);

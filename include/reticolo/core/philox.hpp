@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <numbers>
 
 // Counter-based RNG (Philox-4×32-10, Salmon et al. 2011 / Random123) as a pure
 // RETICOLO_HD bijection — one source of truth shared by the CPU PhiloxRng and
@@ -86,7 +87,7 @@ RETICOLO_HD inline void philox_normal2(
     double u0 = 0.0;
     double u1 = 0.0;
     philox_uniform2(seed, traj, index, u0, u1);
-    constexpr double k_two_pi = 6.283185307179586476925286766559;
+    constexpr double k_two_pi = 2.0 * std::numbers::pi;
     double const r            = std::sqrt(-2.0 * std::log(u0 > 1.0e-300 ? u0 : 1.0e-300));
     double const theta        = k_two_pi * u1;
     n0                        = r * std::cos(theta);

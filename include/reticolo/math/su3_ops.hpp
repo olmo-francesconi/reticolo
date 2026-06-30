@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <numbers>
 #include <vector>
 
 namespace reticolo::math::su3 {
@@ -975,8 +976,8 @@ inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept 
 // matching convention as SU(2).
 template <class T, class Rng>
 [[gnu::always_inline]] inline void sample_algebra_slab(T* p, Rng& rng, std::size_t n) noexcept {
-    constexpr double k_inv_sqrt2 = 0.70710678118654752440;
-    constexpr double k_inv_sqrt3 = 0.57735026918962576451;
+    constexpr double k_inv_sqrt2 = std::numbers::sqrt2 / 2.0;
+    constexpr double k_inv_sqrt3 = std::numbers::inv_sqrt3;
     // Pre-fill 8n independent N(0, 1/√2) draws into a thread-local buffer
     // then scatter — same shape as SU(2)::sample_algebra_slab.
     thread_local std::vector<double> h_buf;

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <numbers>
 #include <vector>
 
 namespace reticolo::math::su2 {
@@ -514,7 +515,7 @@ expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {
 // against K = (1/2)·p²: in both cases σ² = 1 / (∂²K/∂coord²).
 template <class T, class Rng>
 [[gnu::always_inline]] inline void sample_algebra_slab(T* p, Rng& rng, std::size_t n) noexcept {
-    constexpr double k_inv_sqrt2 = 0.70710678118654752440;
+    constexpr double k_inv_sqrt2 = std::numbers::sqrt2 / 2.0;
     // Pre-fill 3n independent N(0, 1/√2) draws into a thread-local buffer,
     // then a single stride-1 scatter pass into the storage layout. Splits
     // the random-draw (rng-state-bound) from the scatter (memory-bound,

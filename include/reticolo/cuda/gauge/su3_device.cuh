@@ -6,6 +6,7 @@
 #include <reticolo/cuda/gauge/group_device.hpp>
 
 #include <cmath>
+#include <numbers>
 
 // Device SU(3) matrix algebra — register-local 3×3 complex ops on the 18-real
 // link layout (slot 2·(3i+j) = Re U_{ij}, +1 = Im U_{ij}; the same convention as
@@ -273,7 +274,7 @@ struct SU3Device {
     // Scatter the n_gen Gell-Mann coords h=(h1..h8) into the anti-hermitian
     // 18-real layout (matches math::su3::sample_algebra_slab).
     RETICOLO_HD static void pack_algebra(double const* h, double* p) {
-        constexpr double k_inv_sqrt3 = 0.57735026918962576451;
+        constexpr double k_inv_sqrt3 = std::numbers::inv_sqrt3;
         double const h8_over_sqrt3   = h[7] * k_inv_sqrt3;
         for (int k = 0; k < 18; ++k) {
             p[k] = 0.0;

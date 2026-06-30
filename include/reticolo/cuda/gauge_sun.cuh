@@ -22,6 +22,7 @@
 #include <cstdint>
 
 #include <cuda_runtime.h>
+#include <numbers>
 
 namespace reticolo::cuda {
 
@@ -173,7 +174,7 @@ __global__ void su_sample_algebra_kernel(double* mom,
     }
     int const mu                 = static_cast<int>(tid / ns);
     long const x                 = tid % ns;
-    constexpr double k_inv_sqrt2 = 0.70710678118654752440;
+    constexpr double k_inv_sqrt2 = std::numbers::sqrt2 / 2.0;
     double h[GD::n_gen];
     // Draw n_gen normals from Philox pairs keyed on (seed, *traj, link·pairs).
     long const pair0 = tid * ((GD::n_gen + 1) / 2);
