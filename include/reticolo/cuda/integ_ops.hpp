@@ -2,7 +2,7 @@
 
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/cuda/device_field.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/stream.hpp>
 
 #include <cuda_runtime.h>
@@ -19,7 +19,7 @@
 // f64 and f32 overloads. The MD step runs in field precision — the f32 atoms
 // cast the integrator's double coefficient down to float — matching the CPU
 // mixed-precision HMC; the Hamiltonian reductions still accumulate in double
-// (reduce.hpp).
+// (reduce.cuh).
 
 namespace reticolo::cuda {
 

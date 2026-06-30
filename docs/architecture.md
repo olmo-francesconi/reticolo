@@ -11,10 +11,12 @@ the way it is.
   `hid_t` never leaves `src/io/writer.cpp` thanks to a PIMPL'd `io::Writer`
   and `extern template`'d `Series<T>`.
 - `reticolo::cli` — INTERFACE wrapper around cxxopts.
-- `reticolo::cuda` — STATIC, **optional** (`RETICOLO_ENABLE_CUDA=ON`), the only
-  target nvcc compiles and the only one that `#include <cuda_runtime.h>`. CUDA
-  never leaks into `reticolo::core`, mirroring how `reticolo::io` quarantines
-  HDF5. See [§ CUDA backend](#cuda-backend).
+- `reticolo::cuda` — INTERFACE, header-only, **optional**
+  (`RETICOLO_ENABLE_CUDA=ON`). The device stack lives entirely in
+  `include/reticolo/cuda/*.{hpp,cuh}`; nvcc compiles only the `.cu` consumers
+  (`apps/cuda/` + `tests/cuda/`). CUDA never leaks into `reticolo::core` —
+  automatic here, since `cuda/` headers only ever reach a `.cu` TU. See
+  [§ CUDA backend](#cuda-backend).
 
 The umbrella `reticolo::reticolo` aggregates the first three (plus `reticolo::cuda`
 when enabled). Apps link only the umbrella and include only
@@ -301,11 +303,12 @@ GPU code is quarantined under a `cuda/` subfolder at every level — that folder
 *is* the boundary:
 
 ```
-include/reticolo/cuda/          device headers (the public backend API)
-include/reticolo/cuda/probes/   per-phase validation harnesses (not public)
-src/cuda/                       reduce.cu — the only real backend TU
-src/cuda/probes/                the *_probe.cu + selftest.cu the harness drives
-tests/cuda/                     GPU tests
+include/reticolo/cuda/          the whole device stack — header-only (.hpp/.cuh).
+                                reticolo::cuda is an INTERFACE target; there is no
+                                compiled backend TU.
+tests/cuda/                     GPU tests: one native .cu Catch2 file per action /
+                                concern (test_cuda_<name>.cu), the device-vs-CPU
+                                validation gates
 apps/cuda/                      all runnable .cu binaries: the reference sims
                                 (umbrella-linked) + bench/profile (reticolo::cuda
                                 only); apps/ itself stays CPU-only

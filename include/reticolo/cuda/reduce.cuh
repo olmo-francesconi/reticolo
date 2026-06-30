@@ -1,5 +1,17 @@
+#pragma once
+
+// Deterministic device reductions / vector ops, header-only (.cuh — nvcc-only,
+// kernels live here as in reduce_fwd.cuh). Fixed launch config so the summation
+// order is reproducible run-to-run — required for HMC reversibility (a varying
+// reduction tree changes ΔH non-deterministically). A simple block-partial +
+// fixed-order host finish; device-scalar (_into) variants build on the same
+// primitive and avoid a host sync inside the graph.
+//
+// Pointers are device pointers. The host launchers are `inline`; the kernels and
+// host helpers sit in an anonymous namespace (one copy per including TU — no ODR
+// clash, the same shape reduce_fwd.cuh already relies on).
+
 #include <reticolo/cuda/check.hpp>
-#include <reticolo/cuda/reduce.hpp>
 
 #include <vector>
 
@@ -12,7 +24,7 @@ namespace {
 constexpr int kBlock   = 256;
 constexpr int kMaxGrid = 1024;
 
-[[nodiscard]] int grid_for(long n) {
+[[nodiscard]] inline int grid_for(long n) {
     long g = (n + kBlock - 1) / kBlock;
     if (g > kMaxGrid) {
         g = kMaxGrid;
@@ -105,7 +117,7 @@ __global__ void final_reduce_kernel(double const* partials, int count, double* o
 
 // Shared host finish: copy block partials back and sum in index order
 // (reproducible), then free the device scratch on `stream`.
-[[nodiscard]] double finish_partials(double* d_partial, int grid, cudaStream_t stream) {
+[[nodiscard]] inline double finish_partials(double* d_partial, int grid, cudaStream_t stream) {
     std::vector<double> partials(static_cast<std::size_t>(grid));
     RETICOLO_CUDA_CHECK(cudaMemcpyAsync(partials.data(),
                                         d_partial,
@@ -122,7 +134,7 @@ __global__ void final_reduce_kernel(double const* partials, int count, double* o
     return total;
 }
 
-[[nodiscard]] double* alloc_partials(int grid, cudaStream_t stream) {
+[[nodiscard]] inline double* alloc_partials(int grid, cudaStream_t stream) {
     double* d_partial = nullptr;
     RETICOLO_CUDA_CHECK(cudaMallocAsync(reinterpret_cast<void**>(&d_partial),
                                         static_cast<std::size_t>(grid) * sizeof(double),
@@ -132,7 +144,10 @@ __global__ void final_reduce_kernel(double const* partials, int count, double* o
 
 }  // namespace
 
-void axpy_f64(double a, double const* x, double* y, long n, cudaStream_t stream) {
+// y[i] += a * x[i], in the field type. The f32 overload supports mixed-precision
+// MD (drift/kick run in field precision); the volume reductions still accumulate
+// in double (see below).
+inline void axpy_f64(double a, double const* x, double* y, long n, cudaStream_t stream = nullptr) {
     if (n <= 0) {
         return;
     }
@@ -140,7 +155,7 @@ void axpy_f64(double a, double const* x, double* y, long n, cudaStream_t stream)
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 
-void axpy_f32(float a, float const* x, float* y, long n, cudaStream_t stream) {
+inline void axpy_f32(float a, float const* x, float* y, long n, cudaStream_t stream = nullptr) {
     if (n <= 0) {
         return;
     }
@@ -148,7 +163,8 @@ void axpy_f32(float a, float const* x, float* y, long n, cudaStream_t stream) {
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 
-double reduce_sum_f64(double const* x, long n, cudaStream_t stream) {
+// Σ x[i], accumulated in double with a fixed, reproducible order.
+[[nodiscard]] inline double reduce_sum_f64(double const* x, long n, cudaStream_t stream = nullptr) {
     if (n <= 0) {
         return 0.0;
     }
@@ -159,7 +175,13 @@ double reduce_sum_f64(double const* x, long n, cudaStream_t stream) {
     return finish_partials(d_partial, grid, stream);
 }
 
-double reduce_sumsq_f64(double const* x, long n, cudaStream_t stream) {
+// Σ x[i]², same fixed-order determinism. The HMC kinetic term ½Σp² — kept a
+// separate primitive (rather than square-into-scratch + reduce_sum) so the
+// reduction stays one pass and run-to-run reproducible for reversibility. The
+// f32 overload reads float momenta but accumulates the sum of squares in double.
+[[nodiscard]] inline double reduce_sumsq_f64(double const* x,
+                                             long n,
+                                             cudaStream_t stream = nullptr) {
     if (n <= 0) {
         return 0.0;
     }
@@ -170,7 +192,9 @@ double reduce_sumsq_f64(double const* x, long n, cudaStream_t stream) {
     return finish_partials(d_partial, grid, stream);
 }
 
-double reduce_sumsq_f32(float const* x, long n, cudaStream_t stream) {
+[[nodiscard]] inline double reduce_sumsq_f32(float const* x,
+                                             long n,
+                                             cudaStream_t stream = nullptr) {
     if (n <= 0) {
         return 0.0;
     }
@@ -181,7 +205,17 @@ double reduce_sumsq_f32(float const* x, long n, cudaStream_t stream) {
     return finish_partials(d_partial, grid, stream);
 }
 
-void reduce_sum_into(double* out, double const* x, long n, double* partials, cudaStream_t stream) {
+// Capacity a `partials` scratch buffer must have for the *_into reductions.
+inline constexpr long k_reduce_max_grid = 1024;
+
+// Device-scalar reductions for the HMC hot loop: write the result to out[0] on
+// the device (no host sync, no per-call allocation). `partials` is a caller-
+// owned scratch buffer of at least k_reduce_max_grid doubles. A fixed-config
+// block reduction + a single-block final pass — deterministic run-to-run, which
+// reversibility requires. The whole trajectory enqueues these on one stream and
+// syncs once (vs the four malloc+sync round-trips reduce_sum/sumsq_f64 cost).
+inline void reduce_sum_into(
+    double* out, double const* x, long n, double* partials, cudaStream_t stream = nullptr) {
     if (n <= 0) {
         return;
     }
@@ -192,8 +226,8 @@ void reduce_sum_into(double* out, double const* x, long n, double* partials, cud
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 
-void reduce_sumsq_into(
-    double* out, double const* x, long n, double* partials, cudaStream_t stream) {
+inline void reduce_sumsq_into(
+    double* out, double const* x, long n, double* partials, cudaStream_t stream = nullptr) {
     if (n <= 0) {
         return;
     }
@@ -204,7 +238,9 @@ void reduce_sumsq_into(
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 
-void reduce_sumsq_into(double* out, float const* x, long n, double* partials, cudaStream_t stream) {
+// f32 momenta overload: reads float, accumulates the sum of squares in double.
+inline void reduce_sumsq_into(
+    double* out, float const* x, long n, double* partials, cudaStream_t stream = nullptr) {
     if (n <= 0) {
         return;
     }

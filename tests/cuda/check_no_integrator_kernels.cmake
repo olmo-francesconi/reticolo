@@ -1,20 +1,24 @@
 # Lint gate: "zero integrator-specific CUDA code." The integrator is a reused
 # type parameter (alg::integ::*), never reimplemented in a kernel. This greps
-# the real CUDA kernel sources for integrator names and fails if any appear.
+# the device kernel headers for integrator names and fails if any appear.
 #
-# Only the backend kernel TUs are scanned: SRC_DIR/*.cu (i.e. reduce.cu). The
-# validation harnesses under SRC_DIR/probes/ are deliberately NOT scanned — they
-# legitimately *instantiate* the generic integrator (alg::integ::Leapfrog) as a
-# type parameter, which is reuse, not a reimplemented integrator-specific kernel.
-# The perf / profiling drivers live under apps/cuda/ and are likewise outside
-# SRC_DIR.
+# Scanned: SRC_DIR/**/*.cuh — the nvcc-only kernel headers (stencil, reduce,
+# reduce_fwd, gauge_*, device_action, gauge/*). hmc.cuh is the one exception: it
+# is the integrator-orchestration layer and legitimately names the reused
+# alg::integ::* tag as a type parameter (default + MD loop), which is reuse, not
+# a reimplemented integrator-specific kernel. The host-callable API headers
+# (*.hpp, e.g. integ_ops.hpp) and the validation tests (tests/cuda/*.cu) are not
+# kernel sources and are out of scope; the perf drivers live under apps/cuda/.
 #
-# Invoked as: cmake -DSRC_DIR=<src/cuda> -P check_no_integrator_kernels.cmake
+# Invoked as: cmake -DSRC_DIR=<include/reticolo/cuda> -P check_no_integrator_kernels.cmake
 
-file(GLOB cu_files "${SRC_DIR}/*.cu")
+file(GLOB_RECURSE cuh_files "${SRC_DIR}/*.cuh")
 set(offenders "")
-foreach(f ${cu_files})
+foreach(f ${cuh_files})
     get_filename_component(name "${f}" NAME)
+    if(name STREQUAL "hmc.cuh")
+        continue()
+    endif()
     file(READ "${f}" content)
     if(content MATCHES "Leapfrog|Omelyan|integ::")
         list(APPEND offenders "${name}")

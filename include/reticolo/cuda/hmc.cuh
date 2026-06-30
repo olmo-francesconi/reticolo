@@ -33,7 +33,7 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/graph.hpp>
 #include <reticolo/cuda/integ_ops.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/stream.hpp>
 
 #include <array>

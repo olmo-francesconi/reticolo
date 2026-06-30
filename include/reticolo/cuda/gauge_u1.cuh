@@ -10,7 +10,7 @@
 #include <reticolo/action/detail/compact_u1_formula.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_topology.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
 
 #include <cmath>
 

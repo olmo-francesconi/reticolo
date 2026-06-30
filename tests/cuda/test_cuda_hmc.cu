@@ -9,9 +9,10 @@
 #include <reticolo/cuda/graph.hpp>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
-#include <reticolo/cuda/probes/hmc_probe.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/stream.hpp>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -285,3 +286,29 @@ bool graph_replay_matches_eager() {
 }
 
 }  // namespace reticolo::cuda
+
+// Leapfrog MD on DeviceField is time-reversible to roundoff.
+TEST_CASE("cuda HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::hmc_reversibility_ok());
+}
+
+// The reused alg::integ tags give |dH| ~ dt^p with p = 2/2/4 on the device.
+TEST_CASE("cuda integrator order is 2/2/4", "[cuda]") {
+    REQUIRE(reticolo::cuda::integrator_order_ok());
+}
+
+// cuda::Hmc::step() (sample -> MD -> dH -> host MH) runs and stays finite.
+TEST_CASE("cuda Hmc step runs end-to-end", "[cuda]") {
+    REQUIRE(reticolo::cuda::hmc_step_runs());
+}
+
+// A graph-captured MD trajectory + its replay reproduce eager MD bit-for-bit.
+TEST_CASE("cuda graph replay matches eager MD", "[cuda]") {
+    REQUIRE(reticolo::cuda::graph_replay_matches_eager());
+}
+
+// Host-free trajectory streaming (device-side Metropolis accept) is
+// deterministic and produces a sane chain.
+TEST_CASE("cuda host-free HMC run is deterministic", "[cuda]") {
+    REQUIRE(reticolo::cuda::hmc_device_run_deterministic());
+}

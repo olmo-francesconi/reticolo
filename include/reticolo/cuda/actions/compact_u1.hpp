@@ -4,7 +4,7 @@
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/gauge_u1.cuh>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/rng_philox.cuh>
 
 #include <cstdint>

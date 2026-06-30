@@ -8,8 +8,9 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
-#include <reticolo/cuda/probes/u1_probe.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -193,3 +194,20 @@ bool u1_hmc_runs() {
 }
 
 }  // namespace reticolo::cuda
+
+// Compact U(1) gauge on the device through the SAME unified DeviceAction.
+TEST_CASE("cuda DeviceAction<CompactU1> matches CPU action::CompactU1", "[cuda]") {
+    REQUIRE(reticolo::cuda::u1_cpu_matches_device());
+}
+
+TEST_CASE("cuda U(1) gather force matches finite-difference of s_full", "[cuda]") {
+    REQUIRE(reticolo::cuda::u1_force_matches_fd());
+}
+
+TEST_CASE("cuda U(1) HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::u1_hmc_reversibility_ok());
+}
+
+TEST_CASE("cuda U(1) host-free HMC runs on the link field", "[cuda]") {
+    REQUIRE(reticolo::cuda::u1_hmc_runs());
+}

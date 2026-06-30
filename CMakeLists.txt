@@ -181,14 +181,25 @@ if(RETICOLO_BUILD_IO)
 endif()
 
 # ---------------------------------------------------------------------------
-# reticolo::cuda  (static; nvcc-compiled; the only target that touches CUDA)
+# reticolo::cuda  (INTERFACE; header-only — the device stack lives entirely in
+# include/reticolo/cuda/*.{hpp,cuh}. nvcc compiles only the consumers that
+# include it: apps/cuda + tests/cuda. CUDA headers must never leak into
+# reticolo::core, mirroring how reticolo::io quarantines <hdf5.h>; here that is
+# automatic, since cuda/ headers are only ever pulled into a .cu TU.)
 # ---------------------------------------------------------------------------
 if(RETICOLO_ENABLE_CUDA)
     if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
         set(CMAKE_CUDA_ARCHITECTURES 70 80 90)
     endif()
     enable_language(CUDA)
-    add_subdirectory(src/cuda)
+    find_package(CUDAToolkit REQUIRED)
+    add_library(reticolo_cuda INTERFACE)
+    add_library(reticolo::cuda ALIAS reticolo_cuda)
+    target_include_directories(reticolo_cuda INTERFACE
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+    )
+    target_link_libraries(reticolo_cuda INTERFACE CUDA::cudart)
 endif()
 
 # ---------------------------------------------------------------------------

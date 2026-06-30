@@ -8,7 +8,8 @@
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
-#include <reticolo/cuda/probes/scalar_probe.hpp>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -91,3 +92,17 @@ bool xy_cpu_matches_device() {
 }
 
 }  // namespace reticolo::cuda
+
+// Each scalar action's device path reproduces the CPU action's s_full + force
+// via the shared HD formula (one source of truth).
+TEST_CASE("cuda DeviceAction<Phi6> matches CPU action::Phi6", "[cuda]") {
+    REQUIRE(reticolo::cuda::phi6_cpu_matches_device());
+}
+
+TEST_CASE("cuda DeviceAction<SineGordon> matches CPU action::SineGordon", "[cuda]") {
+    REQUIRE(reticolo::cuda::sine_gordon_cpu_matches_device());
+}
+
+TEST_CASE("cuda DeviceAction<Xy> matches CPU action::Xy", "[cuda]") {
+    REQUIRE(reticolo::cuda::xy_cpu_matches_device());
+}

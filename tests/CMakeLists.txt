@@ -57,20 +57,41 @@ reticolo_add_test(test_api_uniformity               unit/test_api_uniformity.cpp
 reticolo_add_test(test_philox                        unit/test_philox.cpp)
 
 if(RETICOLO_ENABLE_CUDA)
-    reticolo_add_test(test_cuda_selftest            cuda/test_cuda_selftest.cpp)
-    set_property(GLOBAL APPEND PROPERTY RETICOLO_CUDA_TARGETS test_cuda_selftest)
-    if(RETICOLO_BUILD_IO)
-        # Native .cu test: orchestrates cuda::Hmc + io::checkpoint in one TU. The
-        # host warning flags are CXX-guarded, so nvcc tolerates the io link.
-        reticolo_add_test(test_cuda_checkpoint      cuda/test_cuda_checkpoint.cu)
-        set_target_properties(test_cuda_checkpoint PROPERTIES
+    # Native .cu Catch2 tests: each device-validation gate is its own TU, like
+    # the CPU tests. nvcc compiles the .cu; the host warning flags applied by
+    # reticolo_add_test are CXX-guarded, so they stay inert on the device source.
+    function(reticolo_add_cuda_test name source)
+        reticolo_add_test(${name} ${source})
+        set_target_properties(${name} PROPERTIES
             CUDA_STANDARD              20
             CUDA_STANDARD_REQUIRED     ON
             CUDA_SEPARABLE_COMPILATION ON)
-        set_property(GLOBAL APPEND PROPERTY RETICOLO_CUDA_TARGETS test_cuda_checkpoint)
+        set_property(GLOBAL APPEND PROPERTY RETICOLO_CUDA_TARGETS ${name})
+    endfunction()
+
+    reticolo_add_cuda_test(test_cuda_selftest    cuda/test_cuda_selftest.cu)
+    reticolo_add_cuda_test(test_cuda_rng         cuda/test_cuda_rng.cu)
+    reticolo_add_cuda_test(test_cuda_stencil     cuda/test_cuda_stencil.cu)
+    reticolo_add_cuda_test(test_cuda_phi4        cuda/test_cuda_phi4.cu)
+    reticolo_add_cuda_test(test_cuda_scalar      cuda/test_cuda_scalar.cu)
+    reticolo_add_cuda_test(test_cuda_f32         cuda/test_cuda_f32.cu)
+    reticolo_add_cuda_test(test_cuda_hmc         cuda/test_cuda_hmc.cu)
+    reticolo_add_cuda_test(test_cuda_u1          cuda/test_cuda_u1.cu)
+    reticolo_add_cuda_test(test_cuda_wilson_u1   cuda/test_cuda_wilson_u1.cu)
+    reticolo_add_cuda_test(test_cuda_su2         cuda/test_cuda_su2.cu)
+    reticolo_add_cuda_test(test_cuda_su3         cuda/test_cuda_su3.cu)
+    reticolo_add_cuda_test(test_cuda_bose_gas    cuda/test_cuda_bose_gas.cu)
+
+    if(RETICOLO_BUILD_IO)
+        # Native .cu test: orchestrates cuda::Hmc + io::checkpoint in one TU.
+        reticolo_add_cuda_test(test_cuda_checkpoint cuda/test_cuda_checkpoint.cu)
     endif()
+
+    # Lint gate: no integrator reimplemented as a CUDA kernel. Scans the device
+    # kernel headers (hmc.cuh excepted — it legitimately names the reused
+    # alg::integ::* type parameter).
     add_test(NAME cuda_no_integrator_kernels
-             COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${PROJECT_SOURCE_DIR}/src/cuda
+             COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${PROJECT_SOURCE_DIR}/include/reticolo/cuda
                      -P ${CMAKE_CURRENT_SOURCE_DIR}/cuda/check_no_integrator_kernels.cmake)
 endif()
 

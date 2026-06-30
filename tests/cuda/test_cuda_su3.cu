@@ -11,9 +11,11 @@
 #include <reticolo/cuda/gauge/su3_device.cuh>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
-#include <reticolo/cuda/probes/su3_probe.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
 #include <reticolo/math/su3_ops.hpp>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -323,3 +325,28 @@ bool su3_hmc_runs() {
 }
 
 }  // namespace reticolo::cuda
+
+// SU(3) Wilson gauge — the same generic SU(N) kernels as SU(2) with GD = SU3Device.
+TEST_CASE("cuda SU3Device matrix ops match math::su3", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_device_ops_match_cpu());
+}
+
+TEST_CASE("cuda DeviceAction<Wilson<SU3>> matches CPU action::Wilson<SU3>", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_cpu_matches_device());
+}
+
+TEST_CASE("cuda SU3 Leapfrog MD conserves energy (2nd order)", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_energy_conserved_ok());
+}
+
+TEST_CASE("cuda SU3 HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_hmc_reversibility_ok());
+}
+
+TEST_CASE("cuda SU3 Gell-Mann momenta have the right moments", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_momentum_moments_ok());
+}
+
+TEST_CASE("cuda SU3 host-free HMC runs on the matrix link field", "[cuda]") {
+    REQUIRE(reticolo::cuda::su3_hmc_runs());
+}

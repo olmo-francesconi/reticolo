@@ -16,7 +16,7 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/gauge/group_device.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/stream.hpp>
 
 #include <cstdint>

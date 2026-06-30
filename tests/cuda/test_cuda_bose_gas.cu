@@ -10,8 +10,9 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
-#include <reticolo/cuda/probes/bose_gas_probe.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <complex>
@@ -204,3 +205,25 @@ bool bose_gas_hmc_runs_f32() {
 }
 
 }  // namespace reticolo::cuda
+
+// BoseGas — complex scalar (relativistic Bose gas at finite mu). Validated in
+// f64 and f32; the per-site S_R/F_R formula is shared with the CPU action.
+TEST_CASE("cuda DeviceAction<BoseGas<double>> matches CPU action::BoseGas", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_cpu_matches_device_f64());
+}
+
+TEST_CASE("cuda DeviceAction<BoseGas<float>> matches CPU to f32 tolerance", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_cpu_matches_device_f32());
+}
+
+TEST_CASE("cuda BoseGas HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_hmc_reversibility_ok());
+}
+
+TEST_CASE("cuda BoseGas host-free HMC runs (f64)", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_hmc_runs_f64());
+}
+
+TEST_CASE("cuda BoseGas host-free HMC runs (f32)", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_hmc_runs_f32());
+}

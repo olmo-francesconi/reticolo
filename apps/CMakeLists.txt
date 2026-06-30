@@ -60,7 +60,8 @@ if(RETICOLO_ENABLE_CUDA)
 
     # Lean GPU drivers (bench / Nsight profiling): link ONLY reticolo::cuda — no
     # io/cli, no HDF5 — so they build in a lean profiling config. Header-only core
-    # reaches them through reticolo::cuda's PUBLIC include dir.
+    # + the device stack reach them through reticolo::cuda's INTERFACE include dir
+    # (it carries the whole include/ tree); cudart comes via the same target.
     function(reticolo_add_cuda_tool name)
         add_executable(${name} ${ARGN})
         target_link_libraries(${name} PRIVATE reticolo::cuda)

@@ -11,9 +11,11 @@
 #include <reticolo/cuda/gauge/su2_device.cuh>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
-#include <reticolo/cuda/probes/su2_probe.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
 #include <reticolo/math/su2_ops.hpp>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -335,3 +337,28 @@ bool su2_hmc_runs() {
 }
 
 }  // namespace reticolo::cuda
+
+// SU(2) Wilson gauge on the device through the SAME unified DeviceAction.
+TEST_CASE("cuda SU2Device matrix ops match math::su2", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_device_ops_match_cpu());
+}
+
+TEST_CASE("cuda DeviceAction<Wilson<SU2>> matches CPU action::Wilson<SU2>", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_cpu_matches_device());
+}
+
+TEST_CASE("cuda SU2 Leapfrog MD conserves energy (2nd order)", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_energy_conserved_ok());
+}
+
+TEST_CASE("cuda SU2 HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_hmc_reversibility_ok());
+}
+
+TEST_CASE("cuda SU2 Gell-Mann momenta have the right moments", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_momentum_moments_ok());
+}
+
+TEST_CASE("cuda SU2 host-free HMC runs on the matrix link field", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_hmc_runs());
+}

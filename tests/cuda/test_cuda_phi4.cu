@@ -4,11 +4,13 @@
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
-#include <reticolo/cuda/probes/phi4_probe.hpp>
 
 #include <cmath>
 #include <cstddef>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // Scalar device field + generic DeviceAction over the real Phi4 functor pair.
 // The CPU action::Phi4 and the device path call the same shared HD per-site
@@ -87,3 +89,14 @@ bool phi4_cpu_matches_device() {
 }
 
 }  // namespace reticolo::cuda
+
+// A scalar field survives the host<->device round-trip unchanged.
+TEST_CASE("cuda DeviceField round-trips a scalar field", "[cuda]") {
+    REQUIRE(reticolo::cuda::phi4_roundtrip_ok());
+}
+
+// The generic DeviceAction over the real Phi4 functor pair reproduces the CPU
+// action::Phi4 s_full and force to roundoff.
+TEST_CASE("cuda DeviceAction<Phi4> matches CPU action::Phi4 to roundoff", "[cuda]") {
+    REQUIRE(reticolo::cuda::phi4_cpu_matches_device());
+}

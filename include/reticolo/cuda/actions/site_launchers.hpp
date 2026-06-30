@@ -1,7 +1,7 @@
 #pragma once
 
 #include <reticolo/cuda/device_topology.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/reduce_fwd.cuh>
 #include <reticolo/cuda/rng_philox.cuh>
 #include <reticolo/cuda/stencil.cuh>

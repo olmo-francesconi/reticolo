@@ -7,7 +7,7 @@
 #include <reticolo/cuda/gauge/group_device.hpp>
 #include <reticolo/cuda/gauge_sun.cuh>
 #include <reticolo/cuda/gauge_u1.cuh>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/rng_philox.cuh>
 
 #include <cstdint>

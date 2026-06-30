@@ -9,9 +9,9 @@
 // and gets the whole device stack: DeviceField (the host-side handle), the
 // generic DeviceAction<HostAction,Field> + Hmc<DAct,Integ,Field>, on-device
 // reductions, and the device-functor adapters for every supported action +
-// gauge group. The per-phase validation harnesses under cuda/probes/ are NOT
-// part of the public API and are intentionally excluded — only the selftest TU
-// includes those.
+// gauge group. The per-phase device-vs-CPU validation gates are native .cu
+// Catch2 tests under tests/cuda/ (test_cuda_<action>.cu); they include the
+// kernel headers directly and are not part of this public umbrella.
 //
 // This header is nvcc-only: it pulls in .cuh kernel headers and <cuda_runtime.h>
 // transitively. It must never be reached from a pure-host TU; that is the same
@@ -28,7 +28,7 @@
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/macros.hpp>
 #include <reticolo/cuda/pinned.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/stream.hpp>
 // Device-functor adapters: one per supported host action.
 #include <reticolo/cuda/actions/bose_gas.hpp>

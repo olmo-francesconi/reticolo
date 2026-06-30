@@ -1,8 +1,10 @@
 #include <reticolo/core/philox.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
-#include <reticolo/cuda/probes/rng_probe.hpp>
 #include <reticolo/cuda/rng_philox.cuh>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -126,3 +128,18 @@ bool philox_moments_ok() {
 }
 
 }  // namespace reticolo::cuda
+
+// Device Philox uniforms are bit-identical to the host primitive.
+TEST_CASE("cuda Philox device matches host bit-for-bit", "[cuda]") {
+    REQUIRE(reticolo::cuda::philox_host_matches_device());
+}
+
+// Advancing the trajectory counter changes momenta; same counter repeats.
+TEST_CASE("cuda Philox trajectory counter advances the stream", "[cuda]") {
+    REQUIRE(reticolo::cuda::philox_traj_distinct());
+}
+
+// A large device fill is ~N(0,1).
+TEST_CASE("cuda Philox normals have N(0,1) moments", "[cuda]") {
+    REQUIRE(reticolo::cuda::philox_moments_ok());
+}

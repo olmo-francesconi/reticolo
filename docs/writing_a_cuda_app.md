@@ -33,9 +33,10 @@ warnings (inert on the `.cu` compile), and sets `CUDA_STANDARD 20`.
 
 `<reticolo/cuda/cuda.hpp>` re-exports the public device API: `DeviceField`,
 `DeviceAction`, `cuda::Hmc`, the on-device reductions, and the device-functor
-adapters for every supported action + gauge group. It does **not** include the
-`cuda/probes/` validation harnesses. `io::Writer` PIMPLs HDF5, so nvcc never sees
-`<hdf5.h>` — the app just links the prebuilt `reticolo::io` archive.
+adapters for every supported action + gauge group. The device-vs-CPU validation
+gates are separate `tests/cuda/test_cuda_<name>.cu` files, not part of this
+umbrella. `io::Writer` PIMPLs HDF5, so nvcc never sees `<hdf5.h>` — the app just
+links the prebuilt `reticolo::io` archive.
 
 ## Step 2 — pick the device types
 
@@ -138,9 +139,9 @@ You do **not** rewrite the physics. The per-site formula already lives in
    plaquette launchers (copy `actions/phi4.hpp` for a scalar, `actions/wilson.hpp`
    for a gauge action).
 2. Re-export it from `include/reticolo/cuda/cuda.hpp`.
-3. Add a probe in `src/cuda/probes/<name>_probe.cu` + its `.hpp`, register the
-   `.cu` in `src/cuda/CMakeLists.txt`, and include the header from
-   `tests/cuda/test_cuda_selftest.cpp`. The canonical gates are device-ops-vs-CPU,
+3. Add a native `.cu` Catch2 test `tests/cuda/test_cuda_<name>.cu` (copy an
+   existing one) and register it with `reticolo_add_cuda_test(...)` in
+   `tests/CMakeLists.txt`. The canonical gates are device-ops-vs-CPU,
    `s_full`+force vs the CPU action to ~1e-9, MD energy conservation, and
    reversibility.
 
@@ -155,4 +156,5 @@ instantiation error pointing straight at it.
   namespace scope — `reticolo::log` collides with CUDA's `::log` math function in
   device headers ("reference to 'log' is ambiguous").
 - **`act::` is an umbrella-only alias.** In a TU that does not include
-  `<reticolo/reticolo.hpp>` (e.g. a probe `.cu`), spell it `action::`.
+  `<reticolo/reticolo.hpp>` (e.g. a `tests/cuda/*.cu` device test), spell it
+  `action::`.

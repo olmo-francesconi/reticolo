@@ -9,8 +9,9 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
-#include <reticolo/cuda/probes/wilson_u1_probe.hpp>
-#include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/reduce.cuh>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -157,3 +158,17 @@ bool wilson_u1_hmc_runs() {
 }
 
 }  // namespace reticolo::cuda
+
+// Wilson<U(1)> on the device via the SPECIALIZED abelian path (reuses the
+// CompactU1 angle kernels on a 1-angle LinkLayout field).
+TEST_CASE("cuda DeviceAction<Wilson<U1>> matches CPU action::Wilson<U1>", "[cuda]") {
+    REQUIRE(reticolo::cuda::wilson_u1_cpu_matches_device());
+}
+
+TEST_CASE("cuda Wilson<U1> HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::wilson_u1_hmc_reversibility_ok());
+}
+
+TEST_CASE("cuda Wilson<U1> host-free HMC runs on the link field", "[cuda]") {
+    REQUIRE(reticolo::cuda::wilson_u1_hmc_runs());
+}
