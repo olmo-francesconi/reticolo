@@ -1,7 +1,7 @@
 #pragma once
 
 #include <reticolo/action/detail/concepts.hpp>
-#include <reticolo/action/detail/xy_formula.hpp>
+#include <reticolo/action/detail/site/xy_formula.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>

@@ -1,5 +1,5 @@
-#include <reticolo/action/compact_u1.hpp>
-#include <reticolo/action/phi4.hpp>
+#include <reticolo/action/gauge/compact_u1.hpp>
+#include <reticolo/action/site/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/rng.hpp>

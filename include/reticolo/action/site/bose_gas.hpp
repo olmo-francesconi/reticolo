@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/detail/bose_gas_formula.hpp>
-#include <reticolo/action/detail/helpers.hpp>
+#include <reticolo/action/detail/site/bose_gas_formula.hpp>
+#include <reticolo/action/detail/site/helpers.hpp>
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/indexing.hpp>

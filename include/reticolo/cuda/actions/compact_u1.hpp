@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/action/compact_u1.hpp>
+#include <reticolo/action/gauge/compact_u1.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/gauge_u1.cuh>

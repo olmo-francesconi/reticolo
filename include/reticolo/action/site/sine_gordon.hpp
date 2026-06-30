@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/detail/helpers.hpp>
-#include <reticolo/action/detail/sine_gordon_formula.hpp>
+#include <reticolo/action/detail/site/helpers.hpp>
+#include <reticolo/action/detail/site/sine_gordon_formula.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>

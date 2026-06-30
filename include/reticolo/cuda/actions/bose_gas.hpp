@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/bose_gas.hpp>
-#include <reticolo/action/detail/bose_gas_formula.hpp>
+#include <reticolo/action/site/bose_gas.hpp>
+#include <reticolo/action/detail/site/bose_gas_formula.hpp>
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/actions/site_launchers.hpp>

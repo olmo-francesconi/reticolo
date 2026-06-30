@@ -6,8 +6,8 @@
 // tails, every row crosses batch boundaries (gather fallback), and the
 // SU(2) misaligned-L0 visit_plane guard is taken.
 
-#include <reticolo/action/detail/gauge_group/su2.hpp>
-#include <reticolo/action/detail/gauge_group/su3.hpp>
+#include <reticolo/action/detail/gauge/gauge_group/su2.hpp>
+#include <reticolo/action/detail/gauge/gauge_group/su3.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/math/su2_ops.hpp>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/detail/sine_gordon_formula.hpp>
-#include <reticolo/action/sine_gordon.hpp>
+#include <reticolo/action/detail/site/sine_gordon_formula.hpp>
+#include <reticolo/action/site/sine_gordon.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/actions/site_launchers.hpp>
 #include <reticolo/cuda/macros.hpp>

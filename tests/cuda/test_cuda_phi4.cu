@@ -1,4 +1,4 @@
-#include <reticolo/action/phi4.hpp>
+#include <reticolo/action/site/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/cuda/actions/phi4.hpp>
 #include <reticolo/cuda/check.hpp>

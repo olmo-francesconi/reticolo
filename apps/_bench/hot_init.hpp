@@ -1,8 +1,8 @@
 #pragma once
 
-#include <reticolo/action/detail/gauge_group/su2.hpp>
-#include <reticolo/action/detail/gauge_group/su3.hpp>
-#include <reticolo/action/detail/gauge_group/u1.hpp>
+#include <reticolo/action/detail/gauge/gauge_group/su2.hpp>
+#include <reticolo/action/detail/gauge/gauge_group/su3.hpp>
+#include <reticolo/action/detail/gauge/gauge_group/u1.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>

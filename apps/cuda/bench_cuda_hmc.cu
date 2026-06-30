@@ -8,12 +8,12 @@
 // link field — the gauge row does ~ndim× the elementwise work at equal V, so
 // compare within an action across V, and across actions at equal DOF.
 
-#include <reticolo/action/compact_u1.hpp>
-#include <reticolo/action/phi4.hpp>
-#include <reticolo/action/phi6.hpp>
-#include <reticolo/action/sine_gordon.hpp>
-#include <reticolo/action/wilson.hpp>
-#include <reticolo/action/xy.hpp>
+#include <reticolo/action/gauge/compact_u1.hpp>
+#include <reticolo/action/site/phi4.hpp>
+#include <reticolo/action/site/phi6.hpp>
+#include <reticolo/action/site/sine_gordon.hpp>
+#include <reticolo/action/gauge/wilson.hpp>
+#include <reticolo/action/site/xy.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/cuda/actions/compact_u1.hpp>

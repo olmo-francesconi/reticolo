@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/detail/phi6_formula.hpp>
-#include <reticolo/action/phi6.hpp>
+#include <reticolo/action/detail/site/phi6_formula.hpp>
+#include <reticolo/action/site/phi6.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/actions/site_launchers.hpp>
 #include <reticolo/cuda/macros.hpp>

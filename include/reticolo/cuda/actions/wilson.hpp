@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/detail/gauge_group/u1.hpp>
-#include <reticolo/action/wilson.hpp>
+#include <reticolo/action/detail/gauge/gauge_group/u1.hpp>
+#include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/gauge/group_device.hpp>

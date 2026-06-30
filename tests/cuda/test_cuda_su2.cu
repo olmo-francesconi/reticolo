@@ -1,5 +1,5 @@
-#include <reticolo/action/detail/gauge_group/su2.hpp>
-#include <reticolo/action/wilson.hpp>
+#include <reticolo/action/detail/gauge/gauge_group/su2.hpp>
+#include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/rng.hpp>

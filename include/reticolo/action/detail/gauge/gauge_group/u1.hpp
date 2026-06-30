@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/detail/gauge_group/base.hpp>
-#include <reticolo/action/detail/gauge_helpers.hpp>
+#include <reticolo/action/detail/gauge/gauge_group/base.hpp>
+#include <reticolo/action/detail/gauge/gauge_helpers.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/math/vec_libm.hpp>
 

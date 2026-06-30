@@ -3,9 +3,9 @@
 // that the generic Wilson<G> action over MatrixLinkLattice<G,T> reduces to the
 // hand-tuned CompactU1 path at N = 1.
 
-#include <reticolo/action/compact_u1.hpp>
-#include <reticolo/action/detail/gauge_group/u1.hpp>
-#include <reticolo/action/wilson.hpp>
+#include <reticolo/action/gauge/compact_u1.hpp>
+#include <reticolo/action/detail/gauge/gauge_group/u1.hpp>
+#include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/rng.hpp>

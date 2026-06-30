@@ -1,5 +1,5 @@
 #include <reticolo/action/detail/concepts.hpp>
-#include <reticolo/action/xy.hpp>
+#include <reticolo/action/site/xy.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>

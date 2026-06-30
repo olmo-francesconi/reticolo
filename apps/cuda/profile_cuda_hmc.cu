@@ -14,8 +14,8 @@
 // reduce_sumsq_*, axpy_*, ...). Args: --action=phi4|su3 --size=L [--ndim=4]
 // [--n_md=10] [--iters=30] [--force-only].
 
-#include <reticolo/action/phi4.hpp>
-#include <reticolo/action/wilson.hpp>
+#include <reticolo/action/site/phi4.hpp>
+#include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/cuda/actions/phi4.hpp>

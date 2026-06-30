@@ -1,6 +1,6 @@
-#include <reticolo/action/phi6.hpp>
-#include <reticolo/action/sine_gordon.hpp>
-#include <reticolo/action/xy.hpp>
+#include <reticolo/action/site/phi6.hpp>
+#include <reticolo/action/site/sine_gordon.hpp>
+#include <reticolo/action/site/xy.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/cuda/actions/phi6.hpp>
 #include <reticolo/cuda/actions/sine_gordon.hpp>

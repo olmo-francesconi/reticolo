@@ -1,4 +1,4 @@
-#include <reticolo/action/bose_gas.hpp>
+#include <reticolo/action/site/bose_gas.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/core/lattice.hpp>

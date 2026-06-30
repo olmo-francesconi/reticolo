@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/detail/compact_u1_formula.hpp>
-#include <reticolo/action/detail/gauge_helpers.hpp>
+#include <reticolo/action/detail/gauge/compact_u1_formula.hpp>
+#include <reticolo/action/detail/gauge/gauge_helpers.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/link_lattice.hpp>
