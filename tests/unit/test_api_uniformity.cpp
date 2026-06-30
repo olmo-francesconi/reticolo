@@ -51,11 +51,6 @@ TEST_CASE("s_full and its cache return double across actions", "[api][sfull]") {
     STATIC_REQUIRE(s_full_returns_double<act::Phi6<float>, float>);
     STATIC_REQUIRE(s_full_returns_double<act::SineGordon<float>, float>);
 
-    // O(N): value type is an N-vector.
-    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<act::OnSigma<3> const&>().s_full(
-                                      std::declval<Lattice<std::array<double, 3>> const&>())),
-                                  double>);
-
     // Gauge link action.
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<act::CompactU1<double> const&>().s_full(
                                       std::declval<LinkLattice<double> const&>())),
@@ -79,9 +74,9 @@ TEST_CASE("BoseGas s_full / s_imag and caches return double", "[api][sfull][bose
 // complex-field action no longer carries a complex k_dt. ----
 TEST_CASE("BoseGas fused kick takes a real coefficient and satisfies HasFusedKick", "[api][kick]") {
     using C = std::complex<double>;
-    STATIC_REQUIRE(action::HasFusedKick<act::BoseGas<double>, C>);
-    STATIC_REQUIRE(action::HasFusedKick<act::Phi4<double>, double>);
-    STATIC_REQUIRE(gauge::HasLinkFusedKick<act::CompactU1<double>, double>);
+    STATIC_REQUIRE(action::HasFusedKick<act::BoseGas<double>, Lattice<C>>);
+    STATIC_REQUIRE(action::HasFusedKick<act::Phi4<double>, Lattice<double>>);
+    STATIC_REQUIRE(action::HasFusedKick<act::CompactU1<double>, LinkLattice<double>>);
 
     // The kick coefficient parameter is a real double, not std::complex.
     using KickArg = double;
@@ -122,35 +117,13 @@ TEST_CASE("BoseGas fused kick equals force-then-kick", "[api][kick][bose]") {
     }
 }
 
-// ---- #4: every updater shares the (action, field, rng, spec, ...) shape. ----
-TEST_CASE("Wolff constructs with a WolffSpec and stays 3-arg compatible", "[api][wolff]") {
-    act::Xy<double> const xy{.beta = 1.0};
-    Lattice<double> theta{Lattice<double>::SizeVec{8, 8}};
-    for (double& t : theta) {
-        t = 0.0;
-    }
-    FastRng rng{1};
-
-    alg::Wolff<act::Xy<double>, FastRng> with_spec{xy, theta, rng, alg::WolffSpec{}};
-    alg::Wolff<act::Xy<double>, FastRng> without_spec{xy, theta, rng};
-    STATIC_REQUIRE(std::is_same_v<decltype(with_spec.step()), alg::WolffResult>);
-    (void)with_spec;
-    (void)without_spec;
-    SUCCEED();
-}
-
-// ---- #5: MetropolisResult's count fields are n_accepted/n_attempts (de-collided
-// from HmcResult::accepted), with acceptance() as the blessed accessor. ----
-TEST_CASE("MetropolisResult exposes n_accepted/n_attempts and acceptance()", "[api][metropolis]") {
-    alg::MetropolisResult const r{.n_accepted = 3, .n_attempts = 4};
-    REQUIRE(r.acceptance() == Catch::Approx(0.75));
-
-    alg::MetropolisResult const empty{};
-    REQUIRE(empty.acceptance() == 0.0);  // n_attempts == 0 guard, no div-by-zero
-
-    // HmcResult keeps a bool `accepted`; the shared accessor is acceptance().
+// ---- HmcResult exposes acceptance() as the blessed accessor. ----
+TEST_CASE("HmcResult exposes acceptance()", "[api][hmc]") {
     alg::HmcResult const h{.dH = -0.1, .accepted = true};
     REQUIRE(h.acceptance() == 1.0);
+
+    alg::HmcResult const rej{.dH = 2.0, .accepted = false};
+    REQUIRE(rej.acceptance() == 0.0);
 }
 
 // ---- #7: the shared app setup helpers register the universal flags and join

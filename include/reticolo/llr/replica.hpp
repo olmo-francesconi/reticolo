@@ -197,23 +197,22 @@ public:
         }
     }
 
-    // Drive `sampler` in batches until |S_constraint − E_n| < threshold_sigmas·δ
-    // or `max_batches` × `batch_size` steps have been taken. The sampler must
-    // operate on this replica's field via this replica's WindowedAction; HMC
-    // works unchanged, Metropolis works via the sweep-state hooks.
+    // Drive this replica's own windowed HMC in batches until
+    // |S_constraint − E_n| < threshold_sigmas·δ or `max_batches` × `batch_size`
+    // trajectories have been taken. The windowed force pins trajectories toward
+    // E_n; deep in the S tail a stiffer integrator (more MD steps) may be needed
+    // for the leapfrog to stay stable — tune via the replica's HmcSpec.
     //
     // Returns the number of batches consumed. `== max_batches` means budget
     // exhausted without convergence.
-    template <class Sampler>
-    int thermalize_until_in_window(Sampler& sampler,
-                                   int max_batches,
-                                   int batch_size          = 10,
-                                   double threshold_sigmas = 1.0,
-                                   log::Mode log_mode      = log::Mode::normal) {
+    int warm_into_window(int max_batches,
+                         int batch_size          = 10,
+                         double threshold_sigmas = 1.0,
+                         log::Mode log_mode      = log::Mode::normal) {
         auto _ = log::scope(id_);
         for (int b = 0; b < max_batches; ++b) {
             for (int i = 0; i < batch_size; ++i) {
-                (void)sampler.step(log::Mode::silent);
+                (void)hmc_.step(log::Mode::silent);
             }
             scalar_t const q   = windowed_.constraint_value(phi_);
             scalar_t const dev = std::abs(q - windowed_.E_n);

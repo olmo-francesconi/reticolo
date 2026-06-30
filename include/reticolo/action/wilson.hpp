@@ -116,36 +116,6 @@ struct Wilson {
 
     mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 
-    // Sum of Re Tr U_p over the 2(d−1) plaquettes through link (x, μ),
-    // wrapped into the Wilson constant offset so the returned value is
-    // non-negative for the cold config (theta = 0 → cos(0) = 1 → S_local = 0).
-
-    [[nodiscard]] T s_local(field_type const& U, Site x, std::size_t mu) const noexcept {
-        std::size_t const d  = U.ndims();
-        std::size_t const ns = U.nsites();
-        T const* mb          = U.mu_block_data(mu);
-        double cos_sum       = 0.0;
-        for (std::size_t nu = 0; nu < d; ++nu) {
-            if (nu == mu) {
-                continue;
-            }
-            T const* nb              = U.mu_block_data(nu);
-            std::size_t const x_v    = x.value();
-            std::size_t const x_pmu  = U.next(x, mu).value();
-            std::size_t const x_pnu  = U.next(x, nu).value();
-            Site const x_mnu_site    = U.prev(x, nu);
-            std::size_t const x_mnu  = x_mnu_site.value();
-            std::size_t const x_mnup = U.next(x_mnu_site, mu).value();
-            // Forward plaquette anchored at x.
-            cos_sum += G::plaq_re_tr(mb, nb, x_v, x_pmu, x_pnu, ns);
-            // Backward plaquette anchored at x − ν̂.
-            cos_sum += G::plaq_re_tr(mb, nb, x_mnu, x_mnup, x_v, ns);
-        }
-        T const n_plaq_per_link = T{2} * static_cast<T>(d - 1);
-        T const N_re            = static_cast<T>(G::n_color);
-        T const beta_over_n     = beta / N_re;
-        return (beta * n_plaq_per_link) - (beta_over_n * static_cast<T>(cos_sum));
-    }
 };
 
 }  // namespace reticolo::action

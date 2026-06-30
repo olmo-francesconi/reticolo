@@ -5,7 +5,6 @@
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
-#include <reticolo/core/site.hpp>
 
 #include <cstddef>
 #include <limits>
@@ -20,8 +19,7 @@ namespace reticolo::action {
 //                + lambda (phi(x)^2 - 1)^2 ]
 //
 // Each nearest-neighbour bond appears once in `s_full` (positive-mu
-// convention). `s_local(x)` for Metropolis sums all 2d neighbours of x —
-// the contribution to S that involves phi(x), each touching bond once.
+// convention).
 //
 // MD force is `force(x) = -dS/dphi(x)`. The hot kernels (`s_full`,
 // `compute_force`) hoist raw pointers and run a tight counter-indexed
@@ -39,31 +37,6 @@ struct Phi4 {
         e.line("Phi4<{}>", scalar_name<T>());
         e.param("κ={:.3f}", kappa);
         e.param("λ={:.3f}", lambda);
-    }
-
-    [[nodiscard]] T s_local(Lattice<T> const& l, Site x) const noexcept {
-        T const phi  = l[x];
-        T const nbrs = nn_neighbour_sum(l, x);
-        T const phi2 = phi * phi;
-        T const dev  = phi2 - T{1};
-        return (T{-2} * kappa * phi * nbrs) + phi2 + (lambda * dev * dev);
-    }
-
-    [[nodiscard]] T ds_local(Lattice<T> const& l, Site x, T new_v) const noexcept {
-        return ds_local_from_nbrs(l[x], new_v, nn_neighbour_sum(l, x));
-    }
-
-    // Pure-math form: ds given phi, new_v, and the unweighted sum of all 2*ndims
-    // nearest-neighbour values. Used by the visit_nn Metropolis fast path.
-    [[nodiscard]] T ds_local_from_nbrs(T phi, T new_v, T nbrs) const noexcept {
-        T const phi2_old = phi * phi;
-        T const phi2_new = new_v * new_v;
-        T const dev_old  = phi2_old - T{1};
-        T const dev_new  = phi2_new - T{1};
-        T const hop      = T{-2} * kappa * (new_v - phi) * nbrs;
-        T const onsite =
-            (phi2_new - phi2_old) + (lambda * ((dev_new * dev_new) - (dev_old * dev_old)));
-        return hop + onsite;
     }
 
     // The per-site contribution is evaluated in the field's scalar type `T`

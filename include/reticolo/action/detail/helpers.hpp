@@ -737,22 +737,3 @@ template <class T, class Body>
 }
 
 }  // namespace reticolo::action::detail
-
-namespace reticolo::action {
-
-// Small per-site helper for the built-in scalar Metropolis kernels
-// (`s_local`, `ds_local`) — sums phi(y) over the 2*ndims NN of x with each
-// bond counted once. Hot HMC kernels (`s_full`, `compute_force`) bypass this
-// and inline the visit pattern directly; don't call from inside them since
-// the function-call boundary inhibits the raw-pointer hoist.
-template <class T>
-[[nodiscard]] T nn_neighbour_sum(Lattice<T> const& l, Site x) noexcept {
-    T sum = T{0};
-    for (std::size_t mu = 0; mu < l.ndims(); ++mu) {
-        sum += l[l.next(x, mu)];
-        sum += l[l.prev(x, mu)];
-    }
-    return sum;
-}
-
-}  // namespace reticolo::action

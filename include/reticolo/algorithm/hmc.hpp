@@ -56,15 +56,11 @@ struct HmcResult {
 //                             Gaussian (§29.5.4 guarantees the layout).
 //   - anything else:          per-element static_cast<F>(rng_.normal())
 
-// Field-agnostic action gate: any action with `s_full(field)` and
-// `compute_force(field, force)` qualifies. The existing scalar/U(1) actions
-// satisfy this via `HasSEff`+`HasForce` / `HasLinkSEff`+`HasLinkForce`; the
-// new `Wilson<G>` over `MatrixLinkLattice<G, T>` satisfies it directly.
-template <class A, class Field>
-concept HmcAction = requires(A const& a, Field const& l, Field& f) {
-    { a.s_full(l) } -> std::convertible_to<double>;
-    { a.compute_force(l, f) };
-};
+// The field-agnostic action gate `action::HmcAction<A, Field>` (defined in
+// action/detail/concepts.hpp) is the single source of truth: any action with
+// `s_full(field)` and `compute_force(field, force)` qualifies — scalar, U(1),
+// and `Wilson<G>` over `MatrixLinkLattice<G, T>` all satisfy it directly.
+using action::HmcAction;
 
 // Optional: action caches its last `s_full` evaluation and exposes a
 // restore-from-snapshot hook so HMC can roll the cache back on a rejected

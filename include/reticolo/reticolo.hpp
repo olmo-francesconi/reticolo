@@ -12,7 +12,6 @@
 #include <reticolo/action/detail/gauge_group/su3.hpp>
 #include <reticolo/action/detail/gauge_group/u1.hpp>
 #include <reticolo/action/detail/helpers.hpp>
-#include <reticolo/action/on_sigma.hpp>
 #include <reticolo/action/phi4.hpp>
 #include <reticolo/action/phi6.hpp>
 #include <reticolo/action/sine_gordon.hpp>
@@ -20,8 +19,6 @@
 #include <reticolo/action/xy.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
-#include <reticolo/algorithm/metropolis.hpp>
-#include <reticolo/algorithm/wolff.hpp>
 #include <reticolo/app/setup.hpp>
 #include <reticolo/cli/parser.hpp>
 #include <reticolo/core/field_traits.hpp>

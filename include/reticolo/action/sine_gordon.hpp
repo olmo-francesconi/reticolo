@@ -5,7 +5,6 @@
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
-#include <reticolo/core/site.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
 #include <cmath>
@@ -34,23 +33,6 @@ struct SineGordon {
         e.line("SineGordon<{}>", scalar_name<T>());
         e.param("κ={:.3f}", kappa);
         e.param("α={:.3f}", alpha);
-    }
-
-    [[nodiscard]] T s_local(Lattice<T> const& l, Site x) const noexcept {
-        T const phi  = l[x];
-        T const nbrs = nn_neighbour_sum(l, x);
-        return (T{-2} * kappa * phi * nbrs) + (phi * phi) - (alpha * std::cos(phi));
-    }
-
-    [[nodiscard]] T ds_local(Lattice<T> const& l, Site x, T new_v) const noexcept {
-        return ds_local_from_nbrs(l[x], new_v, nn_neighbour_sum(l, x));
-    }
-
-    [[nodiscard]] T ds_local_from_nbrs(T phi, T new_v, T nbrs) const noexcept {
-        T const hop  = T{-2} * kappa * (new_v - phi) * nbrs;
-        T const mass = (new_v * new_v) - (phi * phi);
-        T const pot  = -alpha * (std::cos(new_v) - std::cos(phi));
-        return hop + mass + pot;
     }
 
     // Per-site math in `T`, volume sum accumulated in (and returned as) `double`

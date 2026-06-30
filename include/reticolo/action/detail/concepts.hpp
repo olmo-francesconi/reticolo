@@ -1,172 +1,59 @@
 #pragma once
 
 #include <reticolo/core/field_traits.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
-#include <reticolo/core/site.hpp>
 
 #include <concepts>
-#include <cstddef>
 
 namespace reticolo::action {
 
-// Concept lattice.
+// Concept lattice — HMC only.
 //
-// Every action is a plain struct. The minimum interface (`LocalAction`) is
-// the two members an updater needs to do a Metropolis sweep: the local
-// contribution to S at a site, and the change in that contribution under a
-// proposed value. Everything else is an *opt-in refinement*: the action
-// exposes one additional member function and a corresponding concept matches.
-// This is how HMC, full-S diagnostics, and Wolff cluster moves are selected
-// at instantiation without growing `LocalAction` itself.
+// Every action is a plain struct. The HMC updater needs exactly two members:
+// the full action total and the molecular-dynamics force. Both are
+// field-agnostic — they take the action's `Field` (a `Lattice<F>` for site
+// actions, a `LinkLattice<F>` / `MatrixLinkLattice<G,F>` for gauge actions)
+// and never mention a site index — so one concept set covers scalar and gauge
+// alike. (Earlier revisions carried a separate `gauge::` family solely because
+// the Metropolis elementary update had a different arity, `(Site, mu)` vs
+// `Site`. With Metropolis gone, that distinction is gone with it.)
 //
-// Every concept takes `Lattice<F> const&`. Actions must not mutate the field.
-// Force kernels receive a separate `Lattice<F>&` to write into.
-//
-// No preprocessor inside any concept body. If/when parallelism returns,
-// it lands as a sibling concept (`HasForceInParallel`) and a separate updater
-// specialisation, never as a macro flip.
+// Everything beyond the baseline is an opt-in refinement: the action exposes
+// one more member and a corresponding concept matches, selecting the fused
+// kick or the complex-LLR constraint path at instantiation. No base class, no
+// virtual dispatch, no macros.
 
-// Baseline: enough to drive a Metropolis sweep with a uniform / external proposal.
-template <class A, class F>
-concept LocalAction = requires(A const& a, Lattice<F> const& l, Site x, F nv) {
-    { a.s_local(l, x) } -> std::convertible_to<double>;
-    { a.ds_local(l, x, nv) } -> std::convertible_to<double>;
-};
-
-// Refinement: full action total. Required for HMC dH evaluation and for
-// diagnostics that want S itself (not just local contributions).
-template <class A, class F>
-concept HasSEff = LocalAction<A, F> && requires(A const& a, Lattice<F> const& l) {
+// Baseline: enough to run HMC. `compute_force` OVERWRITES `force` with
+// -dS/dfield — it fully produces the buffer and never reads its prior
+// contents, so callers don't pre-zero. (Actions that accumulate plane-by-plane
+// internally must zero on entry to honour this.)
+template <class A, class Field>
+concept HmcAction = requires(A const& a, Field const& l, Field& f) {
     { a.s_full(l) } -> std::convertible_to<double>;
+    { a.compute_force(l, f) };
 };
 
-// Refinement: molecular-dynamics force. The kernel OVERWRITES `force` with
-// -dS/dphi — it fully produces the buffer and never reads its prior contents,
-// so callers don't pre-zero. (Actions that accumulate plane-by-plane internally
-// must zero on entry to honour this.)
-template <class A, class F>
-concept HasForce =
-    LocalAction<A, F> && requires(A const& a, Lattice<F> const& l, Lattice<F>& force) {
-        { a.compute_force(l, force) };
-    };
-
-// Refinement: fused force + kick. `compute_force_and_kick(field, mom, k)` computes
-// the per-site force F(x) and applies `mom(x) += k * F(x)` in a single pass — never
-// materialising the force lattice in memory. The HMC integrator prefers this path
-// when present; actions that only implement `compute_force` keep working unchanged.
-template <class A, class F>
+// Refinement: fused force + kick. `compute_force_and_kick(field, mom, k)`
+// computes the per-site force F(x) and applies `mom(x) += k * F(x)` in a single
+// pass — never materialising the force lattice. The HMC integrator prefers this
+// path when present; actions that only implement `compute_force` keep working.
+template <class A, class Field>
 concept HasFusedKick =
-    HasForce<A, F> &&
-    requires(A const& a, Lattice<F> const& l, Lattice<F>& mom, real_scalar_t<F> k) {
+    HmcAction<A, Field> &&
+    requires(A const& a, Field const& l, Field& mom, real_scalar_t<typename Field::value_type> k) {
         { a.compute_force_and_kick(l, mom, k) };
     };
 
-// Refinement: action exposes ds_local as pure math on (phi, new_v, nbrs), where
-// nbrs is the unweighted sum of all 2*ndims nearest neighbours of the site. The
-// Metropolis sweep uses this path with `visit_nn` (direct-stride neighbour reads,
-// vectorisation-friendly) when supported; otherwise it falls back to `ds_local`.
-template <class A, class F>
-concept HasDsLocalFromNbrs = LocalAction<A, F> && requires(A const& a, F phi, F new_v, F nbrs) {
-    { a.ds_local_from_nbrs(phi, new_v, nbrs) } -> std::convertible_to<double>;
-};
-
-// Refinement: action provides its own Metropolis proposal kernel. Selected at
-// updater instantiation via `if constexpr`; the fallback is a Gaussian proposal.
-template <class A, class F, class R>
-concept HasProposal =
-    LocalAction<A, F> && Rng<R> && requires(A const& a, Lattice<F> const& l, Site x, R& rng) {
-        { a.propose(l, x, rng) } -> std::convertible_to<F>;
-    };
-
-// Refinement: action has a complex-valued total, decomposed as S = S_R + i*S_I,
-// where `s_full` returns the real (phase-quenched) part driving HMC and
-// `s_imag` returns the imaginary part — typically used as the LLR constraint
-// observable when the full theory has a sign problem. `compute_force_imag`
-// writes the analog of `compute_force` (the gradient of `s_imag`) into a
-// separate buffer; the LLR window combines them with the right coefficients.
-template <class A, class F>
+// Refinement: action has a complex-valued total, decomposed as S = S_R + i*S_I.
+// `s_full` returns the real (phase-quenched) part driving HMC and `s_imag`
+// returns the imaginary part — typically the LLR constraint observable when the
+// full theory has a sign problem. `compute_force_imag` writes the gradient of
+// `s_imag` into a separate buffer; the LLR window combines them with the right
+// coefficients.
+template <class A, class Field>
 concept HasImagPart =
-    HasSEff<A, F> && HasForce<A, F> &&
-    requires(A const& a, Lattice<F> const& l, Lattice<F>& force, Site x, F new_v) {
+    HmcAction<A, Field> && requires(A const& a, Field const& l, Field& force) {
         { a.s_imag(l) } -> std::convertible_to<double>;
-        { a.ds_imag_local(l, x, new_v) } -> std::convertible_to<double>;
         { a.compute_force_imag(l, force) };
     };
 
-// Refinement: action carries running per-sweep state. The Metropolis sweep
-// calls `begin_sweep` once before the first site update, then `commit_accept`
-// every time a site move is accepted (BEFORE the new value is written to the
-// field — so the action can read the pre-move field to compute the local
-// change). Used by LLR's `WindowedAction` to maintain a running constraint
-// value so its `ds_local` returns the full windowed delta.
-template <class A, class F>
-concept HasSweepState =
-    LocalAction<A, F> && requires(A const& a, Lattice<F> const& l, Site x, F new_v) {
-        { a.begin_sweep(l) };
-        { a.commit_accept(l, x, new_v) };
-    };
-
-// Refinement: action admits a Wolff cluster embedding. The cluster updater
-// is action-agnostic; it asks the action for an axis, a reflection, and a
-// link-acceptance probability. `wolff_link_p` returns the bond-activation
-// probability between two ORIGINAL (pre-flip) field values across the given
-// reflection — this keeps all action-specific physics (beta, coupling form,
-// projection onto the reflection axis) inside the action itself.
-template <class A, class F, class R>
-concept WolffEmbeddable =
-    LocalAction<A, F> && Rng<R> &&
-    requires(A const& a, F const& v, typename A::axis_type const& axis, R& rng) {
-        typename A::axis_type;
-        { a.wolff_random_axis(rng) } -> std::same_as<typename A::axis_type>;
-        { a.wolff_reflect(v, axis) } -> std::same_as<F>;
-        { a.wolff_link_p(v, v, axis) } -> std::convertible_to<double>;
-    };
-
 }  // namespace reticolo::action
-
-// Gauge (link-field) concept lattice. Mirrors the scalar concepts above on
-// `LinkLattice<F>` and on a (Site, mu) elementary update. Same shape, same
-// refinement chain; the only reason these need different concept names is
-// the elementary-update arity (Site vs (Site, mu)).
-
-namespace reticolo::gauge {
-
-template <class A, class F>
-concept LinkLocalAction =
-    requires(A const& a, LinkLattice<F> const& l, Site x, std::size_t mu, F nv) {
-        { a.s_local(l, x, mu) } -> std::convertible_to<double>;
-        { a.ds_local(l, x, mu, nv) } -> std::convertible_to<double>;
-    };
-
-template <class A, class F>
-concept HasLinkSEff = LinkLocalAction<A, F> && requires(A const& a, LinkLattice<F> const& l) {
-    { a.s_full(l) } -> std::convertible_to<double>;
-};
-
-template <class A, class F>
-concept HasLinkForce =
-    LinkLocalAction<A, F> && requires(A const& a, LinkLattice<F> const& l, LinkLattice<F>& force) {
-        { a.compute_force(l, force) };
-    };
-
-template <class A, class F>
-concept HasLinkFusedKick =
-    HasLinkForce<A, F> &&
-    requires(A const& a, LinkLattice<F> const& l, LinkLattice<F>& mom, real_scalar_t<F> k) {
-        { a.compute_force_and_kick(l, mom, k) };
-    };
-
-// Link-arity sibling of `action::HasSweepState`. Same contract: begin_sweep
-// resets running state from the current field; commit_accept updates it
-// before the link is overwritten.
-template <class A, class F>
-concept HasLinkSweepState =
-    LinkLocalAction<A, F> &&
-    requires(A const& a, LinkLattice<F> const& l, Site x, std::size_t mu, F new_v) {
-        { a.begin_sweep(l) };
-        { a.commit_accept(l, x, mu, new_v) };
-    };
-
-}  // namespace reticolo::gauge

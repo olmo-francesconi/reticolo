@@ -12,7 +12,7 @@
 //  /exchange/accepted    — series, one int per RM sweep
 //
 // arxiv:1910.11026 reproduces the paper's `<e^{iφ}>_pq(μ)` curve by feeding
-// the per-µ output of this binary through examples/06_bose_gas_llr/analyze.py.
+// the per-µ output of this binary through examples/05_bose_gas_llr/analyze.py.
 
 #include <reticolo/reticolo.hpp>
 
@@ -20,6 +20,7 @@
 #include <cmath>
 #include <complex>
 #include <cstddef>
+#include <filesystem>
 #include <format>
 #include <memory>
 #include <string>
@@ -32,7 +33,7 @@ int main(int argc, char** argv) {
 
     // ---- CLI ----
     cli::Parser p{"bose_gas_llr", "LLR for the 4D Bose gas at finite chemical potential"};
-    auto const cf      = app::common_flags(p, {.L = 4, .out = "bose_gas_llr.h5"});
+    auto const& L      = p.opt<int>("L,size", 4, "linear lattice extent");
     auto const& ndim   = p.opt<int>("ndim", 4, "spacetime dimensions (4 in paper)");
     auto const& mass   = p.opt<double>("mass", 1.0, "bare mass m");
     auto const& lambda = p.opt<double>("lambda", 1.0, "quartic coupling lambda");
@@ -42,8 +43,14 @@ int main(int argc, char** argv) {
     auto const& delta =
         p.opt<double>("delta",
                       2.0,
-                      "single LLR tuning knob: Gaussian half-width AND replica spacing in S_I. "
-                      "n_rep is derived so adjacent window centres are exactly `delta` apart.");
+                      "Gaussian window half-width in S_I (and the replica spacing unless "
+                      "--spacing is given).");
+    auto const& spacing =
+        p.opt<double>("spacing",
+                      0.0,
+                      "window-centre spacing in S_I; 0 means `delta` (non-overlapping). "
+                      "spacing < delta gives overlapping windows: denser constraint grid "
+                      "without stiffening the window force. n_rep is derived from it.");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md = p.opt<int>("n_md", 10, "MD steps per trajectory");
     auto const& n_nr = p.opt<int>("n_nr", 6, "Newton-Raphson warm-up iterations");
@@ -54,22 +61,27 @@ int main(int argc, char** argv) {
     auto const& n_therm_rm =
         p.opt<int>("n_therm_rm", 100, "thermalisation trajectories per RM sweep");
     auto const& n_meas_rm = p.opt<int>("n_meas_rm", 500, "measurement trajectories per RM sweep");
+    auto const& seed      = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
+    auto const& workspace =
+        p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
+    auto const& outfile = p.opt<std::string>(
+        "out", std::string{"bose_gas_llr.h5"}, "HDF5 output file name, inside workspace");
     if (!p.parse(argc, argv)) {
         return 0;
     }
 
-    log::start(cf.workspace, cf.out, /*replicas=*/true);
-    std::string const outpath = app::out_path(cf);
+    log::start(workspace, outfile, /*replicas=*/true);
+    std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
 
     // ---- Base action ----
     Lattice<std::complex<double>>::SizeVec shape(static_cast<std::size_t>(ndim),
-                                                 static_cast<std::size_t>(cf.L));
+                                                 static_cast<std::size_t>(L));
     Action const base{.mass = mass, .lambda = lambda, .mu = mu};
     log::act(base);
 
     // ---- Replica geometry ----
-    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e = delta;
+    double const d_e = spacing > 0.0 ? spacing : delta;
+    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
 
     // ---- Replicas ----
@@ -79,14 +91,14 @@ int main(int argc, char** argv) {
         double const e_n = e_min + (static_cast<double>(n) * d_e);
         reps.push_back(std::make_unique<ReplicaT>(
             base,
-            FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
+            FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
             ReplicaT::Spec{
                 .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
             alg::HmcSpec{.tau = tau, .n_md = n_md}));
     }
 
     // ---- Output ----
-    FastRng exch_rng{cf.seed};
+    FastRng exch_rng{seed};
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
     out.attr<double>("/cfg@mu", mu);

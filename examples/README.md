@@ -47,12 +47,11 @@ Override the preset with `RETICOLO_PRESET=macos-llvm` or `--preset macos-llvm`.
 | # | directory | description |
 |---|-----------|-------------|
 | 01 | `01_phi4_tuning` | φ⁴ finite-size scaling in the 2D Ising universality class |
-| 02 | `02_on_sigma_critical` | 3D O(3) Heisenberg critical point via Wolff cluster |
-| 03 | `03_phi4_algorithm_tuning` | Algorithm tuning for φ⁴: Metropolis vs HMC Leapfrog/Omelyan2/Omelyan4 |
-| 04 | `04_phi4_llr` | φ⁴ density of states: HMC histogram vs LLR reconstruction |
-| 05 | `05_u1_llr` | Compact U(1) gauge density of states with LLR + replica exchange |
-| 06 | `06_bose_gas_llr` | Relativistic Bose gas density of states with LLR |
-| 07 | `07_su2_llr` | SU(2) gauge density of states with LLR + replica exchange |
-| 08 | `08_volume_scaling` | Kernel throughput vs volume for scalar and gauge actions |
-| 09 | `09_u1_llr_smoothed` | Smoothed LLR vs vanilla LLR at the 4D U(1) bulk transition |
-| 10 | `10_smoothed_synthetic_benchmark` | Python-only synthetic benchmark of smoothed-LLR convergence (no binary) |
+| 02 | `02_phi4_algorithm_tuning` | HMC integrator tuning for φ⁴: Leapfrog/Omelyan2/Omelyan4 |
+| 03 | `03_phi4_llr` | φ⁴ density of states: HMC histogram vs LLR reconstruction |
+| 04 | `04_u1_llr` | Compact U(1) gauge density of states with LLR + replica exchange |
+| 05 | `05_bose_gas_llr` | Relativistic Bose gas density of states with LLR |
+| 06 | `06_su2_llr` | SU(2) gauge density of states with LLR + replica exchange |
+| 07 | `07_volume_scaling` | Kernel throughput vs volume for scalar and gauge actions |
+| 08 | `08_u1_llr_smoothed` | Smoothed LLR vs vanilla LLR at the 4D U(1) bulk transition |
+| 09 | `09_smoothed_synthetic_benchmark` | Python-only synthetic benchmark of smoothed-LLR convergence (no binary) |

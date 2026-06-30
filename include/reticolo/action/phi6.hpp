@@ -5,7 +5,6 @@
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
-#include <reticolo/core/site.hpp>
 
 #include <cstddef>
 #include <limits>
@@ -35,33 +34,6 @@ struct Phi6 {
         e.param("κ={:.3f}", kappa);
         e.param("λ={:.3f}", lambda);
         e.param("g₆={:.3f}", g6);
-    }
-
-    [[nodiscard]] T s_local(Lattice<T> const& l, Site x) const noexcept {
-        T const phi  = l[x];
-        T const nbrs = nn_neighbour_sum(l, x);
-        T const phi2 = phi * phi;
-        T const dev  = phi2 - T{1};
-        T const phi6 = phi2 * phi2 * phi2;
-        return (T{-2} * kappa * phi * nbrs) + phi2 + (lambda * dev * dev) + (g6 * phi6);
-    }
-
-    [[nodiscard]] T ds_local(Lattice<T> const& l, Site x, T new_v) const noexcept {
-        return ds_local_from_nbrs(l[x], new_v, nn_neighbour_sum(l, x));
-    }
-
-    [[nodiscard]] T ds_local_from_nbrs(T phi, T new_v, T nbrs) const noexcept {
-        T const phi2_old = phi * phi;
-        T const phi2_new = new_v * new_v;
-        T const dev_old  = phi2_old - T{1};
-        T const dev_new  = phi2_new - T{1};
-        T const phi6_old = phi2_old * phi2_old * phi2_old;
-        T const phi6_new = phi2_new * phi2_new * phi2_new;
-        T const hop      = T{-2} * kappa * (new_v - phi) * nbrs;
-        T const onsite   = (phi2_new - phi2_old) +
-                         (lambda * ((dev_new * dev_new) - (dev_old * dev_old))) +
-                         (g6 * (phi6_new - phi6_old));
-        return hop + onsite;
     }
 
     // Per-site math in `T`, volume sum accumulated in (and returned as) `double`

@@ -14,15 +14,13 @@
 using reticolo::FastRng;
 using reticolo::Lattice;
 using reticolo::Site;
-using reticolo::action::HasForce;
-using reticolo::action::HasSEff;
-using reticolo::action::LocalAction;
+using reticolo::action::HasFusedKick;
+using reticolo::action::HmcAction;
 using reticolo::action::Phi4;
 using reticolo::action::Phi6;
 
-static_assert(LocalAction<Phi6<double>, double>);
-static_assert(HasSEff<Phi6<double>, double>);
-static_assert(HasForce<Phi6<double>, double>);
+static_assert(HmcAction<Phi6<double>, Lattice<double>>);
+static_assert(HasFusedKick<Phi6<double>, Lattice<double>>);
 
 namespace {
 
@@ -33,29 +31,6 @@ void randomize(Lattice<double>& phi, FastRng& rng) {
 }
 
 }  // namespace
-
-TEST_CASE("Phi6: ds_local matches finite difference of s_full", "[physics][phi6]") {
-    Phi6<double> const action{.kappa = 0.13, .lambda = 0.04, .g6 = 0.02};
-
-    Lattice<double> phi{{6, 6, 6}};
-    FastRng rng{31415};
-    randomize(phi, rng);
-
-    for (std::size_t trial = 0; trial < 20; ++trial) {
-        Site const x     = Site{rng.uniform_int(phi.nsites())};
-        double const old = phi[x];
-        double const nv  = old + (0.3 * rng.normal());
-
-        double const ds_predicted = action.ds_local(phi, x, nv);
-
-        double const s_old = action.s_full(phi);
-        phi[x]             = nv;
-        double const s_new = action.s_full(phi);
-        phi[x]             = old;
-
-        REQUIRE(ds_predicted == Catch::Approx((s_new - s_old)).margin(1e-9));
-    }
-}
 
 TEST_CASE("Phi6: compute_force matches central FD of s_full", "[physics][phi6]") {
     Phi6<double> const action{.kappa = 0.15, .lambda = 0.03, .g6 = 0.01};

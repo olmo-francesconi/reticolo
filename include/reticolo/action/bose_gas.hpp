@@ -7,7 +7,6 @@
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
-#include <reticolo/core/site.hpp>
 
 #include <cmath>
 #include <complex>
@@ -62,36 +61,6 @@ struct BoseGas {
         e.param("m={:.3f}", mass);
         e.param("λ={:.3f}", lambda);
         e.param("μ={:+.3f}", mu);
-    }
-
-    [[nodiscard]] T s_local(Lattice<complex_t> const& l, Site x) const noexcept {
-        std::size_t const d = l.ndims();
-        T const coef_mass   = (T{2} * static_cast<T>(d)) + (mass * mass);
-        T const ch          = cosh_mu_();
-        complex_t const phi = l[x];
-        T const abs2        = std::norm(phi);
-        complex_t staple{T{0}, T{0}};
-        for (std::size_t nu = 0; nu < d; ++nu) {
-            T const c = (nu + 1 == d) ? ch : T{1};
-            staple += c * (l[l.next(x, nu)] + l[l.prev(x, nu)]);
-        }
-        return (coef_mass * abs2) + (lambda * abs2 * abs2) - (T{2} * re_conj_mul_(phi, staple));
-    }
-
-    [[nodiscard]] T ds_local(Lattice<complex_t> const& l, Site x, complex_t new_v) const noexcept {
-        std::size_t const d = l.ndims();
-        T const coef_mass   = (T{2} * static_cast<T>(d)) + (mass * mass);
-        T const ch          = cosh_mu_();
-        complex_t const phi = l[x];
-        T const a_old       = std::norm(phi);
-        T const a_new       = std::norm(new_v);
-        complex_t staple{T{0}, T{0}};
-        for (std::size_t nu = 0; nu < d; ++nu) {
-            T const c = (nu + 1 == d) ? ch : T{1};
-            staple += c * (l[l.next(x, nu)] + l[l.prev(x, nu)]);
-        }
-        return (coef_mass * (a_new - a_old)) + (lambda * ((a_new * a_new) - (a_old * a_old))) -
-               (T{2} * re_conj_mul_(new_v - phi, staple));
     }
 
     // Volume sum returned (and cached) as `double` — see Phi4::s_full.
@@ -163,22 +132,6 @@ struct BoseGas {
                     (T{-2} * coef_mass * phi) - (T{4} * lam * abs2 * phi) + (T{2} * staple);
                 mp[i] += k_dt * f_r;
             });
-    }
-
-    // Local change in S_I when phi_x → new_v. Only the two time-direction
-    // hopping terms touching x contribute. Used by the windowed Metropolis
-    // cascade-thermalization in `apps/bose_gas_llr.cpp` so the system can be
-    // pulled into each LLR window even at force scales where HMC would lose
-    // integrator stability.
-    [[nodiscard]] T
-    ds_imag_local(Lattice<complex_t> const& l, Site x, complex_t new_v) const noexcept {
-        std::size_t const tau   = l.ndims() - 1;
-        complex_t const phi_x   = l[x];
-        complex_t const phi_pmu = l[l.next(x, tau)];
-        complex_t const phi_mmu = l[l.prev(x, tau)];
-        T const old_t = T{2} * (im_conj_mul_(phi_x, phi_pmu) + im_conj_mul_(phi_mmu, phi_x));
-        T const new_t = T{2} * (im_conj_mul_(new_v, phi_pmu) + im_conj_mul_(phi_mmu, new_v));
-        return new_t - old_t;
     }
 
     [[nodiscard]] double s_imag(Lattice<complex_t> const& l) const noexcept {
@@ -297,18 +250,15 @@ struct BoseGas {
     mutable T cosh_mu_val_ = std::numeric_limits<T>::quiet_NaN();
 
 private:
-    // Re(conj(a) * b) and Im(conj(a) * b) without the full complex product —
-    // 2 mul + 1 add instead of 4 mul + 2 add with half the result discarded.
-    [[nodiscard]] static T re_conj_mul_(complex_t a, complex_t b) noexcept {
-        return (a.real() * b.real()) + (a.imag() * b.imag());
-    }
+    // Im(conj(a) * b) without the full complex product — 2 mul + 1 add instead
+    // of 4 mul + 2 add with half the result discarded.
     [[nodiscard]] static T im_conj_mul_(complex_t a, complex_t b) noexcept {
         return (a.real() * b.imag()) - (a.imag() * b.real());
     }
 
     // cosh(mu) memoised on the current mu — `mu` is a fixed action parameter,
-    // but s_local/ds_local run per proposed site on the Metropolis cascade
-    // path where a fresh cosh per call is pure overhead.
+    // but the force/action kernels read it per site, so a fresh cosh per call
+    // would be pure overhead.
     [[nodiscard]] T cosh_mu_() const noexcept {
         if (mu != cosh_mu_key_) {
             cosh_mu_key_ = mu;

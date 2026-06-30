@@ -14,15 +14,11 @@ using reticolo::FastRng;
 using reticolo::LinkLattice;
 using reticolo::Site;
 using reticolo::action::CompactU1;
-using reticolo::gauge::HasLinkForce;
-using reticolo::gauge::HasLinkFusedKick;
-using reticolo::gauge::HasLinkSEff;
-using reticolo::gauge::LinkLocalAction;
+using reticolo::action::HasFusedKick;
+using reticolo::action::HmcAction;
 
-static_assert(LinkLocalAction<CompactU1<double>, double>);
-static_assert(HasLinkSEff<CompactU1<double>, double>);
-static_assert(HasLinkForce<CompactU1<double>, double>);
-static_assert(HasLinkFusedKick<CompactU1<double>, double>);
+static_assert(HmcAction<CompactU1<double>, LinkLattice<double>>);
+static_assert(HasFusedKick<CompactU1<double>, LinkLattice<double>>);
 
 template <class T>
 static void randomize(LinkLattice<T>& l, FastRng& rng) {
@@ -30,30 +26,6 @@ static void randomize(LinkLattice<T>& l, FastRng& rng) {
     std::size_t const n = l.nlinks();
     for (std::size_t i = 0; i < n; ++i) {
         d[i] = static_cast<T>(rng.normal());
-    }
-}
-
-TEST_CASE("CompactU1: ds_local matches finite difference of s_full", "[physics][u1]") {
-    CompactU1<double> const action{.beta = 1.0};
-    LinkLattice<double> links{{4, 4, 4, 4}};
-    FastRng rng{1234};
-    randomize(links, rng);
-
-    for (std::size_t trial = 0; trial < 20; ++trial) {
-        Site const x     = Site{rng.uniform_int(links.nsites())};
-        std::size_t mu   = rng.uniform_int(links.ndims());
-        double const old = links(x, mu);
-        double const nv  = old + rng.normal();
-
-        double const ds_predicted = action.ds_local(links, x, mu, nv);
-
-        double const s_old = action.s_full(links);
-        links(x, mu)       = nv;
-        double const s_new = action.s_full(links);
-        links(x, mu)       = old;
-
-        double const ds_measured = s_new - s_old;
-        REQUIRE(ds_predicted == Catch::Approx(ds_measured).margin(1e-9));
     }
 }
 

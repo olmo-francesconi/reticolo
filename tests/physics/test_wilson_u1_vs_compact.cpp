@@ -1,7 +1,7 @@
-// Bit-identity check: Wilson<U1>::{s_full, compute_force, s_local} must
-// reproduce the matching CompactU1 methods on the same physical configuration.
-// Establishes that the generic Wilson<G> action over MatrixLinkLattice<G,T>
-// reduces to the hand-tuned CompactU1 path at N = 1.
+// Bit-identity check: Wilson<U1>::{s_full, compute_force} must reproduce the
+// matching CompactU1 methods on the same physical configuration. Establishes
+// that the generic Wilson<G> action over MatrixLinkLattice<G,T> reduces to the
+// hand-tuned CompactU1 path at N = 1.
 
 #include <reticolo/action/compact_u1.hpp>
 #include <reticolo/action/detail/gauge_group/u1.hpp>
@@ -77,30 +77,6 @@ TEST_CASE("Wilson<U1>::compute_force matches CompactU1::compute_force on 4D L=4"
     double max_err      = 0.0;
     for (std::size_t i = 0; i < n; ++i) {
         max_err = std::max(max_err, std::abs(f_compact.data()[i] - f_wilson.data()[i]));
-    }
-    REQUIRE(max_err < 1e-12);
-}
-
-TEST_CASE("Wilson<U1>::s_local matches CompactU1::s_local on 3D L=4",
-          "[physics][gauge][wilson][u1]") {
-    LinkLattice<double>::SizeVec const shape{4, 4, 4};
-    LinkLattice<double> theta{shape};
-    MatrixLinkLattice<U1, double> u{shape};
-    FastRng rng{16180};
-    fill_matched(theta, u, rng);
-
-    CompactU1<double> const compact{.beta = 0.7};
-    Wilson<U1, double> const wilson{.beta = 0.7};
-
-    std::size_t const ns = theta.nsites();
-    std::size_t const d  = theta.ndims();
-    double max_err       = 0.0;
-    for (std::size_t s = 0; s < ns; ++s) {
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            double const sa = compact.s_local(theta, Site{s}, mu);
-            double const sb = wilson.s_local(u, Site{s}, mu);
-            max_err         = std::max(max_err, std::abs(sa - sb));
-        }
     }
     REQUIRE(max_err < 1e-12);
 }

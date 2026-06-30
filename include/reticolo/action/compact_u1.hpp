@@ -6,7 +6,6 @@
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/log.hpp>
-#include <reticolo/core/site.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
 #include <algorithm>
@@ -32,13 +31,11 @@ namespace reticolo::action {
 //
 // Boltzmann weight: exp(-S_W). The gauge HMC uses H = K + S so
 // exp(-H) = exp(-K - S). `compute_force` returns the *force* F = -dS/dtheta;
-// the integrator kick is `mom += k_dt * F`. `LinkMetropolis` accepts moves
-// with `ds <= 0 || rng < exp(-ds)` (favours moves that decrease S).
+// the integrator kick is `mom += k_dt * F`.
 //
-// The (1 - cos) constant `beta * n_plaq_per_link` and `beta * n_plaq_total`
-// on `s_local` / `s_full` makes both non-negative for sanity checking — the
-// HMC dynamics and Metropolis acceptance only depend on differences, where
-// the constant cancels.
+// The (1 - cos) constant `beta * n_plaq_total` on `s_full` makes it
+// non-negative for sanity checking — the HMC dynamics only depend on
+// differences, where the constant cancels.
 //
 // Storage layout: `LinkLattice<T>` is direction-major (each direction is a
 // contiguous nsites-element block). The hot loops here iterate one
@@ -57,52 +54,6 @@ struct CompactU1 {
     void describe(log::Entry& e) const {
         e.line("CompactU1<{}>", scalar_name<T>());
         e.param("β={:.3f}", beta);
-    }
-
-    [[nodiscard]] T
-    plaq_angle(LinkLattice<T> const& l, Site x, std::size_t mu, std::size_t nu) const noexcept {
-        Site const x_pmu = l.next(x, mu);
-        Site const x_pnu = l.next(x, nu);
-        return l(x, mu) + l(x_pmu, nu) - l(x_pnu, mu) - l(x, nu);
-    }
-
-    [[nodiscard]] T s_local(LinkLattice<T> const& l, Site x, std::size_t mu) const noexcept {
-        T cos_sum           = T{0};
-        std::size_t const d = l.ndims();
-        for (std::size_t nu = 0; nu < d; ++nu) {
-            if (nu == mu) {
-                continue;
-            }
-            Site const x_mnu     = l.prev(x, nu);
-            Site const x_mnu_pmu = l.next(x_mnu, mu);
-            T const fwd          = plaq_angle(l, x, mu, nu);
-            T const bwd          = l(x_mnu, mu) + l(x_mnu_pmu, nu) - l(x, mu) - l(x_mnu, nu);
-            cos_sum += std::cos(fwd) + std::cos(bwd);
-        }
-        // S contribution from the 2(d-1) plaquettes through link (x, mu),
-        // standard Wilson form: beta * (n_plaq_per_link - sum cos).
-        T const n_plaq_per_link = T{2} * static_cast<T>(d - 1);
-        return beta * (n_plaq_per_link - cos_sum);
-    }
-
-    [[nodiscard]] T
-    ds_local(LinkLattice<T> const& l, Site x, std::size_t mu, T new_v) const noexcept {
-        T const dtheta      = new_v - l(x, mu);
-        T cos_delta         = T{0};
-        std::size_t const d = l.ndims();
-        for (std::size_t nu = 0; nu < d; ++nu) {
-            if (nu == mu) {
-                continue;
-            }
-            Site const x_mnu     = l.prev(x, nu);
-            Site const x_mnu_pmu = l.next(x_mnu, mu);
-            T const fwd_old      = plaq_angle(l, x, mu, nu);
-            T const bwd_old      = l(x_mnu, mu) + l(x_mnu_pmu, nu) - l(x, mu) - l(x_mnu, nu);
-            cos_delta += std::cos(fwd_old + dtheta) - std::cos(fwd_old);
-            cos_delta += std::cos(bwd_old - dtheta) - std::cos(bwd_old);
-        }
-        // d/dt (sum 1-cos) = -d/dt (sum cos), so flip sign.
-        return -beta * cos_delta;
     }
 
     // Per-plaquette cos in `T`, plaquette sum accumulated in (and returned as)

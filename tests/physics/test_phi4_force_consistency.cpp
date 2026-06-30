@@ -12,44 +12,18 @@
 using reticolo::FastRng;
 using reticolo::Lattice;
 using reticolo::Site;
-using reticolo::action::HasForce;
-using reticolo::action::HasSEff;
-using reticolo::action::LocalAction;
+using reticolo::action::HasFusedKick;
+using reticolo::action::HmcAction;
 using reticolo::action::Phi4;
 
-static_assert(LocalAction<Phi4<double>, double>);
-static_assert(HasSEff<Phi4<double>, double>);
-static_assert(HasForce<Phi4<double>, double>);
+static_assert(HmcAction<Phi4<double>, Lattice<double>>);
+static_assert(HasFusedKick<Phi4<double>, Lattice<double>>);
 
 // Seed a small lattice with iid N(0, 1) values.
 template <class T>
 static void randomize(Lattice<T>& phi, FastRng& rng) {
     for (Site x : phi.sites()) {
         phi[x] = static_cast<T>(rng.normal());
-    }
-}
-
-TEST_CASE("Phi4: ds_local matches finite difference of s_full", "[physics][phi4]") {
-    Phi4<double> const action{.kappa = 0.13, .lambda = 0.05};
-
-    Lattice<double> phi{{6, 6, 6}};
-    FastRng rng{1234};
-    randomize(phi, rng);
-
-    for (std::size_t trial = 0; trial < 20; ++trial) {
-        Site const x     = Site{rng.uniform_int(phi.nsites())};
-        double const old = phi[x];
-        double const nv  = old + rng.normal();
-
-        double const ds_predicted = action.ds_local(phi, x, nv);
-
-        double const s_old = action.s_full(phi);
-        phi[x]             = nv;
-        double const s_new = action.s_full(phi);
-        phi[x]             = old;
-
-        double const ds_measured = s_new - s_old;
-        REQUIRE(ds_predicted == Catch::Approx(ds_measured).margin(1e-9));
     }
 }
 

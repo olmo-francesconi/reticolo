@@ -14,15 +14,13 @@
 using reticolo::FastRng;
 using reticolo::Lattice;
 using reticolo::Site;
-using reticolo::action::HasForce;
-using reticolo::action::HasSEff;
-using reticolo::action::LocalAction;
+using reticolo::action::HasFusedKick;
+using reticolo::action::HmcAction;
 using reticolo::action::Phi4;
 using reticolo::action::SineGordon;
 
-static_assert(LocalAction<SineGordon<double>, double>);
-static_assert(HasSEff<SineGordon<double>, double>);
-static_assert(HasForce<SineGordon<double>, double>);
+static_assert(HmcAction<SineGordon<double>, Lattice<double>>);
+static_assert(HasFusedKick<SineGordon<double>, Lattice<double>>);
 
 namespace {
 
@@ -33,28 +31,6 @@ void randomize(Lattice<double>& phi, FastRng& rng) {
 }
 
 }  // namespace
-
-TEST_CASE("SineGordon: ds_local matches finite difference of s_full", "[physics][sine_gordon]") {
-    SineGordon<double> const action{.kappa = 0.15, .alpha = 0.3};
-
-    Lattice<double> phi{{6, 6, 6}};
-    FastRng rng{1729};
-    randomize(phi, rng);
-
-    for (std::size_t trial = 0; trial < 20; ++trial) {
-        Site const x     = Site{rng.uniform_int(phi.nsites())};
-        double const old = phi[x];
-        double const nv  = old + (0.4 * rng.normal());
-
-        double const ds_predicted = action.ds_local(phi, x, nv);
-        double const s_old        = action.s_full(phi);
-        phi[x]                    = nv;
-        double const s_new        = action.s_full(phi);
-        phi[x]                    = old;
-
-        REQUIRE(ds_predicted == Catch::Approx((s_new - s_old)).margin(1e-9));
-    }
-}
 
 TEST_CASE("SineGordon: compute_force matches central FD of s_full", "[physics][sine_gordon]") {
     SineGordon<double> const action{.kappa = 0.17, .alpha = 0.4};

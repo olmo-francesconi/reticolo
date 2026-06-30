@@ -1,4 +1,4 @@
-"""Shared LLR reconstruction helpers used by examples/04..07 analyze scripts.
+"""Shared LLR reconstruction helpers used by examples/03..06 analyze scripts.
 
 The LLR fixed point of <S - E_n> = 0 places a_n = d ln rho/dS at the window
 centre, where rho is the natural DoS for real-action mode A and the

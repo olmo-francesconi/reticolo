@@ -20,8 +20,8 @@ namespace reticolo::alg::integ {
 //
 // Field-generic: works for scalar `Lattice<F>` and link `LinkLattice<F>`
 // unchanged. `flat_size(field)` overloads on the field type to give the
-// right element count; the fused-kick concept check covers both
-// `HasFusedKick` (scalar) and `HasLinkFusedKick` (gauge).
+// right element count; the fused-kick path is gated on the field-agnostic
+// `action::HasFusedKick` concept.
 //
 // Convention: tau = total trajectory time, n_md = number of MD steps,
 // dt = tau / n_md. `force` is scratch storage owned by the HMC driver; the
