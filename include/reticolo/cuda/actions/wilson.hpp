@@ -1,11 +1,14 @@
 #pragma once
 
+#include <reticolo/action/detail/gauge_group/u1.hpp>
 #include <reticolo/action/wilson.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/gauge/group_device.hpp>
 #include <reticolo/cuda/gauge_sun.cuh>
+#include <reticolo/cuda/gauge_u1.cuh>
 #include <reticolo/cuda/reduce.hpp>
+#include <reticolo/cuda/rng_philox.cuh>
 
 #include <cstdint>
 
@@ -18,6 +21,13 @@
 // cuda::DeviceAction consumes it identically; the per-link gather force, the
 // plaquette action, and the Gell-Mann momentum sampler live in the kernels.
 // SU(N) links are f64 only — T is double.
+//
+// U(1) is abelian and does NOT use the matrix path: the Wilson<U1> specialization
+// below reuses the dedicated angle kernels (gauge_u1.cuh) on a 1-angle link,
+// identical to CompactU1 (n_color=1 ⇒ β/N = β). Keeping the abelian kernels
+// separate from gauge_sun.cuh is deliberate — a future non-SU(N) family (e.g. a
+// symplectic group) plugs in as its own kernel set + functor, not a contortion of
+// the generic matrix path.
 
 namespace reticolo::cuda {
 
@@ -61,6 +71,51 @@ struct device_functors<action::Wilson<G, T>> {
                                std::uint64_t const* traj,
                                cudaStream_t s) {
         su_sample_algebra_launch<GD>(mom, topo, seed, traj, s);
+    }
+};
+
+// Wilson<U(1)> — abelian specialization (more specialized than Wilson<G> above,
+// so it wins for G = U1). Reuses the dedicated angle kernels (gauge_u1.cuh) on a
+// 1-angle LinkLayout link, NOT the matrix path: a U(1) link is a phase, the drift
+// is additive (θ ← θ + dt·p, the generic axpy atom), and the momentum is one iid
+// normal per link. Bodies mirror device_functors<CompactU1> (n_color = 1).
+template <class T>
+struct device_functors<action::Wilson<gauge_group::U1, T>> {
+    static void compute_force(action::Wilson<gauge_group::U1, T> const& a,
+                              T const* field,
+                              T* force,
+                              DeviceTopology const& topo,
+                              cudaStream_t s) {
+        plaq_force_launch(field, force, topo, static_cast<double>(a.beta), s);
+    }
+
+    [[nodiscard]] static double s_full(action::Wilson<gauge_group::U1, T> const& a,
+                                       T const* field,
+                                       double* scratch,
+                                       DeviceTopology const& topo,
+                                       cudaStream_t s) {
+        plaq_energy_launch(field, scratch, topo, static_cast<double>(a.beta), s);
+        return reduce_sum_f64(scratch, topo.nsites, s);
+    }
+
+    static void s_full_into(double* out,
+                            action::Wilson<gauge_group::U1, T> const& a,
+                            T const* field,
+                            double* scratch,
+                            double* partials,
+                            DeviceTopology const& topo,
+                            cudaStream_t s) {
+        plaq_energy_launch(field, scratch, topo, static_cast<double>(a.beta), s);
+        reduce_sum_into(out, scratch, topo.nsites, partials, s);
+    }
+
+    static void sample_momenta(T* mom,
+                               long n,
+                               DeviceTopology const& /*topo*/,
+                               std::uint64_t seed,
+                               std::uint64_t const* traj,
+                               cudaStream_t s) {
+        fill_normals(mom, n, seed, traj, s);
     }
 };
 

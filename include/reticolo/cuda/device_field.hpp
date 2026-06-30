@@ -31,7 +31,9 @@ struct LinkLayout {
 // Matrix gauge field: ndim·nc·nsites reals, layout [ndim][nc][nsites] with
 // nc = G::n_real_components (8 for SU(2), 18 for SU(3)) — identical to the host
 // MatrixLinkLattice<G> order, so a flat raw round-trip is exact. Momenta and
-// force share this layout (anti-hermitian algebra elements).
+// force share this layout (anti-hermitian algebra elements). U(1) does NOT use
+// this layout: it is abelian (1-angle link, LinkLayout) and rides the specialized
+// gauge_u1.cuh kernels, not the generic matrix path.
 template <class G>
 struct MatrixLayout {
     [[nodiscard]] static long flat_count(DeviceTopology const& t) {

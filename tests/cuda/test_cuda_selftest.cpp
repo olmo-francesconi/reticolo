@@ -12,6 +12,7 @@
 #include <reticolo/cuda/probes/su2_probe.hpp>
 #include <reticolo/cuda/probes/su3_probe.hpp>
 #include <reticolo/cuda/probes/u1_probe.hpp>
+#include <reticolo/cuda/probes/wilson_u1_probe.hpp>
 #include <reticolo/cuda/reduce.hpp>
 
 #include <array>
@@ -265,4 +266,21 @@ TEST_CASE("cuda SU3 Gell-Mann momenta have the right moments", "[cuda]") {
 
 TEST_CASE("cuda SU3 host-free HMC runs on the matrix link field", "[cuda]") {
     REQUIRE(reticolo::cuda::su3_hmc_runs());
+}
+
+// Wilson<U(1)> on the device via the SPECIALIZED abelian path: it reuses the
+// CompactU1 angle kernels (gauge_u1.cuh) on a 1-angle LinkLayout field — NOT the
+// generic SU(N) matrix kernels. Wilson<U1> and CompactU1 are bit-identical
+// (n_color=1 ⇒ β/N = β), so this is the same device path with the action type
+// swapped, demonstrating the M8 "Wilson<U1> subsumes CompactU1" unification.
+TEST_CASE("cuda DeviceAction<Wilson<U1>> matches CPU action::Wilson<U1>", "[cuda]") {
+    REQUIRE(reticolo::cuda::wilson_u1_cpu_matches_device());
+}
+
+TEST_CASE("cuda Wilson<U1> HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::wilson_u1_hmc_reversibility_ok());
+}
+
+TEST_CASE("cuda Wilson<U1> host-free HMC runs on the link field", "[cuda]") {
+    REQUIRE(reticolo::cuda::wilson_u1_hmc_runs());
 }
