@@ -32,3 +32,6 @@ __pycache__/
 
 # kaggle runner: downloaded kernel logs
 tools/kaggle/output/
+
+# modal runner: pulled benchmark/run artifacts
+tools/modal/output/
