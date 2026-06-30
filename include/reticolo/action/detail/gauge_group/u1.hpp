@@ -21,7 +21,7 @@ namespace reticolo::gauge_group {
 //
 // The slab-batched hot paths here use the same Sleef cos/sin scratch
 // pattern as `action::CompactU1`, so Wilson<U(1)> matches CompactU1
-// throughput on the HMC bench (M8: retire CompactU1 once verified).
+// throughput on the HMC bench (retire CompactU1 once verified).
 // Scratch is owned per call-site via a function-local thread_local —
 // the gauge group struct itself stays stateless.
 //

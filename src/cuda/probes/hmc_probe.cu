@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-// Phase 2b: eager device HMC end-to-end on Phi4 (f64).
+// Eager device HMC end-to-end on Phi4 (f64).
 //
 // NOTE on the "zero integrator-specific CUDA code" lint gate: this is the one
 // TU that NAMES the integrator tags (alg::integ::Leapfrog / Omelyan2 /
@@ -183,8 +183,8 @@ bool hmc_step_runs() {
     return true;
 }
 
-// Phase 2e: run K trajectories fully host-free (one graph replay each, no
-// per-step sync, device-side Metropolis accept). Two independent runs from the
+// Run K trajectories fully host-free (one graph replay each, no per-step sync,
+// device-side Metropolis accept). Two independent runs from the
 // same seed and same initial config must agree bit-for-bit — the whole chain
 // (momenta, MD, accept uniform, rollback, counter bump) is deterministic on the
 // device — and the acceptance must be a sane fraction with a finite field.

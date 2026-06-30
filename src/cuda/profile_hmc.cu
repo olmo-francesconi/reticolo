@@ -186,7 +186,7 @@ double time_us_kernel(Fn&& fn) {
     return (1e3 * static_cast<double>(ms)) / reps;
 }
 
-// Lever 1 occupancy sweep: time the SU(3) force + drift kernels at several
+// Occupancy sweep: time the SU(3) force + drift kernels at several
 // __launch_bounds__(MaxT, MinB) configs in one binary, reporting numRegs and the
 // per-thread local-memory spill from cudaFuncGetAttributes (so we see occupancy
 // vs. spill without ncu, which is blocked on the managed host). blocks/SM ≈

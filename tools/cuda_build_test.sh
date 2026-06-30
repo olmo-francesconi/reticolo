@@ -2,7 +2,7 @@
 # Configure, build, and test the reticolo CUDA backend on a GPU host.
 #
 # Assumes it is run from the repo root with nvcc, a C++ toolchain, CMake >= 3.25
-# and Ninja on PATH. As of Phase 6 the CUDA backend includes HDF5 output +
+# and Ninja on PATH. The CUDA backend includes HDF5 output +
 # checkpoint and native CUDA apps, so IO + APPS are ON by default and HDF5 +
 # cxxopts are required (the runner installs libhdf5-dev; cxxopts is
 # FetchContent'd). Set RETICOLO_BUILD_IO=OFF for a lean core+cuda smoke that

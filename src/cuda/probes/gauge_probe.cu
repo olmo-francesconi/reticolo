@@ -8,12 +8,12 @@
 #include <cmath>
 #include <cstddef>
 
-// Phase 1 (M1): proves the gauge math headers parse and their hot bodies
-// compile under nvcc once <sleef.h>/SIMD intrinsics are guarded out of
-// vec_libm.hpp (the #ifndef __CUDACC__ split). Exercising s_full / compute_force
-// / expi_lmul_slab forces instantiation of the transcendental paths (U(1)
-// cos/sin batch, SU(3) acos/sincos batch) that now route through the scalar
-// std fallback rather than Sleef. No device kernels yet.
+// Proves the gauge math headers parse and their hot bodies compile under nvcc
+// once <sleef.h>/SIMD intrinsics are guarded out of vec_libm.hpp (the
+// #ifndef __CUDACC__ split). Exercising s_full / compute_force / expi_lmul_slab
+// forces instantiation of the transcendental paths (U(1) cos/sin batch, SU(3)
+// acos/sincos batch) that now route through the scalar std fallback rather than
+// Sleef. No device kernels.
 
 namespace reticolo::cuda {
 

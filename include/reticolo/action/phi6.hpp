@@ -20,7 +20,7 @@ namespace reticolo::action {
 //               + lambda * (phi(x)^2 - 1)^2
 //               + g6     * phi(x)^6 ]
 //
-// At g6 = 0 this reduces exactly to Phi4 — verified by the M8 physics suite.
+// At g6 = 0 this reduces exactly to Phi4 — verified by the physics suite.
 
 template <class T = double>
 struct Phi6 {

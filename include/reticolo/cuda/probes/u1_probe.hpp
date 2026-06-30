@@ -2,7 +2,7 @@
 
 namespace reticolo::cuda {
 
-// Phase 4 gates (defined in src/cuda/u1_probe.cu): compact U(1) gauge on the
+// Gates (defined in src/cuda/u1_probe.cu): compact U(1) gauge on the
 // device. The link field is DeviceField<double, LinkLayout>; the force is the
 // per-link gather (re-derived, not the CPU scatter), the action a per-site
 // plaquette reduction. cuda::DeviceAction and cuda::Hmc are unchanged — the

@@ -112,7 +112,7 @@ Layout facts that matter for CUDA:
 - **U(1) has two distinct field layouts.** `CompactU1` runs on
   `LinkLattice<T>` (direction-major, one angle per link); `Wilson<U1>` runs
   on `MatrixLinkLattice<U1,T>` with `n_real_components = 1`. A device backend
-  must pick one path per app (the plan targets `CompactU1` first).
+  must pick one path per app.
 - **Force kernels must be gather, not scatter.** For HMC reversibility the
   force must be a deterministic function of `U`; `atomicAdd` scatter makes it
   order-dependent and silently breaks detailed balance. The explicit
@@ -180,6 +180,5 @@ contiguous buffers** and **SoA gauge layout** — so `compute_force`, `drift`,
 friction point is the header-only template design: device kernels can't be
 arbitrary per-app template instantiations the way the CPU path is, so the
 backend needs explicit kernel instantiations per (action, group, precision).
-The concrete plan for that is in
-[`cuda_extension_plan.md`](cuda_extension_plan.md).
+See [`writing_a_cuda_app.md`](writing_a_cuda_app.md) for the implementation pattern.
 </invoke>

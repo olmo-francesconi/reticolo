@@ -11,8 +11,8 @@
 // reversibility depends on ΔH being computed the same way every trajectory.
 //
 // Splitting per-site-eval (here) from the reduction (reduce_sum_f64) keeps the
-// summation order independent of the field layout and lets Phase 2 fuse
-// s_full + kinetic over the same primitive.
+// summation order independent of the field layout and lets the device-scalar
+// (_into) variants fuse s_full + kinetic over the same primitive.
 
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_topology.hpp>
@@ -23,7 +23,7 @@
 namespace reticolo::cuda {
 
 // field/site_out __restrict__ + const field → read-only-cache (LDG) gather, as in
-// stencil_kernel (Lever 2). Generic across all scalar element types.
+// stencil_kernel (measured neutral on P100 — see that note).
 template <class F>
 __global__ void reduce_fwd_site_kernel(F f, typename F::element const* __restrict__ field,
                                        double* __restrict__ site_out, DeviceTopology topo) {

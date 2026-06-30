@@ -111,7 +111,7 @@ profile_one() {  # action L
 for L in ${phi4_sizes}; do profile_one phi4 "${L}"; done
 for L in ${su3_sizes}; do profile_one su3 "${L}"; done
 
-# f32 phi4 throughput (Lever / secondary): phi4 is bandwidth-bound, so half the
+# f32 phi4 throughput: phi4 is bandwidth-bound, so half the
 # bytes should run ~2× the f64 path. Throughput-only (the nsys timeline isn't
 # needed to read ms/traj + eff GB/s from the JSON).
 f32="${out}/phi4f32.jsonl"
@@ -122,7 +122,7 @@ for L in ${phi4_sizes}; do
 done
 "${bin}" --action=phi4f32 --size=32 --force-only | tee -a "${f32}"
 
-# Lever 1: SU(3) force/drift __launch_bounds__ occupancy sweep (one binary, many
+# SU(3) force/drift __launch_bounds__ occupancy sweep (one binary, many
 # configs; regs + spill from cudaFuncGetAttributes, no ncu needed). L=16 and L=32.
 lb_sweep="${out}/lb_sweep.jsonl"
 : > "${lb_sweep}"

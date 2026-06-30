@@ -18,7 +18,7 @@
 // per-site select kernel, and the Philox trajectory counter is bumped on the
 // device. `run(k)` replays k trajectories without a single host sync; the host
 // touches the chain only when it measures (`sync()` + read the field). This is
-// what removes the per-trajectory host-sync floor — see docs/cuda_hmc_roadmap.md.
+// what removes the per-trajectory host-sync floor.
 //
 // The capture trap (graph.hpp): anything that varies per trajectory must be read
 // from a device buffer, never baked as a kernel literal. The trajectory counter

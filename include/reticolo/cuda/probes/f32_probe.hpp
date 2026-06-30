@@ -2,7 +2,7 @@
 
 namespace reticolo::cuda {
 
-// Phase 3d gates (defined in src/cuda/f32_probe.cu): the device HMC stack
+// F32 HMC gates (defined in src/cuda/f32_probe.cu): the device HMC stack
 // instantiated in single precision. f32 fields run the MD drift/kick in float
 // (axpy_f32) while the Hamiltonian reductions still accumulate in double, so the
 // checks use a BOUNDED tolerance, never roundoff (and f32 never gets the

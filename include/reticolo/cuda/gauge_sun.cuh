@@ -30,14 +30,13 @@ namespace reticolo::cuda {
 // (0 = no floor). The kernels are templated on these so the profiler's --lb-sweep
 // can measure several configs in one build (cudaFuncGetAttributes regs/spill).
 //
-// Lever 1 RESULT (refuted): raising the floor to lift occupancy is a 2.6–7.7×
-// REGRESSION. The SU(3) staple genuinely needs ~250 regs/thread; capping to fit
+// Raising the occupancy floor via __launch_bounds__ is a 2.6–7.7× regression:
+// the SU(3) staple genuinely needs ~250 regs/thread; capping registers to fit
 // ≥2 blocks/SM spills the 3×3 complex matrices to local memory and the spill
 // traffic dwarfs the occupancy gain — the kernel is spill-bound, not occupancy-
 // latency-bound. So kMinBlocks stays 0; (256,0) matches the no-launch_bounds
-// baseline exactly (271 ms/traj at L=32). A real su3 win is structural (stage the
-// staple through shared memory / warp-per-link), not occupancy. See
-// docs/cuda_optimization_plan.md Lever 1 and the roadmap Phase 9 addendum.
+// baseline exactly (271 ms/traj at L=32). A real su3 win is structural (stage
+// the staple through shared memory / warp-per-link), not occupancy.
 inline constexpr int kSuBlock     = 256;
 inline constexpr int kSuMinBlocks = 0;
 

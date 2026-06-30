@@ -16,10 +16,10 @@
 // otherwise dereference device pointers on the host). They reduce to the
 // already-deterministic `axpy_f64` — no integrator-specific kernel exists.
 //
-// f64 (Phase 2) and f32 (Phase 3) overloads. The MD step runs in field
-// precision — the f32 atoms cast the integrator's double coefficient down to
-// float — matching the CPU mixed-precision HMC; the Hamiltonian reductions
-// still accumulate in double (reduce.hpp).
+// f64 and f32 overloads. The MD step runs in field precision — the f32 atoms
+// cast the integrator's double coefficient down to float — matching the CPU
+// mixed-precision HMC; the Hamiltonian reductions still accumulate in double
+// (reduce.hpp).
 
 namespace reticolo::cuda {
 

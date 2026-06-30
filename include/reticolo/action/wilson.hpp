@@ -29,9 +29,8 @@ namespace reticolo::action {
 //     block_ptr[k * stride + s].
 //
 // At N=1 with U=exp(iθ) this reduces line-for-line to `CompactU1` — the
-// bit-identity is the design point of M3 and lets the gauge group concept
-// be validated on a known-correct path before the SU(2)/SU(3) instances
-// arrive in M5/M7.
+// bit-identity is the design point and lets the gauge group concept
+// be validated on a known-correct path before SU(2)/SU(3) instances.
 
 template <gauge_group::GaugeGroup G, class T = double>
 struct Wilson {

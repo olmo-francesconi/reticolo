@@ -15,11 +15,11 @@
 #include <cstddef>
 #include <vector>
 
-// Phase 4: compact U(1) gauge HMC on the device. The link field is direction-
-// major (LinkLayout), the force a per-link gather, the action a per-site
-// plaquette reduction. This TU runs the CPU action and the device path and
-// compares, validates the gather force against a finite difference, and checks
-// MD reversibility. (Excluded from the no-integrator-kernels lint gate: it names
+// Compact U(1) gauge HMC on the device. The link field is direction-major
+// (LinkLayout), the force a per-link gather, the action a per-site plaquette
+// reduction. This TU runs the CPU action and the device path and compares,
+// validates the gather force against a finite difference, and checks MD
+// reversibility. (Excluded from the no-integrator-kernels lint gate: it names
 // alg::integ::Leapfrog to instantiate the generic integrator over the link
 // field, the same as hmc_probe.cu / f32_probe.cu.)
 

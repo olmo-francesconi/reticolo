@@ -1,8 +1,7 @@
 #pragma once
 
-// Public umbrella include. As milestones land this will grow to cover
-// actions, algorithms, observers, and IO. At M2 it exposes the core
-// types: lattice + indexing + site + bc + rng + log.
+// Public umbrella include — covers actions, algorithms, observers, IO, and
+// core types (lattice, indexing, site, bc, rng, log).
 
 // NOLINTBEGIN(misc-include-cleaner): re-exports are the whole point of the umbrella.
 #include <reticolo/action/bose_gas.hpp>

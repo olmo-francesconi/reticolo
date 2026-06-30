@@ -10,10 +10,10 @@
 #include <cstddef>
 #include <vector>
 
-// Phase 2a: scalar device field + generic DeviceAction over the real Phi4
-// functor pair. The CPU action::Phi4 and the device path call the same shared
-// HD per-site formula (action::detail::phi4_*), so they must agree to roundoff
-// — this TU runs both (CPU on the host, device on the GPU) and compares.
+// Scalar device field + generic DeviceAction over the real Phi4 functor pair.
+// The CPU action::Phi4 and the device path call the same shared HD per-site
+// formula (action::detail::phi4_*), so they must agree to roundoff — this TU
+// runs both (CPU on the host, device on the GPU) and compares.
 
 namespace reticolo::cuda {
 

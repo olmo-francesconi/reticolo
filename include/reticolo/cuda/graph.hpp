@@ -14,16 +14,13 @@ namespace reticolo::cuda {
 // trajectory's stream-operation sequence is identical every time (static
 // topology, mutable buffer contents), which is exactly what a graph wants.
 //
-// THE CAPTURE TRAP (see docs/cuda_hmc_roadmap.md): capture freezes kernel
+// THE CAPTURE TRAP: capture freezes kernel
 // ARGUMENTS by value. Anything that varies per trajectory — the Philox
 // trajectory counter above all, also dt if it is ever varied — must be read
 // by the kernels from a *device buffer* the host bumps between replays, NOT
 // passed as a kernel literal. A baked-in trajectory counter would regenerate
 // identical momenta on every replay: a non-ergodic chain that still looks
 // thermalized. The `run` body below must honour that.
-//
-// Phase 0: capture/replay/invalidate skeleton only. Phase 2 wires the body
-// (H0 → Integ::run → H1) and the spec-invalidation hook.
 //
 // Non-copyable and non-movable: the instantiated graph bakes raw device
 // pointers, so the owning object must not relocate.

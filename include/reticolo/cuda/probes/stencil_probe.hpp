@@ -2,7 +2,7 @@
 
 namespace reticolo::cuda {
 
-// Phase 1 exit gate. Runs the scalar device protocol end-to-end on a dummy
+// Stencil gate. Runs the scalar device protocol end-to-end on a dummy
 // Phi4-shaped functor pair: computes the MD force with the stencil skeleton
 // and the total action with the reduce_fwd skeleton, then verifies
 // force[j] == -dS/dphi(j) by central finite differences at a spread of sites.

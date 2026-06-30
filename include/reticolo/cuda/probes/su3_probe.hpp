@@ -2,7 +2,7 @@
 
 namespace reticolo::cuda {
 
-// Phase 5 gates (defined in src/cuda/su3_probe.cu): SU(3) Wilson gauge on the
+// Gates (defined in src/cuda/su3_probe.cu): SU(3) Wilson gauge on the
 // device through the SAME generic SU(N) kernels as SU(2) — only the device
 // traits change (GD = SU3Device, nc=18, n_gen=8). The link field is
 // DeviceField<double, MatrixLayout<SU3>>, the same [ndim][nc][nsites] flat order

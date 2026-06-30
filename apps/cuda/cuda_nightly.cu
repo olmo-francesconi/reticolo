@@ -1,8 +1,7 @@
 // Nightly GPU physics harness (app-level, NOT a ctest gate — it runs full
 // simulations, which the deterministic suite must never do). It links the
 // umbrella, so it runs the CPU alg::Hmc and the GPU cuda::Hmc side-by-side in
-// ONE process and asserts the physics identities the per-phase roadmap tags
-// [nightly]:
+// ONE process and asserts the physics identities:
 //
 //   * <exp(-dH)> = 1  (Kennedy-Pendleton) — joint check of momentum
 //     normalisation + integrator + Metropolis accept, CPU and GPU.

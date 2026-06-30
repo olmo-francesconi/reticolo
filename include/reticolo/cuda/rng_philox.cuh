@@ -6,8 +6,8 @@
 // using the SHARED HD Philox primitive (core/philox.hpp) — the same generator
 // the CPU PhiloxRng runs. Embarrassingly parallel (one thread per output pair,
 // no shared state). The trajectory counter is read from a DEVICE pointer, never
-// a baked kernel literal, so a captured graph (Phase 2d) replays with a fresh
-// counter just by advancing the device-side value.
+// a baked kernel literal, so a captured graph replays with a fresh counter just
+// by advancing the device-side value.
 
 #include <reticolo/core/philox.hpp>
 #include <reticolo/cuda/check.hpp>

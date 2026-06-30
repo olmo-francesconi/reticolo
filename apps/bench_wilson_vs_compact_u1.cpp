@@ -4,7 +4,7 @@
 // underlying field type (LinkLattice<double> vs MatrixLinkLattice<U1, double>,
 // which have identical storage at nc = 1).
 //
-// Decides M8: if Wilson<U1> is within ~5% of CompactU1 we can route the U(1)
+// If Wilson<U1> is within ~5% of CompactU1 we can route the U(1)
 // apps through Wilson<U1> and delete compact_u1.hpp. Otherwise keep both.
 
 #include <reticolo/reticolo.hpp>

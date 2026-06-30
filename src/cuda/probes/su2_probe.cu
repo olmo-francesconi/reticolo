@@ -20,16 +20,15 @@
 #include <cstdint>
 #include <vector>
 
-// Phase 5: SU(2) Wilson gauge HMC on the device. The matrix link field is
-// [ndim][nc][nsites] (MatrixLayout<SU2>, nc=8), identical to the host
-// MatrixLinkLattice<SU2> order — a flat copy round-trips. The force is the
-// per-link staple gather + TA[U·V], the action a per-site forward-plane sum,
-// the drift a group exponential. This TU validates the device matrix ops against
-// math::su2, the device action/force against the CPU Wilson<SU2>, MD energy
-// conservation + reversibility, the Gell-Mann momentum moments, and the generic
-// host-free Hmc instantiation. (Excluded from the no-integrator-kernels lint
-// gate: it names alg::integ::Leapfrog to instantiate the generic integrator over
-// the matrix field, as hmc_probe.cu / u1_probe.cu.)
+// SU(2) Wilson gauge HMC on the device. The matrix link field is [ndim][nc][nsites]
+// (MatrixLayout<SU2>, nc=8), identical to the host MatrixLinkLattice<SU2> order —
+// a flat copy round-trips. The force is the per-link staple gather + TA[U·V], the
+// action a per-site forward-plane sum, the drift a group exponential. This TU
+// validates the device matrix ops against math::su2, the device action/force against
+// the CPU Wilson<SU2>, MD energy conservation + reversibility, the Gell-Mann
+// momentum moments, and the generic host-free Hmc instantiation. (Excluded from the
+// no-integrator-kernels lint gate: it names alg::integ::Leapfrog to instantiate the
+// generic integrator over the matrix field, as hmc_probe.cu / u1_probe.cu.)
 
 namespace reticolo::cuda {
 

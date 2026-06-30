@@ -18,8 +18,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cuda_runtime.h>
 
-// Phase 6 exit gate: a checkpointed-and-resumed CUDA run reproduces an
-// uninterrupted one bit-for-bit. The device RNG is counter-based Philox, so
+// A checkpointed-and-resumed CUDA run reproduces an uninterrupted one
+// bit-for-bit. The device RNG is counter-based Philox, so
 // restoring (seed, trajectory counter) + the field fully determines the
 // continuation. This .cu orchestrates cuda::Hmc and io::checkpoint in one TU —
 // io::Writer PIMPLs HDF5, so nvcc never sees <hdf5.h>; it links the prebuilt

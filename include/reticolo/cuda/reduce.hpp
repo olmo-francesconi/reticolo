@@ -6,15 +6,15 @@ namespace reticolo::cuda {
 
 // Deterministic device reductions / vector ops, f64. Fixed launch config so the
 // summation order is reproducible run-to-run — required for HMC reversibility
-// (a varying reduction tree changes ΔH non-deterministically). Phase 1 uses a
-// simple block-partial + fixed-order host finish; Phase 2 fuses s_full+kinetic
-// on top of the same primitive.
+// (a varying reduction tree changes ΔH non-deterministically). Uses a simple
+// block-partial + fixed-order host finish; device-scalar (_into) variants build
+// on the same primitive and avoid host sync inside the graph.
 //
 // Defined in src/cuda/reduce.cu. Pointers are device pointers.
 
-// y[i] += a * x[i], in the field type. f32 is the Phase-3 mixed-precision MD
-// path (drift/kick run in field precision); the volume reductions still
-// accumulate in double (see below).
+// y[i] += a * x[i], in the field type. The f32 overload supports mixed-precision
+// MD (drift/kick run in field precision); the volume reductions still accumulate
+// in double (see below).
 void axpy_f64(double a, double const* x, double* y, long n, cudaStream_t stream = nullptr);
 void axpy_f32(float a, float const* x, float* y, long n, cudaStream_t stream = nullptr);
 

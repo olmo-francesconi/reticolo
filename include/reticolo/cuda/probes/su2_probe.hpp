@@ -2,7 +2,7 @@
 
 namespace reticolo::cuda {
 
-// Phase 5 gates (defined in src/cuda/su2_probe.cu): SU(2) Wilson gauge on the
+// Gates (defined in src/cuda/su2_probe.cu): SU(2) Wilson gauge on the
 // device. The link field is DeviceField<double, MatrixLayout<SU2>> — the same
 // [ndim][nc][nsites] flat order as the host MatrixLinkLattice<SU2>, so a raw
 // copy round-trips with no transpose. The generic gauge kernels (gauge_sun.cuh)

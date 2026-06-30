@@ -3,14 +3,14 @@
 # reticolo::core, mirroring how reticolo::io quarantines <hdf5.h>.
 #
 # It uses reticolo::core headers (header-only — nothing to link) via the include
-# dir below. As of M1, <sleef.h> and the SIMD intrinsics are guarded out of
+# dir below. <sleef.h> and the SIMD intrinsics are guarded out of
 # vec_libm.hpp under __CUDACC__, so the gauge math headers parse under nvcc
-# (proven by gauge_probe.cu). See docs/cuda_hmc_roadmap.md.
+# (proven by gauge_probe.cu).
 
 find_package(CUDAToolkit REQUIRED)
 
 # reduce.cu is the only real-backend TU; everything under probes/ is the
-# per-phase validation harness driven by tests/cuda/test_cuda_selftest.cpp.
+# validation harness driven by tests/cuda/test_cuda_selftest.cpp.
 add_library(reticolo_cuda STATIC
     reduce.cu
     probes/selftest.cu probes/gauge_probe.cu probes/stencil_probe.cu

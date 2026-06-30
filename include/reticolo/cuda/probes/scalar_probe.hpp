@@ -2,7 +2,7 @@
 
 namespace reticolo::cuda {
 
-// Phase 3 gates (defined in src/cuda/scalar_probe.cu): the generic DeviceAction
+// Scalar action gates (defined in src/cuda/scalar_probe.cu): the generic DeviceAction
 // over each new scalar action's functor pair reproduces the CPU action's s_full
 // and force — the shared HD formula is one source of truth across CPU + device.
 // Polynomial actions match to roundoff; the transcendental ones (SineGordon, XY)

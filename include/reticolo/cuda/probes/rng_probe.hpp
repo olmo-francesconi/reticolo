@@ -2,7 +2,7 @@
 
 namespace reticolo::cuda {
 
-// Phase 2c gates (defined in src/cuda/rng_probe.cu).
+// RNG gates (defined in src/cuda/rng_probe.cu).
 
 // The device Philox uniforms are BIT-IDENTICAL to the host philox_uniform2 for
 // the same (seed, traj, index) — the cross-backend reproducibility proof

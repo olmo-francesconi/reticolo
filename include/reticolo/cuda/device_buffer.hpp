@@ -9,8 +9,7 @@
 namespace reticolo::cuda {
 
 // Minimal owning device buffer — a run-lifetime `cudaMalloc` region with RAII
-// teardown. Phase 1's `DeviceField<T, Layout>` builds on this; Phase 0 uses it
-// for the toolchain round-trip self-test.
+// teardown. `DeviceField<T, Layout>` builds on this.
 //
 // Move-only, and move *preserves the device pointer value* (it transfers, not
 // reallocates). This is load-bearing for graph capture: a captured graph bakes

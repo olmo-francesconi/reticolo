@@ -20,14 +20,14 @@
 #include <cstdint>
 #include <vector>
 
-// Phase 5: SU(3) Wilson gauge HMC on the device. Same generic SU(N) kernels
-// (gauge_sun.cuh) as SU(2) — only GD = SU3Device differs (nc=18, n_gen=8, 3×3
-// Morningstar-Peardon group exp). The matrix link field is MatrixLayout<SU3>,
-// identical [ndim][nc][nsites] order to the host MatrixLinkLattice<SU3>. Gates:
-// device ops vs math::su3, action/force vs CPU Wilson<SU3>, MD energy
-// conservation + reversibility, Gell-Mann momentum moments, host-free HMC.
-// (Excluded from the no-integrator-kernels lint gate: names alg::integ::Leapfrog
-// to instantiate the generic integrator over the matrix field.)
+// SU(3) Wilson gauge HMC on the device. Same generic SU(N) kernels (gauge_sun.cuh)
+// as SU(2) — only GD = SU3Device differs (nc=18, n_gen=8, 3×3 Morningstar-Peardon
+// group exp). The matrix link field is MatrixLayout<SU3>, identical [ndim][nc][nsites]
+// order to the host MatrixLinkLattice<SU3>. Gates: device ops vs math::su3,
+// action/force vs CPU Wilson<SU3>, MD energy conservation + reversibility, Gell-Mann
+// momentum moments, host-free HMC. (Excluded from the no-integrator-kernels lint
+// gate: names alg::integ::Leapfrog to instantiate the generic integrator over the
+// matrix field.)
 
 namespace reticolo::cuda {
 

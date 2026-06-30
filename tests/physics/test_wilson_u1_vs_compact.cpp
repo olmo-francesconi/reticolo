@@ -1,8 +1,7 @@
 // Bit-identity check: Wilson<U1>::{s_full, compute_force, s_local} must
 // reproduce the matching CompactU1 methods on the same physical configuration.
-// Establishes that the generic Wilson<G> action over the new
-// MatrixLinkLattice<G,T> field reduces to the hand-tuned CompactU1 path at
-// N = 1 — the prerequisite for routing U(1) through Wilson<U1> in M8.
+// Establishes that the generic Wilson<G> action over MatrixLinkLattice<G,T>
+// reduces to the hand-tuned CompactU1 path at N = 1.
 
 #include <reticolo/action/compact_u1.hpp>
 #include <reticolo/action/detail/gauge_group/u1.hpp>

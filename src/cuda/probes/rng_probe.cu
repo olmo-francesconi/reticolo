@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <vector>
 
-// Phase 2c gates for the device Philox momentum sampler.
+// Gates for the device Philox momentum sampler.
 
 namespace reticolo::cuda {
 

@@ -2,7 +2,7 @@
 
 namespace reticolo::cuda {
 
-// Phase 2a gates (defined in src/cuda/phi4_probe.cu).
+// Phi4 gates (defined in src/cuda/phi4_probe.cu).
 
 // A Lattice<double> survives Lattice → DeviceField → Lattice unchanged.
 [[nodiscard]] bool phi4_roundtrip_ok();

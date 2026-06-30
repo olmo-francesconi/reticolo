@@ -23,7 +23,7 @@ namespace reticolo::action {
 // random vector on the sphere via the Marsaglia normalised-Gaussian trick.
 // Apps must seed every site to a unit vector before the first sweep.
 //
-// HMC on a constrained manifold (RATTLE-style) is deferred — at M8 OnSigma
+// HMC on a constrained manifold (RATTLE-style) is deferred — OnSigma
 // satisfies LocalAction + HasSEff + HasProposal, which is exactly what
 // `alg::Metropolis` needs to drive it.
 

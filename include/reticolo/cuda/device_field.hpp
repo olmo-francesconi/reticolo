@@ -12,9 +12,9 @@
 namespace reticolo::cuda {
 
 // Layout policy: maps a DeviceTopology to the flat element count of the buffer.
-// Phase 2 implements ScalarLayout (one element per site, x-fastest, identical
-// to Lattice<T>'s AoS order). LinkLayout (Phase 4) and MatrixLayout<G>
-// (Phase 5) plug in here without touching DeviceField.
+// ScalarLayout is one element per site, x-fastest, identical to Lattice<T>'s
+// AoS order. LinkLayout and MatrixLayout<G> plug in here without touching
+// DeviceField.
 struct ScalarLayout {
     [[nodiscard]] static long flat_count(DeviceTopology const& t) { return t.nsites; }
 };
@@ -68,7 +68,7 @@ public:
 
     // Host round-trip. For ScalarLayout the device buffer is `nsites`
     // contiguous elements in the same order as Lattice<T>, so a flat copy is
-    // exact; non-scalar layouts will reorder here in later phases.
+    // exact; non-scalar layouts may reorder in their overloads.
     void copy_from_host(Lattice<T> const& l, cudaStream_t stream = nullptr) {
         buf_.copy_from_host(l.data(), stream);
     }
@@ -77,7 +77,7 @@ public:
     }
 
     // Raw host-pointer overloads (caller guarantees `size()` elements) — used to
-    // stage momenta drawn by the host RNG before the device RNG lands (Phase 2c).
+    // stage momenta drawn by the host RNG before the device RNG lands.
     void copy_from_host(T const* src, cudaStream_t stream = nullptr) {
         buf_.copy_from_host(src, stream);
     }

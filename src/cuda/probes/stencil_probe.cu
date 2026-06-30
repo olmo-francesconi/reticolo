@@ -10,15 +10,15 @@
 #include <cstddef>
 #include <vector>
 
-// Phase 1 (M1): force-vs-finite-difference gate for the scalar device protocol.
-// Instantiates stencil<Phi4ForceFunctor> and reduce_fwd<Phi4EnergyFunctor> over
-// a shared (kappa, lambda) and checks that the stencil force equals -dS/dphi
-// computed by central differences of the reduce_fwd action. Validates BOTH
-// skeletons and that their access policies (all-2d force vs forward-only
-// action) are mutually consistent — a missing or double-counted neighbour
-// breaks the identity by O(kappa), far above the FD tolerance. The functors
-// call the SHARED HD per-site formula (action::detail::phi4_*), so this also
-// exercises the real device Phi4 math, not a stand-in.
+// Force-vs-finite-difference gate for the scalar device protocol. Instantiates
+// stencil<Phi4ForceFunctor> and reduce_fwd<Phi4EnergyFunctor> over a shared
+// (kappa, lambda) and checks that the stencil force equals -dS/dphi computed by
+// central differences of the reduce_fwd action. Validates BOTH skeletons and
+// that their access policies (all-2d force vs forward-only action) are mutually
+// consistent — a missing or double-counted neighbour breaks the identity by
+// O(kappa), far above the FD tolerance. The functors call the SHARED HD per-site
+// formula (action::detail::phi4_*), so this also exercises the real device Phi4
+// math, not a stand-in.
 
 namespace reticolo::cuda {
 

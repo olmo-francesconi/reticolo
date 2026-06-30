@@ -14,11 +14,11 @@
 #include <cstddef>
 #include <vector>
 
-// Phase 3: scalar-action coverage. Each new action's CPU s_full + force and the
-// generic device path call the SAME shared HD formula (action::detail::*), so
-// they must agree — to roundoff for the polynomial Phi6, to a bounded tolerance
-// for the transcendental SineGordon / XY (device sin/cos vs Sleef/libm). This TU
-// runs both sides and compares, mirroring phi4_probe.cu.
+// Scalar-action coverage. Each action's CPU s_full + force and the generic device
+// path call the SAME shared HD formula (action::detail::*), so they must agree —
+// to roundoff for the polynomial Phi6, to a bounded tolerance for the
+// transcendental SineGordon / XY (device sin/cos vs Sleef/libm). This TU runs
+// both sides and compares, mirroring phi4_probe.cu.
 
 namespace reticolo::cuda {
 

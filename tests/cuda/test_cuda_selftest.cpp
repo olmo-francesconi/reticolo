@@ -26,13 +26,13 @@
 // CUDA tests. Only registered when RETICOLO_ENABLE_CUDA is on (see
 // tests/CMakeLists.txt); all require a GPU at run time.
 
-// Phase 0 exit gate: the toolchain builds, a kernel launches, and a
+// The toolchain builds, a kernel launches, and a
 // host→device→host round-trip preserves data.
 TEST_CASE("cuda backend self-test round-trips through the device", "[cuda]") {
     REQUIRE(reticolo::cuda::selftest());
 }
 
-// Phase 1: the device's closed-form periodic indexing must reproduce the CPU
+// The device's closed-form periodic indexing must reproduce the CPU
 // reference neighbour table exactly — checked on the host (next/prev are
 // __host__ __device__). Covers a 4D cube and a non-cube, non-power-of-two shape.
 TEST_CASE("cuda DeviceTopology matches the reference Indexing", "[cuda]") {
@@ -53,7 +53,7 @@ TEST_CASE("cuda DeviceTopology matches the reference Indexing", "[cuda]") {
     }
 }
 
-// Phase 1: deterministic f64 reduction + axpy on the device.
+// Deterministic f64 reduction + axpy on the device.
 TEST_CASE("cuda reduce_sum_f64 and axpy_f64 are correct", "[cuda]") {
     using namespace reticolo::cuda;
     constexpr long n = 10000;
@@ -101,77 +101,77 @@ TEST_CASE("cuda reduce_sum_f64 and axpy_f64 are correct", "[cuda]") {
     REQUIRE(h_out[1] == Catch::Approx(host_sumsq).epsilon(1e-12));
 }
 
-// Phase 1 (M1): the gauge action/drift headers compile under nvcc (Sleef now
+// The gauge action/drift headers compile under nvcc (Sleef now
 // guarded out of vec_libm.hpp) and produce finite output. That this links at
 // all means src/cuda/gauge_probe.cu compiled the transcendental paths.
 TEST_CASE("cuda gauge headers compile and run under nvcc", "[cuda]") {
     REQUIRE(reticolo::cuda::gauge_headers_compile());
 }
 
-// Phase 1 exit gate: the generic stencil + reduce_fwd device skeletons, driven
-// by a dummy Phi4-shaped functor pair, satisfy force == -dS/dphi by central
-// finite differences. Validates the scalar device action protocol end-to-end.
+// The generic stencil + reduce_fwd device skeletons, driven by a dummy
+// Phi4-shaped functor pair, satisfy force == -dS/dphi by central finite
+// differences. Validates the scalar device action protocol end-to-end.
 TEST_CASE("cuda stencil force matches finite-difference of reduce_fwd action", "[cuda]") {
     REQUIRE(reticolo::cuda::stencil_force_matches_fd());
 }
 
-// Phase 2a: a scalar field survives the host↔device round-trip unchanged.
+// A scalar field survives the host↔device round-trip unchanged.
 TEST_CASE("cuda DeviceField round-trips a scalar field", "[cuda]") {
     REQUIRE(reticolo::cuda::phi4_roundtrip_ok());
 }
 
-// Phase 2a: the generic DeviceAction over the real Phi4 functor pair
-// reproduces the CPU action::Phi4 s_full and force to roundoff — the shared
-// HD formula is genuinely one source of truth across CPU and device.
+// The generic DeviceAction over the real Phi4 functor pair reproduces the CPU
+// action::Phi4 s_full and force to roundoff — the shared HD formula is
+// genuinely one source of truth across CPU and device.
 TEST_CASE("cuda DeviceAction<Phi4> matches CPU action::Phi4 to roundoff", "[cuda]") {
     REQUIRE(reticolo::cuda::phi4_cpu_matches_device());
 }
 
-// Phase 2b: Leapfrog MD on DeviceField is time-reversible to roundoff.
+// Leapfrog MD on DeviceField is time-reversible to roundoff.
 TEST_CASE("cuda HMC trajectory is reversible", "[cuda]") {
     REQUIRE(reticolo::cuda::hmc_reversibility_ok());
 }
 
-// Phase 2b: the reused alg::integ tags give |ΔH| ~ dt^p with p = 2/2/4 on the
+// The reused alg::integ tags give |ΔH| ~ dt^p with p = 2/2/4 on the
 // device — the integrator-genericity proof.
 TEST_CASE("cuda integrator order is 2/2/4", "[cuda]") {
     REQUIRE(reticolo::cuda::integrator_order_ok());
 }
 
-// Phase 2b: cuda::Hmc::step() (sample → MD → ΔH → host MH) runs and stays finite.
+// cuda::Hmc::step() (sample → MD → ΔH → host MH) runs and stays finite.
 TEST_CASE("cuda Hmc step runs end-to-end", "[cuda]") {
     REQUIRE(reticolo::cuda::hmc_step_runs());
 }
 
-// Phase 2c: device Philox uniforms are bit-identical to the host primitive.
+// Device Philox uniforms are bit-identical to the host primitive.
 TEST_CASE("cuda Philox device matches host bit-for-bit", "[cuda]") {
     REQUIRE(reticolo::cuda::philox_host_matches_device());
 }
 
-// Phase 2c: advancing the trajectory counter changes momenta; same counter repeats.
+// Advancing the trajectory counter changes momenta; same counter repeats.
 TEST_CASE("cuda Philox trajectory counter advances the stream", "[cuda]") {
     REQUIRE(reticolo::cuda::philox_traj_distinct());
 }
 
-// Phase 2c: a large device fill is ~N(0,1).
+// A large device fill is ~N(0,1).
 TEST_CASE("cuda Philox normals have N(0,1) moments", "[cuda]") {
     REQUIRE(reticolo::cuda::philox_moments_ok());
 }
 
-// Phase 2d: a graph-captured MD trajectory + its replay reproduce eager MD
+// A graph-captured MD trajectory + its replay reproduce eager MD
 // bit-for-bit from the same (q0, p0).
 TEST_CASE("cuda graph replay matches eager MD", "[cuda]") {
     REQUIRE(reticolo::cuda::graph_replay_matches_eager());
 }
 
-// Phase 2e: host-free trajectory streaming (device-side Metropolis accept, no
+// Host-free trajectory streaming (device-side Metropolis accept, no
 // per-step sync) is deterministic and produces a sane chain.
 TEST_CASE("cuda host-free HMC run is deterministic", "[cuda]") {
     REQUIRE(reticolo::cuda::hmc_device_run_deterministic());
 }
 
-// Phase 3: each new scalar action's device path reproduces the CPU action's
-// s_full + force via the shared HD formula (one source of truth).
+// Each scalar action's device path reproduces the CPU action's s_full + force
+// via the shared HD formula (one source of truth).
 TEST_CASE("cuda DeviceAction<Phi6> matches CPU action::Phi6", "[cuda]") {
     REQUIRE(reticolo::cuda::phi6_cpu_matches_device());
 }
@@ -184,7 +184,7 @@ TEST_CASE("cuda DeviceAction<Xy> matches CPU action::Xy", "[cuda]") {
     REQUIRE(reticolo::cuda::xy_cpu_matches_device());
 }
 
-// Phase 3d: the device HMC stack in single precision — DeviceAction<Phi4<float>>
+// The device HMC stack in single precision — DeviceAction<Phi4<float>>
 // matches the CPU f32 action, and f32 Leapfrog MD is reversible (bounded tol).
 TEST_CASE("cuda DeviceAction<Phi4<float>> matches CPU to f32 tolerance", "[cuda]") {
     REQUIRE(reticolo::cuda::phi4_f32_cpu_matches_device());
@@ -194,9 +194,9 @@ TEST_CASE("cuda f32 HMC trajectory is reversible", "[cuda]") {
     REQUIRE(reticolo::cuda::hmc_f32_reversibility_ok());
 }
 
-// Phase 4: compact U(1) gauge on the device through the SAME unified
-// DeviceAction — the gauge access pattern (per-link gather force, per-site
-// plaquette action) lives only in the device_functors<CompactU1> trait.
+// Compact U(1) gauge on the device through the SAME unified DeviceAction —
+// the gauge access pattern (per-link gather force, per-site plaquette action)
+// lives only in the device_functors<CompactU1> trait.
 TEST_CASE("cuda DeviceAction<CompactU1> matches CPU action::CompactU1", "[cuda]") {
     REQUIRE(reticolo::cuda::u1_cpu_matches_device());
 }
@@ -213,11 +213,10 @@ TEST_CASE("cuda U(1) host-free HMC runs on the link field", "[cuda]") {
     REQUIRE(reticolo::cuda::u1_hmc_runs());
 }
 
-// Phase 5: SU(2) Wilson gauge on the device through the SAME unified
-// DeviceAction — the matrix access pattern (staple-gather force, plaquette
-// action, group-exp drift, Gell-Mann momentum) lives only in the
-// device_functors<Wilson<SU2>> trait, the MatrixLayout drift atom, and the
-// SU2Device register-local ops.
+// SU(2) Wilson gauge on the device through the SAME unified DeviceAction —
+// the matrix access pattern (staple-gather force, plaquette action, group-exp
+// drift, Gell-Mann momentum) lives only in the device_functors<Wilson<SU2>>
+// trait, the MatrixLayout drift atom, and the SU2Device register-local ops.
 TEST_CASE("cuda SU2Device matrix ops match math::su2", "[cuda]") {
     REQUIRE(reticolo::cuda::su2_device_ops_match_cpu());
 }
@@ -242,7 +241,7 @@ TEST_CASE("cuda SU2 host-free HMC runs on the matrix link field", "[cuda]") {
     REQUIRE(reticolo::cuda::su2_hmc_runs());
 }
 
-// Phase 5: SU(3) Wilson gauge — the same generic SU(N) kernels as SU(2) with
+// SU(3) Wilson gauge — the same generic SU(N) kernels as SU(2) with
 // GD = SU3Device (nc=18, n_gen=8, Morningstar-Peardon 3×3 group exp). Nothing in
 // DeviceAction / Hmc / the kernels changed — only the device-traits struct.
 TEST_CASE("cuda SU3Device matrix ops match math::su3", "[cuda]") {
@@ -273,7 +272,7 @@ TEST_CASE("cuda SU3 host-free HMC runs on the matrix link field", "[cuda]") {
 // CompactU1 angle kernels (gauge_u1.cuh) on a 1-angle LinkLayout field — NOT the
 // generic SU(N) matrix kernels. Wilson<U1> and CompactU1 are bit-identical
 // (n_color=1 ⇒ β/N = β), so this is the same device path with the action type
-// swapped, demonstrating the M8 "Wilson<U1> subsumes CompactU1" unification.
+// swapped.
 TEST_CASE("cuda DeviceAction<Wilson<U1>> matches CPU action::Wilson<U1>", "[cuda]") {
     REQUIRE(reticolo::cuda::wilson_u1_cpu_matches_device());
 }
