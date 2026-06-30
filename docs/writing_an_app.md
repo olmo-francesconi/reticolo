@@ -189,6 +189,143 @@ thermalisation).
 
 ---
 
+# Adding an action
+
+Two families, two recipes. Both keep the action a plain aggregate that
+satisfies `HmcAction` (`s_full` + `compute_force`) — the compiler is the only
+registry, there is nothing to "register" beyond an `#include` in the family
+aggregator.
+
+## A new site action
+
+A site action lives on a `Lattice<F>`. The per-site math is a `RETICOLO_HD`
+formula (shared verbatim with the CUDA backend); the struct is a thin wrapper
+around the shared `detail::reduce_fwd` / `detail::visit_nn` traversal
+primitives. Copy `site/phi4.hpp` + `detail/site/phi4_formula.hpp` and swap
+three things: the formula body, the couplings, and `describe`.
+
+1. **Formula** — `include/reticolo/action/detail/site/<name>_formula.hpp`. Two
+   `RETICOLO_HD inline` free templates in `namespace reticolo::action::detail`,
+   taking pre-gathered neighbour sums (this is the single source of truth — the
+   CUDA functors call the *same* functions):
+
+   ```cpp
+   template <class T>
+   [[nodiscard]] RETICOLO_HD inline T <name>_action_site(T phi, T fwd, /*params*/);
+   //   `fwd`  = sum over the ndim FORWARD neighbours (each bond once) → for s_full
+   template <class T>
+   [[nodiscard]] RETICOLO_HD inline T <name>_force_site(T phi, T nbrs, /*params*/);
+   //   `nbrs` = sum over all 2·ndim neighbours; returns the force -dS/dphi(x)
+   ```
+
+2. **Struct** — `include/reticolo/action/site/<name>.hpp`, a designated-init
+   aggregate:
+
+   ```cpp
+   template <class T = double>
+   struct MyAction {
+       using value_type = T;
+       T c1 = T{0};                       // couplings
+       void describe(log::Entry& e) const { e.line("MyAction<{}>", scalar_name<T>()); e.param("c1={:.3f}", c1); }
+
+       [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
+           double const s = detail::reduce_fwd<T, double>(l, [c = c1](T phi, T fwd) {
+               return static_cast<double>(detail::myaction_action_site<T>(phi, fwd, c)); });
+           last_s_full_ = s; return s;
+       }
+       void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
+           T* const out = force.data();
+           detail::visit_nn<T>(l, [c = c1, out](std::size_t i, T phi, T nbrs) {
+               out[i] = detail::myaction_force_site<T>(phi, nbrs, c); });
+       }
+       // Optional → HasFusedKick: the same visit_nn doing `mom[i] += k_dt * force_site(...)` in place.
+       void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept { /* ... */ }
+
+       [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
+       void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
+       mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
+   };
+   ```
+
+   `s_full` + `compute_force` ⇒ `HmcAction`; add `compute_force_and_kick` for
+   `HasFusedKick` (the integrator's preferred path). A complex action with a
+   sign problem adds `s_imag` + `compute_force_imag` for `HasImagPart` — copy
+   `site/bose_gas.hpp`.
+
+3. **Register** — add `#include <reticolo/action/site/<name>.hpp>` to
+   `include/reticolo/action/site.hpp`. `alg::Hmc<MyAction<double>, FastRng>`
+   now compiles.
+
+4. **App + test** — copy `apps/phi4_hmc.cpp`; add a force-vs-FD test (pattern
+   #2 below) under `tests/physics/`.
+
+Two scalar actions deviate from this skeleton — `sine_gordon` Sleef-batches
+`sin`/`cos` into a scratch buffer before the visit, and `xy` is bond-based with
+no fused kick. If your action is shaped like one of those, copy it instead.
+
+## A new gauge group
+
+A gauge group `G` is the template parameter to the generic `Wilson<G>` action
+over `MatrixLinkLattice<G, T>`. This is a bigger job than a site action: `G`
+owns the group representation, the HMC algebra, *and* the plaquette/force
+kernels. **Copy `SU2`** (`detail/gauge/gauge_group/su2.hpp` +
+`math/su2_ops.hpp`) — it's the simplest matrix group.
+
+1. **Concept members** (the `GaugeGroup` concept lives in
+   `detail/gauge/gauge_group/base.hpp`):
+
+   ```cpp
+   struct MyGroup {
+       using scalar_t = double;
+       static constexpr std::size_t n_real_components = ...;  // doubles per link (8 = SU(2) 4-complex, 18 = SU(3) 9-complex)
+       static constexpr std::size_t n_color           = N;    // the N in SU(N): Wilson 1/N prefactor + the N·n_plaq offset
+       static constexpr std::string_view name         = "MyGroup";
+   };
+   ```
+
+2. **HMC algebra** — `include/reticolo/math/<g>_ops.hpp`, exposed as static
+   members on `G`. The HMC integrator's momentum sample / kinetic / drift route
+   through these for matrix links (see `algorithm/integ_ops.hpp`,
+   `core/matrix_link_lattice.hpp`):
+
+   ```cpp
+   template <class Rng> static void sample_algebra_slab(T* p_blk, Rng&, std::size_t n);  // draw P in the Lie algebra
+   static double            kinetic_slab (T const* p_blk, std::size_t n);                // ½ Tr P²
+   static void              expi_lmul_slab(T* u_blk, T const* p_blk, double dt, std::size_t n); // U ← exp(i·dt·P)·U
+   ```
+
+   `expi_lmul` (the matrix-exponential drift) is the genuinely group-specific
+   piece — the SU(N) analogue of the scalar `phi += dt·mom`, and the one device
+   exception to the shared-formula rule.
+
+3. **Plaquette + force kernels** — the statics `Wilson<G>` delegates to
+   (see `gauge/wilson.hpp`):
+
+   ```cpp
+   static double plaq_re_tr(mb, nb, s, s_pmu, s_pnu, stride);                    // Re Tr U_p
+   template <class T> static double s_full_plane_re_tr_sum(MatrixLinkLattice<G,T> const&, mu, nu); // optional fast path
+   static void compute_force         (MatrixLinkLattice<G,T> const&, MatrixLinkLattice<G,T>&, double beta_over_N);
+   static void compute_force_and_kick(... , double beta_over_N, double k_dt);   // optional → HasFusedKick
+   ```
+
+   Component `k` of the link at site `s` in direction `μ`'s block is at
+   `block_ptr[k·stride + s]` (stride = `nsites`). SU(2)/SU(3) batch these over
+   `k_gauge_batch<T>` sites — start unbatched (a plain per-site loop, like the
+   Abelian `CompactU1`) and add batching only if it's a measured bottleneck.
+
+4. **Register + use** — add the group header next to the other
+   `gauge_group/*` includes in `include/reticolo/reticolo.hpp`; `Wilson<MyGroup,
+   double>` is then an `HmcAction`. Copy `apps/su2_hmc.cpp`, and add a
+   reversibility test (pattern #3) plus an equivalence check against a known
+   limit.
+
+The Abelian case (`U(1)`) is degenerate — `n_real_components = 1` (just the
+angle), no matrix exponential — and already ships both the hand-tuned
+`CompactU1` action and a `Wilson<gauge_group::U1>` path that reduces to it
+bit-for-bit (`test_wilson_u1_vs_compact`).
+
+---
+
 # Writing a test
 
 Every action, algorithm, and IO component has tests under `tests/`. The
