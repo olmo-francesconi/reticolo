@@ -565,15 +565,39 @@ lever now that we know it is memory-bound.
   `MatrixLayout<G>` `drift_field` group-exp overload, selected over the generic
   axpy drift by partial ordering); Phase 2 only proved it for scalar atoms.
 
-### Phase 6 — observables, measurement overlap, checkpoint/restart
+### Phase 6 — observables, measurement overlap, checkpoint/restart — DONE
 *(exit: CUDA app HDF5 matches host schema; only scalars cross PCIe;
 **checkpoint round-trip**: device field + RNG counter → HDF5 → resume equals an
 uninterrupted run)*
-- `obs::*` via `device_reduce`; measurement on a second stream overlapping the
-  next trajectory.
-- **(review)** Checkpoint/restart was missing entirely; `io/checkpoint.hpp`
-  exists and the Philox counter is fully specified, so this is cheap and
-  important for long runs.
+
+**Status: DONE** (39/39 CUDA gates green on Tesla P100). Done **natively**, not
+through a façade: the CUDA apps are plain `.cu` twins of the host apps
+(`apps/phi4_cuda_hmc.cu`, `apps/su2_cuda_hmc.cu`) that include the full
+`<reticolo/reticolo.hpp>` umbrella, use `cuda::Hmc` + `DeviceField` for the
+device work and `io::Writer` for output, and keep the trajectory for-loop
+plainly in `main()`. `io::Writer` PIMPLs HDF5, so nvcc never sees `<hdf5.h>`; it
+links the prebuilt `reticolo::io` archive. The enabling fix was guarding the
+`-Wall`/`-Werror` interface flags behind `$<COMPILE_LANGUAGE:CXX>` in
+`ReticoloWarnings.cmake` (+ OpenMP OFF so no `-fopenmp` leaks onto nvcc).
+
+- **Observables** — reduced on-device (`cuda::reduce_sum_f64`/`reduce_sumsq_f64`);
+  only the scalar action + magnetisation moments cross PCIe, measured per
+  host-free block of `meas_every` trajectories.
+- **Checkpoint/restart** — `io::save_config_counter` / `load_config_counter`
+  write `/field` + `/rng@{seed,counter}` + `/traj@i`. Because the device RNG is
+  counter-based Philox, restoring (seed, trajectory counter) + field continues
+  the chain **bit-for-bit** (Test #71: resumed run == uninterrupted run, exactly).
+- **New gates**: Test #71 (checkpoint round-trip, bit-exact) and Test #89
+  (phi4_cuda_hmc HDF5 schema, mirrors `test_phi4_hmc_smoke`).
+- **(review)** First build to compile the full umbrella + io + apps under nvcc;
+  it surfaced four latent issues now fixed: `std::views::zip` (C++23 lib,
+  unavailable to nvcc `-std=c++20`) in `obs::analysis`; a `string_view`→`char*`
+  bug in `Writer::field` for matrix links (only instantiated via SU(N)
+  checkpoint); an umbrella-only `act::` alias used without the umbrella; and the
+  `reticolo::log` vs CUDA `::log` ambiguity from a namespace-scope
+  using-directive.
+- **Deferred**: second-stream measurement overlapping the next trajectory (the
+  current path syncs between blocks). Cheap to add when measurement cost matters.
 
 ### Phase 7 — hardening & docs  *(exit: full deterministic suite green under `RETICOLO_ENABLE_CUDA`; nightly physics harness green)*
 `docs/writing_a_cuda_app.md`; update `architecture.md` with the backend;
