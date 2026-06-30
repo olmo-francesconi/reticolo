@@ -221,52 +221,21 @@ reticolo_add_test(test_my_thing  unit/test_my_thing.cpp)
 `reticolo::reticolo + Catch2::Catch2`, configures warnings, and runs
 `catch_discover_tests`. One file + one line; done.
 
-## The five canonical patterns
+## The four canonical patterns
 
 ### 1. Concept static_assert
 
 Every action header has one. Zero-runtime; failures at compile time:
 
 ```cpp
-static_assert(LocalAction<Phi4<double>, double>);
-static_assert(HasSEff   <Phi4<double>, double>);
-static_assert(HasForce  <Phi4<double>, double>);
+static_assert(HmcAction   <Phi4<double>, Lattice<double>>);
+static_assert(HasFusedKick<Phi4<double>, Lattice<double>>);  // if the action fuses the kick
 ```
 
-Put at the top of every action's force-consistency test.
+Put at the top of every action's force-consistency test. Gauge actions name
+their link field instead, e.g. `HmcAction<CompactU1<double>, LinkLattice<double>>`.
 
-### 2. `ds_local` matches finite difference of `s_full`
-
-The Metropolis contract. If `ds_local(φ, x, nv) ≠ s_full(φ_new) − s_full(φ)`
-the update is wrong by definition:
-
-```cpp
-TEST_CASE("Phi4: ds_local matches FD of s_full", "[physics][phi4]") {
-    Phi4<double> const action{.kappa = 0.13, .lambda = 0.05};
-    Lattice<double> phi{{6, 6, 6}};
-    FastRng rng{1234};
-    randomize(phi, rng);
-
-    for (std::size_t trial = 0; trial < 20; ++trial) {
-        Site const x     = Site{rng.uniform_int(phi.nsites())};
-        double const old = phi[x];
-        double const nv  = old + rng.normal();
-
-        double const ds_predicted = action.ds_local(phi, x, nv);
-        double const s_old = action.s_full(phi);
-        phi[x] = nv;
-        double const s_new = action.s_full(phi);
-        phi[x] = old;
-
-        REQUIRE(std::abs(ds_predicted - (s_new - s_old)) < 1e-9);
-    }
-}
-```
-
-Tolerance 1e-9 is for a tight exact-arithmetic identity. Loosen to 1e-6
-only if you have a numerical reason to.
-
-### 3. `compute_force` matches central FD of `s_full`
+### 2. `compute_force` matches central FD of `s_full`
 
 The HMC contract: `F(x) = −∂S/∂φ(x)`. Central diff is O(ε²); with
 ε = 1e-4 you should see <1e-7 disagreement:
@@ -284,11 +253,11 @@ double const force_numeric = -(s_plus - s_minus) / (2.0 * k_eps);
 REQUIRE(std::abs(force[x] - force_numeric) < 1e-7);
 ```
 
-Every HMC-capable action has this pattern in
+Every action has this pattern in
 `tests/physics/test_<action>_force_consistency.cpp`. Copy one, edit the
 action type + couplings.
 
-### 4. HMC reversibility
+### 3. HMC reversibility
 
 Integrating forward then back must return to the starting field (modulo
 round-off). The integrator's symplectic contract:
@@ -308,14 +277,14 @@ for (Site x : phi.sites()) REQUIRE(std::abs(phi[x] - phi0[x]) < 1e-9);
 accept/reject). See `tests/physics/test_hmc_reversibility.cpp`,
 `test_u1_hmc_reversibility.cpp`, `test_su2_hmc_reversibility.cpp`.
 
-### 5. Limiting regime
+### 4. Limiting regime
 
 Pick a limit where the answer is known analytically:
 
 - **Free theory (λ=0)** for Phi4: `force(x) = 2κ·Σ_NN φ_nn − 2φ(x)`.
-- **Gaussian Metropolis at β=0** for OnSigma: acceptance → 1.
-- **β=0 Wolff** for XY: every cluster is a singleton.
-- **Large β Wolff**: clusters span the lattice.
+- **Aligned config (θ=0)** for CompactU1: every plaquette contributes 0, so `S = 0`.
+- **Wilson<U1> vs CompactU1**: the generic matrix-group action must match the
+  hand-tuned Abelian path bit-for-bit at N=1.
 - **Integrator order** for HMC: `⟨|ΔH|⟩` scales as `Δt²` (Leapfrog,
   Omelyan2) or `Δt⁴` (Omelyan4). See
   `tests/physics/test_hmc_integrator_order.cpp` for the cleanest example

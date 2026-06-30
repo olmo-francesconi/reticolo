@@ -18,11 +18,8 @@ lives in one of three places:
   This is the GPU bread-and-butter.
 - **Replica-parallel** — LLR runs N independent replicas, each its own HMC.
   Today this is the only OpenMP axis; on a GPU it is a batch/grid dimension.
-- **Colour-parallel** — Metropolis even/odd sublattices are independent
-  given the other colour frozen.
 
-Serial and not portable: the trajectory chain itself, Wolff cluster DFS,
-replica exchange.
+Serial and not portable: the trajectory chain itself, replica exchange.
 
 ## Hotspot ranking
 
@@ -95,8 +92,8 @@ Layout facts that matter for CUDA:
 
 - **Scalar fields are AoS** (`vector<T>`, one element/site, x-fastest
   row-major). Stencil reads are stride-1 in the inner axis → coalescing
-  friendly as-is. `std::array<double,N>` (O(N)) is interleaved AoS and
-  will want a transpose to SoA on device.
+  friendly as-is. Complex scalars (`std::complex<double>`, BoseGas) are
+  interleaved Re/Im and may want a transpose to SoA on device.
 - **SU(N) links are already SoA** (`[μ][2N²][nsites]`, each real component
   a contiguous nsites slab). This is the GPU-ideal layout — straight
   `cudaMemcpy` + coalesced access, no repacking.
@@ -132,12 +129,10 @@ Layout facts that matter for CUDA:
      updater.step()                            #pragma omp parallel for (replicas) ◄ REPLICA-PARALLEL
      obs → Series → HDF5                         each Replica: phi, rng, HMC,
         │                                          WindowedAction(base, a, E_n, δ)
-   ┌────┴─────┬───────────┬──────────┐            thermalize → sample → update a
-   │ Hmc      │ Metropolis │ Wolff    │           ── serial even/odd EXCHANGE ──
-   └────┬─────┴─────┬──────┴────┬─────             P=min(1,exp((a_i−a_j)(E_i−E_j)))
-        │           │           └─ DFS cluster: SEQUENTIAL, path-dependent
-        │           └─ even/odd sweep: RNG-serialized accept; checkerboard
-        │              batches exp() but accept stays serial. SITE-PARALLEL/colour.
+   ┌──────────┐                                   thermalize → sample → update a
+   │ Hmc      │                                   ── serial even/odd EXCHANGE ──
+   └────┬─────┘                                   P=min(1,exp((a_i−a_j)(E_i−E_j)))
+        │
         ▼
    ┌──────────────────── HMC trajectory (the GPU target) ─────────────────────┐
    │ sample_momenta_   RNG normal_fill / group algebra sample      [O(V)]       │
@@ -163,9 +158,8 @@ Layout facts that matter for CUDA:
 | Axis | Kernels | GPU mapping |
 |------|---------|-------------|
 | Site / link-parallel | `compute_force`, `s_full`, drift, kick, momentum sample, observables | one thread per site (scalar) or per link (`nsites·ndim`); reduction via cub/thrust |
-| Colour-parallel | Metropolis even/odd | per-thread RNG, one kernel per colour |
 | Replica-parallel | LLR ensemble | grid/stream batch dimension; saturates a GPU one lattice can't |
-| Serial (not portable) | trajectory chain, Wolff DFS, replica exchange | stays host-side or single-thread |
+| Serial (not portable) | trajectory chain, replica exchange | stays host-side or single-thread |
 
 ## Implications for the backend
 

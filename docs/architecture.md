@@ -50,8 +50,7 @@ all in scope.
 
 Value semantics: copy = deep-copy the field, share the `Indexing`. Move is
 cheap. The element type `T` is whatever the action needs — `double` for
-real scalar fields, `std::array<double, N>` for O(N) sigma models,
-`std::complex<double>` for charged scalars.
+real scalar fields, `std::complex<double>` for charged scalars (BoseGas).
 
 ```cpp
 Lattice<double>                phi{{16, 16, 16}};        // 3D, fresh Indexing from pool
@@ -91,31 +90,36 @@ it.
 ## Actions
 
 Plain structs satisfying C++20 concepts in
-[`<reticolo/action/concepts.hpp>`](../include/reticolo/action/concepts.hpp).
+[`<reticolo/action/detail/concepts.hpp>`](../include/reticolo/action/detail/concepts.hpp).
 No base class, no virtual, no `register_action`. An action just *has* the
-right member functions; the updater concept-checks at the call site.
+right member functions; the HMC updater concept-checks at the call site.
+Actions split into two families by field type — site actions (`Lattice<F>`)
+under `action/site/`, gauge actions (`LinkLattice<F>` /
+`MatrixLinkLattice<G,F>`) under `action/gauge/` — but they satisfy the **same**
+field-agnostic concepts; only the `Field` they name differs.
 
-### The concept refinement
+### The concepts
 
-- **`LocalAction`** — Metropolis baseline. `s_local(l, x)` returns the
-  contribution to S touching site x; `ds_local(l, x, new_v)` returns
-  `s_local`'s change if `phi(x)` is replaced. The Metropolis sweep accepts
-  with `min(1, exp(-ds_local))`.
-- **`HasSEff`** — `s_full(l)` returns total S. Needed by HMC (for ΔH) and
-  any diagnostic series logging S.
-- **`HasForce`** — `compute_force(l, force)` writes `-dS/dphi` into `force`.
-  Called once per MD step. `HasForce + HasSEff + Rng` is the `alg::Hmc`
-  requirement.
-- **`HasProposal`** — `propose(l, x, rng)` returns a candidate `phi(x)`. If
-  present, `alg::Metropolis` uses it; otherwise it falls back to a Gaussian
-  random walk. Selection happens at instantiation via `if constexpr`. Used
-  by `OnSigma<N>` for uniform-on-sphere draws (Marsaglia).
-- **`WolffEmbeddable`** — `axis_type`, `wolff_random_axis(rng)`,
-  `wolff_reflect(v, axis)`, `wolff_link_p(v_x, v_y, axis)`. The cluster
-  updater stays action-agnostic by deferring the bond-activation
-  probability to the action — XY uses
-  `1 - exp(min(0, -2β sin(θ_x-r) sin(θ_y-r)))`, OnSigma uses
-  `1 - exp(min(0, -2β (r·φ_x)(r·φ_y)))`, etc.
+- **`HmcAction<A, Field>`** — the baseline. `s_full(l)` returns total S (for
+  ΔH and any diagnostic series logging S); `compute_force(l, force)` writes
+  `-dS/dfield` into `force`, called once per MD step. `HmcAction + Rng` is the
+  entire `alg::Hmc` requirement.
+- **`HasFusedKick<A, Field>`** — refines `HmcAction` with
+  `compute_force_and_kick(l, mom, k)`, which computes the force and applies
+  `mom += k·F` in a single pass without materialising the force lattice. The
+  integrator prefers this path when present and falls back to plain
+  `compute_force` otherwise.
+- **`HasImagPart<A, Field>`** — refines `HmcAction` for complex actions with a
+  sign problem: `s_imag(l)` is the imaginary part (the LLR constraint
+  observable in the phase-quenched ensemble) and `compute_force_imag(l, force)`
+  its gradient. Only `BoseGas` uses it today; `llr::WindowedAction` switches to
+  its complex mode when the base satisfies it.
+
+Earlier revisions carried a `LocalAction` Metropolis baseline
+(`s_local`/`ds_local`) and a parallel `gauge::` concept family keyed on the
+`(Site, mu)` elementary-update arity. With Metropolis and Wolff removed, both
+are gone: HMC's `s_full`/`compute_force` are field-agnostic, so one concept set
+covers site and gauge alike.
 
 ### Example: `act::Phi4`
 
@@ -126,28 +130,28 @@ struct Phi4 {
     T kappa  = 0;
     T lambda = 0;
 
-    T s_local (Lattice<T> const&, Site) const noexcept;
-    T ds_local(Lattice<T> const&, Site, T new_v) const noexcept;
-    T s_full  (Lattice<T> const&) const noexcept;
-    void compute_force(Lattice<T> const&, Lattice<T>& force) const noexcept;
+    double s_full(Lattice<T> const&) const noexcept;
+    void   compute_force(Lattice<T> const&, Lattice<T>& force) const noexcept;
+    void   compute_force_and_kick(Lattice<T> const&, Lattice<T>& mom, T k) const noexcept;
 };
 ```
 
-Satisfies `LocalAction + HasSEff + HasForce`. Works with both
-`alg::Metropolis<Phi4<double>, FastRng>` and
-`alg::Hmc<Phi4<double>, FastRng>`. A new action is one header file added
-to the umbrella include; nothing else changes.
+Satisfies `HmcAction<Phi4<double>, Lattice<double>>` and `HasFusedKick`, so it
+drives `alg::Hmc<Phi4<double>, FastRng>` directly. A new action is one header
+under `action/site/` (or `action/gauge/`) added to the family aggregator
+(`action/site.hpp` / `action/gauge.hpp`); nothing else changes.
 
-Concept failures at the updater instantiation site point at the missing
+Concept failures at the `alg::Hmc` instantiation site point at the missing
 member — read the compiler error.
 
 ## Updaters
 
-| updater                | needs                                     |
-| ---------------------- | ----------------------------------------- |
-| `alg::Metropolis<A,R>` | `LocalAction` (+ optionally `HasProposal`) |
-| `alg::Hmc<A,R,Integ>`  | `HasSEff` + `HasForce`                     |
-| `alg::Wolff<A,R>`      | `WolffEmbeddable`                          |
+| updater                | needs                                       |
+| ---------------------- | ------------------------------------------- |
+| `alg::Hmc<A,R,Integ>`  | `HmcAction` (+ optionally `HasFusedKick`)   |
+
+`alg::Hmc` is the only update algorithm; `llr::Replica` orchestrates an
+ensemble of windowed HMC chains on top of it (see the LLR section).
 
 The HMC integrator is a **type parameter**, not a runtime switch. Three
 ship: `alg::integ::Leapfrog` (2nd-order, cheap default),
@@ -365,9 +369,8 @@ OpenMP is off, so neither reaches the nvcc compile. See
 
 ### Builtin apps (`apps/`)
 
-`apps/` is the canonical reference set: one sim per action
-(`phi4_hmc`, `phi6_hmc`, `sine_gordon_hmc`, `xy_wolff`,
-`on_sigma_metropolis`/`wolff`, `bose_gas_hmc`, `u1_metropolis`/`hmc`,
+`apps/` is the canonical reference set: one HMC sim per action
+(`phi4_hmc`, `phi6_hmc`, `sine_gordon_hmc`, `bose_gas_hmc`, `u1_hmc`,
 `su2_hmc`, `su3_hmc`), the LLR sims (`phi4_llr`, `u1_llr`,
 `u1_llr_smoothed`, `bose_gas_llr`, `su2_llr`), `f32` variants, and the
 `bench_*` suite. Built in-tree only; registered with `reticolo_add_app`
@@ -423,9 +426,8 @@ sets `RETICOLO_ENABLE_OPENMP=OFF` explicitly.
 
 - `tests/unit/` — types in isolation: `Site`, `Indexing`, pool, `Lattice`,
   `FastRng`, `Parser`, observers, analysis.
-- `tests/physics/` — force-vs-FD consistency for every HMC-capable action,
-  HMC reversibility & integrator-order, Metropolis acceptance in the
-  Gaussian limit, Wolff invariants.
+- `tests/physics/` — force-vs-FD consistency for every action,
+  HMC reversibility & integrator-order, Wilson<U1>-vs-CompactU1 equivalence.
 - `tests/io/` — Writer round-trips, metadata stamping, phase collision
   rejection, `/vars` stamping.
 - `tests/apps/` — every reference app smoke-tested end-to-end: run the

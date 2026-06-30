@@ -131,7 +131,8 @@ still apply). Add a smoke test by mirroring
 ## Adding a new action to the GPU backend
 
 You do **not** rewrite the physics. The per-site formula already lives in
-`action/detail/<name>_formula.hpp`, annotated `RETICOLO_HD`. To run it on the GPU:
+`action/detail/site/<name>_formula.hpp` (or `action/detail/gauge/<name>_formula.hpp`),
+annotated `RETICOLO_HD`. To run it on the GPU:
 
 1. Add `include/reticolo/cuda/actions/<name>.hpp`: device functors whose
    `finalize()` calls the *same* `action::detail::<name>_*_site<T>(...)` formula,

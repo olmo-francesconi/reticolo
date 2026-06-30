@@ -12,9 +12,9 @@
 
 **Modern C++ library for Monte Carlo simulation of lattice quantum field theories.**
 
-Scalar and gauge actions behind a concept-refined interface, with HMC
-(Leapfrog / Omelyan2 / Omelyan4), Metropolis, Wolff cluster, and LLR
-density-of-states updaters, and a CUDA backend for HMC. Output in self-describing
+Scalar and gauge actions behind a concept-constrained interface, updated by HMC
+(Leapfrog / Omelyan2 / Omelyan4) with LLR density-of-states reconstruction as an
+orchestration layer on top, and a CUDA backend for HMC. Output in self-describing
 HDF5. See [`docs/architecture.md`](docs/architecture.md) for the design rationale.
 
 ## Build
