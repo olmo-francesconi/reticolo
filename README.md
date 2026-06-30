@@ -138,3 +138,32 @@ staple force is correspondingly heavier per link. Throughput in M dof-updates/s:
 | Wilson&lt;SU3&gt; | 16⁴     |    3.1 |    3.0 |    3.1 |
 | Wilson&lt;SU3&gt; | 20⁴     |    3.8 |    3.7 |    3.9 |
 | Wilson&lt;SU3&gt; | 24⁴     |    3.3 |    3.3 |    3.4 |
+
+## GPU benchmarks
+
+Double-precision HMC throughput in **G dof-updates/s** (dof × trajectories/s) on
+three FP64 datacenter GPUs, via Modal (`tools/modal/app.py`), climbing the lattice
+volume until each card runs out of memory (`—`).
+
+φ⁴ (scalar):
+
+| lattice | A100 (40 GB) | H100 (80 GB) | B200 (180 GB) |
+|---------|-------------:|-------------:|--------------:|
+| 16⁴     |         0.32 |         0.61 |          0.67 |
+| 32⁴     |         0.74 |         1.55 |          2.68 |
+| 64⁴     |         0.88 |         1.62 |          2.93 |
+| 128⁴    |         0.85 |         1.53 |          2.93 |
+| 192⁴    |          —   |         1.51 |          2.87 |
+
+SU(3) (gauge):
+
+| lattice | A100 | H100 | B200 |
+|---------|-----:|-----:|-----:|
+| 8⁴      | 0.66 | 1.15 | 1.13 |
+| 16⁴     | 0.84 | 2.12 | 3.09 |
+| 32⁴     | 0.92 | 2.09 | 2.90 |
+| 56⁴     | 0.86 | 1.89 | 2.75 |
+| 72⁴     |  —   |  —   | 2.75 |
+
+Reproduce: `uv run tools/modal/app.py bench --gpus A100,H100,B200`, then
+`pull --session <id>` and `python tools/profile/compare.py tools/modal/output/<id>`.
