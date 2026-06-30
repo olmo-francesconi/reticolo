@@ -31,6 +31,7 @@
 #include <reticolo/cuda/reduce.hpp>
 #include <reticolo/cuda/stream.hpp>
 // Device-functor adapters: one per supported host action.
+#include <reticolo/cuda/actions/bose_gas.hpp>
 #include <reticolo/cuda/actions/compact_u1.hpp>
 #include <reticolo/cuda/actions/phi4.hpp>
 #include <reticolo/cuda/actions/phi6.hpp>

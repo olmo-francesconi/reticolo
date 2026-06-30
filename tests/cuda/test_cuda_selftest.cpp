@@ -1,6 +1,7 @@
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>
+#include <reticolo/cuda/probes/bose_gas_probe.hpp>
 #include <reticolo/cuda/probes/f32_probe.hpp>
 #include <reticolo/cuda/probes/gauge_probe.hpp>
 #include <reticolo/cuda/probes/hmc_probe.hpp>
@@ -283,4 +284,28 @@ TEST_CASE("cuda Wilson<U1> HMC trajectory is reversible", "[cuda]") {
 
 TEST_CASE("cuda Wilson<U1> host-free HMC runs on the link field", "[cuda]") {
     REQUIRE(reticolo::cuda::wilson_u1_hmc_runs());
+}
+
+// BoseGas — complex scalar (relativistic Bose gas at finite μ). HMC samples the
+// phase-quenched S_R; the device field element is cplx<T> (AoS, flat-copy with
+// the host Lattice<std::complex<T>>), the per-site S_R/F_R formula shared with
+// the CPU action. Validated in f64 and f32.
+TEST_CASE("cuda DeviceAction<BoseGas<double>> matches CPU action::BoseGas", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_cpu_matches_device_f64());
+}
+
+TEST_CASE("cuda DeviceAction<BoseGas<float>> matches CPU to f32 tolerance", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_cpu_matches_device_f32());
+}
+
+TEST_CASE("cuda BoseGas HMC trajectory is reversible", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_hmc_reversibility_ok());
+}
+
+TEST_CASE("cuda BoseGas host-free HMC runs (f64)", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_hmc_runs_f64());
+}
+
+TEST_CASE("cuda BoseGas host-free HMC runs (f32)", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_hmc_runs_f32());
 }

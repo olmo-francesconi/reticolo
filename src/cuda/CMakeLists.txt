@@ -16,7 +16,7 @@ add_library(reticolo_cuda STATIC
     probes/selftest.cu probes/gauge_probe.cu probes/stencil_probe.cu
     probes/phi4_probe.cu probes/scalar_probe.cu probes/f32_probe.cu
     probes/u1_probe.cu probes/wilson_u1_probe.cu probes/su2_probe.cu probes/su3_probe.cu
-    probes/hmc_probe.cu probes/rng_probe.cu)
+    probes/bose_gas_probe.cu probes/hmc_probe.cu probes/rng_probe.cu)
 add_library(reticolo::cuda ALIAS reticolo_cuda)
 
 target_include_directories(reticolo_cuda PUBLIC

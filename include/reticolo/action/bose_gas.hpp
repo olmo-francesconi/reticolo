@@ -1,6 +1,8 @@
 #pragma once
 
+#include <reticolo/action/detail/bose_gas_formula.hpp>
 #include <reticolo/action/detail/helpers.hpp>
+#include <reticolo/core/cplx.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/lattice.hpp>
@@ -101,11 +103,14 @@ struct BoseGas {
             l,
             [coef_mass, lam = lambda, ch_minus_1](
                 complex_t phi, complex_t fwd_total, complex_t fwd_last) {
-                T const abs2 = std::norm(phi);
-                // hopping(x) = real( conj(phi) * (fwd_total + (ch-1)*fwd_last) )
+                // weighted forward sum (time dir ×cosh) → shared per-site formula.
                 complex_t const weighted = fwd_total + (ch_minus_1 * fwd_last);
-                T const hop              = re_conj_mul_(phi, weighted);
-                return complex_t{(coef_mass * abs2) + (lam * abs2 * abs2) - (T{2} * hop), T{0}};
+                T const s =
+                    detail::bose_gas_action_site<T>(cplx<T>{phi.real(), phi.imag()},
+                                                    cplx<T>{weighted.real(), weighted.imag()},
+                                                    coef_mass,
+                                                    lam);
+                return complex_t{s, T{0}};
             });
         double const s = static_cast<double>(std::real(total));
         last_s_full_   = s;
@@ -127,9 +132,13 @@ struct BoseGas {
             l,
             [coef_mass, lam = lambda, ch_minus_1, out](
                 std::size_t i, complex_t phi, complex_t nbrs_total, complex_t nbrs_last) {
-                T const abs2           = std::norm(phi);
                 complex_t const staple = nbrs_total + (ch_minus_1 * nbrs_last);
-                out[i] = (T{-2} * coef_mass * phi) - (T{4} * lam * abs2 * phi) + (T{2} * staple);
+                cplx<T> const f =
+                    detail::bose_gas_force_site<T>(cplx<T>{phi.real(), phi.imag()},
+                                                   cplx<T>{staple.real(), staple.imag()},
+                                                   coef_mass,
+                                                   lam);
+                out[i] = complex_t{f.re, f.im};
             });
     }
 

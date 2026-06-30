@@ -227,6 +227,69 @@ void su2_block() {
     check_equiv("cpu-vs-gpu <plaq>", c_plaq, g_plaq);
 }
 
+void bose_gas_block() {
+    using namespace reticolo;
+    std::printf("BoseGas (L=6^4, m=1, lambda=0.5, mu=0.3):\n");
+    using DField = cuda::DeviceField<cplx<double>>;
+    using DAct   = cuda::DeviceAction<action::BoseGas<double>, DField>;
+    Lattice<std::complex<double>>::SizeVec const shape(4, 6);
+    action::BoseGas<double> const a{.mass = 1.0, .lambda = 0.5, .mu = 0.3};
+
+    // GPU chain. ⟨|φ|²⟩ = Σ(re²+im²)/V over the 2·V underlying reals.
+    std::vector<double> g_edh;
+    std::vector<double> g_phi2;
+    {
+        Lattice<std::complex<double>> cold{shape};
+        std::fill(cold.data(), cold.data() + cold.nsites(), std::complex<double>{0.0, 0.0});
+        DField f{shape};
+        f.copy_from_host(reinterpret_cast<cplx<double> const*>(cold.data()));
+        RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+        DAct meas{a, f.topology()};
+        // Omelyan2 (as in the canonical bose_gas_hmc app): leapfrog at this
+        // trajectory length is past the BoseGas stability edge from a cold start.
+        cuda::Hmc<DAct, alg::integ::Omelyan2, DField> hmc{
+            DAct{a, f.topology()}, f, k_tau, k_n_md, 0xB05EULL};
+        hmc.run(k_n_therm);
+        hmc.sync();
+        auto const v = static_cast<double>(f.size());
+        auto const n = 2 * static_cast<long>(f.size());
+        for (int i = 0; i < k_n_meas; ++i) {
+            auto const r = hmc.step();
+            g_edh.push_back(std::exp(-r.dH));
+            g_phi2.push_back(cuda::reduce_sumsq_f64(reinterpret_cast<double const*>(f.data()), n) /
+                             v);
+        }
+    }
+
+    // CPU chain.
+    std::vector<double> c_edh;
+    std::vector<double> c_phi2;
+    {
+        Lattice<std::complex<double>> phi{shape};
+        std::fill(phi.data(), phi.data() + phi.nsites(), std::complex<double>{0.0, 0.0});
+        FastRng rng{0xB1A5ULL};
+        action::BoseGas<double> ac{.mass = 1.0, .lambda = 0.5, .mu = 0.3};
+        alg::Hmc hmc{ac, phi, rng, {.tau = k_tau, .n_md = k_n_md}, alg::integ::omelyan2};
+        auto const v = static_cast<double>(phi.nsites());
+        for (int i = 0; i < k_n_therm; ++i) {
+            (void)hmc.step(log::Mode::silent);
+        }
+        for (int i = 0; i < k_n_meas; ++i) {
+            auto const s = hmc.step(log::Mode::silent);
+            c_edh.push_back(std::exp(-s.dH));
+            double acc = 0.0;
+            for (std::size_t k = 0; k < phi.nsites(); ++k) {
+                acc += std::norm(phi.data()[k]);
+            }
+            c_phi2.push_back(acc / v);
+        }
+    }
+
+    check_exp_dH("gpu <exp(-dH)>", g_edh);
+    check_exp_dH("cpu <exp(-dH)>", c_edh);
+    check_equiv("cpu-vs-gpu <|phi|^2>", c_phi2, g_phi2);
+}
+
 }  // namespace
 
 int main() {
@@ -234,6 +297,7 @@ int main() {
     std::printf("=== reticolo CUDA nightly physics harness ===\n");
     phi4_block();
     su2_block();
+    bose_gas_block();
     std::printf("=== nightly harness: %s ===\n", g_ok ? "GREEN" : "RED");
     return g_ok ? 0 : 1;
 }
