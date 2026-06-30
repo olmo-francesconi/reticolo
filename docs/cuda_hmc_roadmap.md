@@ -600,9 +600,30 @@ links the prebuilt `reticolo::io` archive. The enabling fix was guarding the
 - **Deferred**: second-stream measurement overlapping the next trajectory (the
   current path syncs between blocks). Cheap to add when measurement cost matters.
 
-### Phase 7 — hardening & docs  *(exit: full deterministic suite green under `RETICOLO_ENABLE_CUDA`; nightly physics harness green)*
-`docs/writing_a_cuda_app.md`; update `architecture.md` with the backend;
-consolidate the nightly harness.
+### Phase 7 — hardening & docs — DONE  *(exit: full deterministic suite green under `RETICOLO_ENABLE_CUDA`; nightly physics harness green)*
+
+**Status: DONE.** Deterministic suite: 39/39 CUDA gates green on Tesla P100.
+
+- **Docs.** `architecture.md` gained a CUDA-backend section (the `cuda/` folder
+  boundary, the one-way `cuda → core` dependency + the two sanctioned `core`
+  shims, the `.hpp`/`.cuh` rule, the four-hop shared-formula seam). New
+  `docs/writing_a_cuda_app.md` walk-through (incl. the nvcc gotchas).
+- **Structure.** Public backend API, validation probes, and apps are now
+  physically separated: `include/reticolo/cuda/` top level = public API,
+  `cuda/probes/` = harnesses, `src/cuda/probes/` = probe TUs, `apps/cuda/` = GPU
+  apps. New `<reticolo/cuda/cuda.hpp>` umbrella → a GPU app is two includes,
+  symmetric with the CPU side.
+- **Nightly harness.** `apps/cuda/cuda_nightly.cu` consolidates the per-phase
+  `[nightly]` obligations into one binary that runs the CPU `alg::Hmc` and the
+  GPU `cuda::Hmc` side-by-side and asserts: `⟨exp(−ΔH)⟩ = 1` (Kennedy–Pendleton,
+  both backends), CPU-vs-GPU observable equivalence within MC error (φ⁴ ⟨φ²⟩,
+  SU(2) ⟨plaq⟩), for φ⁴ and SU(2) Wilson. Driven on a GPU host by
+  `tools/cuda_build_test.sh` with `RETICOLO_NIGHTLY=1`; non-zero exit fails the
+  run. (A standalone CPU-vs-GPU φ⁴ observable comparison was also validated at
+  0.49σ across ⟨S/V⟩, ⟨|m|⟩, ⟨m²⟩, ⟨φ²⟩.)
+- **Deferred (out of scope for "done"):** the analytic free-field acceptance-vs-
+  `erfc(dt)` check and an actual scheduled cron; the harness is run on demand via
+  the Kaggle lane. LLR replica batching (M7) remains future work.
 
 > **LLR replica batching is out of scope here** — it sits on top of a working
 > generic device HMC (M7 in `cuda_extension_plan.md`). The generic `cuda::Hmc`
