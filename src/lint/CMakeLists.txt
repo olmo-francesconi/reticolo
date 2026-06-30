@@ -6,5 +6,5 @@
 # fresh after every configure, so run-clang-tidy can find it without surprises.
 add_library(reticolo_lint_amalgamation STATIC amalgamation.cpp)
 target_link_libraries(reticolo_lint_amalgamation PRIVATE reticolo::reticolo)
-target_compile_features(reticolo_lint_amalgamation PRIVATE cxx_std_23)
+target_compile_features(reticolo_lint_amalgamation PRIVATE cxx_std_20)
 reticolo_configure_warnings(reticolo_lint_amalgamation)

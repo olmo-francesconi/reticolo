@@ -149,8 +149,8 @@ instantiation error pointing straight at it.
 
 ## Gotchas (each cost a Kaggle round-trip once)
 
-- **No C++23 library features in headers the umbrella pulls** — nvcc caps device
-  compilation at `-std=c++20`. (`std::views::zip` → indexed loop.)
+- **No C++23 features in headers the umbrella pulls** — the library targets C++20,
+  and nvcc device compilation also caps at `-std=c++20`. (`std::views::zip` → indexed loop.)
 - **Scope `using namespace reticolo;` inside `main()`/a function**, never at
   namespace scope — `reticolo::log` collides with CUDA's `::log` math function in
   device headers ("reference to 'log' is ambiguous").

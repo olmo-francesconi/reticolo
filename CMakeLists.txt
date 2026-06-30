@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.25)
 project(
     reticolo
     VERSION 0.3.0
-    DESCRIPTION "Lightweight serial C++23 library for lattice quantum field theory MCMC"
+    DESCRIPTION "Lightweight serial C++20 library for lattice quantum field theory MCMC"
     LANGUAGES CXX
 )
 
@@ -12,7 +12,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -106,7 +106,7 @@ endif()
 add_library(reticolo_core INTERFACE)
 add_library(reticolo::core ALIAS reticolo_core)
 
-target_compile_features(reticolo_core INTERFACE cxx_std_23)
+target_compile_features(reticolo_core INTERFACE cxx_std_20)
 target_include_directories(reticolo_core INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>

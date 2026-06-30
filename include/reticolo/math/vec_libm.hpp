@@ -86,7 +86,7 @@ inline constexpr std::size_t k_vec_width_d = 8;
 inline constexpr std::size_t k_vec_width_d = 4;
 #elif defined(__ARM_NEON) || defined(__aarch64__)
 inline constexpr std::size_t k_vec_width_d = 2;
-#elifdef __SSE2__
+#elif defined(__SSE2__)
 inline constexpr std::size_t k_vec_width_d = 2;
 #else
 inline constexpr std::size_t k_vec_width_d = 1;
@@ -100,7 +100,7 @@ inline constexpr std::size_t k_vec_width_f = 16;
 inline constexpr std::size_t k_vec_width_f = 8;
 #elif defined(__ARM_NEON) || defined(__aarch64__)
 inline constexpr std::size_t k_vec_width_f = 4;
-#elifdef __SSE2__
+#elif defined(__SSE2__)
 inline constexpr std::size_t k_vec_width_f = 4;
 #else
 inline constexpr std::size_t k_vec_width_f = 1;
@@ -115,12 +115,12 @@ inline void cos_batch(double* dst, double const* src, std::size_t n) noexcept {
         __m512d const v = _mm512_loadu_pd(src + i);
         _mm512_storeu_pd(dst + i, Sleef_cosd8_u10avx512f(v));
     }
-#elifdef __AVX2__
+#elif defined(__AVX2__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_cosd4_u10avx2(v));
     }
-#elifdef __AVX__
+#elif defined(__AVX__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_cosd4_u10avx(v));
@@ -131,7 +131,7 @@ inline void cos_batch(double* dst, double const* src, std::size_t n) noexcept {
         float64x2_t const v = vld1q_f64(src + i);
         vst1q_f64(dst + i, Sleef_cosd2_u10advsimd(v));
     }
-#elifdef __SSE2__
+#elif defined(__SSE2__)
     for (; i + 2 <= n; i += 2) {
         __m128d const v = _mm_loadu_pd(src + i);
         _mm_storeu_pd(dst + i, Sleef_cosd2_u10sse2(v));
@@ -153,12 +153,12 @@ inline void cos_batch(float* dst, float const* src, std::size_t n) noexcept {
         __m512 const v = _mm512_loadu_ps(src + i);
         _mm512_storeu_ps(dst + i, Sleef_cosf16_u10avx512f(v));
     }
-#elifdef __AVX2__
+#elif defined(__AVX2__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v = _mm256_loadu_ps(src + i);
         _mm256_storeu_ps(dst + i, Sleef_cosf8_u10avx2(v));
     }
-#elifdef __AVX__
+#elif defined(__AVX__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v = _mm256_loadu_ps(src + i);
         _mm256_storeu_ps(dst + i, Sleef_cosf8_u10avx(v));
@@ -169,7 +169,7 @@ inline void cos_batch(float* dst, float const* src, std::size_t n) noexcept {
         float32x4_t const v = vld1q_f32(src + i);
         vst1q_f32(dst + i, Sleef_cosf4_u10advsimd(v));
     }
-#elifdef __SSE2__
+#elif defined(__SSE2__)
     for (; i + 4 <= n; i += 4) {
         __m128 const v = _mm_loadu_ps(src + i);
         _mm_storeu_ps(dst + i, Sleef_cosf4_u10sse2(v));
@@ -189,12 +189,12 @@ inline void sin_batch(double* dst, double const* src, std::size_t n) noexcept {
         __m512d const v = _mm512_loadu_pd(src + i);
         _mm512_storeu_pd(dst + i, Sleef_sind8_u10avx512f(v));
     }
-#elifdef __AVX2__
+#elif defined(__AVX2__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_sind4_u10avx2(v));
     }
-#elifdef __AVX__
+#elif defined(__AVX__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_sind4_u10avx(v));
@@ -205,7 +205,7 @@ inline void sin_batch(double* dst, double const* src, std::size_t n) noexcept {
         float64x2_t const v = vld1q_f64(src + i);
         vst1q_f64(dst + i, Sleef_sind2_u10advsimd(v));
     }
-#elifdef __SSE2__
+#elif defined(__SSE2__)
     for (; i + 2 <= n; i += 2) {
         __m128d const v = _mm_loadu_pd(src + i);
         _mm_storeu_pd(dst + i, Sleef_sind2_u10sse2(v));
@@ -225,12 +225,12 @@ inline void sin_batch(float* dst, float const* src, std::size_t n) noexcept {
         __m512 const v = _mm512_loadu_ps(src + i);
         _mm512_storeu_ps(dst + i, Sleef_sinf16_u10avx512f(v));
     }
-#elifdef __AVX2__
+#elif defined(__AVX2__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v = _mm256_loadu_ps(src + i);
         _mm256_storeu_ps(dst + i, Sleef_sinf8_u10avx2(v));
     }
-#elifdef __AVX__
+#elif defined(__AVX__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v = _mm256_loadu_ps(src + i);
         _mm256_storeu_ps(dst + i, Sleef_sinf8_u10avx(v));
@@ -241,7 +241,7 @@ inline void sin_batch(float* dst, float const* src, std::size_t n) noexcept {
         float32x4_t const v = vld1q_f32(src + i);
         vst1q_f32(dst + i, Sleef_sinf4_u10advsimd(v));
     }
-#elifdef __SSE2__
+#elif defined(__SSE2__)
     for (; i + 4 <= n; i += 4) {
         __m128 const v = _mm_loadu_ps(src + i);
         _mm_storeu_ps(dst + i, Sleef_sinf4_u10sse2(v));
@@ -264,12 +264,12 @@ inline void acos_batch(double* dst, double const* src, std::size_t n) noexcept {
         __m512d const v = _mm512_loadu_pd(src + i);
         _mm512_storeu_pd(dst + i, Sleef_acosd8_u10avx512f(v));
     }
-#elifdef __AVX2__
+#elif defined(__AVX2__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_acosd4_u10avx2(v));
     }
-#elifdef __AVX__
+#elif defined(__AVX__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_acosd4_u10avx(v));
@@ -280,7 +280,7 @@ inline void acos_batch(double* dst, double const* src, std::size_t n) noexcept {
         float64x2_t const v = vld1q_f64(src + i);
         vst1q_f64(dst + i, Sleef_acosd2_u10advsimd(v));
     }
-#elifdef __SSE2__
+#elif defined(__SSE2__)
     for (; i + 2 <= n; i += 2) {
         __m128d const v = _mm_loadu_pd(src + i);
         _mm_storeu_pd(dst + i, Sleef_acosd2_u10sse2(v));
@@ -308,14 +308,14 @@ sincos_batch(double* dst_sin, double* dst_cos, double const* src, std::size_t n)
         _mm512_storeu_pd(dst_sin + i, sc.x);
         _mm512_storeu_pd(dst_cos + i, sc.y);
     }
-#elifdef __AVX2__
+#elif defined(__AVX2__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v          = _mm256_loadu_pd(src + i);
         Sleef___m256d_2 const sc = Sleef_sincosd4_u10avx2(v);
         _mm256_storeu_pd(dst_sin + i, sc.x);
         _mm256_storeu_pd(dst_cos + i, sc.y);
     }
-#elifdef __AVX__
+#elif defined(__AVX__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v          = _mm256_loadu_pd(src + i);
         Sleef___m256d_2 const sc = Sleef_sincosd4_u10avx(v);
@@ -330,7 +330,7 @@ sincos_batch(double* dst_sin, double* dst_cos, double const* src, std::size_t n)
         vst1q_f64(dst_sin + i, sc.x);
         vst1q_f64(dst_cos + i, sc.y);
     }
-#elifdef __SSE2__
+#elif defined(__SSE2__)
     for (; i + 2 <= n; i += 2) {
         __m128d const v          = _mm_loadu_pd(src + i);
         Sleef___m128d_2 const sc = Sleef_sincosd2_u10sse2(v);
@@ -361,14 +361,14 @@ inline void sincos_batch(float* dst_sin, float* dst_cos, float const* src, std::
         _mm512_storeu_ps(dst_sin + i, sc.x);
         _mm512_storeu_ps(dst_cos + i, sc.y);
     }
-#elifdef __AVX2__
+#elif defined(__AVX2__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v          = _mm256_loadu_ps(src + i);
         Sleef___m256_2 const sc = Sleef_sincosf8_u10avx2(v);
         _mm256_storeu_ps(dst_sin + i, sc.x);
         _mm256_storeu_ps(dst_cos + i, sc.y);
     }
-#elifdef __AVX__
+#elif defined(__AVX__)
     for (; i + 8 <= n; i += 8) {
         __m256 const v          = _mm256_loadu_ps(src + i);
         Sleef___m256_2 const sc = Sleef_sincosf8_u10avx(v);
@@ -383,7 +383,7 @@ inline void sincos_batch(float* dst_sin, float* dst_cos, float const* src, std::
         vst1q_f32(dst_sin + i, sc.x);
         vst1q_f32(dst_cos + i, sc.y);
     }
-#elifdef __SSE2__
+#elif defined(__SSE2__)
     for (; i + 4 <= n; i += 4) {
         __m128 const v          = _mm_loadu_ps(src + i);
         Sleef___m128_2 const sc = Sleef_sincosf4_u10sse2(v);
@@ -413,12 +413,12 @@ inline void exp_batch(double* dst, double const* src, std::size_t n) noexcept {
         __m512d const v = _mm512_loadu_pd(src + i);
         _mm512_storeu_pd(dst + i, Sleef_expd8_u10avx512f(v));
     }
-#elifdef __AVX2__
+#elif defined(__AVX2__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_expd4_u10avx2(v));
     }
-#elifdef __AVX__
+#elif defined(__AVX__)
     for (; i + 4 <= n; i += 4) {
         __m256d const v = _mm256_loadu_pd(src + i);
         _mm256_storeu_pd(dst + i, Sleef_expd4_u10avx(v));
@@ -429,7 +429,7 @@ inline void exp_batch(double* dst, double const* src, std::size_t n) noexcept {
         float64x2_t const v = vld1q_f64(src + i);
         vst1q_f64(dst + i, Sleef_expd2_u10advsimd(v));
     }
-#elifdef __SSE2__
+#elif defined(__SSE2__)
     for (; i + 2 <= n; i += 2) {
         __m128d const v = _mm_loadu_pd(src + i);
         _mm_storeu_pd(dst + i, Sleef_expd2_u10sse2(v));

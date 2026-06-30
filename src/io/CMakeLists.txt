@@ -14,7 +14,7 @@ target_include_directories(reticolo_io PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_compile_features(reticolo_io PUBLIC cxx_std_23)
+target_compile_features(reticolo_io PUBLIC cxx_std_20)
 
 # The /run@compile_flags stamp uses the same RETICOLO_COMPILE_FLAGS macro
 # the core target carries.

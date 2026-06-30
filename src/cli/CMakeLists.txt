@@ -12,4 +12,4 @@ target_include_directories(reticolo_cli INTERFACE
     $<INSTALL_INTERFACE:include>
 )
 
-target_compile_features(reticolo_cli INTERFACE cxx_std_23)
+target_compile_features(reticolo_cli INTERFACE cxx_std_20)

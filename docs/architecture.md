@@ -88,7 +88,7 @@ it.
 
 ## Actions
 
-Plain structs satisfying C++23 concepts in
+Plain structs satisfying C++20 concepts in
 [`<reticolo/action/concepts.hpp>`](../include/reticolo/action/concepts.hpp).
 No base class, no virtual, no `register_action`. An action just *has* the
 right member functions; the updater concept-checks at the call site.
