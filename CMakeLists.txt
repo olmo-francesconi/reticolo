@@ -17,6 +17,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(RETICOLO_BUILD_APPS         "Build reference apps"                OFF)
+option(RETICOLO_BUILD_BENCHMARKS   "Build the bench_* suite (needs apps)" OFF)
 option(RETICOLO_BUILD_EXAMPLES     "Build standalone example consumers"  OFF)
 option(RETICOLO_BUILD_TESTS        "Build test suite"                    OFF)
 option(RETICOLO_BUILD_IO           "Build the HDF5-backed io subsystem"  ON)

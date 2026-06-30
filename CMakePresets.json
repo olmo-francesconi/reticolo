@@ -13,6 +13,7 @@
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
                 "RETICOLO_WARNINGS_AS_ERRORS":  "ON",
                 "RETICOLO_BUILD_APPS":          "ON",
+                "RETICOLO_BUILD_BENCHMARKS":    "ON",
                 "RETICOLO_BUILD_EXAMPLES":      "ON",
                 "RETICOLO_BUILD_TESTS":         "ON"
             }

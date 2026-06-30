@@ -79,11 +79,18 @@ jobs:
         #
         # The macos-appleclang preset bakes RETICOLO_ENABLE_OPENMP=OFF in
         # itself (AppleClang ships without libomp) — no per-matrix flag here.
+        #
+        # BENCHMARKS/EXAMPLES OFF: the dev presets build both, but CI doesn't
+        # need them. The bench_* suite is never run by ctest, and the examples
+        # are covered by the dedicated example-standalone job below — building
+        # them here is ~25 umbrella-heavy TUs of wasted compile per matrix entry.
         run: >
           cmake --preset ${{ matrix.preset }}
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DRETICOLO_TUNE_NATIVE=OFF
+          -DRETICOLO_BUILD_BENCHMARKS=OFF
+          -DRETICOLO_BUILD_EXAMPLES=OFF
 
       - name: build
         run: cmake --build --preset ${{ matrix.preset }}
