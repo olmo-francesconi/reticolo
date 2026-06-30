@@ -40,8 +40,8 @@ over one of 3 access patterns." Concretely (file-verified):
 |--------|---------|-------------|
 | **OnSigma** | has **no `compute_force`** — Metropolis-only via `propose()`; HMC on the sphere needs RATTLE-style constrained integration that does not exist on CPU (`on_sigma.hpp:26-28`) | **Out of this roadmap.** Not an HMC action; the plain `field += c·mom` drift is wrong on the manifold. Tracked as a separate constrained-integrator workstream. |
 | **XY** | per-bond term is nonlinear (`Σ sin/cos(θ_x−θ_y)`), so it **bypasses `visit_nn`** and reads each neighbour individually (`xy.hpp:61-104`) | needs a *per-neighbour* stencil, not the neighbour-**sum** stencil phi4/phi6/sine_gordon use |
-| **BoseGas** | anisotropic split-last hopping (`reduce_fwd_split_last`, `visit_nn_split_last`), plus `s_imag`/`compute_force_imag` over a **time-slab**, plus `std::complex` (`bose_gas.hpp:100-279`) | needs split-last + time-slab access patterns *and* a `cuda::std::complex` element — its own workstream, not "a complex fork" |
-| **U(1) gauge** | `compute_force` is a **scatter** into 4 links/plaquette — for *both* `CompactU1` (`compact_u1.hpp:148-176`) and `Wilson<U1>` (`gauge_group/u1.hpp:74-76`) | the device must **re-derive** U(1) force as a per-link **gather** (sum the 2(d−1) plaquettes through each link, recompute `sin`) — the gather-only invariant forbids the CPU scatter. So `Wilson<U1>` does **not** "validate the matrix path for free": U(1) matrix path is scatter, SU(N) is gather. |
+| **BoseGas** | anisotropic split-last hopping (`reduce_fwd_split_last`, `visit_nn_split_last`), plus `s_imag`/`compute_force_imag` over a **time-slab**, plus `std::complex` (`bose_gas.hpp:100-279`) | needs split-last + time-slab access patterns *and* a `cuda::std::complex` element — its own workstream, not "a complex fork". **✓ DONE (Phase 8)** via `reticolo::cplx<T>` (not `cuda::std::complex`); the time-direction cosh(μ) weight is folded into the per-neighbour stencil accumulate, so the shared S_R/F_R formula needs no split-last on device. S_I / time-slab stays CPU (LLR-only). |
+| **U(1) gauge** | `compute_force` is a **scatter** into 4 links/plaquette — for *both* `CompactU1` (`compact_u1.hpp:148-176`) and `Wilson<U1>` (`gauge_group/u1.hpp:74-76`) | the device must **re-derive** U(1) force as a per-link **gather** (sum the 2(d−1) plaquettes through each link, recompute `sin`) — the gather-only invariant forbids the CPU scatter. So `Wilson<U1>` does **not** "validate the matrix path for free": U(1) matrix path is scatter, SU(N) is gather. **✓ DONE (Phase 8)** — `Wilson<U1>` ported via the specialized abelian gather (reuses `gauge_u1.cuh`, the `CompactU1` kernels), NOT the SU(N) matrix path — exactly as this row predicted. |
 | **SU(2)/SU(3)** | link-centric gather already (`su3.hpp` `compute_force_batched_`) | fits the gather skeleton; the *formula* shares, the CPU *slab code* does not (see expi note) |
 
 So the access-pattern set is an **open taxonomy**, not three closed tags, and
@@ -456,9 +456,10 @@ tuning) — a known ±10–20% knob, also deferred to profiling.
   `DeviceAction<Phi4<float>>` vs CPU `s_full`+force (1e-5 / 1e-4), and f32
   Leapfrog reversibility (1e-3). f32 for the transcendental/other scalar actions
   is a free follow-on (same functors, `<float>`); only Phi4 is gated so far.
-- **(remaining) BoseGas is its own sub-workstream**: `cuda::std::complex`,
-  split-last + time-slab patterns, `s_imag`/`compute_force_imag` — not a drop-in
-  functor.
+- **BoseGas — DONE in Phase 8** (was deferred as its own sub-workstream). The
+  `cuda::std::complex` concern was resolved with a tiny `reticolo::cplx<T>`; the
+  HMC-relevant S_R/F_R fit the site stencil once the cosh(μ) time weight folds
+  into the per-neighbour accumulate. `s_imag`/`compute_force_imag` (LLR) stay CPU.
 
 ### Phase 4 — U(1) gauge — DONE  *(exit: force-vs-FD + reversibility on `CompactU1`; [nightly] plaquette at known β)*
 `LinkLayout` field (`ndim·nsites`, direction-major = host `LinkLattice` order, so
@@ -485,7 +486,9 @@ forward-plane `β·Σ(1−cos)` → `reduce_sum`). The CPU scatter is **not** po
   reversibility (roundoff); host-free `cuda::Hmc` smoke over the link field.
   Plaquette-at-β equilibration is a simulation → nightly only, not a gate.
 - Validates the gather plaquette path before SU(N) — but **does not** validate
-  the matrix path (`Wilson<U1>` is also scatter).
+  the matrix path (`Wilson<U1>` is also scatter). **Phase 8** later ports
+  `Wilson<U1>` onto exactly these `gauge_u1.cuh` kernels (same gather, same
+  `LinkLayout`), confirming the bit-identity with `CompactU1` holds on device too.
 
 **Cross-action throughput baseline (P100, host-free `cuda::Hmc`, Leapfrog
 τ=1.0 n_md=10, ms/traj):**
@@ -629,6 +632,49 @@ links the prebuilt `reticolo::io` archive. The enabling fix was guarding the
 > generic device HMC (M7 in `cuda_extension_plan.md`). The generic `cuda::Hmc`
 > + hand-rolled **segmented** `device_reduce` are designed so a batched replica
 > axis is an outer grid dimension over the same kernels, not a rewrite.
+
+### Phase 8 — extended action coverage: Wilson\<U1\> + BoseGas — DONE
+
+Two actions originally flagged "own workstream / out of scope" (see the action
+table above) ported after Phase 7, each via the path that table predicted.
+**47/47 CUDA gates green on Tesla P100; nightly harness green.**
+
+- **Wilson\<U1\> — specialized abelian path.** A `device_functors<Wilson<U1,T>>`
+  partial specialization (wins over the generic `Wilson<G>` for `G=U1`) that
+  reuses the `CompactU1` angle kernels (`gauge_u1.cuh`) on a 1-angle `LinkLayout`
+  field — deliberately **not** the SU(N) matrix path. The generic `gauge_sun.cuh`
+  path is untouched; the abelian and matrix kernel families stay separate (a
+  future Sp(N) plugs in as its own kernel set, not a contortion of the generic
+  matrix kernel). GPU `Wilson<U1>` is byte-identical to GPU `CompactU1` — the M8
+  "subsume CompactU1 under Wilson\<U1\>" unification, now demonstrable on device.
+  Gates: device-vs-CPU `s_full`+force (1e-9), reversibility, host-free HMC.
+  - *Rejected alternative:* routing U(1) through the generic matrix kernels with a
+    1×1-complex `U1Device` (`nc=2`). It works but needs an angle↔(cos,sin)
+    conversion at the copy boundary and buys no GPU perf (a U(1) staple is a
+    general complex, so `nc=1` can't feed the generic staple accumulate). The
+    specialized gather is leaner and keeps the families cleanly separated.
+- **BoseGas — complex scalar, f64 + f32.** New `reticolo::cplx<T>` (HD,
+  standard-layout {re,im}, layout-compatible with `std::complex<T>` ⇒ flat
+  host↔device copy). The per-site S_R/F_R formula is factored into
+  `action/detail/bose_gas_formula.hpp` and shared by the CPU action and
+  `device_functors<BoseGas<T>>` (one source of truth); the cosh(μ) time-direction
+  weight folds into the per-neighbour stencil accumulate, so no split-last is
+  needed on device. A `cplx<T>` field is 2 reals/site: the complex MD atoms
+  (drift/kick/kinetic ½Σ|φ|² over the 2·n underlying reals) live in `integ_ops.hpp`
+  so they are visible at the `cuda::Hmc` definition (`cplx`'s only ADL-associated
+  namespace is `reticolo`, not `reticolo::cuda`), letting the generic `Hmc` run a
+  complex field unchanged. S_I / `compute_force_imag` (LLR) stay CPU. Gates: f64
+  and f32 device-vs-CPU `s_full`+force, reversibility, f64+f32 host-free HMC.
+- **Nightly harness** extended with a BoseGas CPU-vs-GPU block: ⟨exp(−ΔH)⟩=1
+  (1.0000 both backends) and ⟨|φ|²⟩ agree at 0.20σ (the first complex-field HMC
+  on the GPU, validated at ensemble level).
+- **Lesson (reaffirmed):** Leapfrog is unstable for the stiffer actions (SU(2),
+  BoseGas) from a cold start at the longer trajectory — Omelyan2 is the right
+  default, matching the canonical CPU apps. The nightly harness caught exactly
+  this regression for BoseGas (frozen field, ⟨exp(−ΔH)⟩ underflow) before merge.
+
+**Remaining unported:** OnSigma (constrained-integrator workstream), the non-HMC
+updaters (Metropolis / Wolff), and LLR replica batching (M7).
 
 ## Cross-cutting invariants (every phase)
 
