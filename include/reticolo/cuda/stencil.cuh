@@ -21,9 +21,14 @@
 
 namespace reticolo::cuda {
 
+// `field`/`out` are __restrict__ (the force write never aliases the field read),
+// and `field` is const → nvcc routes the 2d neighbour gather through the
+// read-only data cache (LDG), recovering some of the redundant-read locality
+// without restructuring (Lever 2). Generic across every scalar element type
+// (double/float/cplx<T>), unlike an explicit __ldg which lacks a complex overload.
 template <class F>
-__global__ void stencil_kernel(F f, typename F::element const* field,
-                               typename F::element* out, DeviceTopology topo) {
+__global__ void stencil_kernel(F f, typename F::element const* __restrict__ field,
+                               typename F::element* __restrict__ out, DeviceTopology topo) {
     long const i = static_cast<long>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (i >= topo.nsites) {
         return;

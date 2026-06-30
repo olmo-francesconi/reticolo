@@ -22,9 +22,11 @@
 
 namespace reticolo::cuda {
 
+// field/site_out __restrict__ + const field → read-only-cache (LDG) gather, as in
+// stencil_kernel (Lever 2). Generic across all scalar element types.
 template <class F>
-__global__ void reduce_fwd_site_kernel(F f, typename F::element const* field, double* site_out,
-                                       DeviceTopology topo) {
+__global__ void reduce_fwd_site_kernel(F f, typename F::element const* __restrict__ field,
+                                       double* __restrict__ site_out, DeviceTopology topo) {
     long const i = static_cast<long>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (i >= topo.nsites) {
         return;

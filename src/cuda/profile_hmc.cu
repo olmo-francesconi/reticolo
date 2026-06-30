@@ -299,12 +299,15 @@ int main(int argc, char** argv) {
     if (action == "phi4") {
         run_config<act::Phi4<double>, DeviceField<double>>(
             "phi4", shape, {.kappa = 0.18, .lambda = 1.0}, n_md, iters, force_only);
+    } else if (action == "phi4f32") {
+        run_config<act::Phi4<float>, DeviceField<float>>(
+            "phi4f32", shape, {.kappa = 0.18F, .lambda = 1.0F}, n_md, iters, force_only);
     } else if (action == "su3") {
         using G = reticolo::gauge_group::SU3;
         run_config<act::Wilson<G, double>, DeviceField<double, MatrixLayout<G>>>(
             "su3", shape, {.beta = 6.0}, n_md, iters, force_only);
     } else {
-        std::fprintf(stderr, "unknown --action=%s (expected phi4|su3)\n", action.c_str());
+        std::fprintf(stderr, "unknown --action=%s (expected phi4|phi4f32|su3)\n", action.c_str());
         return 2;
     }
     return 0;
