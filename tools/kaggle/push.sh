@@ -13,7 +13,9 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
+repo="$(cd "${here}/../.." && pwd)"
 slug="reticolo-cuda-ci"
+ds_slug="reticolo-src"
 
 if ! command -v kaggle >/dev/null 2>&1; then
     echo "error: kaggle CLI not found — 'pip install kaggle' and add ~/.kaggle/kaggle.json" >&2
@@ -35,11 +37,52 @@ if [ -z "${user}" ]; then
     echo "error: could not determine kaggle username (set KAGGLE_USERNAME, add kaggle.json, or 'kaggle config set -n username -v <you>')" >&2
     exit 1
 fi
-echo "Kaggle user: ${user}    kernel: ${user}/${slug}"
+echo "Kaggle user: ${user}    kernel: ${user}/${slug}    dataset: ${user}/${ds_slug}"
 
-# Stage the kernel: run.py + generated metadata (GPU + internet on, private).
+# Ship the LOCAL working tree as a Kaggle dataset (tarball) — so a run reflects
+# the current checkout, including uncommitted changes, with no git commit/push.
+# Exclude .git, build artifacts, prior Kaggle output, and HDF5 blobs.
+dstage="$(mktemp -d)"
+trap 'rm -rf "${dstage}"' EXIT
+echo "Taring working tree → ${ds_slug}.tar.gz ..."
+tar czf "${dstage}/${ds_slug}.tar.gz" -C "${repo}" \
+    --exclude='./.git' --exclude='./.git/*' \
+    --exclude='./build' --exclude='./build/*' \
+    --exclude='./tools/kaggle/output' --exclude='./tools/kaggle/output/*' \
+    --exclude='*.h5' --exclude='.DS_Store' .
+cat > "${dstage}/dataset-metadata.json" <<EOF
+{
+  "title": "${ds_slug}",
+  "id": "${user}/${ds_slug}",
+  "licenses": [{"name": "CC0-1.0"}]
+}
+EOF
+
+# Create the dataset on first run, version it thereafter.
+if kaggle datasets status "${user}/${ds_slug}" >/dev/null 2>&1; then
+    echo "Versioning dataset ..."
+    kaggle datasets version -p "${dstage}" -m "snapshot"
+else
+    echo "Creating dataset ..."
+    kaggle datasets create -p "${dstage}"
+fi
+
+# Wait for Kaggle to finish processing the new version before the kernel attaches
+# it (an attached-but-unprocessed dataset makes the kernel use a stale version).
+echo "Waiting for dataset to process ..."
+for _ in $(seq 1 40); do
+    st="$(kaggle datasets status "${user}/${ds_slug}" 2>/dev/null || true)"
+    echo "  dataset: ${st}"
+    case "$(printf '%s' "${st}" | tr '[:upper:]' '[:lower:]')" in
+        *ready*|*complete*) break ;;
+        *error*) echo "dataset processing error" >&2; exit 1 ;;
+    esac
+    sleep 10
+done
+
+# Stage the kernel: run.py + metadata (GPU + internet on, private, src dataset).
 stage="$(mktemp -d)"
-trap 'rm -rf "${stage}"' EXIT
+trap 'rm -rf "${stage}" "${dstage}"' EXIT
 cp "${here}/run.py" "${stage}/run.py"
 cat > "${stage}/kernel-metadata.json" <<EOF
 {
@@ -51,7 +94,7 @@ cat > "${stage}/kernel-metadata.json" <<EOF
   "is_private": true,
   "enable_gpu": true,
   "enable_internet": true,
-  "dataset_sources": [],
+  "dataset_sources": ["${user}/${ds_slug}"],
   "competition_sources": [],
   "kernel_sources": []
 }
@@ -75,7 +118,9 @@ done
 
 out="${here}/output"
 mkdir -p "${out}"
-kaggle kernels output "${user}/${slug}" -p "${out}"
+# --force: kaggle skips files whose local mtime is newer, which silently keeps a
+# STALE throughput.jsonl / kern_*.csv from a prior run; force the fresh artifacts.
+kaggle kernels output "${user}/${slug}" -p "${out}" --force
 echo "Logs downloaded to ${out} (see *.log)"
 case "${status_lc}" in
     *complete*) echo "RESULT: complete" ;;
