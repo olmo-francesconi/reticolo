@@ -1,13 +1,21 @@
-# reticolo
+<p align="center">
+  <img src="docs/banner.png" alt="reticolo — Monte Carlo for lattice quantum field theory" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/olmo-francesconi/reticolo/actions/workflows/ci.yml"><img src="https://github.com/olmo-francesconi/reticolo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/C%2B%2B-20-00599c" alt="C++20">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-555" alt="platforms">
+  <img src="https://img.shields.io/badge/GPU-CUDA-76b900?logo=nvidia&logoColor=white" alt="CUDA">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
+</p>
 
 **Modern C++ library for Monte Carlo simulation of lattice quantum field theories.**
 
-Scalar actions (Phi4, Phi6, SineGordon, XY, O(N) sigma, Relativistic Bose gas) and gauge actions
-(compact U(1), Wilson SU(2)/SU(3)) behind a concept-refined interface. Ships HMC
-(Leapfrog / Omelyan2 / Omelyan4), Metropolis, Wolff cluster, and LLR density-of-states
-updaters. Output in self-describing HDF5.
-
-See [`docs/architecture.md`](docs/architecture.md) for the design rationale.
+Scalar and gauge actions behind a concept-refined interface, with HMC
+(Leapfrog / Omelyan2 / Omelyan4), Metropolis, Wolff cluster, and LLR
+density-of-states updaters, and a CUDA backend for HMC. Output in self-describing
+HDF5. See [`docs/architecture.md`](docs/architecture.md) for the design rationale.
 
 ## Build
 
