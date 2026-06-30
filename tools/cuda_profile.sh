@@ -111,6 +111,15 @@ profile_one() {  # action L
 for L in ${phi4_sizes}; do profile_one phi4 "${L}"; done
 for L in ${su3_sizes}; do profile_one su3 "${L}"; done
 
+# Lever 1: SU(3) force/drift __launch_bounds__ occupancy sweep (one binary, many
+# configs; regs + spill from cudaFuncGetAttributes, no ncu needed). L=16 and L=32.
+lb_sweep="${out}/lb_sweep.jsonl"
+: > "${lb_sweep}"
+for L in 16 32; do
+    echo "--- su3 lb_sweep L${L} ---"
+    "${bin}" --action=su3 --size="${L}" --lb-sweep | tee -a "${lb_sweep}"
+done
+
 # ncu deep dive on the force kernel (eager force-only mode → clean single-kernel
 # target). A couple of representative configs; non-fatal if perf counters are
 # locked. --launch-count limits ncu's expensive per-kernel replay.

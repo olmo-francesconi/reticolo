@@ -722,6 +722,33 @@ memory-bound kernel.
 both actions; the place to look is its memory access pattern (coalescing,
 neighbour reuse / shared-memory tiling). Not yet pursued.
 
+### Phase 9 addendum — Lever 1 (su3 occupancy) measured & REFUTED *(2026-06-30)*
+
+Hypothesis (optimization-plan Lever 1): su3 force/drift run at 1 block/SM (~12%
+occ) because of ~144–156 regs/thread; `__launch_bounds__` to cap regs and fit
+≥2–4 blocks/SM should win if the kernel is latency-bound. **Measured false.**
+
+A single-run sweep (`profile_cuda_hmc --lb-sweep`: force/drift templated on
+`<MaxT,MinB>`, regs + local-mem **spill** read via `cudaFuncGetAttributes`, so no
+`ncu`) at su3 L=16/32 (P100):
+
+| (MaxT,MinB) | force regs | spill B | occ | force µs (L=32) |
+|---|---|---|---|---|
+| (256,0) baseline | 252 | 112 | 12.5% | **15 804** |
+| (256,2) | 128 | 432 | 25% | 40 986 (2.6×) |
+| (256,3) | 80 | 1128 | 37.5% | 94 576 (6.0×) |
+| (256,4) | 64 | 1360 | 50% | 122 287 (7.7×) |
+| (128,4/6/8) | = 256-reg equiv | | | = 256 equiv |
+
+Every occupancy increase is a 2.6–7.7× **regression**: the staple needs ~250
+regs, capping spills the 3×3 complex matrices to local memory and spill traffic
+dwarfs the occupancy gain. The kernel is **spill/register-bound, not occupancy-
+latency-bound**. Production keeps `kSuMinBlocks=0`; `(256,0)` reproduces the
+no-launch_bounds baseline exactly (271 ms/traj L=32, 16.1 L=16). A genuine su3
+win is **structural** (stage the staple through shared memory, accumulate the
+algebra projection incrementally, or warp-per-link) — deferred. The `--lb-sweep`
+harness is retained for re-measuring the structural route.
+
 ## Cross-cutting invariants (every phase)
 
 1. **No `switch(action)` / `switch(integrator)` in device code** — compile-time

@@ -24,6 +24,7 @@
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/gauge/su3_device.cuh>
+#include <reticolo/cuda/gauge_sun.cuh>
 #include <reticolo/cuda/hmc.cuh>
 
 #include <chrono>
@@ -163,6 +164,93 @@ void run_config(char const* label,
                 us_sample);
 }
 
+template <class Fn>
+double time_us_kernel(Fn&& fn) {
+    cudaEvent_t a = nullptr;
+    cudaEvent_t b = nullptr;
+    cudaEventCreate(&a);
+    cudaEventCreate(&b);
+    fn();  // warm
+    cudaDeviceSynchronize();
+    constexpr int reps = 50;
+    cudaEventRecord(a);
+    for (int i = 0; i < reps; ++i) {
+        fn();
+    }
+    cudaEventRecord(b);
+    cudaEventSynchronize(b);
+    float ms = 0.0F;
+    cudaEventElapsedTime(&ms, a, b);
+    cudaEventDestroy(a);
+    cudaEventDestroy(b);
+    return (1e3 * static_cast<double>(ms)) / reps;
+}
+
+// Lever 1 occupancy sweep: time the SU(3) force + drift kernels at several
+// __launch_bounds__(MaxT, MinB) configs in one binary, reporting numRegs and the
+// per-thread local-memory spill from cudaFuncGetAttributes (so we see occupancy
+// vs. spill without ncu, which is blocked on the managed host). blocks/SM ≈
+// 65536 / (numRegs · MaxT); a higher MinB caps regs to raise it.
+template <int MaxT, int MinB, class Field>
+void su3_lb_config(Field& field, Field& force, Field& mom, std::size_t v, int /*iters*/) {
+    using GD                          = reticolo::cuda::SU3Device;
+    reticolo::cuda::DeviceTopology const& topo = field.topology();
+    cudaFuncAttributes fa{};
+    cudaFuncAttributes da{};
+    cudaFuncGetAttributes(&fa, reticolo::cuda::su_plaq_force_kernel<GD, MaxT, MinB>);
+    cudaFuncGetAttributes(&da, reticolo::cuda::su_expi_lmul_kernel<GD, MaxT, MinB>);
+    double const us_force = time_us_kernel([&] {
+        reticolo::cuda::su_plaq_force_launch<GD, MaxT, MinB>(
+            field.data(), force.data(), topo, -2.0, nullptr);
+    });
+    double const us_drift = time_us_kernel([&] {
+        reticolo::cuda::su_expi_lmul_launch<GD, MaxT, MinB>(
+            field.data(), mom.data(), topo, 0.1, nullptr);
+    });
+    // P100: 65536 regs/SM, 2048 threads/SM. blocks/SM = min(register-limited,
+    // thread-limited); occupancy = blocks·MaxT / 2048.
+    int const reg_blocks    = 65536 / (fa.numRegs * MaxT);
+    int const thread_blocks = 2048 / MaxT;
+    int const blocks_per_sm = reg_blocks < thread_blocks ? reg_blocks : thread_blocks;
+    double const f_occ      = 100.0 * blocks_per_sm * MaxT / 2048.0;
+    std::printf("{\"action\":\"su3\",\"mode\":\"lb_sweep\",\"V\":%zu,\"MaxT\":%d,\"MinB\":%d,"
+                "\"force_regs\":%d,\"force_spill\":%d,\"drift_regs\":%d,\"drift_spill\":%d,"
+                "\"force_blocks_per_sm\":%d,\"force_occ_pct\":%.1f,"
+                "\"us_force\":%.3f,\"us_drift\":%.3f}\n",
+                v,
+                MaxT,
+                MinB,
+                fa.numRegs,
+                static_cast<int>(fa.localSizeBytes),
+                da.numRegs,
+                static_cast<int>(da.localSizeBytes),
+                blocks_per_sm,
+                f_occ,
+                us_force,
+                us_drift);
+}
+
+template <class Field>
+void su3_lb_sweep(std::vector<std::size_t> const& shape, int iters) {
+    Field field{shape};
+    Field force{field.topology()};
+    Field mom{field.topology()};
+    std::vector<double> const zero(field.size(), 0.0);
+    field.copy_from_host(zero.data());
+    cudaDeviceSynchronize();
+    std::size_t v = 1;
+    for (std::size_t s : shape) {
+        v *= s;
+    }
+    su3_lb_config<256, 0>(field, force, mom, v, iters);
+    su3_lb_config<256, 2>(field, force, mom, v, iters);
+    su3_lb_config<256, 3>(field, force, mom, v, iters);
+    su3_lb_config<256, 4>(field, force, mom, v, iters);
+    su3_lb_config<128, 4>(field, force, mom, v, iters);
+    su3_lb_config<128, 6>(field, force, mom, v, iters);
+    su3_lb_config<128, 8>(field, force, mom, v, iters);
+}
+
 int arg_int(int argc, char** argv, char const* key, int fallback) {
     std::size_t const klen = std::strlen(key);
     for (int i = 1; i < argc; ++i) {
@@ -188,17 +276,25 @@ int main(int argc, char** argv) {
     int const L           = arg_int(argc, argv, "--size=", 16);
     int const n_md        = arg_int(argc, argv, "--n_md=", 10);
     int const iters       = arg_int(argc, argv, "--iters=", 30);
-    bool const force_only = [&] {
+    auto const has_flag = [&](char const* f) {
         for (int i = 1; i < argc; ++i) {
-            if (std::strcmp(argv[i], "--force-only") == 0) {
+            if (std::strcmp(argv[i], f) == 0) {
                 return true;
             }
         }
         return false;
-    }();
+    };
+    bool const force_only = has_flag("--force-only");
+    bool const lb_sweep   = has_flag("--lb-sweep");
 
     std::vector<std::size_t> const shape(static_cast<std::size_t>(ndim),
                                          static_cast<std::size_t>(L));
+
+    if (lb_sweep) {
+        using G = reticolo::gauge_group::SU3;
+        su3_lb_sweep<DeviceField<double, MatrixLayout<G>>>(shape, iters);
+        return 0;
+    }
 
     if (action == "phi4") {
         run_config<act::Phi4<double>, DeviceField<double>>(

@@ -25,6 +25,22 @@
 
 namespace reticolo::cuda {
 
+// Launch geometry for the per-link force/drift kernels. kSuBlock is the block
+// size; kSuMinBlocks is the __launch_bounds__ minimum blocks/SM occupancy floor
+// (0 = no floor). The kernels are templated on these so the profiler's --lb-sweep
+// can measure several configs in one build (cudaFuncGetAttributes regs/spill).
+//
+// Lever 1 RESULT (refuted): raising the floor to lift occupancy is a 2.6–7.7×
+// REGRESSION. The SU(3) staple genuinely needs ~250 regs/thread; capping to fit
+// ≥2 blocks/SM spills the 3×3 complex matrices to local memory and the spill
+// traffic dwarfs the occupancy gain — the kernel is spill-bound, not occupancy-
+// latency-bound. So kMinBlocks stays 0; (256,0) matches the no-launch_bounds
+// baseline exactly (271 ms/traj at L=32). A real su3 win is structural (stage the
+// staple through shared memory / warp-per-link), not occupancy. See
+// docs/cuda_optimization_plan.md Lever 1 and the roadmap Phase 9 addendum.
+inline constexpr int kSuBlock     = 256;
+inline constexpr int kSuMinBlocks = 0;
+
 // Per-site Wilson action contribution over forward planes μ<ν:
 //   site_out[x] = Σ_{μ<ν} ( β − (β/N)·ReTr U_{μν}(x) )   →   Σ_x = S_W.
 template <class GD>
@@ -61,8 +77,8 @@ su_plaq_energy_kernel(double const* field, double* site_out, DeviceTopology topo
 }
 
 // Per-link staple force gather. scale = −(β/N); writes F = scale·TA[U·V].
-template <class GD>
-__global__ void
+template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
+__global__ void __launch_bounds__(MaxT, MinB)
 su_plaq_force_kernel(double const* field, double* force, DeviceTopology topo, double scale) {
     long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const ns    = topo.nsites;
@@ -120,8 +136,9 @@ su_plaq_force_kernel(double const* field, double* force, DeviceTopology topo, do
 }
 
 // Per-link group exponential drift: U ← exp(dt·P)·U.
-template <class GD>
-__global__ void su_expi_lmul_kernel(double* u, double const* p, DeviceTopology topo, double dt) {
+template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
+__global__ void __launch_bounds__(MaxT, MinB)
+su_expi_lmul_kernel(double* u, double const* p, DeviceTopology topo, double dt) {
     long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const ns    = topo.nsites;
     int const d      = topo.ndim;
@@ -189,16 +206,27 @@ void su_plaq_energy_launch(double const* field,
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 
-template <class GD>
+template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
 void su_plaq_force_launch(double const* field,
                           double* force,
                           DeviceTopology const& topo,
                           double scale,
                           cudaStream_t stream) {
-    constexpr int kBlock = 256;
-    long const total     = topo.nsites * topo.ndim;
-    auto const grid      = static_cast<unsigned>((total + kBlock - 1) / kBlock);
-    su_plaq_force_kernel<GD><<<grid, kBlock, 0, stream>>>(field, force, topo, scale);
+    long const total = topo.nsites * topo.ndim;
+    auto const grid  = static_cast<unsigned>((total + MaxT - 1) / MaxT);
+    su_plaq_force_kernel<GD, MaxT, MinB><<<grid, MaxT, 0, stream>>>(field, force, topo, scale);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+}
+
+template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
+void su_expi_lmul_launch(double* u,
+                         double const* p,
+                         DeviceTopology const& topo,
+                         double dt,
+                         cudaStream_t stream) {
+    long const total = topo.nsites * topo.ndim;
+    auto const grid  = static_cast<unsigned>((total + MaxT - 1) / MaxT);
+    su_expi_lmul_kernel<GD, MaxT, MinB><<<grid, MaxT, 0, stream>>>(u, p, topo, dt);
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 
@@ -222,14 +250,8 @@ template <class G>
 inline void drift_field(DeviceField<double, MatrixLayout<G>>& field,
                         DeviceField<double, MatrixLayout<G>> const& mom,
                         double cdt) {
-    using GD                   = typename group_device<G>::type;
-    constexpr int kBlock       = 256;
-    DeviceTopology const& topo = field.topology();
-    long const total           = topo.nsites * topo.ndim;
-    auto const grid            = static_cast<unsigned>((total + kBlock - 1) / kBlock);
-    su_expi_lmul_kernel<GD>
-        <<<grid, kBlock, 0, current_stream()>>>(field.data(), mom.data(), topo, cdt);
-    RETICOLO_CUDA_CHECK_LAUNCH();
+    using GD = typename group_device<G>::type;
+    su_expi_lmul_launch<GD>(field.data(), mom.data(), field.topology(), cdt, current_stream());
 }
 
 }  // namespace reticolo::cuda

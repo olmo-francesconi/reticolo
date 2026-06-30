@@ -47,7 +47,30 @@ integrator-specific kernels.
 
 ---
 
-## Lever 1 — su3 occupancy (HIGHEST VALUE)
+## Lever 1 — su3 occupancy — REFUTED (measured 2026-06-30)
+
+**Outcome: the occupancy hypothesis is wrong; launch_bounds is counterproductive.**
+A single-run `--lb-sweep` (profiler instantiates the force/drift kernels at 7
+configs, regs+spill from `cudaFuncGetAttributes`) at su3 L=16/32:
+
+| config (MaxT,MinB) | force regs | spill (B) | occ | force µs (L=32) |
+|---|---|---|---|---|
+| (256,0) baseline | 252 | 112 | 12.5% | **15 804** |
+| (256,2) | 128 | 432 | 25% | 40 986 (2.6×) |
+| (256,3) | 80 | 1128 | 37.5% | 94 576 (6.0×) |
+| (256,4) | 64 | 1360 | 50% | 122 287 (7.7×) |
+| (128,4/6/8) | = 256 equiv | | | = 256 equiv |
+
+The SU(3) staple genuinely needs ~250 regs; capping to raise occupancy spills the
+3×3 complex matrices to local memory and the spill traffic dwarfs the gain — the
+kernel is **spill/register-bound, not occupancy-latency-bound** (the "Risk" case
+below). Production stays at `kSuMinBlocks=0`; `(256,0)` == the no-launch_bounds
+baseline (271 ms/traj L=32, unchanged). The harness (`gauge_sun.cuh` templated
+kernels + `profile_hmc --lb-sweep`) is retained for the structural route. **A real
+su3 win must be structural** (stage the staple through shared memory / accumulate
+the projection incrementally / warp-per-link), not occupancy tuning.
+
+<details><summary>original Lever 1 hypothesis (kept for context)</summary>
 
 **80% of su3 runtime (force + drift) runs at ~12% occupancy**, pinned to 1
 block/SM by 144–156 registers/thread. With ~8 warps/SM the P100 cannot hide DRAM
@@ -76,6 +99,10 @@ in the SQLite > 0) eating the gain — find the sweet spot.
 genuinely need the registers; if so the win is smaller and the structural route
 (shared-mem staple / warp-per-link) is the real fix. Keep SU(2)/SU(3) generic —
 any change lives once in `gauge_sun.cuh` / the `GD` traits.
+
+</details>
+
+(↑ This Risk is exactly what happened — see the REFUTED outcome at the top.)
 
 ---
 
