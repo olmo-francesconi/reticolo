@@ -78,6 +78,7 @@
                 "RETICOLO_ENABLE_CUDA":     "ON",
                 "RETICOLO_ENABLE_OPENMP":   "OFF",
                 "RETICOLO_BUILD_EXAMPLES":  "OFF",
+                "RETICOLO_TUNE_NATIVE":     "OFF",
                 "CMAKE_CUDA_ARCHITECTURES": "native"
             }
         }
