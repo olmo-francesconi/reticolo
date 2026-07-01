@@ -89,9 +89,7 @@ int main(int argc, char** argv) {
     }
 
     log::info("llr", "warm {} replicas into window", n_rep);
-    for (auto& r : reps) {
-        r->warm_into_window(50, 10, 1.0);
-    }
+    cuda::llr::warm_all(reps, 50, 10, 1.0);
 
     // ---- Output ----
     FastRng exch_rng{cf.seed};

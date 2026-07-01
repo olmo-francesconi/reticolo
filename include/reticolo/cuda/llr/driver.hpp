@@ -24,6 +24,41 @@
 
 namespace reticolo::cuda::llr {
 
+// Overlapped warm-in: advance all not-yet-converged replicas one batch at a time,
+// launching every replica's batch (async) before checking any, so the batches
+// overlap across streams. Physically identical to per-replica serial warm — each
+// replica runs the same trajectories until its own |S−E_n| < threshold·δ — only
+// the scheduling changes.
+template <class Replica>
+void warm_all(std::vector<std::unique_ptr<Replica>>& reps,
+              int max_batches,
+              int batch               = 10,
+              double threshold_sigmas = 1.0) {
+    std::size_t const n_rep = reps.size();
+    std::vector<char> done(n_rep, 0);
+    for (int b = 0; b < max_batches; ++b) {
+        for (std::size_t n = 0; n < n_rep; ++n) {
+            if (done[n] == 0) {
+                reps[n]->warm_launch(batch);  // async → overlap
+            }
+        }
+        std::size_t remaining = 0;
+        for (std::size_t n = 0; n < n_rep; ++n) {
+            if (done[n] != 0) {
+                continue;
+            }
+            if (reps[n]->warm_reached(threshold_sigmas)) {
+                done[n] = 1;
+            } else {
+                ++remaining;
+            }
+        }
+        if (remaining == 0) {
+            break;
+        }
+    }
+}
+
 struct DriverSpec {
     int n_nr;
     int n_therm_nr;

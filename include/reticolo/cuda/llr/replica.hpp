@@ -95,18 +95,14 @@ public:
         other.e_n_ = e0;
     }
 
-    // Batches of HMC until |S_base - E_n| < threshold_sigmas·delta or the budget
-    // is spent. Returns batches consumed (== max_batches means not converged).
-    int warm_into_window(int max_batches, int batch = 10, double threshold_sigmas = 1.0) {
-        for (int b = 0; b < max_batches; ++b) {
-            hmc_.run(batch);
-            double const q     = hmc_.constraint_value();
-            double const ratio = (delta_ != 0.0) ? std::abs(q - e_n_) / delta_ : 0.0;
-            if (ratio < threshold_sigmas) {
-                return b + 1;
-            }
-        }
-        return max_batches;
+    // Warm-in primitives, split so a driver can overlap replicas: launch a batch
+    // of HMC (async, no sync), then check convergence (syncs this stream). Launch
+    // every replica's batch before checking any and the batches overlap.
+    void warm_launch(int batch) { hmc_.run(batch); }
+    [[nodiscard]] bool warm_reached(double threshold_sigmas) {
+        double const q     = hmc_.constraint_value();
+        double const ratio = (delta_ != 0.0) ? std::abs(q - e_n_) / delta_ : 0.0;
+        return ratio < threshold_sigmas;
     }
 
     [[nodiscard]] double acceptance() { return hmc_.acceptance(); }
