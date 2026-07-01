@@ -172,5 +172,31 @@ SU(3) (gauge):
 | 56⁴     | 0.86 | 1.89 | 2.75 |
 | 72⁴     |  —   |  —   | 2.75 |
 
+Isolated `compute_force` throughput in **G dof-updates/s** (dof ÷ time for one
+force sweep) — the same metric as the CPU force-kernel table above, so these are
+directly comparable across host and device (a full trajectory above bundles
+`n_md=10` of these plus the kicks/drifts). Bandwidth-bound; the sweep sits near
+each card's FP64 memory ceiling.
+
+φ⁴ (scalar):
+
+| lattice | A100 (40 GB) | H100 (80 GB) | B200 (180 GB) |
+|---------|-------------:|-------------:|--------------:|
+| 16⁴     |         5.75 |        12.32 |         10.12 |
+| 32⁴     |        13.94 |        28.19 |         43.47 |
+| 64⁴     |        15.44 |        31.23 |         53.74 |
+| 128⁴    |        17.64 |        28.59 |         53.12 |
+| 192⁴    |          —   |        28.15 |         51.47 |
+
+SU(3) (gauge):
+
+| lattice | A100 | H100 | B200 |
+|---------|-----:|-----:|-----:|
+| 8⁴      | 10.01 | 23.42 | 21.03 |
+| 16⁴     | 16.08 | 42.50 | 58.29 |
+| 32⁴     | 15.42 | 39.65 | 50.43 |
+| 56⁴     | 15.33 | 34.46 | 47.10 |
+| 72⁴     |  —    |  —    | 46.91 |
+
 Reproduce: `uv run tools/modal/app.py bench --gpus A100,H100,B200`, then
 `pull --session <id>` and `python tools/profile/compare.py tools/modal/output/<id>`.
