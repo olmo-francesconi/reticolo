@@ -3,13 +3,13 @@
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/rng_philox.cuh>
 
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // Gates for the device Philox momentum sampler.
 

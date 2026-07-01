@@ -25,8 +25,10 @@ namespace reticolo::cuda {
 // field/site_out __restrict__ + const field → read-only-cache (LDG) gather, as in
 // stencil_kernel (measured neutral on P100 — see that note).
 template <class F>
-__global__ void reduce_fwd_site_kernel(F f, typename F::element const* __restrict__ field,
-                                       double* __restrict__ site_out, DeviceTopology topo) {
+__global__ void reduce_fwd_site_kernel(F f,
+                                       typename F::element const* __restrict__ field,
+                                       double* __restrict__ site_out,
+                                       DeviceTopology topo) {
     long const i = static_cast<long>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (i >= topo.nsites) {
         return;
@@ -42,11 +44,13 @@ __global__ void reduce_fwd_site_kernel(F f, typename F::element const* __restric
 // `site_scratch` is a device buffer of at least topo.nsites doubles. Returns a
 // host double (reduce_sum_f64 finishes on the host).
 template <class F>
-[[nodiscard]] double reduce_fwd_launch(F const& f, typename F::element const* field,
-                                       double* site_scratch, DeviceTopology const& topo,
+[[nodiscard]] double reduce_fwd_launch(F const& f,
+                                       typename F::element const* field,
+                                       double* site_scratch,
+                                       DeviceTopology const& topo,
                                        cudaStream_t stream = nullptr) {
     constexpr int kBlock = 256;
-    auto const grid = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
+    auto const grid      = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
     reduce_fwd_site_kernel<F><<<grid, kBlock, 0, stream>>>(f, field, site_scratch, topo);
     RETICOLO_CUDA_CHECK_LAUNCH();
     return reduce_sum_f64(site_scratch, topo.nsites, stream);
@@ -56,11 +60,15 @@ template <class F>
 // the device, no host sync / no allocation. `partials` is k_reduce_max_grid
 // doubles, `site_scratch` is topo.nsites doubles — both caller-owned.
 template <class F>
-void reduce_fwd_into(double* out, F const& f, typename F::element const* field,
-                     double* site_scratch, double* partials, DeviceTopology const& topo,
+void reduce_fwd_into(double* out,
+                     F const& f,
+                     typename F::element const* field,
+                     double* site_scratch,
+                     double* partials,
+                     DeviceTopology const& topo,
                      cudaStream_t stream = nullptr) {
     constexpr int kBlock = 256;
-    auto const grid = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
+    auto const grid      = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
     reduce_fwd_site_kernel<F><<<grid, kBlock, 0, stream>>>(f, field, site_scratch, topo);
     RETICOLO_CUDA_CHECK_LAUNCH();
     reduce_sum_into(out, site_scratch, topo.nsites, partials, stream);

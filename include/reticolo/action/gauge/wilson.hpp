@@ -115,7 +115,6 @@ struct Wilson {
     }
 
     mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
-
 };
 
 }  // namespace reticolo::action

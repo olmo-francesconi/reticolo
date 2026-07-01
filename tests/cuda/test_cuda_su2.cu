@@ -14,13 +14,13 @@
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/math/su2_ops.hpp>
 
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // SU(2) Wilson gauge HMC on the device. The matrix link field is [ndim][nc][nsites]
 // (MatrixLayout<SU2>, nc=8), identical to the host MatrixLinkLattice<SU2> order —

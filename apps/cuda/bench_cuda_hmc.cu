@@ -9,10 +9,10 @@
 // compare within an action across V, and across actions at equal DOF.
 
 #include <reticolo/action/gauge/compact_u1.hpp>
+#include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/action/site/phi6.hpp>
 #include <reticolo/action/site/sine_gordon.hpp>
-#include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/action/site/xy.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/log.hpp>

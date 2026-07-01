@@ -1,5 +1,5 @@
-#include <reticolo/action/gauge/compact_u1.hpp>
 #include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/action/gauge/compact_u1.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>

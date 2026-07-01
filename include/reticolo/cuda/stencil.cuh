@@ -29,8 +29,10 @@ namespace reticolo::cuda {
 // not redundant-read-bound, so the cache hint buys ~0. Kept as correct intent;
 // a real phi4 win needs shared-memory halo tiling (deferred).
 template <class F>
-__global__ void stencil_kernel(F f, typename F::element const* __restrict__ field,
-                               typename F::element* __restrict__ out, DeviceTopology topo) {
+__global__ void stencil_kernel(F f,
+                               typename F::element const* __restrict__ field,
+                               typename F::element* __restrict__ out,
+                               DeviceTopology topo) {
     long const i = static_cast<long>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (i >= topo.nsites) {
         return;
@@ -45,10 +47,13 @@ __global__ void stencil_kernel(F f, typename F::element const* __restrict__ fiel
 
 // out[i] = F(field, i) over all 2d neighbours. Pointers are device pointers.
 template <class F>
-void stencil_launch(F const& f, typename F::element const* field, typename F::element* out,
-                    DeviceTopology const& topo, cudaStream_t stream = nullptr) {
+void stencil_launch(F const& f,
+                    typename F::element const* field,
+                    typename F::element* out,
+                    DeviceTopology const& topo,
+                    cudaStream_t stream = nullptr) {
     constexpr int kBlock = 256;
-    auto const grid = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
+    auto const grid      = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
     stencil_kernel<F><<<grid, kBlock, 0, stream>>>(f, field, out, topo);
     RETICOLO_CUDA_CHECK_LAUNCH();
 }

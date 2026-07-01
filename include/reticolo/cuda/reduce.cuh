@@ -179,9 +179,8 @@ inline void axpy_f32(float a, float const* x, float* y, long n, cudaStream_t str
 // separate primitive (rather than square-into-scratch + reduce_sum) so the
 // reduction stays one pass and run-to-run reproducible for reversibility. The
 // f32 overload reads float momenta but accumulates the sum of squares in double.
-[[nodiscard]] inline double reduce_sumsq_f64(double const* x,
-                                             long n,
-                                             cudaStream_t stream = nullptr) {
+[[nodiscard]] inline double
+reduce_sumsq_f64(double const* x, long n, cudaStream_t stream = nullptr) {
     if (n <= 0) {
         return 0.0;
     }
@@ -192,9 +191,8 @@ inline void axpy_f32(float a, float const* x, float* y, long n, cudaStream_t str
     return finish_partials(d_partial, grid, stream);
 }
 
-[[nodiscard]] inline double reduce_sumsq_f32(float const* x,
-                                             long n,
-                                             cudaStream_t stream = nullptr) {
+[[nodiscard]] inline double
+reduce_sumsq_f32(float const* x, long n, cudaStream_t stream = nullptr) {
     if (n <= 0) {
         return 0.0;
     }

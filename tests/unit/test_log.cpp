@@ -1,6 +1,6 @@
 #include <reticolo/action/detail/gauge/gauge_group/su2.hpp>
-#include <reticolo/action/site/phi4.hpp>
 #include <reticolo/action/gauge/wilson.hpp>
+#include <reticolo/action/site/phi4.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
 

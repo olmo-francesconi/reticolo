@@ -93,10 +93,8 @@ int main() {
     constexpr int k_n_md = 20;
 
     run_one("Phi4", act::Phi4<double>{.kappa = 0.18, .lambda = 1.145}, cases, k_n_md);
-    run_one("Phi6 (g6=0)",
-            act::Phi6<double>{.kappa = 0.18, .lambda = 1.145, .g6 = 0.0},
-            cases,
-            k_n_md);
+    run_one(
+        "Phi6 (g6=0)", act::Phi6<double>{.kappa = 0.18, .lambda = 1.145, .g6 = 0.0}, cases, k_n_md);
     run_one("Phi6 (g6=0.2)",
             act::Phi6<double>{.kappa = 0.18, .lambda = 1.145, .g6 = 0.2},
             cases,

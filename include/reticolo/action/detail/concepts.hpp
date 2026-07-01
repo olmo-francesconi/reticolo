@@ -50,10 +50,9 @@ concept HasFusedKick =
 // `s_imag` into a separate buffer; the LLR window combines them with the right
 // coefficients.
 template <class A, class Field>
-concept HasImagPart =
-    HmcAction<A, Field> && requires(A const& a, Field const& l, Field& force) {
-        { a.s_imag(l) } -> std::convertible_to<double>;
-        { a.compute_force_imag(l, force) };
-    };
+concept HasImagPart = HmcAction<A, Field> && requires(A const& a, Field const& l, Field& force) {
+    { a.s_imag(l) } -> std::convertible_to<double>;
+    { a.compute_force_imag(l, force) };
+};
 
 }  // namespace reticolo::action

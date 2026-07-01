@@ -14,8 +14,8 @@
 // reduce_sumsq_*, axpy_*, ...). Args: --action=phi4|su3 --size=L [--ndim=4]
 // [--n_md=10] [--iters=30] [--force-only].
 
-#include <reticolo/action/site/phi4.hpp>
 #include <reticolo/action/gauge/wilson.hpp>
+#include <reticolo/action/site/phi4.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/cuda/actions/phi4.hpp>
@@ -193,7 +193,7 @@ double time_us_kernel(Fn&& fn) {
 // 65536 / (numRegs · MaxT); a higher MinB caps regs to raise it.
 template <int MaxT, int MinB, class Field>
 void su3_lb_config(Field& field, Field& force, Field& mom, std::size_t v, int /*iters*/) {
-    using GD                          = reticolo::cuda::SU3Device;
+    using GD                                   = reticolo::cuda::SU3Device;
     reticolo::cuda::DeviceTopology const& topo = field.topology();
     cudaFuncAttributes fa{};
     cudaFuncAttributes da{};
@@ -272,10 +272,10 @@ int main(int argc, char** argv) {
             action = argv[i] + 9;
         }
     }
-    int const ndim        = arg_int(argc, argv, "--ndim=", 4);
-    int const L           = arg_int(argc, argv, "--size=", 16);
-    int const n_md        = arg_int(argc, argv, "--n_md=", 10);
-    int const iters       = arg_int(argc, argv, "--iters=", 30);
+    int const ndim      = arg_int(argc, argv, "--ndim=", 4);
+    int const L         = arg_int(argc, argv, "--size=", 16);
+    int const n_md      = arg_int(argc, argv, "--n_md=", 10);
+    int const iters     = arg_int(argc, argv, "--iters=", 30);
     auto const has_flag = [&](char const* f) {
         for (int i = 1; i < argc; ++i) {
             if (std::strcmp(argv[i], f) == 0) {

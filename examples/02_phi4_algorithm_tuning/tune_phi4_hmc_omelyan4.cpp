@@ -1,5 +1,6 @@
 // Phi4 HMC tuning rig — Omelyan4 integrator.
-// Output schema (S, Σφ² time series + /prod@wall_seconds) is shared across the three integrator rigs.
+// Output schema (S, Σφ² time series + /prod@wall_seconds) is shared across the three integrator
+// rigs.
 
 #include <reticolo/reticolo.hpp>
 

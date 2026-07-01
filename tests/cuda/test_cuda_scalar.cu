@@ -8,12 +8,13 @@
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstddef>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // Scalar-action coverage. Each action's CPU s_full + force and the generic device
 // path call the SAME shared HD formula (action::detail::*), so they must agree —

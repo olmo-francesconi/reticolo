@@ -9,12 +9,12 @@
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.cuh>
 
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-
 #include <cmath>
 #include <cstddef>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // Device HMC stack in single precision. f32 momenta/fields flow through axpy_f32
 // (MD) + the double-accumulating sum-of-squares reduction; this TU runs the same

@@ -11,14 +11,15 @@
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.cuh>
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // BoseGas complex-scalar HMC on the device. The field element is cplx<T> (AoS,
 // 2 reals/site), so the host Lattice<std::complex<T>> flat-copies in via a

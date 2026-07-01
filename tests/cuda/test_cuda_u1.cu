@@ -9,12 +9,13 @@
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.cuh>
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstddef>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // Compact U(1) gauge HMC on the device. The link field is direction-major
 // (LinkLayout), the force a per-link gather, the action a per-site plaquette

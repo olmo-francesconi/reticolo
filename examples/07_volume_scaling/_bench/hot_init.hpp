@@ -101,8 +101,8 @@ void hot_init(MatrixLinkLattice<gauge_group::SU2, double>& f, Rng& rng) noexcept
 // ---- MatrixLinkLattice<SU3, double> -----------------------------------------
 template <class Rng>
 void hot_init(MatrixLinkLattice<gauge_group::SU3, double>& f, Rng& rng) noexcept {
-    std::size_t const d  = f.ndims();
-    std::size_t const ns = f.nsites();
+    std::size_t const d     = f.ndims();
+    std::size_t const ns    = f.nsites();
     std::size_t const total = d * gauge_group::SU3::n_real_components * ns;
     double* const data      = f.data();
     for (std::size_t i = 0; i < total; ++i) {

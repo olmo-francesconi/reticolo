@@ -10,12 +10,13 @@
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.cuh>
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstddef>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // Wilson<U(1)> on the device via the abelian specialization. The link is a
 // single angle (LinkLayout); device_functors<Wilson<U1>> reuses the gauge_u1.cuh

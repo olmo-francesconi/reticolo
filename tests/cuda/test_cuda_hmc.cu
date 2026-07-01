@@ -11,13 +11,14 @@
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/stream.hpp>
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <cstddef>
 #include <utility>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // Eager device HMC end-to-end on Phi4 (f64).
 //

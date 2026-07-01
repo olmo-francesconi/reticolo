@@ -20,9 +20,9 @@
 #include <reticolo/cuda/stream.hpp>
 
 #include <cstdint>
+#include <numbers>
 
 #include <cuda_runtime.h>
-#include <numbers>
 
 namespace reticolo::cuda {
 
@@ -79,7 +79,7 @@ su_plaq_energy_kernel(double const* field, double* site_out, DeviceTopology topo
 // Per-link staple force gather. scale = −(β/N); writes F = scale·TA[U·V].
 template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
 __global__ void __launch_bounds__(MaxT, MinB)
-su_plaq_force_kernel(double const* field, double* force, DeviceTopology topo, double scale) {
+    su_plaq_force_kernel(double const* field, double* force, DeviceTopology topo, double scale) {
     long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const ns    = topo.nsites;
     int const d      = topo.ndim;
@@ -138,7 +138,7 @@ su_plaq_force_kernel(double const* field, double* force, DeviceTopology topo, do
 // Per-link group exponential drift: U ← exp(dt·P)·U.
 template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
 __global__ void __launch_bounds__(MaxT, MinB)
-su_expi_lmul_kernel(double* u, double const* p, DeviceTopology topo, double dt) {
+    su_expi_lmul_kernel(double* u, double const* p, DeviceTopology topo, double dt) {
     long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const ns    = topo.nsites;
     int const d      = topo.ndim;
@@ -219,11 +219,8 @@ void su_plaq_force_launch(double const* field,
 }
 
 template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
-void su_expi_lmul_launch(double* u,
-                         double const* p,
-                         DeviceTopology const& topo,
-                         double dt,
-                         cudaStream_t stream) {
+void su_expi_lmul_launch(
+    double* u, double const* p, DeviceTopology const& topo, double dt, cudaStream_t stream) {
     long const total = topo.nsites * topo.ndim;
     auto const grid  = static_cast<unsigned>((total + MaxT - 1) / MaxT);
     su_expi_lmul_kernel<GD, MaxT, MinB><<<grid, MaxT, 0, stream>>>(u, p, topo, dt);

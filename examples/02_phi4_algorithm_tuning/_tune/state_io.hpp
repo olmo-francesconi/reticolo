@@ -19,9 +19,8 @@ void load_field_raw(Field& field, std::string const& path) {
     std::size_t const got = std::fread(field.data(), sizeof(double), field.nsites(), f);
     std::fclose(f);
     if (got != field.nsites()) {
-        throw std::runtime_error("load_field_raw: shape mismatch (got " +
-                                 std::to_string(got) + " doubles, expected " +
-                                 std::to_string(field.nsites()) + ")");
+        throw std::runtime_error("load_field_raw: shape mismatch (got " + std::to_string(got) +
+                                 " doubles, expected " + std::to_string(field.nsites()) + ")");
     }
 }
 

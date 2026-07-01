@@ -1,6 +1,3 @@
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-
 #include <reticolo/cuda/actions/phi4.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
@@ -11,6 +8,9 @@
 #include <cmath>
 #include <cstddef>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // Force-vs-finite-difference gate for the scalar device protocol. Instantiates
 // stencil<Phi4ForceFunctor> and reduce_fwd<Phi4EnergyFunctor> over a shared

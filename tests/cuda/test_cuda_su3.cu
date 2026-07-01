@@ -14,13 +14,13 @@
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/math/su3_ops.hpp>
 
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // SU(3) Wilson gauge HMC on the device. Same generic SU(N) kernels (gauge_sun.cuh)
 // as SU(2) — only GD = SU3Device differs (nc=18, n_gen=8, 3×3 Morningstar-Peardon
