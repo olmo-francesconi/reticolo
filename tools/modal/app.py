@@ -93,6 +93,14 @@ def _container_setup(run_id, arch, jobs, meta):
     # Point the preset's binaryDir (build/) at the Volume so the CMake tree +
     # ccache persist across runs. add_local_dir ignores **/build, so it is free.
     subprocess.run("ln -sfn /cache/build /root/reticolo/build", shell=True, check=True)
+    # add_local_dir normalizes mounted-source mtimes, so ninja compares the fresh
+    # sources against the newer cached objects on the Volume and skips the rebuild
+    # ("ninja: no work to do" → stale binary). Touch the tree so ninja re-evaluates;
+    # ccache is content-hashed, so unchanged TUs stay cache hits and only real edits
+    # actually recompile.
+    subprocess.run(
+        "find /root/reticolo/include /root/reticolo/src /root/reticolo/apps "
+        "/root/reticolo/tests -type f -exec touch {} +", shell=True, check=True)
     os.environ.update({
         "PATH": "/usr/local/cuda/bin:/usr/lib/ccache:" + os.environ["PATH"],
         "CCACHE_DIR": "/cache/ccache",
