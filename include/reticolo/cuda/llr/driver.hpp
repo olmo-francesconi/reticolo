@@ -73,25 +73,24 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     }
     auto exch_series = out.series<int>("/exchange/accepted");
 
-    // Overlapped measurement: thermalize + n_meas trajectories, all replicas'
-    // work enqueued before any gather so the streams overlap. Returns ⟨dE⟩ per
-    // slot.
+    // Host-free overlapped measurement: the entire block (thermalise + n_meas
+    // trajectories, every replica) is enqueued on the per-replica streams before
+    // any sync, with each trajectory's ⟨S−E_n⟩ contribution accumulated ON the
+    // device. Only one readback per replica at the end — no per-trajectory host
+    // barrier. Returns ⟨dE⟩ per slot.
     auto measure = [&](int n_therm, int n_meas) {
         for (auto& r : reps) {
-            r->thermalize(n_therm);  // async, no sync
+            r->thermalize(n_therm);  // async
+            r->begin_measure();      // zero device accumulator (async)
         }
-        std::vector<double> accum(n_rep_u, 0.0);
         for (int t = 0; t < n_meas; ++t) {
             for (auto& r : reps) {
-                r->launch_trajectory();  // all async first → overlap
-            }
-            for (std::size_t n = 0; n < n_rep_u; ++n) {
-                accum[n] += reps[n]->read_dE();  // gather
+                r->measure_trajectory();  // trajectory + on-device accumulate, async
             }
         }
         std::vector<double> de(n_rep_u);
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            de[n] = accum[n] / static_cast<double>(n_meas);
+            de[n] = reps[n]->end_measure(n_meas);  // one readback per replica
         }
         return de;
     };

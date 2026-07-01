@@ -89,6 +89,16 @@ __global__ void bump_counter_kernel(std::uint64_t* traj) {
     ++(*traj);
 }
 
+// LLR: accumulate (S - E_n) into a device-resident block accumulator so a whole
+// measurement block runs host-free — one readback per block instead of one per
+// trajectory. E_n is a plain kernel arg: these are enqueued eagerly on md_stream_
+// after the trajectory graph (not captured), so it need not be device-resident.
+// Single thread.
+template <class Dummy = void>
+__global__ void accumulate_de_kernel(double* de_accum, double const* s, double e_n) {
+    de_accum[0] += (s[0] - e_n);
+}
+
 struct HmcResult {
     double dH     = 0.0;
     bool accepted = false;
@@ -102,7 +112,7 @@ public:
           force_{field.topology()}, old_{field.topology()}, tau_{tau}, n_md_{n_md}, seed_{seed},
           traj_buf_{1}, acc_buf_{1}, accept_buf_{1},
           partials_{static_cast<std::size_t>(k_reduce_max_grid)}, eng_{4}, cons_buf_{1},
-          md_stream_{make_stream_()}, graph_{md_stream_} {
+          de_accum_{1}, md_stream_{make_stream_()}, graph_{md_stream_} {
         std::uint64_t const zero = 0;
         traj_buf_.copy_from_host(&zero, md_stream_);
         acc_buf_.copy_from_host(&zero, md_stream_);
@@ -171,6 +181,29 @@ public:
     [[nodiscard]] double constraint_value() {
         enqueue_constraint();
         return read_constraint();
+    }
+
+    // --- LLR host-free measurement block ------------------------------------
+    // Accumulate ⟨S − E_n⟩ over a whole block on the device: begin_measure()
+    // zeros the accumulator, measure_trajectory(e_n) enqueues one trajectory +
+    // the base-S reduction + the accumulate (all async, no sync), and
+    // end_measure() reads back once. Collapses the per-trajectory sync that
+    // read_constraint costs to a single readback per block.
+    void begin_measure() {
+        RETICOLO_CUDA_CHECK(cudaMemsetAsync(de_accum_.data(), 0, sizeof(double), md_stream_));
+    }
+    void measure_trajectory(double e_n) {
+        run(1);
+        action_.constraint_s_full_into(cons_buf_.data(), field_, partials_.data(), md_stream_);
+        accumulate_de_kernel<void>
+            <<<1, 1, 0, md_stream_>>>(de_accum_.data(), cons_buf_.data(), e_n);
+        RETICOLO_CUDA_CHECK_LAUNCH();
+    }
+    [[nodiscard]] double end_measure(int n_meas) {
+        double sum = 0.0;
+        de_accum_.copy_to_host(&sum, md_stream_);
+        sync();
+        return sum / static_cast<double>(n_meas);
     }
 
     // Access the action so LLR can drive the window slope a / centre E_n between
@@ -262,6 +295,7 @@ private:
     DeviceBuffer<double> partials_;         // reduction scratch (no per-step malloc)
     DeviceBuffer<double> eng_;              // device scalars: 2·kin0, pot0, 2·kin1, pot1
     DeviceBuffer<double> cons_buf_;         // LLR base-constraint readback scalar
+    DeviceBuffer<double> de_accum_;         // LLR ⟨S−E_n⟩ block accumulator (device)
     std::array<double, 4> h_eng_{};         // host mirror for step()
     int h_accept_ = 0;                      // host mirror of accept_buf_ for step()
     cudaStream_t md_stream_;

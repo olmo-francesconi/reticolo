@@ -66,12 +66,12 @@ public:
     // measurement trajectories on the same stream, so no barrier is needed.
     void thermalize(int n) { hmc_.run(n); }
 
-    // Model-B measurement pair: enqueue everything first, gather after.
-    void launch_trajectory() {
-        hmc_.run(1);
-        hmc_.enqueue_constraint();
-    }
-    [[nodiscard]] double read_dE() { return hmc_.read_constraint() - e_n_; }
+    // Host-free measurement block: begin → N × measure_trajectory → end. Every
+    // trajectory's dE contribution accumulates on the device, so the whole block
+    // (across all replicas) is enqueued before a single readback per replica.
+    void begin_measure() { hmc_.begin_measure(); }
+    void measure_trajectory() { hmc_.measure_trajectory(e_n_); }
+    [[nodiscard]] double end_measure(int n_meas) { return hmc_.end_measure(n_meas); }
 
     // Exchange energy E = base action S of the current config (syncs).
     [[nodiscard]] double energy() { return hmc_.constraint_value(); }

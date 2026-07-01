@@ -274,11 +274,21 @@ OpenMP off) 10.2s total vs GPU (T4) 40.8s — **GPU ~4× slower** at 8³=512 sit
 Cause: the driver's measurement loop syncs every replica every trajectory
 (`read_dE` → `cudaStreamSynchronize`), ~4050 host syncs/sweep each waiting on a
 microsecond trajectory; stream overlap can't hide a per-trajectory host barrier.
-**Highest-leverage fix (do before the gauge rollout):** device-side `⟨dE⟩`
-accumulation — launch a whole measurement block host-free, accumulate `(S−Eₙ)`
-into a device buffer via a tiny kernel per trajectory, read the accumulator once
-per sweep (~4050 syncs/sweep → 9). Then the graph replay runs truly host-free
-and the GPU should win, especially at larger V. This is also what model C needs.
+**Fix applied — device-side `⟨dE⟩` accumulation** (`Hmc::begin_measure` /
+`measure_trajectory` / `end_measure`, driver measure loop): a whole measurement
+block runs host-free, `(S−Eₙ)` accumulates into a device buffer per trajectory,
+one readback per sweep (~4050 syncs/sweep → 9). Result at 8³: GPU 40.8s → **28.9s
+(1.4×)**, RM/sweep 0.90s → 0.63s; physics unchanged (1.16σ). Removing the sync
+exposed the next floor: **per-trajectory host launch overhead** (~4 async launches
+per `measure_trajectory` — graph + base-S reduction + accumulate — dominate when
+512-site kernels are microseconds). Still ~2.8× slower than 1 CPU core at this
+pessimal small V.
+
+Further launch reduction, if a target size needs it: (a) capture N trajectories +
+accumulates into one measurement graph (~1 host launch/block, stays model B), or
+(b) model C batched replicas. The real lever is **V** — at 8³ the GPU is
+latency-bound; larger lattices grow per-traj compute while launch overhead stays
+fixed, so the crossover is a volume question (see crossover study).
 
 ## Open sign-off points
 
