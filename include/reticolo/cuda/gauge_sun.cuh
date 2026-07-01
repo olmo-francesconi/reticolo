@@ -45,7 +45,10 @@ inline constexpr int kSuMinBlocks = 0;
 //   site_out[x] = Σ_{μ<ν} ( β − (β/N)·ReTr U_{μν}(x) )   →   Σ_x = S_W.
 template <class GD>
 __global__ void
-su_plaq_energy_kernel(double const* field, double* site_out, DeviceTopology topo, double beta) {
+su_plaq_energy_kernel(double const* __restrict__ field,
+                      double* __restrict__ site_out,
+                      DeviceTopology topo,
+                      double beta) {
     long const x = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     if (x >= topo.nsites) {
         return;
@@ -79,7 +82,10 @@ su_plaq_energy_kernel(double const* field, double* site_out, DeviceTopology topo
 // Per-link staple force gather. scale = −(β/N); writes F = scale·TA[U·V].
 template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
 __global__ void __launch_bounds__(MaxT, MinB)
-    su_plaq_force_kernel(double const* field, double* force, DeviceTopology topo, double scale) {
+    su_plaq_force_kernel(double const* __restrict__ field,
+                         double* __restrict__ force,
+                         DeviceTopology topo,
+                         double scale) {
     long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const ns    = topo.nsites;
     int const d      = topo.ndim;
@@ -138,7 +144,10 @@ __global__ void __launch_bounds__(MaxT, MinB)
 // Per-link group exponential drift: U ← exp(dt·P)·U.
 template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
 __global__ void __launch_bounds__(MaxT, MinB)
-    su_expi_lmul_kernel(double* u, double const* p, DeviceTopology topo, double dt) {
+    su_expi_lmul_kernel(double* __restrict__ u,
+                        double const* __restrict__ p,
+                        DeviceTopology topo,
+                        double dt) {
     long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const ns    = topo.nsites;
     int const d      = topo.ndim;
@@ -161,10 +170,10 @@ __global__ void __launch_bounds__(MaxT, MinB)
 
 // Per-link Gell-Mann momentum sampler: h_a ~ N(0,½), P = Σ_a h_a T_a.
 template <class GD>
-__global__ void su_sample_algebra_kernel(double* mom,
+__global__ void su_sample_algebra_kernel(double* __restrict__ mom,
                                          DeviceTopology topo,
                                          std::uint64_t seed,
-                                         std::uint64_t const* traj) {
+                                         std::uint64_t const* __restrict__ traj) {
     long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const ns    = topo.nsites;
     int const d      = topo.ndim;

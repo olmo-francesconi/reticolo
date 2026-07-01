@@ -23,20 +23,20 @@ struct SU2Device {
     static constexpr int n_color = 2;
 
     // SoA gather/scatter: component k of link (mu, x) at field[(mu*nc + k)*ns + x].
-    RETICOLO_HD static void load(double const* field, int mu, long x, long ns, double* m) {
+    RETICOLO_HD static void load(double const* __restrict__ field, int mu, long x, long ns, double* m) {
         long const base = ((static_cast<long>(mu) * nc) * ns) + x;
         for (int k = 0; k < nc; ++k) {
             m[k] = field[base + (static_cast<long>(k) * ns)];
         }
     }
-    RETICOLO_HD static void store(double* field, int mu, long x, long ns, double const* m) {
+    RETICOLO_HD static void store(double* __restrict__ field, int mu, long x, long ns, double const* m) {
         long const base = ((static_cast<long>(mu) * nc) * ns) + x;
         for (int k = 0; k < nc; ++k) {
             field[base + (static_cast<long>(k) * ns)] = m[k];
         }
     }
     RETICOLO_HD static void
-    store_scaled(double* field, int mu, long x, long ns, double const* m, double scale) {
+    store_scaled(double* __restrict__ field, int mu, long x, long ns, double const* m, double scale) {
         long const base = ((static_cast<long>(mu) * nc) * ns) + x;
         for (int k = 0; k < nc; ++k) {
             field[base + (static_cast<long>(k) * ns)] = scale * m[k];

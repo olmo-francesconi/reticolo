@@ -24,7 +24,10 @@ namespace reticolo::cuda {
 // Angles accumulate in double — the float-sum-corrupts-ΔH rule.
 template <class T>
 __global__ void
-plaq_energy_site_kernel(T const* field, double* site_out, DeviceTopology topo, double beta) {
+plaq_energy_site_kernel(T const* __restrict__ field,
+                        double* __restrict__ site_out,
+                        DeviceTopology topo,
+                        double beta) {
     long const x = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     if (x >= topo.nsites) {
         return;
@@ -55,7 +58,10 @@ plaq_energy_site_kernel(T const* field, double* site_out, DeviceTopology topo, d
 // own link — race-free, unlike the CPU scatter.
 template <class T>
 __global__ void
-plaq_force_gather_kernel(T const* field, T* force, DeviceTopology topo, double beta) {
+plaq_force_gather_kernel(T const* __restrict__ field,
+                         T* __restrict__ force,
+                         DeviceTopology topo,
+                         double beta) {
     long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const ns    = topo.nsites;
     int const d      = topo.ndim;
