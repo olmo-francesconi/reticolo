@@ -30,7 +30,9 @@ int main(int argc, char** argv) {
     auto const& e_min = p.opt<double>("E_min", 200.0, "lower window centre");
     auto const& e_max = p.opt<double>("E_max", 1400.0, "upper window centre");
     auto const& delta = p.opt<double>(
-        "delta", 200.0, "single LLR tuning knob: Gaussian half-width AND replica spacing.");
+        "delta", 200.0, "Gaussian penalty width δ in (S−E_n)²/2δ² (also the a-update scale)");
+    auto const& spacing = p.opt<double>(
+        "spacing", 0.0, "replica energy interval between window centres; 0 ⇒ equal to delta");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md = p.opt<int>("n_md", 20, "MD steps per trajectory");
     auto const& n_nr = p.opt<int>("n_nr", 6, "Newton-Raphson warm-up iterations");
@@ -54,8 +56,8 @@ int main(int argc, char** argv) {
     log::act(base);
 
     // ---- Replica geometry ----
-    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e = delta;
+    double const d_e = spacing > 0.0 ? spacing : delta;
+    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
 
     // ---- Replicas (each cold-started to SU(2) identity) ----
