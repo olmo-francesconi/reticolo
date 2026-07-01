@@ -64,6 +64,41 @@ private:
     T fwd_ = T{0};
 };
 
+// Fused force + energy in one gather (see Phi4ForceEnergyFunctor): full 2d sum for
+// the force (with sin φ), separate forward sum for the energy (with cos φ) → S_base
+// bit-identical to the reduce_fwd path. Used by the LLR WindowedAction.
+template <class T>
+class SineGordonForceEnergyFunctor {
+public:
+    using element = T;
+    RETICOLO_HD SineGordonForceEnergyFunctor(T kappa, T alpha) : kappa_{kappa}, alpha_{alpha} {}
+
+    RETICOLO_HD void init(T self) {
+        phi_  = self;
+        full_ = T{0};
+        fwd_  = T{0};
+    }
+    RETICOLO_HD void fwd(T nbr) {
+        full_ += nbr;
+        fwd_ += nbr;
+    }
+    RETICOLO_HD void bwd(T nbr) { full_ += nbr; }
+    [[nodiscard]] RETICOLO_HD T force() const {
+        return action::detail::sine_gordon_force_site<T>(phi_, full_, std::sin(phi_), kappa_, alpha_);
+    }
+    [[nodiscard]] RETICOLO_HD double energy() const {
+        return static_cast<double>(
+            action::detail::sine_gordon_action_site<T>(phi_, fwd_, std::cos(phi_), kappa_, alpha_));
+    }
+
+private:
+    T kappa_;
+    T alpha_;
+    T phi_  = T{0};
+    T full_ = T{0};
+    T fwd_  = T{0};
+};
+
 template <class T>
 struct device_functors<action::SineGordon<T>> {
     static void compute_force(action::SineGordon<T> const& a,
@@ -98,6 +133,17 @@ struct device_functors<action::SineGordon<T>> {
                                std::uint64_t const* traj,
                                cudaStream_t s) {
         detail::site_sample_momenta(mom, n, topo, seed, traj, s);
+    }
+    static void s_full_and_force(double* out,
+                                 action::SineGordon<T> const& a,
+                                 T const* field,
+                                 T* force,
+                                 double* scratch,
+                                 double* partials,
+                                 DeviceTopology const& topo,
+                                 cudaStream_t s) {
+        detail::site_s_full_and_force(out, SineGordonForceEnergyFunctor<T>{a.kappa, a.alpha}, field,
+                                      force, scratch, partials, topo, s);
     }
 };
 

@@ -311,8 +311,11 @@ and halves the hopping weight instead) so `energy()` calls the unchanged
 Opt-in per action: `device_functors<A>::s_full_and_force` → `DeviceAction`
 exposes it (detected by concept `HasFusedForce`) → the device `WindowedAction`
 picks it via `if constexpr (requires{...})`, exact mirror of the CPU
-`WindowedAction`'s `s_full_and_force` gate. **Phi4 only** for now; other site
-actions and gauge keep the two-pass fallback until measured.
+`WindowedAction`'s `s_full_and_force` gate. Wired for all **real-scalar site
+actions** — Phi4, Phi6, SineGordon, Xy (Xy carries two bond accumulators since its
+force/energy use different per-bond transcendentals). **BoseGas** (complex) is left
+for later: it needs the time-dir cosh(μ) weight (per-`mu` accumulation) and a
+complex-capable force-scale kernel. Gauge actions keep the two-pass fallback.
 
 **Validated (RunPod V100, sm_70):** full `linux-nvcc` build + 48/48 CUDA tests
 (incl. the `phi4_llr_cuda` smoke), and the physics gate — CPU `phi4_llr` vs fused

@@ -58,6 +58,38 @@ private:
     T sum_   = T{0};
 };
 
+// Fused force + energy in one gather. Unlike the phi-type actions the force and
+// energy accumulate DIFFERENT per-bond transcendentals, so it carries two sums:
+// fsum_ (force bond, over all 2d neighbours) and esum_ (action bond, forward only)
+// → the energy matches the reduce_fwd path exactly. Used by the LLR WindowedAction.
+template <class T>
+class XyForceEnergyFunctor {
+public:
+    using element = T;
+    RETICOLO_HD explicit XyForceEnergyFunctor(T beta) : beta_{beta} {}
+
+    RETICOLO_HD void init(T self) {
+        theta_ = self;
+        fsum_  = T{0};
+        esum_  = T{0};
+    }
+    RETICOLO_HD void fwd(T nbr) {
+        fsum_ += action::detail::xy_force_bond<T>(theta_, nbr);
+        esum_ += action::detail::xy_action_bond<T>(theta_, nbr);
+    }
+    RETICOLO_HD void bwd(T nbr) { fsum_ += action::detail::xy_force_bond<T>(theta_, nbr); }
+    [[nodiscard]] RETICOLO_HD T force() const { return -beta_ * fsum_; }
+    [[nodiscard]] RETICOLO_HD double energy() const {
+        return static_cast<double>(-beta_ * esum_);
+    }
+
+private:
+    T beta_;
+    T theta_ = T{0};
+    T fsum_  = T{0};
+    T esum_  = T{0};
+};
+
 template <class T>
 struct device_functors<action::Xy<T>> {
     static void compute_force(action::Xy<T> const& a,
@@ -91,6 +123,17 @@ struct device_functors<action::Xy<T>> {
                                std::uint64_t const* traj,
                                cudaStream_t s) {
         detail::site_sample_momenta(mom, n, topo, seed, traj, s);
+    }
+    static void s_full_and_force(double* out,
+                                 action::Xy<T> const& a,
+                                 T const* field,
+                                 T* force,
+                                 double* scratch,
+                                 double* partials,
+                                 DeviceTopology const& topo,
+                                 cudaStream_t s) {
+        detail::site_s_full_and_force(out, XyForceEnergyFunctor<T>{a.beta}, field, force, scratch,
+                                      partials, topo, s);
     }
 };
 
