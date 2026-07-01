@@ -46,7 +46,20 @@ using reticolo::cuda::MatrixLayout;
 namespace act    = reticolo::action;
 using clock_type = std::chrono::steady_clock;
 
-constexpr double kPeakGBps = 732.0;  // Tesla P100 HBM2 peak (≈732 GB/s)
+// Theoretical HBM peak of the device actually running, GB/s — memoryClockRate
+// (kHz) × busWidth (bits) × 2 (DDR). Queried once; pct_peak against a hardcoded
+// P100 constant was meaningless on A100/H100/B200. 0.0 if the query fails or the
+// driver reports no clock (some archs), in which case pct_peak prints 0.
+double device_peak_gbps() {
+    static double const peak = [] {
+        cudaDeviceProp prop{};
+        if (cudaGetDeviceProperties(&prop, 0) != cudaSuccess) {
+            return 0.0;
+        }
+        return 2.0 * prop.memoryClockRate * 1.0e3 * (prop.memoryBusWidth / 8.0) / 1.0e9;
+    }();
+    return peak;
+}
 
 template <class HostAction, class Field>
 void run_config(char const* label,
@@ -94,7 +107,7 @@ void run_config(char const* label,
             gib,
             t * 1e6,
             gbps,
-            100.0 * gbps / kPeakGBps);
+            device_peak_gbps() > 0.0 ? 100.0 * gbps / device_peak_gbps() : 0.0);
         return;
     }
 
