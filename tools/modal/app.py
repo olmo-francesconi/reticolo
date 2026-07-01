@@ -215,9 +215,12 @@ def _build_script():
 def _run_script(target, run_args):
     return (
         'set -e\n'
-        f'[ -f "{BUILD}/CMakeCache.txt" ] || {{ echo "no configured build — run \'build\' first"; exit 1; }}\n'
+        # Reconfigure for this GPU's arch — the shared Volume build tree may hold a
+        # different CMAKE_CUDA_ARCHITECTURES from the last run, and building without
+        # reconfiguring would launch a wrong-SM cubin ("named symbol not found").
+        'cmake --preset linux-nvcc ${RETICOLO_CUDA_ARCH:+-DCMAKE_CUDA_ARCHITECTURES=$RETICOLO_CUDA_ARCH}\n'
         f'cmake --build --preset linux-nvcc --target {target} ${{JOBS:+-j $JOBS}}\n'
-        f'bin="$(find "{BUILD}" -name {target} -type f -perm -u+x | head -1)"\n'
+        f'bin="$PWD/$(find "{BUILD}" -name {target} -type f -perm -u+x | head -1)"\n'
         f'[ -x "$bin" ] || {{ echo "target {target} produced no binary"; exit 1; }}\n'
         'work="$(mktemp -d)"; cd "$work"\n'
         f'echo "+ $bin {run_args}"\n'
