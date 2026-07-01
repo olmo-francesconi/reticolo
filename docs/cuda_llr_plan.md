@@ -259,6 +259,27 @@ uv run tools/modal/app.py build                 # linux-nvcc preset gate
 uv run tools/modal/app.py run --app phi4_llr_cuda  # run one binary, export HDF5
 ```
 
+## Validation results (2026-07-01)
+
+Milestone B verified end to end:
+- CPU: 181/181 tests, `-Werror` clean (windowed-action refactor behavior-preserving).
+- GPU (Modal, T4): 48/48 CUDA-preset tests incl. the phi4_llr_cuda smoke.
+- **Physics gate PASS:** phi4 L=8 ndim=3, 9 windows. CPU `phi4_llr` vs GPU
+  `phi4_llr_cuda` reconstructed `a(Eₙ)` agree to **max 1.16σ** (abs Δa ~0.001–0.007).
+  Reusable check: `tools/validate/compare_llr.py A.h5 B.h5` (groups the GPU's
+  time-varying per-slot `E_n` series by window before averaging).
+
+**Perf finding — model B is sync-bound at small V.** Same run: CPU (1 core,
+OpenMP off) 10.2s total vs GPU (T4) 40.8s — **GPU ~4× slower** at 8³=512 sites.
+Cause: the driver's measurement loop syncs every replica every trajectory
+(`read_dE` → `cudaStreamSynchronize`), ~4050 host syncs/sweep each waiting on a
+microsecond trajectory; stream overlap can't hide a per-trajectory host barrier.
+**Highest-leverage fix (do before the gauge rollout):** device-side `⟨dE⟩`
+accumulation — launch a whole measurement block host-free, accumulate `(S−Eₙ)`
+into a device buffer via a tiny kernel per trajectory, read the accumulator once
+per sweep (~4050 syncs/sweep → 9). Then the graph replay runs truly host-free
+and the GPU should win, especially at larger V. This is also what model C needs.
+
 ## Open sign-off points
 
 1. Output schema: per-slot `E_n` **series** + python grouping (recommended,
