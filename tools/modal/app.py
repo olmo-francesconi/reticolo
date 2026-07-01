@@ -89,10 +89,15 @@ def _container_setup(run_id, arch, jobs, meta):
 
     out = f"/cache/out/{run_id}"
     os.makedirs(out, exist_ok=True)
-    os.makedirs("/cache/build", exist_ok=True)
-    # Point the preset's binaryDir (build/) at the Volume so the CMake tree +
-    # ccache persist across runs. add_local_dir ignores **/build, so it is free.
-    subprocess.run("ln -sfn /cache/build /root/reticolo/build", shell=True, check=True)
+    # Per-arch build tree on the Volume: each concrete CUDA arch gets its own
+    # CMake cache + objects, so switching GPUs (T4 sm_75 → A100 sm_80) can never
+    # link a stale wrong-arch cubin ("named symbol not found" / SIGILL). "native"
+    # (unknown GPU) falls back to a shared dir. Point the preset's binaryDir
+    # (build/) at it so the tree + ccache persist across runs; add_local_dir
+    # ignores **/build, so it is free.
+    buildroot = f"/cache/build-{arch}" if arch and arch != "native" else "/cache/build"
+    os.makedirs(buildroot, exist_ok=True)
+    subprocess.run(f"ln -sfn {buildroot} /root/reticolo/build", shell=True, check=True)
     # add_local_dir normalizes mounted-source mtimes, so ninja compares the fresh
     # sources against the newer cached objects on the Volume and skips the rebuild
     # ("ninja: no work to do" → stale binary). Touch the tree so ninja re-evaluates;
@@ -236,13 +241,17 @@ def _dispatch(label, script, a):
     run_id = f"{now:%Y-%m-%d}-{now:%H%M%S}-{slug}"
     sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
                          capture_output=True, text=True).stdout.strip()
-    meta = {"label": label, "name": a.name, "gpu": a.gpu, "arch": a.arch, "cpu": a.cpu,
+    # Resolve a concrete arch for the requested GPU so the build lands in a
+    # per-arch tree (build-<arch>) and CMAKE_CUDA_ARCHITECTURES is pinned — no
+    # reliance on native detection against a shared, possibly-stale CMake cache.
+    arch = a.arch if a.arch != "native" else GPU_ARCH.get(a.gpu, "native")
+    meta = {"label": label, "name": a.name, "gpu": a.gpu, "arch": arch, "cpu": a.cpu,
             "git_sha": sha, "started": now.isoformat(), "script": script}
     opts = {"gpu": a.gpu, "cpu": a.cpu, **({"memory": a.mem} if a.mem else {})}
 
-    print(f"run_id = {run_id}  (gpu={a.gpu}, cpu={a.cpu}, sha={sha})")
+    print(f"run_id = {run_id}  (gpu={a.gpu}, arch={arch}, cpu={a.cpu}, sha={sha})")
     with modal.enable_output(), app.run():
-        _exec.with_options(**opts).remote(script, run_id=run_id, arch=a.arch,
+        _exec.with_options(**opts).remote(script, run_id=run_id, arch=arch,
                                           jobs=max(1, int(a.cpu)), meta=meta)
     print(f"artifacts: out/{run_id}\n  fetch: uv run tools/modal/app.py pull {run_id}")
 
