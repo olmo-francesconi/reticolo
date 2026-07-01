@@ -4,6 +4,7 @@
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
+#include <reticolo/llr/detail/window_formula.hpp>
 
 #include <complex>
 #include <cstddef>
@@ -64,13 +65,13 @@ struct WindowedAction {
     }
 
     [[nodiscard]] scalar_t s_full(Field const& l) const noexcept {
-        scalar_t const q   = constraint_value(l);
-        scalar_t const dq  = q - E_n;
-        scalar_t const inv = scalar_t{1} / (scalar_t{2} * delta * delta);
+        scalar_t const q = constraint_value(l);
         if constexpr (k_complex) {
+            scalar_t const dq  = q - E_n;
+            scalar_t const inv = scalar_t{1} / (scalar_t{2} * delta * delta);
             return base.s_full(l) + (a * q) + (dq * dq * inv);
         } else {
-            return ((scalar_t{1} + a) * q) + (dq * dq * inv);
+            return detail::windowed_value(q, a, E_n, delta);
         }
     }
 
@@ -117,7 +118,7 @@ struct WindowedAction {
                 base.compute_force(l, force);
                 s = static_cast<scalar_t>(base.s_full(l));
             }
-            scalar_t const scale = scalar_t{1} + a + ((s - E_n) / (delta * delta));
+            scalar_t const scale = detail::force_scale(s, a, E_n, delta);
             T* const fp          = force.data();
             std::size_t const n  = flat_size(force);
             for (std::size_t i = 0; i < n; ++i) {
@@ -161,7 +162,7 @@ struct WindowedAction {
                 // fallback pays on every MD step.
                 Field& f             = scratch_(mom.indexing());
                 auto const s         = static_cast<scalar_t>(base.s_full_and_force(l, f));
-                scalar_t const scale = scalar_t{1} + a + ((s - E_n) / (delta * delta));
+                scalar_t const scale = detail::force_scale(s, a, E_n, delta);
                 scalar_t const c     = k_dt * scale;
                 T* const mp          = mom.data();
                 T const* const fp    = f.data();
@@ -171,7 +172,7 @@ struct WindowedAction {
                 }
             } else {
                 scalar_t const s     = base.s_full(l);
-                scalar_t const scale = scalar_t{1} + a + ((s - E_n) / (delta * delta));
+                scalar_t const scale = detail::force_scale(s, a, E_n, delta);
                 base.compute_force_and_kick(l, mom, k_dt * scale);
             }
         }

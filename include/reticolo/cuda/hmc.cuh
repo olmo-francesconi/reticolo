@@ -101,7 +101,7 @@ public:
         : action_{std::move(action)}, field_{field}, mom_{field.topology()},
           force_{field.topology()}, old_{field.topology()}, tau_{tau}, n_md_{n_md}, seed_{seed},
           traj_buf_{1}, acc_buf_{1}, accept_buf_{1},
-          partials_{static_cast<std::size_t>(k_reduce_max_grid)}, eng_{4},
+          partials_{static_cast<std::size_t>(k_reduce_max_grid)}, eng_{4}, cons_buf_{1},
           md_stream_{make_stream_()}, graph_{md_stream_} {
         std::uint64_t const zero = 0;
         traj_buf_.copy_from_host(&zero, md_stream_);
@@ -149,6 +149,34 @@ public:
         return traj_count_ == 0 ? 0.0
                                 : static_cast<double>(accepted) / static_cast<double>(traj_count_);
     }
+
+    // --- LLR constraint readback --------------------------------------------
+    // The base-action constraint value S of the CURRENT (post-resolve) config,
+    // for the LLR a-update. Two-phase so a driver can overlap replicas: enqueue
+    // every replica's reduction first (all async, streams overlap), then gather.
+    // Requires the action A to expose constraint_s_full_into (cuda::llr::
+    // WindowedAction does; a plain DeviceAction does not — these members only
+    // instantiate when called). Recomputes over field_ rather than reusing the
+    // trajectory's eng_[3]: that is the WINDOWED proposal action and is not
+    // rolled back on reject, whereas the resolved field is.
+    void enqueue_constraint() {
+        action_.constraint_s_full_into(cons_buf_.data(), field_, partials_.data(), md_stream_);
+    }
+    [[nodiscard]] double read_constraint() {
+        double s = 0.0;
+        cons_buf_.copy_to_host(&s, md_stream_);
+        sync();
+        return s;
+    }
+    [[nodiscard]] double constraint_value() {
+        enqueue_constraint();
+        return read_constraint();
+    }
+
+    // Access the action so LLR can drive the window slope a / centre E_n between
+    // trajectories (graph-safe: only device param buffers, pointers stable).
+    [[nodiscard]] A& action() noexcept { return action_; }
+    [[nodiscard]] A const& action() const noexcept { return action_; }
 
     // --- checkpoint hooks ---------------------------------------------------
     // The complete per-run RNG state is (seed_, device trajectory counter): the
@@ -233,6 +261,7 @@ private:
     DeviceBuffer<int> accept_buf_;          // per-trajectory accept flag (device)
     DeviceBuffer<double> partials_;         // reduction scratch (no per-step malloc)
     DeviceBuffer<double> eng_;              // device scalars: 2·kin0, pot0, 2·kin1, pot1
+    DeviceBuffer<double> cons_buf_;         // LLR base-constraint readback scalar
     std::array<double, 4> h_eng_{};         // host mirror for step()
     int h_accept_ = 0;                      // host mirror of accept_buf_ for step()
     cudaStream_t md_stream_;
