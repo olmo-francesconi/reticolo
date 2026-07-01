@@ -46,6 +46,21 @@ concept DeviceActionTraits = requires(double* out,
     device_functors<HostAction>::sample_momenta(force, n, topo, seed, traj, s);
 };
 
+// Optional fused force+action launcher (site actions only). When present,
+// DeviceAction exposes s_full_and_force and the LLR WindowedAction uses it in
+// place of a separate compute_force + s_full_into. Absent → the two-pass path.
+template <class HostAction, class T>
+concept HasFusedForce = requires(double* out,
+                                 HostAction const& a,
+                                 T const* field,
+                                 T* force,
+                                 double* scratch,
+                                 double* partials,
+                                 DeviceTopology const& topo,
+                                 cudaStream_t s) {
+    device_functors<HostAction>::s_full_and_force(out, a, field, force, scratch, partials, topo, s);
+};
+
 template <class HostAction, class Field>
     requires DeviceActionTraits<HostAction, typename Field::value_type>
 class DeviceAction {
@@ -69,6 +84,21 @@ public:
     // host sync / no allocation (`partials` is caller-owned, k_reduce_max_grid).
     void s_full_into(double* out, Field const& field, double* partials, cudaStream_t stream) const {
         traits::s_full_into(out, host_, field.data(), scratch_.data(), partials, topo_, stream);
+    }
+
+    // Fused force + total action in one field gather: writes the force into
+    // `force` and Σ S_base into out[0], no host sync. Present only when the trait
+    // provides it (site actions with a force/energy functor); the LLR
+    // WindowedAction detects it via `requires`.
+    void s_full_and_force(double* out,
+                          Field const& field,
+                          Field& force,
+                          double* partials,
+                          cudaStream_t stream) const
+        requires HasFusedForce<HostAction, typename Field::value_type>
+    {
+        traits::s_full_and_force(
+            out, host_, field.data(), force.data(), scratch_.data(), partials, topo_, stream);
     }
 
     // Fill `mom` with fresh momenta — iid normals for scalar/U(1), a Gell-Mann

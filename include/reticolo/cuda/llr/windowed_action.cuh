@@ -89,10 +89,18 @@ public:
     }
 
     // F_LLR = force_scale(S_base) · F_base, all on the current (capture) stream.
+    // S_base and F_base come from ONE field gather when the base action provides
+    // the fused launcher (site actions), else a separate force + base-S reduction.
     void compute_force(Field const& field, Field& force) const {
         cudaStream_t const st = current_stream();
-        base_.compute_force(field, force);
-        base_.s_full_into(s_tmp_.data(), field, partials_.data(), st);
+        if constexpr (requires {
+                          base_.s_full_and_force(s_tmp_.data(), field, force, partials_.data(), st);
+                      }) {
+            base_.s_full_and_force(s_tmp_.data(), field, force, partials_.data(), st);
+        } else {
+            base_.compute_force(field, force);
+            base_.s_full_into(s_tmp_.data(), field, partials_.data(), st);
+        }
         auto const n         = static_cast<long>(force.size());
         constexpr int kBlock = 256;
         auto const grid      = static_cast<unsigned>((n + kBlock - 1) / kBlock);

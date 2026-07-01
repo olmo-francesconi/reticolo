@@ -290,11 +290,64 @@ accumulates into one measurement graph (~1 host launch/block, stays model B), or
 latency-bound; larger lattices grow per-traj compute while launch overhead stays
 fixed, so the crossover is a volume question (see crossover study).
 
+## Force+action fusion (2026-07-01)
+
+nsys (RunPod V100, `--cuda-graph-trace=node`) flagged the force-scale reduction:
+`reduce_fwd_site_kernel` runs ~121k instances in lockstep with the force
+`stencil_kernel` (~115k) — **two full field gathers per MD force eval** (~41/traj),
+the reduction ~21% of GPU time. The windowed `compute_force` did `stencil` (force)
+then a separate `reduce_fwd` (base-S) over the same field.
+
+**Fix — a dual-output stencil** (`cuda/stencil_fwd_fused.cuh`): one thread-per-site
+gather emits both `force[i]` (all 2d neighbours) and `site_energy[i]` (forward
+neighbours), then the existing `reduce_sum_into` (a tree reduction, not a gather —
+already part of the s_full path). One gather instead of two; the `reduce_fwd`
+gather is gone. The functor keeps a **separate forward accumulator** alongside the
+full 2d sum (a free register on device; the CPU `s_full_and_force` can't afford it
+and halves the hopping weight instead) so `energy()` calls the unchanged
+`phi4_action_site` on the same forward sum → **S_base bit-identical to
+`s_full_into`**, no new formula, no reproducibility divergence.
+
+Opt-in per action: `device_functors<A>::s_full_and_force` → `DeviceAction`
+exposes it (detected by concept `HasFusedForce`) → the device `WindowedAction`
+picks it via `if constexpr (requires{...})`, exact mirror of the CPU
+`WindowedAction`'s `s_full_and_force` gate. **Phi4 only** for now; other site
+actions and gauge keep the two-pass fallback until measured.
+
+**Validated (RunPod V100, sm_70):** full `linux-nvcc` build + 48/48 CUDA tests
+(incl. the `phi4_llr_cuda` smoke), and the physics gate — CPU `phi4_llr` vs fused
+GPU `phi4_llr_cuda`, defaults (L=8 ndim=3, 9 windows) — `a(Eₙ)` agrees to **max
+1.08σ** (was 1.16σ pre-fusion), confirming the fused S_base is physics-equivalent.
+
+**Profile confirms the win (nsys, `--cuda-graph-trace=node`):** in the fused run
+`reduce_fwd_site_kernel` drops from lockstep-with-force (~21% GPU time, instance
+count ≈ the force stencil's) to **3,932 vs 72,570 instances (~5%, 1.3% GPU
+time)** — only the 2 Hamiltonian s_full evals per trajectory. `stencil_fwd_fused`
+now carries force + base-S in one gather; the redundant per-force-eval gather is
+gone. What's left dominant is the S-reduction *tree* (`block_sum`+`final_reduce`,
+~35%) — inherent to the windowed force's global reduction, a separate lever, not
+what this fusion targeted.
+
+**Measured wall-clock A/B (Modal A100 arch-80, `stress` matrix, baseline 5b60a3e
+vs fused — only the fusion differs):** the win grows with volume, since at large
+4D V the strided neighbour *gathers* dominate the force path and the fusion drops
+one of the two per force eval:
+
+| L (4D) | sites | Δ wall @N=128 |
+|---|---|---|
+| 8  | 4,096  | −16% |
+| 12 | 20,736 | −25% |
+| 16 | 65,536 | **−29.5%** (127.2s → 89.6s) |
+
+Small V / low replica count is launch-bound (−5% at L=8 N=8), converging to the
+asymptote as replicas fill the GPU. So the 18% single-kernel estimate is the
+floor; production 4D volumes see 25–30%.
+
 ## Open sign-off points
 
 1. Output schema: per-slot `E_n` **series** + python grouping (recommended,
    consequence of param-swap) vs. keeping windows slot-fixed via config D2D-swap.
-2. Force-scale reduction cost: one extra base-S reduction per force eval. Fine at
-   small V; revisit only if profiling flags it.
+2. ~~Force-scale reduction cost: one extra base-S reduction per force eval.~~
+   **Resolved** — folded into the force stencil (fusion above), Phi4.
 3. First app = Phi4 (scalar). Add CompactU1 / Wilson variants after the scalar
    path is validated.

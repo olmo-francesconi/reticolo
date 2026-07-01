@@ -63,6 +63,42 @@ private:
     T fwd_ = T{0};
 };
 
+// Fused force + energy: one neighbour gather yields both. Keeps a separate
+// forward accumulator (fwd_) alongside the full 2d sum (full_) so energy() reuses
+// the unchanged phi4_action_site on the forward sum — bit-identical to the
+// reduce_fwd path, so the LLR windowed force's S_base matches s_full_into exactly.
+template <class T>
+class Phi4ForceEnergyFunctor {
+public:
+    using element = T;
+    RETICOLO_HD Phi4ForceEnergyFunctor(T kappa, T lambda) : kappa_{kappa}, lambda_{lambda} {}
+
+    RETICOLO_HD void init(T self) {
+        phi_  = self;
+        full_ = T{0};
+        fwd_  = T{0};
+    }
+    RETICOLO_HD void fwd(T nbr) {
+        full_ += nbr;
+        fwd_ += nbr;
+    }
+    RETICOLO_HD void bwd(T nbr) { full_ += nbr; }
+    [[nodiscard]] RETICOLO_HD T force() const {
+        return action::detail::phi4_force_site<T>(phi_, full_, kappa_, lambda_);
+    }
+    [[nodiscard]] RETICOLO_HD double energy() const {
+        return static_cast<double>(
+            action::detail::phi4_action_site<T>(phi_, fwd_, kappa_, lambda_));
+    }
+
+private:
+    T kappa_;
+    T lambda_;
+    T phi_  = T{0};
+    T full_ = T{0};
+    T fwd_  = T{0};
+};
+
 // Maps action::Phi4 to the device launchers DeviceAction calls (the primary
 // template lives in device_functors.hpp). A scalar action's trait wraps the
 // site-stencil skeletons (site_launchers.hpp) with its functor pair; a gauge
@@ -102,6 +138,20 @@ struct device_functors<action::Phi4<T>> {
                                std::uint64_t const* traj,
                                cudaStream_t s) {
         detail::site_sample_momenta(mom, n, topo, seed, traj, s);
+    }
+    // Opt-in fused path (dual-output stencil) — detected by cuda::DeviceAction and
+    // used by the LLR WindowedAction to skip the redundant base-S reduction.
+    static void s_full_and_force(double* out,
+                                 action::Phi4<T> const& a,
+                                 T const* field,
+                                 T* force,
+                                 double* scratch,
+                                 double* partials,
+                                 DeviceTopology const& topo,
+                                 cudaStream_t s) {
+        detail::site_s_full_and_force(
+            out, Phi4ForceEnergyFunctor<T>{a.kappa, a.lambda}, field, force, scratch, partials, topo,
+            s);
     }
 };
 

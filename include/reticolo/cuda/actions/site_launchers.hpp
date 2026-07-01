@@ -5,6 +5,7 @@
 #include <reticolo/cuda/reduce_fwd.cuh>
 #include <reticolo/cuda/rng_philox.cuh>
 #include <reticolo/cuda/stencil.cuh>
+#include <reticolo/cuda/stencil_fwd_fused.cuh>
 
 #include <cstdint>
 
@@ -40,6 +41,22 @@ inline void site_s_full_into(double* out,
                              DeviceTopology const& topo,
                              cudaStream_t s) {
     reduce_fwd_into(out, e, field, scratch, partials, topo, s);
+}
+
+// Fused force + total action in one field gather (the dual-output stencil). The
+// action opts in by naming a force/energy functor with the fwd/bwd/force/energy
+// protocol; used by the LLR WindowedAction, whose force scale needs S_base on
+// every MD step. Actions without a fused functor keep the two-pass path.
+template <class FusedF, class T>
+inline void site_s_full_and_force(double* out,
+                                  FusedF f,
+                                  T const* field,
+                                  T* force,
+                                  double* scratch,
+                                  double* partials,
+                                  DeviceTopology const& topo,
+                                  cudaStream_t s) {
+    stencil_fwd_fused_launch(f, field, force, out, scratch, partials, topo, s);
 }
 
 // Scalar / U(1) momentum sampler: one iid normal per field component. The
