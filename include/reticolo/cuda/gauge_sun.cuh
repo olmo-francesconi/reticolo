@@ -32,12 +32,15 @@ namespace reticolo::cuda {
 // can measure several configs in one build (cudaFuncGetAttributes regs/spill).
 //
 // Raising the occupancy floor via __launch_bounds__ is a 2.6–7.7× regression:
-// the SU(3) staple genuinely needs ~250 regs/thread; capping registers to fit
-// ≥2 blocks/SM spills the 3×3 complex matrices to local memory and the spill
-// traffic dwarfs the occupancy gain — the kernel is spill-bound, not occupancy-
-// latency-bound. So kMinBlocks stays 0; (256,0) matches the no-launch_bounds
-// baseline exactly (271 ms/traj at L=32). A real su3 win is structural (stage
-// the staple through shared memory / warp-per-link), not occupancy.
+// the SU(3) staple genuinely needs ~198 regs/thread (measured, --lb-sweep);
+// capping registers to fit ≥2 blocks/SM spills the 3×3 complex matrices to local
+// memory and the spill traffic dwarfs the occupancy gain — the kernel is spill-
+// bound, not occupancy-latency-bound. So kMinBlocks stays 0; (256,0) matches the
+// no-launch_bounds baseline exactly. This one-thread-per-link, matrices-in-
+// registers design at ~12.5% occupancy turns out to be near-optimal: brick
+// thread-tiling and warp-per-link (rows across lanes, __shfl matmuls) were both
+// tried and both lose (shuffle/streaming overhead > occupancy gain). __restrict__
+// on the gather is the only measured win.
 inline constexpr int kSuBlock     = 256;
 inline constexpr int kSuMinBlocks = 0;
 
