@@ -65,6 +65,13 @@ BENCH_ACTIONS = ["phi4", "su3"]
 GPU_ARCH = {"T4": "75", "L4": "89", "A100": "80", "H100": "90", "H200": "90", "B200": "100"}
 BENCH_FP64_GPUS = "A100,H100,H200,B200"
 
+# LLR scaling stress matrix (phi4_llr_cuda). Per volume L (4D, kappa=0.20 lambda=1.0):
+# n_md tuned for acceptance, and (mean_S, sigma_S) measured from a thermalised HMC.
+# The S-window is <S> +/- 2 sigma; the Gaussian width is fixed at delta = sigma(V);
+# n_rep is set by --spacing = 4 sigma / (N-1), so only the replica count varies.
+STRESS_VOLS = {8: (20, -211.0, 56.0), 12: (30, -1106.0, 132.0), 16: (50, -3706.0, 234.0)}
+STRESS_NREPS = [8, 16, 32, 64, 128]
+
 IMAGE = (
     modal.Image.from_registry("nvidia/cuda:12.8.1-devel-ubuntu24.04", add_python="3.12")
     .entrypoint([])                                   # CUDA image ships a bad default
@@ -139,6 +146,85 @@ def _exec(script: str, run_id: str, arch: str = "native",
                     f'set -o pipefail; ({script}) 2>&1 | tee "{out}/console.log"'],
                    cwd="/root/reticolo", check=True)
     cache.commit()                                     # persist build tree + ccache + artifacts
+
+
+@app.function(image=IMAGE, gpu="T4", volumes={"/cache": cache}, timeout=7200)
+def _stress_exec(run_id: str, vols: dict, nreps: list,
+                 arch: str = "native", jobs: int = 8, meta: dict | None = None):
+    """LLR scaling stress: build phi4_llr_cuda once, sweep (volume, n_rep). Per
+    cell the app runs to completion; wall time comes from the app's own elapsed
+    stamp (last HHH:MM:SS.mmm line). delta = sigma(V) is held fixed, n_rep set via
+    --spacing, so only the replica count varies. One JSON line per cell → stress.jsonl."""
+    import json
+    import re
+    import subprocess
+    import time
+
+    out = _container_setup(run_id, arch, jobs, meta)
+    logf = open(f"{out}/console.log", "w")
+
+    def log(msg):
+        print(msg, flush=True)
+        logf.write(msg + "\n")
+        logf.flush()
+
+    arch_flag = f"-DCMAKE_CUDA_ARCHITECTURES={arch}" if arch and arch != "native" else ""
+    subprocess.run(f"cmake --preset linux-nvcc {arch_flag}", shell=True,
+                   cwd="/root/reticolo", check=True)
+    subprocess.run(f"cmake --build --preset linux-nvcc --target phi4_llr_cuda -j {jobs}",
+                   shell=True, cwd="/root/reticolo", check=True)
+    binpath = subprocess.run(
+        f'find {BUILD} -name phi4_llr_cuda -type f -perm -u+x | head -1',
+        shell=True, cwd="/root/reticolo", capture_output=True, text=True).stdout.strip()
+    if not binpath:
+        raise RuntimeError("phi4_llr_cuda produced no binary")
+
+    sched = dict(n_nr=1, n_therm_nr=30, n_meas_nr=100, n_rm=4, n_therm_rm=30, n_meas_rm=100)
+    traj_per_rep = (sched["n_nr"] * (sched["n_therm_nr"] + sched["n_meas_nr"])
+                    + sched["n_rm"] * (sched["n_therm_rm"] + sched["n_meas_rm"]))
+    ts = re.compile(r"(\d{3}):(\d\d):(\d\d\.\d+)")  # log stamp HHH:MM:SS.mmm
+
+    def app_elapsed(text):
+        last = None
+        for m in ts.finditer(text):
+            last = m
+        if not last:
+            return None
+        h, mn, s = last.groups()
+        return (int(h) * 3600) + (int(mn) * 60) + float(s)
+
+    jsonl = open(f"{out}/stress.jsonl", "w")
+    for L, (n_md, mean_s, sigma) in sorted(vols.items()):
+        emin, emax = mean_s - (2 * sigma), mean_s + (2 * sigma)
+        for N in nreps:
+            spacing = (emax - emin) / (N - 1)
+            args = ([f"--size={L}", "--ndim=4", "--kappa=0.20", "--lambda=1.0",
+                     "--tau=1.0", f"--n_md={n_md}", f"--E_min={emin}", f"--E_max={emax}",
+                     f"--delta={sigma}", f"--spacing={spacing}"]
+                    + [f"--{k}={v}" for k, v in sched.items()]
+                    + ["--seed=20260701", "--workspace=/tmp/stress", "--out=s.h5"])
+            t0 = time.time()
+            r = subprocess.run([f"/root/reticolo/{binpath}", *args],
+                               cwd="/root/reticolo", capture_output=True, text=True)
+            wall = time.time() - t0
+            ae = app_elapsed(r.stdout)
+            traj = N * traj_per_rep
+            rec = {"L": L, "sites": L ** 4, "N": N, "n_md": n_md, "delta": sigma,
+                   "spacing": round(spacing, 4), "rc": r.returncode,
+                   "wall_s": round(wall, 3), "app_s": round(ae, 3) if ae else None,
+                   "traj": traj,
+                   "traj_per_s": round(traj / ae, 1) if ae else None,
+                   "mupd_per_s": round(traj * (L ** 4) * n_md / ae / 1e6, 1) if ae else None}
+            jsonl.write(json.dumps(rec) + "\n")
+            jsonl.flush()
+            log(f"  L={L}^4 N={N:>3}: rc={r.returncode} app={rec['app_s']}s "
+                f"traj/s={rec['traj_per_s']} Mupd/s={rec['mupd_per_s']}")
+            if r.returncode != 0:
+                log(f"    FAIL stderr: {r.stderr[-300:]}")
+            cache.commit()
+    jsonl.close()
+    logf.close()
+    cache.commit()
 
 
 @app.function(image=IMAGE, gpu="T4", volumes={"/cache": cache}, timeout=7200)
@@ -285,6 +371,25 @@ def _bench(a):
     print(f"  compare: python tools/profile/compare.py tools/modal/output/{session}")
 
 
+def _stress(a):
+    now = datetime.now()
+    run_id = f"{now:%Y-%m-%d}-{now:%H%M%S}-{re.sub(r'[^A-Za-z0-9]+', '-', (a.name or 'stress')).strip('-').lower()}"
+    sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                         capture_output=True, text=True).stdout.strip()
+    arch = a.arch if a.arch != "native" else GPU_ARCH.get(a.gpu, "native")
+    meta = {"label": "stress", "name": a.name, "gpu": a.gpu, "arch": arch, "cpu": a.cpu,
+            "git_sha": sha, "vols": {str(k): v for k, v in STRESS_VOLS.items()},
+            "nreps": STRESS_NREPS, "started": now.isoformat()}
+    opts = {"gpu": a.gpu, "cpu": a.cpu, "timeout": 7200, **({"memory": a.mem} if a.mem else {})}
+    print(f"stress matrix on {a.gpu} (arch={arch}): "
+          f"L={list(STRESS_VOLS)} × N={STRESS_NREPS}  run_id={run_id}")
+    with modal.enable_output(), app.run():
+        _stress_exec.with_options(**opts).remote(
+            run_id=run_id, vols=STRESS_VOLS, nreps=STRESS_NREPS,
+            arch=arch, jobs=max(1, int(a.cpu)), meta=meta)
+    print(f"artifacts: out/{run_id}\n  fetch: uv run tools/modal/app.py pull {run_id}")
+
+
 def _modal(*cmd):
     return subprocess.run([shutil.which("modal") or "modal", *cmd], check=False)
 
@@ -335,6 +440,8 @@ def main():
     b.add_argument("--n_md", type=int, default=10, help="HMC MD steps per trajectory")
     b.add_argument("--iters", type=int, default=30, help="timed reps per config")
 
+    gpu_opts(subs.add_parser("stress", help="LLR (volume × n_rep) scaling matrix on one GPU"))
+
     pl = subs.add_parser("pull", help="download a run's artifacts (no id → list runs)")
     pl.add_argument("run_id", nargs="?")
     pl.add_argument("--session", help="fetch a whole bench session (out/<session>/*)")
@@ -348,6 +455,8 @@ def main():
         _dispatch(a.name or f"run-{a.app}", _run_script(a.app, a.args), a)
     elif a.cmd == "bench":
         _bench(a)
+    elif a.cmd == "stress":
+        _stress(a)
 
 
 if __name__ == "__main__":
