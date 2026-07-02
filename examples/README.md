@@ -55,3 +55,4 @@ Override the preset with `RETICOLO_PRESET=macos-llvm` or `--preset macos-llvm`.
 | 07 | `07_volume_scaling` | Kernel throughput vs volume for scalar and gauge actions |
 | 08 | `08_u1_llr_smoothed` | Smoothed LLR vs vanilla LLR at the 4D U(1) bulk transition |
 | 09 | `09_smoothed_synthetic_benchmark` | Python-only synthetic benchmark of smoothed-LLR convergence (no binary) |
+| 10 | `10_cpu_vs_cuda_llr` | CPU vs CUDA LLR density-of-states agreement (φ⁴ `a(Eₙ)`, cross-seed errors) |
