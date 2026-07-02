@@ -67,8 +67,12 @@ class DeviceAction {
 public:
     using traits = device_functors<HostAction>;
 
+    // scratch_ holds per-site energy for site actions (nsites) but also the
+    // per-LINK energy partials of the fused gauge path (ndim·nsites, one plaquette
+    // owner per link), so size it for the larger. Negligible extra device memory.
     DeviceAction(HostAction host, DeviceTopology topo)
-        : host_{host}, topo_{topo}, scratch_{static_cast<std::size_t>(topo.nsites)} {}
+        : host_{host}, topo_{topo},
+          scratch_{static_cast<std::size_t>(topo.ndim) * static_cast<std::size_t>(topo.nsites)} {}
 
     // Launches on the thread-local current stream (cuda/stream.hpp), so a
     // compute_force inside a captured MD trajectory lands on the capture stream.

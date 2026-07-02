@@ -346,11 +346,45 @@ Small V / low replica count is launch-bound (−5% at L=8 N=8), converging to th
 asymptote as replicas fill the GPU. So the 18% single-kernel estimate is the
 floor; production 4D volumes see 25–30%.
 
+## Gauge LLR (2026-07-02)
+
+Extended the windowed action to gauge. The device `WindowedAction<Wilson<G>, …>`
+was **structurally free** — `DeviceField` stores the algebra force as raw
+`double` (`value_type=double`, `size()`=all reals), so the existing
+`scale_force_kernel<double>` already scales it; the "matrix scale" blocker was
+imaginary (it only bites complex `value_type`, i.e. BoseGas). New library code was
+minimal and opt-in via the trait: **U(1) hot-start** (`fill_normals` × σ — β≈1 is
+on the compact-U(1) transition, needs a disordered start) and the **SU(N) identity
+cold-start** (`set_cold`; the zero matrix is not a group element).
+
+Apps: `u1_llr_cuda`, `su2_llr_cuda`, `su3_llr_cuda`. Validated CPU-vs-GPU `a(Eₙ)`
+with **cross-seed error bars** (4 seeds each — the single-run RM-tail SEM is
+autocorrelated and not a valid error; `compare_llr.py` was fixed): U(1) **1.83σ**
+(incl. on the transition), SU(2) **2.07σ**, SU(3) transitive (device action
+CPU-matched + SU(2) machinery) with a textbook monotonic `a(Eₙ)`.
+
+**Gauge force+action fusion.** The gauge analogue of the site fusion: the per-link
+force gather already forms every forward plaquette, so it also emits a per-link
+energy partial — each plaquette {μ<ν} at x assigned to its lower-direction link
+(μ). U(1) accumulates `Σ_{ν>μ}(1−cos Q)`; SU(N) accumulates `W = Σ_{ν>μ} fwd
+staples` and uses `ReTr(U·W) = Σ ReTr(plaquette)` (linearity), so `U_μ(x)` stays
+out of the register-tight staple loop (only `W` is extra). Per-link partials →
+`ndim·nsites` scratch (DeviceAction scratch enlarged). Opt-in `s_full_and_force`
+on the gauge traits; the WindowedAction auto-picks it. Fused == two-pass to
+1e-9/1e-10 (unit tests, all groups).
+
+Wall-clock A/B (A100, fused vs two-pass toggled): **SU(3) −29%** (4.75s vs 6.70s)
+— the +18-register `W` accumulator is a non-issue, eliminating the 3×3-mult
+plaquette pass dominates. **U(1) −2.3%** (≈ noise; its plaquette is one `cos`). The
+win scales with per-plaquette compute cost, so it pays biggest exactly on the
+matrix groups. BoseGas (complex) still deferred — needs a complex force-scale
+kernel + per-μ cosh(μ) weighting.
+
 ## Open sign-off points
 
 1. Output schema: per-slot `E_n` **series** + python grouping (recommended,
    consequence of param-swap) vs. keeping windows slot-fixed via config D2D-swap.
 2. ~~Force-scale reduction cost: one extra base-S reduction per force eval.~~
-   **Resolved** — folded into the force stencil (fusion above), Phi4.
-3. First app = Phi4 (scalar). Add CompactU1 / Wilson variants after the scalar
-   path is validated.
+   **Resolved** — folded into the force stencil/staple gather (site + gauge fusion).
+3. ~~First app = Phi4 (scalar). Add CompactU1 / Wilson variants.~~ **Done** —
+   Phi4/Phi6/SineGordon/Xy + U(1)/SU(2)/SU(3), all fused.

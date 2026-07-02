@@ -95,6 +95,55 @@ plaq_force_gather_kernel(T const* __restrict__ field,
     force[(static_cast<long>(mu) * ns) + x] = static_cast<T>(-beta * acc);
 }
 
+// Fused per-link force + per-link plaquette-energy partial, one gather. The LLR
+// windowed force needs S on every MD step; the force gather already forms each
+// forward plaquette angle Q_nu(x), so we accumulate that plaquette's Wilson
+// energy here instead of a separate plaq_energy pass. Each plaquette {mu<nu} at x
+// is counted once — at its lower-direction link (mu). Σ over links = S_W.
+template <class T>
+__global__ void plaq_fused_force_energy_kernel(T const* __restrict__ field,
+                                               T* __restrict__ force,
+                                               double* __restrict__ energy_partial,
+                                               DeviceTopology topo,
+                                               double beta) {
+    long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
+    long const ns    = topo.nsites;
+    int const d      = topo.ndim;
+    long const total = ns * d;
+    if (tid >= total) {
+        return;
+    }
+    int const mu = static_cast<int>(tid / ns);
+    long const x = tid % ns;
+    double acc   = 0.0;  // force gather
+    double e     = 0.0;  // Σ_{nu>mu} (1 − cos Q_nu(x)) — plaquettes this link owns
+    for (int nu = 0; nu < d; ++nu) {
+        if (nu == mu) {
+            continue;
+        }
+        long const x_pmu     = topo.next(x, mu);
+        long const x_pnu     = topo.next(x, nu);
+        long const x_mnu     = topo.prev(x, nu);
+        long const x_mnu_pmu = topo.next(x_mnu, mu);
+        double const fwd     = action::detail::u1_plaq<double>(
+            static_cast<double>(field[(static_cast<long>(mu) * ns) + x]),
+            static_cast<double>(field[(static_cast<long>(nu) * ns) + x_pmu]),
+            static_cast<double>(field[(static_cast<long>(mu) * ns) + x_pnu]),
+            static_cast<double>(field[(static_cast<long>(nu) * ns) + x]));
+        double const bwd = action::detail::u1_plaq<double>(
+            static_cast<double>(field[(static_cast<long>(mu) * ns) + x_mnu]),
+            static_cast<double>(field[(static_cast<long>(nu) * ns) + x_mnu_pmu]),
+            static_cast<double>(field[(static_cast<long>(mu) * ns) + x]),
+            static_cast<double>(field[(static_cast<long>(nu) * ns) + x_mnu]));
+        acc += sin(fwd) - sin(bwd);
+        if (nu > mu) {
+            e += 1.0 - cos(fwd);
+        }
+    }
+    force[(static_cast<long>(mu) * ns) + x]          = static_cast<T>(-beta * acc);
+    energy_partial[(static_cast<long>(mu) * ns) + x] = beta * e;
+}
+
 // ---- launchers ----------------------------------------------------------
 
 template <class T>
@@ -116,6 +165,23 @@ void plaq_force_launch(
     long const total     = topo.nsites * topo.ndim;
     auto const grid      = static_cast<unsigned>((total + kBlock - 1) / kBlock);
     plaq_force_gather_kernel<T><<<grid, kBlock, 0, stream>>>(field, force, topo, beta);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+}
+
+// Force + per-link energy partial in one launch. `energy_partial` is ndim·nsites
+// doubles (caller-owned); Σ over it is S_W.
+template <class T>
+void plaq_fused_launch(T const* field,
+                       T* force,
+                       double* energy_partial,
+                       DeviceTopology const& topo,
+                       double beta,
+                       cudaStream_t stream) {
+    constexpr int kBlock = 256;
+    long const total     = topo.nsites * topo.ndim;
+    auto const grid      = static_cast<unsigned>((total + kBlock - 1) / kBlock);
+    plaq_fused_force_energy_kernel<T>
+        <<<grid, kBlock, 0, stream>>>(field, force, energy_partial, topo, beta);
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 

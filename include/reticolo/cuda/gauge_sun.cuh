@@ -144,6 +144,85 @@ __global__ void __launch_bounds__(MaxT, MinB)
     GD::store_scaled(force, mu, x, ns, ta, scale);
 }
 
+// Fused per-link force + per-link plaquette-energy partial, one gather. The LLR
+// windowed force needs S every MD step; the staple gather already forms every
+// forward staple, so we also accumulate W = Σ_{nu>mu} (forward staples this link
+// owns). Then ReTr(U·W) = Σ_{nu>mu} ReTr(plaquette_{mu nu}(x)) by linearity, so
+// energy = n_fwd·β − (β/N)·ReTr(U·W) with n_fwd = #{nu>mu} = d−1−mu. This keeps
+// U_mu(x) out of the (register-tight) staple loop — only W is extra — and each
+// plaquette {mu<nu} at x is counted once. Σ over links = S_W.
+template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
+__global__ void __launch_bounds__(MaxT, MinB)
+    su_plaq_fused_kernel(double const* __restrict__ field,
+                         double* __restrict__ force,
+                         double* __restrict__ energy_partial,
+                         DeviceTopology topo,
+                         double beta) {
+    long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
+    long const ns    = topo.nsites;
+    int const d      = topo.ndim;
+    long const total = ns * d;
+    if (tid >= total) {
+        return;
+    }
+    int const mu        = static_cast<int>(tid / ns);
+    long const x        = tid % ns;
+    long const x_pmu    = topo.next(x, mu);
+    double const beta_n = beta / static_cast<double>(GD::n_color);
+
+    double v[GD::nc];
+    double w[GD::nc];
+    for (int k = 0; k < GD::nc; ++k) {
+        v[k] = 0.0;
+        w[k] = 0.0;
+    }
+    for (int nu = 0; nu < d; ++nu) {
+        if (nu == mu) {
+            continue;
+        }
+        long const x_pnu     = topo.next(x, nu);
+        long const x_mnu     = topo.prev(x, nu);
+        long const x_pmu_mnu = topo.prev(x_pmu, nu);
+        double a[GD::nc];
+        double b[GD::nc];
+        double c[GD::nc];
+        double t1[GD::nc];
+        double t2[GD::nc];
+        // forward staple: U_ν(x+μ)·U_μ(x+ν)†·U_ν(x)†
+        GD::load(field, nu, x_pmu, ns, a);
+        GD::load(field, mu, x_pnu, ns, b);
+        GD::load(field, nu, x, ns, c);
+        GD::mul_adj(t1, a, b);
+        GD::mul_adj(t2, t1, c);
+        for (int k = 0; k < GD::nc; ++k) {
+            v[k] += t2[k];
+            if (nu > mu) {
+                w[k] += t2[k];
+            }
+        }
+        // backward staple: U_ν(x+μ−ν)†·U_μ(x−ν)†·U_ν(x−ν)   (force only)
+        GD::load(field, nu, x_pmu_mnu, ns, a);
+        GD::load(field, mu, x_mnu, ns, b);
+        GD::load(field, nu, x_mnu, ns, c);
+        GD::adj_mul(t1, b, c);
+        GD::adj_mul(t2, a, t1);
+        for (int k = 0; k < GD::nc; ++k) {
+            v[k] += t2[k];
+        }
+    }
+    double u[GD::nc];
+    double uv[GD::nc];
+    double ta[GD::nc];
+    GD::load(field, mu, x, ns, u);
+    GD::mul(uv, u, v);
+    GD::traceless_antiherm(ta, uv);
+    GD::store_scaled(force, mu, x, ns, ta, -beta_n);
+    double uw[GD::nc];
+    GD::mul(uw, u, w);
+    double const n_fwd = static_cast<double>((d - 1) - mu);
+    energy_partial[(static_cast<long>(mu) * ns) + x] = (n_fwd * beta) - (beta_n * GD::retr(uw));
+}
+
 // Per-link group exponential drift: U ← exp(dt·P)·U.
 template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
 __global__ void __launch_bounds__(MaxT, MinB)
@@ -254,6 +333,20 @@ void su_expi_lmul_launch(
     long const total = topo.nsites * topo.ndim;
     auto const grid  = static_cast<unsigned>((total + MaxT - 1) / MaxT);
     su_expi_lmul_kernel<GD, MaxT, MinB><<<grid, MaxT, 0, stream>>>(u, p, topo, dt);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+}
+
+template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
+void su_plaq_fused_launch(double const* field,
+                          double* force,
+                          double* energy_partial,
+                          DeviceTopology const& topo,
+                          double beta,
+                          cudaStream_t stream) {
+    long const total = topo.nsites * topo.ndim;
+    auto const grid  = static_cast<unsigned>((total + MaxT - 1) / MaxT);
+    su_plaq_fused_kernel<GD, MaxT, MinB>
+        <<<grid, MaxT, 0, stream>>>(field, force, energy_partial, topo, beta);
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 

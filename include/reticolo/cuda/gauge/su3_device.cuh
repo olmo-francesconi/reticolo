@@ -146,6 +146,11 @@ struct SU3Device {
         }
     }
 
+    // Re Tr(M) = Σ_i Re M_ii — the real diagonal entries.
+    RETICOLO_HD static double retr(double const* m) {
+        return m[idx_re(0, 0)] + m[idx_re(1, 1)] + m[idx_re(2, 2)];
+    }
+
     // Re Tr(X · Y†) = Σ_k X[k]·Y[k] over the 2N² reals (generic identity).
     RETICOLO_HD static double retr_mul_adj(double const* x, double const* y) {
         double acc = 0.0;

@@ -75,6 +75,21 @@ struct device_functors<action::CompactU1<T>> {
                           cudaStream_t s) {
         fill_normals(field, n, seed, traj, s, sigma);
     }
+
+    // Fused force + action in one link gather (dodges the redundant plaquette
+    // pass) — the gauge twin of the site s_full_and_force, used by the LLR
+    // WindowedAction. `scratch` is the ndim·nsites per-link energy partials.
+    static void s_full_and_force(double* out,
+                                 action::CompactU1<T> const& a,
+                                 T const* field,
+                                 T* force,
+                                 double* scratch,
+                                 double* partials,
+                                 DeviceTopology const& topo,
+                                 cudaStream_t s) {
+        plaq_fused_launch(field, force, scratch, topo, static_cast<double>(a.beta), s);
+        reduce_sum_into(out, scratch, topo.nsites * topo.ndim, partials, s);
+    }
 };
 
 }  // namespace reticolo::cuda

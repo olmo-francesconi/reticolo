@@ -166,6 +166,48 @@ bool su2_cpu_matches_device() {
     return true;
 }
 
+// The fused s_full_and_force (one staple gather → force + per-link energy) must
+// reproduce the two-pass compute_force + s_full. The force reuses the same staple
+// sum V so it is bit-identical; the action sums staples first then takes one ReTr,
+// so it matches s_full only to roundoff. This is what the LLR WindowedAction uses.
+bool su2_fused_matches_twopass() {
+    MatrixLinkLattice<SU2, double> const host = make_links();
+    Wil a{};
+    a.beta = kBeta;
+
+    DField dfield{kShape};
+    dfield.copy_from_host(host.data());
+    DAct const act{a, dfield.topology()};
+
+    DField f_two{dfield.topology()};
+    act.compute_force(dfield, f_two);
+    double const s_ref = act.s_full(dfield);
+
+    DeviceBuffer<double> partials{static_cast<std::size_t>(k_reduce_max_grid)};
+    DeviceBuffer<double> s_dev{1};
+    DField f_fused{dfield.topology()};
+    act.s_full_and_force(s_dev.data(), dfield, f_fused, partials.data(), nullptr);
+    RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+
+    double s_fused = 0.0;
+    s_dev.copy_to_host(&s_fused);
+    std::vector<double> h_two(f_two.size());
+    std::vector<double> h_fused(f_fused.size());
+    f_two.copy_to_host(h_two.data());
+    f_fused.copy_to_host(h_fused.data());
+    RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+
+    if (std::abs(s_ref - s_fused) > 1e-9 * (1.0 + std::abs(s_ref))) {
+        return false;
+    }
+    for (std::size_t i = 0; i < h_two.size(); ++i) {
+        if (std::abs(h_two[i] - h_fused[i]) > 1e-10 * (1.0 + std::abs(h_two[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool su2_energy_conserved_ok() {
     MatrixLinkLattice<SU2, double> const init = make_links();
     MatrixLinkLattice<SU2, double> p_host{init.indexing()};
@@ -345,6 +387,10 @@ TEST_CASE("cuda SU2Device matrix ops match math::su2", "[cuda]") {
 
 TEST_CASE("cuda DeviceAction<Wilson<SU2>> matches CPU action::Wilson<SU2>", "[cuda]") {
     REQUIRE(reticolo::cuda::su2_cpu_matches_device());
+}
+
+TEST_CASE("cuda SU2 fused s_full_and_force matches two-pass", "[cuda]") {
+    REQUIRE(reticolo::cuda::su2_fused_matches_twopass());
 }
 
 TEST_CASE("cuda SU2 Leapfrog MD conserves energy (2nd order)", "[cuda]") {

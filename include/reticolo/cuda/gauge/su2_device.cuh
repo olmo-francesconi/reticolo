@@ -88,6 +88,9 @@ struct SU2Device {
         out[7]               = -diag_im;
     }
 
+    // Re Tr(M) = Σ_i Re M_ii — the real diagonal entries (comps 0, 6 for 2×2).
+    RETICOLO_HD static double retr(double const* m) { return m[0] + m[6]; }
+
     // Re Tr(X · Y†) = Σ_k X[k]·Y[k] over the 2N² reals (generic identity).
     RETICOLO_HD static double retr_mul_adj(double const* x, double const* y) {
         double acc = 0.0;

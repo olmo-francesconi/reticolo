@@ -79,6 +79,21 @@ struct device_functors<action::Wilson<G, T>> {
     static void set_cold(T* field, DeviceTopology const& topo, cudaStream_t s) {
         su_set_identity_launch<GD>(field, topo, s);
     }
+
+    // Fused force + action in one staple gather (skips the redundant plaquette
+    // pass) — used by the LLR WindowedAction. `scratch` is the ndim·nsites
+    // per-link energy partials.
+    static void s_full_and_force(double* out,
+                                 action::Wilson<G, T> const& a,
+                                 T const* field,
+                                 T* force,
+                                 double* scratch,
+                                 double* partials,
+                                 DeviceTopology const& topo,
+                                 cudaStream_t s) {
+        su_plaq_fused_launch<GD>(field, force, scratch, topo, static_cast<double>(a.beta), s);
+        reduce_sum_into(out, scratch, topo.nsites * topo.ndim, partials, s);
+    }
 };
 
 // Wilson<U(1)> — abelian specialization (more specialized than Wilson<G> above,
