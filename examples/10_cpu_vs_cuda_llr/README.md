@@ -11,21 +11,39 @@ different Markov chains** — CPU xoshiro vs GPU Philox RNG — so a correct por
 converge to the same `a(E_n)` within statistical error, even though no single
 trajectory matches.
 
-This runs the shipped apps `phi4_llr` (CPU) and `phi4_llr_cuda` (GPU) over the
-**same fixed windows** for several independent seeds, then overlays:
+Two models, selected with `MODEL`:
 
-1. `a(E_n)` from both backends with a **cross-seed** error band,
-2. the reconstructed `ln g(E)` (trapezoidal integral of `a`),
-3. the per-window pull `(a_GPU − a_CPU)/σ` against a ±3σ guide.
+- `MODEL=phi4` (default) — `phi4_llr` / `phi4_llr_cuda`, **mode A** (the window
+  constrains the real action `S`).
+- `MODEL=bose` — `bose_gas_llr` / `bose_gas_llr_cuda`, **mode B** (the window
+  constrains the imaginary action `S_I` of the relativistic Bose gas at finite
+  µ). This directly validates the complex-LLR GPU port.
 
-Agreement across the well-sampled action range is the pass condition.
+It runs the shipped apps over the **same fixed windows** for several independent
+seeds, then overlays:
 
-## Why cross-seed errors
+1. the per-seed `a(E_n)` **point-clouds** of both backends,
+2. the reconstructed `ln g(E)` (trapezoidal integral of the cross-seed mean `a`),
+3. the per-window two-sample **KS p-value** (distribution match).
 
-A single run's `a(E_n)` comes from one Robbins-Monro trajectory whose tail is
-strongly autocorrelated — `std/√N` over that tail is **not** a valid error (see
-`tools/validate/compare_llr.py`). The only honest error bar is the scatter of the
-converged `a` across independent seeds, so pass ≥3–5 seeds per backend.
+The two backends' `a(E_n)` distributions being statistically indistinguishable
+across the well-sampled range is the pass condition.
+
+## Method: compare distributions, not point estimates
+
+- **Per-seed estimator = the LAST Robbins-Monro `a`-value** (the converged RM
+  iterate), not the mean over the tail. A tail-mean smears in the RM transient
+  and the strong within-run autocorrelation of the RM tail.
+- At the final iteration the replica exchange is a permutation, so each seed
+  contributes exactly one final `a` per window. Per window we then have a CPU
+  sample and a GPU sample (one value per seed each), and we test whether they are
+  drawn from the **same distribution** (two-sample Kolmogorov–Smirnov) — the
+  physical claim is that the two backends are the same ensemble, so per-window
+  their converged-`a` distributions must match, not merely their means. Use ≥5
+  seeds per backend for the test to have any resolution.
+
+`tools/validate/compare_llr.py` is the numeric companion (prints a per-window
+table without plotting).
 
 ## Running
 
@@ -33,32 +51,31 @@ The CPU side runs locally; the GPU side needs a CUDA device (there is no local
 GPU here — it goes through the Modal runner).
 
 ```sh
-# 1. CPU seeds (local) + prints the exact GPU commands:
-SEEDS="1 2 3 4 5" ./run.sh
+# 1. CPU seeds (local) + prints the exact GPU commands. MODEL=phi4|bose.
+MODEL=phi4 SEEDS="1 2 3 4 5" ./run.sh
 
 # 2. GPU seeds (Modal), for each seed printed by run.sh:
-uv run tools/modal/app.py run --app phi4_llr_cuda --name gpu-s1 \
+uv run tools/modal/app.py run --app phi4_llr_cuda --name gpu-phi4-s1 \
     --args "<same args> --seed=1 --out=gpu_seed1.h5"
 uv run tools/modal/app.py pull <run_id>
-cp tools/modal/output/<run_id>/**/gpu_seed1.h5 results/gpu/
+cp tools/modal/output/<run_id>/**/gpu_seed1.h5 results/phi4/gpu/
 
-# 3. re-run to plot once results/gpu/ is populated:
-./run.sh          # or call analyze.py directly
+# 3. re-run to plot once results/<model>/gpu/ is populated:
+MODEL=phi4 ./run.sh          # or call analyze.py directly
 ```
 
 `analyze.py` can be pointed at any two run sets:
 
 ```sh
-uv run --with h5py --with numpy --with matplotlib ./analyze.py \
-    --cpu results/cpu/*.h5 --gpu results/gpu/*.h5 --out results/comparison.pdf
+uv run --with h5py --with numpy --with scipy --with matplotlib ./analyze.py \
+    --cpu results/phi4/cpu/*.h5 --gpu results/phi4/gpu/*.h5 \
+    --title "phi4 LLR — CPU vs CUDA" --out results/comparison_phi4.pdf
 ```
-
-It reuses the multi-seed loader from `tools/validate/compare_llr.py` (that script
-is the numeric companion — it prints the per-window Δ/σ table without plotting).
 
 ## Extending
 
-`phi4_llr` is mode A (real action). The same harness applies to the complex
-`bose_gas_llr` / `bose_gas_llr_cuda` (mode B: the window constrains the imaginary
-action `S_I`) — point `analyze.py` at those outputs to validate the complex-LLR
-GPU port the same way.
+`MODEL=bose` already validates the complex-LLR (mode B) GPU port: `a(S_I)` is
+**odd** in `S_I` (the S_I distribution is even, so `d ln ρ/dS_I` is odd), and both
+backends must reproduce that antisymmetry. Any other action pair with matching
+CPU/GPU LLR apps and the same output schema drops into `run.sh`'s `case` the same
+way.

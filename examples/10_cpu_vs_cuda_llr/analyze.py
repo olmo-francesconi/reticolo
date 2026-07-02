@@ -1,134 +1,138 @@
 #!/usr/bin/env python3
-"""CPU-vs-CUDA LLR agreement plot.
+"""CPU-vs-CUDA LLR agreement plot — distributional comparison.
 
 The LLR slope a(E_n) ≈ d ln g/dE − 1 is a physical property of the density of
 states, so the CPU (xoshiro) and CUDA (Philox) backends — the SAME ensemble, not
-the same Markov chain — must converge to the same a(E_n). This overlays a(E_n)
-from both backends with a STATISTICALLY VALID cross-seed error band, reconstructs
-ln g(E) from each, and shows the per-window pull (a_gpu − a_cpu)/σ.
+the same Markov chain — must produce the same a(E_n). Rather than reduce each
+backend to a mean and compare point estimates, we compare the DISTRIBUTIONS:
 
-Reuses the loader from tools/validate/compare_llr.py (both exchange conventions:
-fixed /cfg/E_n and param-swap per-slot /replica_NNN/E_n).
+  * Per-seed estimator = the LAST Robbins-Monro a-value (the converged RM
+    iterate), NOT the mean over the tail — a tail-mean smears in the RM transient
+    and the within-run autocorrelation.
+  * At the final iteration the replica exchange is a permutation, so each seed
+    contributes exactly one final a per window. Per window we then have a
+    5-sample CPU set and a 5-sample GPU set, and we test whether they are drawn
+    from the same distribution (two-sample Kolmogorov-Smirnov).
+
+Overlays the per-seed a(E_n) point-clouds of both backends, the ln g(E)
+reconstructed from the cross-seed means, and the per-window KS p-value.
+
+Reuses the raw loader from tools/validate/compare_llr.py (handles both exchange
+conventions: fixed /cfg/E_n and param-swap per-slot /replica_NNN/E_n).
 
 Usage:
-    uv run --with h5py --with numpy --with matplotlib \
+    uv run --with h5py --with numpy --with scipy --with matplotlib \
         examples/10_cpu_vs_cuda_llr/analyze.py \
-        --cpu results/cpu/*.h5 --gpu results/gpu/*.h5 --out results/comparison.pdf
+        --cpu results/<model>/cpu/*.h5 --gpu results/<model>/gpu/*.h5 \
+        --out results/comparison_<model>.pdf
 """
 from __future__ import annotations
 
 import argparse
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+from scipy import stats
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# Reuse the validated multi-seed loader/aggregator (one source of truth).
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent / "tools" / "validate"))
-from compare_llr import aggregate  # noqa: E402
+from compare_llr import load_replicas  # noqa: E402
 
 
-def curve(paths, tail):
-    """{E_n:(mean,sem,n)} -> sorted (E, a, sem) arrays."""
-    agg = aggregate(paths, tail)
-    e = np.array(sorted(agg))
-    a = np.array([agg[k][0] for k in e])
-    sem = np.array([agg[k][1] for k in e])
-    return e, a, sem
+def last_values(paths):
+    """{window centre: np.array of per-seed FINAL a-values}. One value per seed
+    per window: at the last iteration the exchange is a permutation, so each of
+    a run's replica slots ends at a distinct window and contributes its final a."""
+    per_window = defaultdict(list)
+    for p in paths:
+        for a, en in load_replicas(p).values():
+            per_window[round(float(en[-1]), 6)].append(float(a[-1]))
+    return {w: np.array(v) for w, v in sorted(per_window.items())}
 
 
 def reconstruct_log_g(e, a):
     """ln g(E) up to a constant: cumulative trapezoid of a(E) over the window
-    centres (energy convention d ln g/dE ≈ a). Returned mean-subtracted so the two
-    backends overlay on shape, which is what the comparison tests."""
+    centres (d ln g/dE ≈ a), mean-subtracted so the two backends overlay on shape."""
     lg = np.concatenate([[0.0], np.cumsum(0.5 * (a[1:] + a[:-1]) * np.diff(e))])
     return lg - lg.mean()
 
 
-def log_g_band(e, sem):
-    """1σ band on the cumulative-trapezoid ln g from independent per-window SEMs."""
-    w = np.diff(e)
-    step_var = np.concatenate([[0.0], (0.5 * w) ** 2 * (sem[1:] ** 2 + sem[:-1] ** 2)])
-    return np.sqrt(np.cumsum(step_var))
-
-
 def main():
-    ap = argparse.ArgumentParser(description="CPU-vs-CUDA LLR agreement plot")
+    ap = argparse.ArgumentParser(description="CPU-vs-CUDA LLR distributional agreement")
     ap.add_argument("--cpu", nargs="+", required=True, metavar="H5")
     ap.add_argument("--gpu", nargs="+", required=True, metavar="H5")
-    ap.add_argument("--tail", type=int, default=10,
-                    help="average the last N appended a-values (RM-converged region)")
     ap.add_argument("--title", default="phi4 LLR — CPU vs CUDA")
+    ap.add_argument("--xlabel", default=r"$E_n$  (action window centre)")
     ap.add_argument("--out", default="comparison.pdf")
     args = ap.parse_args()
 
-    ec, ac, sc = curve(args.cpu, args.tail)
-    eg, ag, sg = curve(args.gpu, args.tail)
-    have_err = len(args.cpu) > 1 and len(args.gpu) > 1
+    cpu = last_values(args.cpu)
+    gpu = last_values(args.gpu)
+    wins = np.array([w for w in cpu if w in gpu])
+    dx = np.median(np.diff(wins)) if len(wins) > 1 else 1.0
+    jit = 0.14 * dx
 
-    # Shared windows for the pull.
-    keys = np.array(sorted(set(np.round(ec, 6)) & set(np.round(eg, 6))))
-    ac_k = np.array([ac[np.argmin(np.abs(ec - k))] for k in keys])
-    ag_k = np.array([ag[np.argmin(np.abs(eg - k))] for k in keys])
-    sc_k = np.array([sc[np.argmin(np.abs(ec - k))] for k in keys])
-    sg_k = np.array([sg[np.argmin(np.abs(eg - k))] for k in keys])
-    d = ag_k - ac_k
-    sig = np.hypot(sc_k, sg_k)
-    pull = np.where(sig > 0, d / sig, np.nan)
-    max_pull = np.nanmax(np.abs(pull)) if have_err else float("nan")
+    cpu_mean = np.array([cpu[w].mean() for w in wins])
+    cpu_std = np.array([cpu[w].std(ddof=1) for w in wins])
+    gpu_mean = np.array([gpu[w].mean() for w in wins])
+    gpu_std = np.array([gpu[w].std(ddof=1) for w in wins])
+    ks_p = np.array([stats.ks_2samp(cpu[w], gpu[w]).pvalue for w in wins])
+    n_reject = int(np.sum(ks_p < 0.05))
+
+    print(f"CPU seeds: {len(args.cpu)}   GPU seeds: {len(args.gpu)}")
+    print(f"{'E_n':>8}  {'cpu μ':>9} {'cpu s':>7}  {'gpu μ':>9} {'gpu s':>7}  {'KS p':>7}")
+    for i, w in enumerate(wins):
+        print(f"{w:8.2f}  {cpu_mean[i]:9.4f} {cpu_std[i]:7.4f}  "
+              f"{gpu_mean[i]:9.4f} {gpu_std[i]:7.4f}  {ks_p[i]:7.3f}")
+    print(f"\nwindows: {len(wins)}   KS rejections at p<0.05: {n_reject} "
+          f"(≈{0.05*len(wins):.1f} expected under the null)   min p = {ks_p.min():.3f}")
 
     fig, (ax0, ax1, ax2) = plt.subplots(
         3, 1, figsize=(7.5, 9.0), height_ratios=[3, 3, 1.6], constrained_layout=True)
 
-    # (0) a(E_n) overlay
-    if have_err:
-        ax0.fill_between(ec, ac - sc, ac + sc, color="C0", alpha=0.25, lw=0)
-        ax0.fill_between(eg, ag - sg, ag + sg, color="C1", alpha=0.25, lw=0)
-    ax0.plot(ec, ac, "o-", color="C0", ms=4, label=f"CPU ({len(args.cpu)} seeds)")
-    ax0.plot(eg, ag, "s--", color="C1", ms=4, label=f"CUDA ({len(args.gpu)} seeds)")
-    ax0.set_ylabel(r"$a(E_n)\ \approx\ d\ln g/dE - 1$")
+    # (0) per-seed a(E_n) point-clouds — the distributions themselves.
+    for i, w in enumerate(wins):
+        ax0.plot(np.full_like(cpu[w], w - jit), cpu[w], ".", color="C0", ms=6, alpha=0.6)
+        ax0.plot(np.full_like(gpu[w], w + jit), gpu[w], ".", color="C1", ms=6, alpha=0.6)
+    ax0.plot(wins - jit, cpu_mean, "_", color="C0", ms=14, mew=2)
+    ax0.plot(wins + jit, gpu_mean, "_", color="C1", ms=14, mew=2)
+    ax0.plot([], [], "o", color="C0", label=f"CPU ({len(args.cpu)} seeds)")
+    ax0.plot([], [], "o", color="C1", label=f"CUDA ({len(args.gpu)} seeds)")
+    ax0.set_ylabel(r"$a(E_n)$  (per-seed final RM value)")
     ax0.set_title(args.title)
     ax0.legend()
     ax0.grid(alpha=0.3)
 
-    # (1) reconstructed ln g(E)
-    lgc, lgg = reconstruct_log_g(ec, ac), reconstruct_log_g(eg, ag)
-    if have_err:
-        bc, bg = log_g_band(ec, sc), log_g_band(eg, sg)
-        ax1.fill_between(ec, lgc - bc, lgc + bc, color="C0", alpha=0.25, lw=0)
-        ax1.fill_between(eg, lgg - bg, lgg + bg, color="C1", alpha=0.25, lw=0)
-    ax1.plot(ec, lgc, "o-", color="C0", ms=4, label="CPU")
-    ax1.plot(eg, lgg, "s--", color="C1", ms=4, label="CUDA")
+    # (1) reconstructed ln g(E) from the cross-seed means.
+    lgc, lgg = reconstruct_log_g(wins, cpu_mean), reconstruct_log_g(wins, gpu_mean)
+    ax1.plot(wins, lgc, "o-", color="C0", ms=4, label="CPU")
+    ax1.plot(wins, lgg, "s--", color="C1", ms=4, label="CUDA")
     ax1.set_ylabel(r"$\ln g(E)$  (mean-subtracted)")
     ax1.legend()
     ax1.grid(alpha=0.3)
 
-    # (2) per-window pull
-    ax2.axhline(0, color="k", lw=0.8)
-    for y in (-3, 3):
-        ax2.axhline(y, color="r", ls=":", lw=0.8)
-    ax2.axhspan(-1, 1, color="gray", alpha=0.15)
-    ax2.plot(keys, pull, "kD", ms=4)
-    ax2.set_ylabel(r"$(a_{\rm GPU}-a_{\rm CPU})/\sigma$")
-    ax2.set_xlabel(r"$E_n$  (action window centre)")
-    ax2.set_ylim(-5, 5)
+    # (2) two-sample KS p-value per window (distribution match).
+    ax2.axhline(0.05, color="r", ls=":", lw=0.9, label="p = 0.05")
+    ax2.stem(wins, ks_p, basefmt=" ", linefmt="k-", markerfmt="kD")
+    ax2.set_yscale("log")
+    ax2.set_ylim(1e-2, 1.5)
+    ax2.set_ylabel("KS two-sample $p$")
+    ax2.set_xlabel(args.xlabel)
+    ax2.legend(loc="lower right")
     ax2.grid(alpha=0.3)
-    if have_err:
-        ax2.text(0.02, 0.9, rf"max $|{{\rm pull}}|$ = {max_pull:.2f}$\sigma$",
-                 transform=ax2.transAxes, va="top")
+    ax2.text(0.02, 0.1, f"rejections p<0.05: {n_reject}/{len(wins)}",
+             transform=ax2.transAxes)
 
     fig.savefig(args.out)
     print(f"wrote {args.out}")
-    if have_err:
-        verdict = "PASS" if max_pull < 3.0 else "CHECK"
-        print(f"{verdict}: max |pull| = {max_pull:.2f}σ over {len(keys)} windows")
-    else:
-        print("single seed per backend — no valid error band (pass >1 seed each)")
+    verdict = "PASS" if n_reject <= max(1, round(0.05 * len(wins) + 1)) else "CHECK"
+    print(f"{verdict}: distributions consistent ({n_reject} window(s) reject at p<0.05)")
 
 
 if __name__ == "__main__":
