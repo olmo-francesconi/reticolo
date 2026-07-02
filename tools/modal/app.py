@@ -9,8 +9,8 @@ wrappers. Pinned to the reticolo-cuda Modal environment. One-time auth:
 `uvx modal token new`.
 
     uv run tools/modal/app.py build --gpu H100 --cpu 16
-    uv run tools/modal/app.py run --app phi4_cuda_hmc --args "--L 16 --n_prod 500 --out phi4.h5"
-    uv run tools/modal/app.py run --app profile_cuda_hmc --args "--action=su3 --size=16"
+    uv run tools/modal/app.py run --app phi4_hmc_cuda --args "--L 16 --n_prod 500 --out phi4.h5"
+    uv run tools/modal/app.py run --app profile_hmc_cuda --args "--action=su3 --size=16"
     uv run tools/modal/app.py bench --gpus T4,L4,A100,H100 --name multigpu  # cross-GPU sweep
     uv run tools/modal/app.py pull            # list runs on the Volume
     uv run tools/modal/app.py pull <run_id>   # fetch a run's artifacts
@@ -18,7 +18,7 @@ wrappers. Pinned to the reticolo-cuda Modal environment. One-time auth:
 
 Commands:
   build  cmake --preset / --build --preset / ctest --preset linux-nvcc — the gate;
-         builds the whole suite incl. bench_cuda_hmc, profile_cuda_hmc, cuda_nightly.
+         builds the whole suite incl. bench_hmc_cuda, profile_hmc_cuda, nightly_cuda.
   run    (re)build ONE target, run it in a temp dir, export its output to the run
          folder — also how you run the bench / profile / nightly binaries.
   pull   download out/<run_id>/ from the Volume into tools/modal/output/.
@@ -50,7 +50,7 @@ OUTPUT = _self.parent / "output"
 VOL = "reticolo-cuda-cache"
 BUILD = "build/linux-nvcc"   # the linux-nvcc preset's binaryDir (relative to repo root)
 
-# Multi-GPU benchmark grids. profile_cuda_hmc climbs each list until a config OOMs
+# Multi-GPU benchmark grids. profile_hmc_cuda climbs each list until a config OOMs
 # (cudaMalloc throws), then stops that action's climb. phi4 (f64) ~40 B/site; su3
 # Wilson (f64) link fields are ~72x heavier per site, so its grid tops out far
 # lower. Grids overshoot the small GPUs on purpose — the OOM cutoff is the signal.
@@ -230,7 +230,7 @@ def _stress_exec(run_id: str, vols: dict, nreps: list,
 @app.function(image=IMAGE, gpu="T4", volumes={"/cache": cache}, timeout=7200)
 def _bench_exec(run_id: str, actions: list, grids: dict, n_md: int, iters: int,
                 arch: str = "native", jobs: int = 8, meta: dict | None = None):
-    """Per-GPU throughput sweep: build profile_cuda_hmc for this GPU's arch, then
+    """Per-GPU throughput sweep: build profile_hmc_cuda for this GPU's arch, then
     climb each action's size grid. Each (action,L) runs an hmc pass (traj/s) and,
     on success, a --force-only pass (eff_GBps); both JSON lines append to
     throughput.jsonl. A cudaMalloc OOM exits the child nonzero → record a marker
@@ -251,13 +251,13 @@ def _bench_exec(run_id: str, actions: list, grids: dict, n_md: int, iters: int,
     arch_flag = f"-DCMAKE_CUDA_ARCHITECTURES={arch}" if arch and arch != "native" else ""
     subprocess.run(f"cmake --preset linux-nvcc {arch_flag}", shell=True,
                    cwd="/root/reticolo", check=True)
-    subprocess.run(f"cmake --build --preset linux-nvcc --target profile_cuda_hmc -j {jobs}",
+    subprocess.run(f"cmake --build --preset linux-nvcc --target profile_hmc_cuda -j {jobs}",
                    shell=True, cwd="/root/reticolo", check=True)
     binpath = subprocess.run(
-        f'find {BUILD} -name profile_cuda_hmc -type f -perm -u+x | head -1',
+        f'find {BUILD} -name profile_hmc_cuda -type f -perm -u+x | head -1',
         shell=True, cwd="/root/reticolo", capture_output=True, text=True).stdout.strip()
     if not binpath:
-        raise RuntimeError("profile_cuda_hmc produced no binary")
+        raise RuntimeError("profile_hmc_cuda produced no binary")
 
     def run_one(extra):
         r = subprocess.run([f"/root/reticolo/{binpath}", *extra],

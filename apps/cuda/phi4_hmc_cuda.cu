@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
     using DField = cuda::DeviceField<double>;
     using DAct   = cuda::DeviceAction<act::Phi4<double>, DField>;
 
-    cli::Parser p{"phi4_cuda_hmc", "Hybrid Monte Carlo for phi^4 on the CUDA backend"};
+    cli::Parser p{"phi4_hmc_cuda", "Hybrid Monte Carlo for phi^4 on the CUDA backend"};
     auto const cf          = app::common_flags(p, {.out = "phi4_cuda.h5"});
     auto const& kappa      = p.opt<double>("kappa", 0.18, "hopping parameter");
     auto const& lambda     = p.opt<double>("lambda", 1.0, "quartic coupling");

@@ -82,20 +82,20 @@ if(RETICOLO_ENABLE_CUDA)
         set_property(GLOBAL APPEND PROPERTY RETICOLO_CUDA_TARGETS ${name})
     endfunction()
 
-    reticolo_add_cuda_tool(bench_cuda_hmc   cuda/bench_cuda_hmc.cu)
-    reticolo_add_cuda_tool(profile_cuda_hmc cuda/profile_cuda_hmc.cu)
-    reticolo_add_cuda_app(phi4_cuda_hmc     cuda/phi4_cuda_hmc.cu)
+    reticolo_add_cuda_tool(bench_hmc_cuda   cuda/bench_hmc_cuda.cu)
+    reticolo_add_cuda_tool(profile_hmc_cuda cuda/profile_hmc_cuda.cu)
+    reticolo_add_cuda_app(phi4_hmc_cuda     cuda/phi4_hmc_cuda.cu)
     reticolo_add_cuda_app(phi4_llr_cuda     cuda/phi4_llr_cuda.cu)
     reticolo_add_cuda_app(u1_llr_cuda       cuda/u1_llr_cuda.cu)
-    reticolo_add_cuda_app(su2_cuda_hmc      cuda/su2_cuda_hmc.cu)
+    reticolo_add_cuda_app(su2_hmc_cuda      cuda/su2_hmc_cuda.cu)
     reticolo_add_cuda_app(su2_llr_cuda      cuda/su2_llr_cuda.cu)
     reticolo_add_cuda_app(su3_llr_cuda      cuda/su3_llr_cuda.cu)
-    reticolo_add_cuda_app(bose_gas_cuda_hmc cuda/bose_gas_cuda_hmc.cu)
+    reticolo_add_cuda_app(bose_gas_hmc_cuda cuda/bose_gas_hmc_cuda.cu)
     reticolo_add_cuda_app(bose_gas_llr_cuda cuda/bose_gas_llr_cuda.cu)
     # Nightly physics harness: runs CPU alg::Hmc and GPU cuda::Hmc side-by-side
     # and asserts the [nightly] identities (<exp(-dH)>=1, CPU-vs-GPU equivalence,
     # plaquette at beta). App-level, not a ctest gate (it runs full simulations).
-    reticolo_add_cuda_app(cuda_nightly      cuda/cuda_nightly.cu)
+    reticolo_add_cuda_app(nightly_cuda      cuda/nightly_cuda.cu)
 endif()
 
 # OpenMP is inherited transitively through reticolo::core — no per-app link

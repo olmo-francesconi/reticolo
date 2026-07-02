@@ -245,7 +245,7 @@ Modified:
 - `apps/CMakeLists.txt`, `tests/CMakeLists.txt`
 
 NOT modified: the `cuda.hpp` umbrella stays as-is. `driver.hpp` needs
-`io::Writer`, and the lean CUDA tools (`bench_cuda_hmc` / `profile_cuda_hmc`)
+`io::Writer`, and the lean CUDA tools (`bench_hmc_cuda` / `profile_hmc_cuda`)
 link only `reticolo::cuda` without io — so the app includes the three cuda/llr
 headers directly rather than pulling them through the umbrella.
 

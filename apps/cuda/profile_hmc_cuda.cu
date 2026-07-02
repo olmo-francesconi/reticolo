@@ -1,6 +1,6 @@
 // Single-config profiling driver for the Nsight tools. Runs ONE (action, L) per
 // invocation so `nsys` attributes kernel time per configuration (the all-in-one
-// bench_cuda_hmc would aggregate across configs). Two modes:
+// bench_hmc_cuda would aggregate across configs). Two modes:
 //
 //   default      host-free cuda::Hmc trajectories (graph replay) — the real
 //                workload nsys traces; emits one JSON line with wall-clock

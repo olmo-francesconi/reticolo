@@ -10,7 +10,7 @@
 # nsys is the usable profiler. Keep the run SHORT — graph-node tracing makes the
 # trace grow fast (a few hundred trajectories is plenty for the breakdown).
 #
-#   ./tools/runpod/profile.sh phi4_cuda_hmc --size=16 --n_therm=20 --n_prod=200 --out=p.h5
+#   ./tools/runpod/profile.sh phi4_hmc_cuda --size=16 --n_therm=20 --n_prod=200 --out=p.h5
 set -euo pipefail
 _dir="$(dirname "$0")"
 . "$_dir/common.sh"

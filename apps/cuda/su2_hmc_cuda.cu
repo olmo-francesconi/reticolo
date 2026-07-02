@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
     using DField = cuda::DeviceField<double, cuda::MatrixLayout<Group>>;
     using DAct   = cuda::DeviceAction<Action, DField>;
 
-    cli::Parser p{"su2_cuda_hmc", "SU(2) Wilson action HMC on the CUDA backend"};
+    cli::Parser p{"su2_hmc_cuda", "SU(2) Wilson action HMC on the CUDA backend"};
     auto const cf          = app::common_flags(p, {.L = 4, .out = "su2_cuda.h5"});
     auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
     auto const& beta       = p.opt<double>("beta", 2.3, "Wilson coupling");

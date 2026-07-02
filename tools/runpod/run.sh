@@ -3,7 +3,7 @@
 # to tools/runpod/output/<target>/. Pass app flags after the target; use a bare
 # --out filename (no --workspace) so the file lands in the run dir we pull.
 #
-#   ./tools/runpod/run.sh phi4_cuda_hmc --size=8 --n_prod=200 --out=x.h5
+#   ./tools/runpod/run.sh phi4_hmc_cuda --size=8 --n_prod=200 --out=x.h5
 set -euo pipefail
 _dir="$(dirname "$0")"
 . "$_dir/common.sh"

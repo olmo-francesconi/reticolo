@@ -49,9 +49,9 @@ consumer cards are 1:32 and skew the f64 profile). And its **80 SMs ≈ the A100
 
 ```sh
 ./tools/runpod/build.sh                       # sync + configure + build + ctest
-./tools/runpod/build.sh phi4_cuda_hmc         # build one target, skip ctest
-./tools/runpod/run.sh   phi4_cuda_hmc --size=8 --n_prod=200 --out=x.h5
-./tools/runpod/profile.sh phi4_cuda_hmc --size=16 --n_therm=20 --n_prod=200 --out=p.h5
+./tools/runpod/build.sh phi4_hmc_cuda         # build one target, skip ctest
+./tools/runpod/run.sh   phi4_hmc_cuda --size=8 --n_prod=200 --out=x.h5
+./tools/runpod/profile.sh phi4_hmc_cuda --size=16 --n_therm=20 --n_prod=200 --out=p.h5
 ```
 
 `run` output lands in `tools/runpod/output/<target>/`; `profile` drops

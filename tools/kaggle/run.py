@@ -71,13 +71,13 @@ if RUN_GATES:
     sh("cd /tmp/reticolo && cmake --preset linux-nvcc")
     sh("cd /tmp/reticolo && cmake --build --preset linux-nvcc")
     sh("cd /tmp/reticolo && ctest --preset linux-nvcc --output-on-failure")
-    sh(f"{B}/apps/bench_cuda_hmc")
-    sh(f"{B}/apps/cuda_nightly")
+    sh(f"{B}/apps/bench_hmc_cuda")
+    sh(f"{B}/apps/nightly_cuda")
     print("CUDA build & test OK", flush=True)
 
 if RUN_PROFILE:
     # Throughput sweep: run the profile binary (built above) across lattice sizes.
     for action, sizes in (("phi4", "8 16 32 48 64"), ("su3", "8 12 16 24 32")):
         for L in sizes.split():
-            sh(f"{B}/apps/profile_cuda_hmc --action={action} --size={L}")
+            sh(f"{B}/apps/profile_hmc_cuda --action={action} --size={L}")
     print("CUDA profiling OK", flush=True)

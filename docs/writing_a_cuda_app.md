@@ -3,7 +3,7 @@
 The GPU twin of [`writing_an_app.md`](writing_an_app.md). A CUDA app is a plain
 `.cu` that looks like its CPU sibling — same CLI, same HDF5 schema, the
 trajectory `for` plainly in `main()` — but runs the trajectories on the device.
-The completed `apps/cuda/phi4_cuda_hmc.cu` is ~95 LOC.
+The completed `apps/cuda/phi4_hmc_cuda.cu` is ~95 LOC.
 
 Read the [CUDA backend section of architecture.md](architecture.md#cuda-backend)
 first; this file is the practical walk-through.
@@ -123,7 +123,7 @@ ctest --preset linux-nvcc
 The preset bakes in `RETICOLO_ENABLE_CUDA=ON`, OpenMP off, examples off, and
 `CMAKE_CUDA_ARCHITECTURES=native` (it does not pin the host compiler, so `CC`/`CXX`
 still apply). Add a smoke test by mirroring
-[`tests/apps/test_phi4_cuda_hmc_smoke.cpp`](../tests/apps/test_phi4_cuda_hmc_smoke.cpp)
+[`tests/apps/test_phi4_hmc_cuda_smoke.cpp`](../tests/apps/test_phi4_hmc_cuda_smoke.cpp)
 (execs the binary, checks the HDF5 schema) — register it under the
 `RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS AND RETICOLO_ENABLE_CUDA` block in
 `tests/CMakeLists.txt`.

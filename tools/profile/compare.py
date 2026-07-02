@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-GPU comparison of profile_cuda_hmc bench sweeps.
+"""Cross-GPU comparison of profile_hmc_cuda bench sweeps.
 
     python tools/profile/compare.py tools/modal/output/<session> [--baseline T4]
     python tools/profile/compare.py <run_dir1> <run_dir2> ...
@@ -249,7 +249,7 @@ def make_plots(hmc, bw, vmap, gpus, actions, outdir, baseline):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="cross-GPU profile_cuda_hmc comparison")
+    ap = argparse.ArgumentParser(description="cross-GPU profile_hmc_cuda comparison")
     ap.add_argument("paths", nargs="+", help="a session dir or explicit run dirs")
     ap.add_argument("--baseline", default="T4", help="GPU label for speedup ratios")
     ap.add_argument("--out", help="plot dir (default: <first path>/plots)")
