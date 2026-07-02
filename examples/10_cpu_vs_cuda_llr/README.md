@@ -45,6 +45,17 @@ across the well-sampled range is the pass condition.
 `tools/validate/compare_llr.py` is the numeric companion (prints a per-window
 table without plotting).
 
+## Tuning: more intervals ≠ smaller δ
+
+To add windows, shrink `--spacing` (window-centre spacing), **not** `--delta`
+(window width). `δ` sets LLR stability: a too-narrow window makes the NR/RM
+update + replica exchange blow up stochastically (a runaway `a` at a window,
+then smeared across neighbours by param-swap exchange) — on *both* backends, so
+it corrupts the comparison. Keep `δ` in the stable range (δ≈2 for the bose `S_I`
+here, whose spread is ≈2.65) and place centres closer with `SPACING=1` for more,
+overlapping intervals. Also keep window centres inside the well-sampled range
+(≲2σ of the observable); deeper tails are hard to warm into and converge slowly.
+
 ## Running
 
 The CPU side runs locally; the GPU side needs a CUDA device (there is no local

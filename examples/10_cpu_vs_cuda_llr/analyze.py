@@ -69,14 +69,15 @@ def main():
     ap.add_argument("--gpu", nargs="+", required=True, metavar="H5")
     ap.add_argument("--title", default="phi4 LLR — CPU vs CUDA")
     ap.add_argument("--xlabel", default=r"$E_n$  (action window centre)")
+    ap.add_argument("--wmin", type=float, default=-np.inf,
+                    help="drop windows below this centre (e.g. underconverged rare tails)")
+    ap.add_argument("--wmax", type=float, default=np.inf)
     ap.add_argument("--out", default="comparison.pdf")
     args = ap.parse_args()
 
     cpu = last_values(args.cpu)
     gpu = last_values(args.gpu)
-    wins = np.array([w for w in cpu if w in gpu])
-    dx = np.median(np.diff(wins)) if len(wins) > 1 else 1.0
-    jit = 0.14 * dx
+    wins = np.array([w for w in cpu if w in gpu and args.wmin <= w <= args.wmax])
 
     cpu_mean = np.array([cpu[w].mean() for w in wins])
     cpu_std = np.array([cpu[w].std(ddof=1) for w in wins])
@@ -93,41 +94,41 @@ def main():
     print(f"\nwindows: {len(wins)}   KS rejections at p<0.05: {n_reject} "
           f"(≈{0.05*len(wins):.1f} expected under the null)   min p = {ks_p.min():.3f}")
 
-    fig, (ax0, ax1, ax2) = plt.subplots(
-        3, 1, figsize=(7.5, 9.0), height_ratios=[3, 3, 1.6], constrained_layout=True)
+    # Per-window reference = pooled (both-backend) mean, for the residual panel.
+    ref = np.array([np.concatenate([cpu[w], gpu[w]]).mean() for w in wins])
 
-    # (0) per-seed a(E_n) point-clouds — the distributions themselves.
-    for i, w in enumerate(wins):
-        ax0.plot(np.full_like(cpu[w], w - jit), cpu[w], ".", color="C0", ms=6, alpha=0.6)
-        ax0.plot(np.full_like(gpu[w], w + jit), gpu[w], ".", color="C1", ms=6, alpha=0.6)
-    ax0.plot(wins - jit, cpu_mean, "_", color="C0", ms=14, mew=2)
-    ax0.plot(wins + jit, gpu_mean, "_", color="C1", ms=14, mew=2)
-    ax0.plot([], [], "o", color="C0", label=f"CPU ({len(args.cpu)} seeds)")
-    ax0.plot([], [], "o", color="C1", label=f"CUDA ({len(args.gpu)} seeds)")
-    ax0.set_ylabel(r"$a(E_n)$  (per-seed final RM value)")
+    # Shared thin-line / open-marker / small-cap-errorbar style.
+    ek = dict(lw=0.9, ms=5, mew=0.9, mfc="none", capsize=2.5, capthick=0.8, elinewidth=0.8)
+    fig, (ax0, ax1, ax2) = plt.subplots(
+        3, 1, figsize=(7.5, 9.0), height_ratios=[3, 3, 2.4], constrained_layout=True)
+
+    # (0) a(E_n): cross-seed mean ± std at the true window centre (no x-shift).
+    ax0.errorbar(wins, cpu_mean, yerr=cpu_std, fmt="o-", color="C0",
+                 label=f"CPU ({len(args.cpu)} seeds)", **ek)
+    ax0.errorbar(wins, gpu_mean, yerr=gpu_std, fmt="s--", color="C1",
+                 label=f"CUDA ({len(args.gpu)} seeds)", **ek)
+    ax0.set_ylabel(r"$a(E_n)$  (mean $\pm$ seed std)")
     ax0.set_title(args.title)
     ax0.legend()
     ax0.grid(alpha=0.3)
 
     # (1) reconstructed ln g(E) from the cross-seed means.
-    lgc, lgg = reconstruct_log_g(wins, cpu_mean), reconstruct_log_g(wins, gpu_mean)
-    ax1.plot(wins, lgc, "o-", color="C0", ms=4, label="CPU")
-    ax1.plot(wins, lgg, "s--", color="C1", ms=4, label="CUDA")
+    ax1.plot(wins, reconstruct_log_g(wins, cpu_mean), "o-", color="C0",
+             lw=0.9, ms=5, mew=0.9, mfc="none", label="CPU")
+    ax1.plot(wins, reconstruct_log_g(wins, gpu_mean), "s--", color="C1",
+             lw=0.9, ms=5, mew=0.9, mfc="none", label="CUDA")
     ax1.set_ylabel(r"$\ln g(E)$  (mean-subtracted)")
     ax1.legend()
     ax1.grid(alpha=0.3)
 
-    # (2) two-sample KS p-value per window (distribution match).
-    ax2.axhline(0.05, color="r", ls=":", lw=0.9, label="p = 0.05")
-    ax2.stem(wins, ks_p, basefmt=" ", linefmt="k-", markerfmt="kD")
-    ax2.set_yscale("log")
-    ax2.set_ylim(1e-2, 1.5)
-    ax2.set_ylabel("KS two-sample $p$")
+    # (2) residual: each backend's a distribution (mean ± std) about the per-window
+    # pooled mean — the fine-scale comparison the full-range panel can't resolve.
+    ax2.axhline(0.0, color="k", lw=0.6)
+    ax2.errorbar(wins, cpu_mean - ref, yerr=cpu_std, fmt="o-", color="C0", **ek)
+    ax2.errorbar(wins, gpu_mean - ref, yerr=gpu_std, fmt="s--", color="C1", **ek)
+    ax2.set_ylabel(r"$a - \langle a\rangle_{\mathrm{interval}}$")
     ax2.set_xlabel(args.xlabel)
-    ax2.legend(loc="lower right")
     ax2.grid(alpha=0.3)
-    ax2.text(0.02, 0.1, f"rejections p<0.05: {n_reject}/{len(wins)}",
-             transform=ax2.transAxes)
 
     fig.savefig(args.out)
     print(f"wrote {args.out}")

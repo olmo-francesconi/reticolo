@@ -31,7 +31,7 @@ case "$model" in
     cpu_app=phi4_llr; gpu_app=phi4_llr_cuda
     # bulk of the phi4 action (probed via phi4_hmc: S ≈ 441 ± 16, L=8 ndim=3).
     phys="--size=${L:-8} --ndim=${NDIM:-3} --kappa=${KAPPA:-0.18} --lambda=${LAMBDA:-1.0} \
-      --E_min=${E_MIN:-400} --E_max=${E_MAX:-480} --delta=${DELTA:-8}"
+      --E_min=${E_MIN:-400} --E_max=${E_MAX:-480} --delta=${DELTA:-8} --spacing=${SPACING:-0}"
     n_md=${N_MD:-20}
     title="phi4 LLR — CPU vs CUDA"
     xlabel='$E_n$  (action window centre)'
@@ -41,7 +41,8 @@ case "$model" in
     # S_I is symmetric ~N(0, 2.65) at these couplings (probed via bose_gas_hmc,
     # L=4 ndim=4 mu=1); windows span the bulk + moderate tails.
     phys="--size=${L:-4} --ndim=${NDIM:-4} --mass=${MASS:-1.0} --lambda=${LAMBDA:-1.0} \
-      --mu=${MU:-1.0} --E_min=${E_MIN:--8} --E_max=${E_MAX:-8} --delta=${DELTA:-2}"
+      --mu=${MU:-1.0} --E_min=${E_MIN:--8} --E_max=${E_MAX:-8} --delta=${DELTA:-2} \
+      --spacing=${SPACING:-0}"
     title="Bose gas LLR (mode B) — CPU vs CUDA"
     xlabel='$E_n$  ($S_I$ window centre)'
     ;;
