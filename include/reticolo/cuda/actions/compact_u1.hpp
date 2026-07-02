@@ -63,6 +63,18 @@ struct device_functors<action::CompactU1<T>> {
                                cudaStream_t s) {
         fill_normals(mom, n, seed, traj, s);
     }
+
+    // LLR hot-start: disorder the link angles with θ ~ N(0, sigma²) (compact, so
+    // any angle is valid) before warm-in — the abelian twin of the CPU
+    // llr::Replica::hot_start. `n` is the link-buffer length.
+    static void hot_start(T* field,
+                          long n,
+                          double sigma,
+                          std::uint64_t seed,
+                          std::uint64_t const* traj,
+                          cudaStream_t s) {
+        fill_normals(field, n, seed, traj, s, sigma);
+    }
 };
 
 }  // namespace reticolo::cuda

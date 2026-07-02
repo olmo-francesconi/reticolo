@@ -13,7 +13,9 @@
 
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/check.hpp>
+#include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/llr/windowed_action.cuh>
@@ -43,7 +45,7 @@ public:
             double a_init = 0.0)
         : field_{shape},
           hmc_{Windowed{host, field_.topology(), a_init, e_n, delta}, field_, tau, n_md, seed},
-          e_n_{e_n}, delta_{delta} {
+          e_n_{e_n}, delta_{delta}, seed_{seed} {
         cold_start();
     }
 
@@ -60,6 +62,27 @@ public:
     void upload(Lattice<value_type> const& l) {
         field_.copy_from_host(l);
         RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+    }
+
+    // LLR hot-start: disorder the config before warm-in, mirroring the CPU
+    // llr::Replica::hot_start. Opt-in — only actions whose device trait provides
+    // hot_start (the gauge families) do anything; scalar actions cold-start fine
+    // and this is a no-op for them. The RNG stream uses the replica's seed with a
+    // dedicated counter, disjoint from the per-trajectory momentum stream.
+    void hot_start(double sigma) {
+        using traits = device_functors<HostAction>;
+        if constexpr (requires(std::uint64_t const* c, cudaStream_t s) {
+                          traits::hot_start(
+                              field_.data(), static_cast<long>(field_.size()), sigma, seed_, c, s);
+                      }) {
+            DeviceBuffer<std::uint64_t> ctr{1};
+            std::uint64_t const tag = k_hot_counter;
+            RETICOLO_CUDA_CHECK(
+                cudaMemcpy(ctr.data(), &tag, sizeof(tag), cudaMemcpyHostToDevice));
+            traits::hot_start(
+                field_.data(), static_cast<long>(field_.size()), sigma, seed_, ctr.data(), nullptr);
+            RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+        }
     }
 
     // Async (no sync) so the driver can overlap replicas; ordered before the
@@ -109,10 +132,15 @@ public:
     [[nodiscard]] Field& field() noexcept { return field_; }
 
 private:
+    // Philox counter for the hot-start draw — a fixed, large offset so it never
+    // overlaps the per-trajectory momentum stream (which counts from 0).
+    static constexpr std::uint64_t k_hot_counter = 1ULL << 48;
+
     Field field_;
     Hmc<Windowed, Integ, Field> hmc_;
     double e_n_;
     double delta_;
+    std::uint64_t seed_;
 };
 
 }  // namespace reticolo::cuda::llr
