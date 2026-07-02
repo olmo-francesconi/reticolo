@@ -67,9 +67,8 @@ struct WindowedAction {
     [[nodiscard]] scalar_t s_full(Field const& l) const noexcept {
         scalar_t const q = constraint_value(l);
         if constexpr (k_complex) {
-            scalar_t const dq  = q - E_n;
-            scalar_t const inv = scalar_t{1} / (scalar_t{2} * delta * delta);
-            return base.s_full(l) + (a * q) + (dq * dq * inv);
+            return detail::windowed_value_complex(
+                static_cast<scalar_t>(base.s_full(l)), q, a, E_n, delta);
         } else {
             return detail::windowed_value(q, a, E_n, delta);
         }
@@ -98,7 +97,7 @@ struct WindowedAction {
             // Combined: F_R + (a + (S_I - E_n)/delta^2) * F_I.
             base.compute_force(l, force);
             scalar_t const s     = base.s_imag(l);
-            scalar_t const scale = a + ((s - E_n) / (delta * delta));
+            scalar_t const scale = detail::force_scale_imag(s, a, E_n, delta);
             Field& imag_force    = scratch_(force.indexing());
             base.compute_force_imag(l, imag_force);
             T* const fp         = force.data();
@@ -132,7 +131,7 @@ struct WindowedAction {
     {
         if constexpr (k_complex) {
             scalar_t const s     = base.s_imag(l);
-            scalar_t const scale = a + ((s - E_n) / (delta * delta));
+            scalar_t const scale = detail::force_scale_imag(s, a, E_n, delta);
             // If the base action exposes a fused combined-force kernel
             // (F_R + scale·F_I in one pass directly into mom), use it —
             // skips the imag_force scratch buffer and the merge pass.

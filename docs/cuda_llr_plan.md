@@ -380,6 +380,44 @@ win scales with per-plaquette compute cost, so it pays biggest exactly on the
 matrix groups. BoseGas (complex) still deferred — needs a complex force-scale
 kernel + per-μ cosh(μ) weighting.
 
+## Complex mode-B (BoseGas) on the device (2026-07-02)
+
+The deferred complex-action path is now ported. On the CPU, `action::BoseGas`
+already exposed the imaginary machinery (`s_imag`, `compute_force_imag`, the
+combined kick) and `llr::WindowedAction` had mode B; the analysis
+(`examples/05_bose_gas_llr`, python-flint phase-factor) was complete. The gap was
+entirely CUDA.
+
+**One source of truth.** The S_I / F_I per-site math moved into the shared
+`RETICOLO_HD` formula header (`bose_gas_formula.hpp`,
+`bose_gas_action_imag_site` / `bose_gas_force_imag_site`) and the mode-B window
+math into `window_formula.hpp` (`windowed_value_complex` / `force_scale_imag`) —
+CPU and device call the same expressions. (The f32 mode-B test caught a
+double/float deduction bug in the CPU `windowed_value_complex` call — the old
+inline auto-promoted, the shared helper needed a `scalar_t` cast.)
+
+**Device kernels** (`bose_imag.cuh`, τ-only sweeps): S_I is a forward-τ
+`Im(conj φ·φ_{x+τ})` reduction; F_I is a per-site `2i(φ_{x+τ}−φ_{x−τ})` gather.
+`device_functors<BoseGas>` gains `s_imag`/`s_imag_into`/`compute_force_imag` +
+`hot_start`; `DeviceAction` exposes them behind `HasImagDevice`, which the device
+`WindowedAction` uses to select mode B (`k_complex`): windowed
+`S_R + a·S_I + (S_I−E_n)²/2δ²`, combined force `F_R + (a+(S_I−E_n)/δ²)·F_I`,
+constraint → S_I. `hmc.cuh` / `llr/driver.hpp` / `llr/replica.hpp` are unchanged —
+mode B only redefines what `constraint_s_full_into` returns.
+
+**Capture trap.** The F_I scratch is pre-allocated in the WindowedAction ctor:
+lazily allocating it inside `compute_force` (which runs on the capture stream
+during MD) trips `cudaMalloc during stream capture`. Validated device-vs-CPU to
+1e-8 (f64) / 2e-3 (f32) + end-to-end app smoke.
+
+**Imag force+action fusion.** The F_I gather already loads φ_{x+τ}; the fused
+kernel also emits the S_I partial from it, so one τ-sweep replaces the separate
+F_I kernel + S_I reduction. Opt-in `force_imag_and_s_imag_into` on the trait,
+auto-picked by mode B (toggle `k_fuse_imag`). Wall-clock A/B (T4 f64, L=12⁴,
+identical LLR schedule): **fused 40.8s vs two-pass 48.9s (−16.5%)** — at this size
+the imag τ-sweeps are launch/latency-bound, so dropping a kernel + a field reload
+per MD step pays outsized. The fraction shrinks on larger V / faster f64 GPUs.
+
 ## Open sign-off points
 
 1. Output schema: per-slot `E_n` **series** + python grouping (recommended,

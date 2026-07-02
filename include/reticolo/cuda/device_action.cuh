@@ -61,6 +61,39 @@ concept HasFusedForce = requires(double* out,
     device_functors<HostAction>::s_full_and_force(out, a, field, force, scratch, partials, topo, s);
 };
 
+// Optional imaginary-part launchers (complex actions only, e.g. BoseGas). When
+// present, DeviceAction exposes s_imag / s_imag_into / compute_force_imag and the
+// LLR WindowedAction selects mode B (sample S_R, constrain S_I). Absent → mode A.
+template <class HostAction, class T>
+concept HasImagDevice = requires(double* out,
+                                 HostAction const& a,
+                                 T const* field,
+                                 T* force,
+                                 double* scratch,
+                                 double* partials,
+                                 DeviceTopology const& topo,
+                                 cudaStream_t s) {
+    { device_functors<HostAction>::s_imag(a, field, scratch, topo, s) } -> std::same_as<double>;
+    device_functors<HostAction>::s_imag_into(out, a, field, scratch, partials, topo, s);
+    device_functors<HostAction>::compute_force_imag(a, field, force, topo, s);
+};
+
+// Optional fused F_I + S_I launcher — one field gather yields both the imaginary
+// force and the S_I reduction. The mode-B WindowedAction uses it when present;
+// absent → the two-pass (compute_force_imag + s_imag_into).
+template <class HostAction, class T>
+concept HasFusedImagDevice = requires(double* out,
+                                      HostAction const& a,
+                                      T const* field,
+                                      T* force,
+                                      double* scratch,
+                                      double* partials,
+                                      DeviceTopology const& topo,
+                                      cudaStream_t s) {
+    device_functors<HostAction>::force_imag_and_s_imag_into(
+        out, a, field, force, scratch, partials, topo, s);
+};
+
 template <class HostAction, class Field>
     requires DeviceActionTraits<HostAction, typename Field::value_type>
 class DeviceAction {
@@ -102,6 +135,34 @@ public:
         requires HasFusedForce<HostAction, typename Field::value_type>
     {
         traits::s_full_and_force(
+            out, host_, field.data(), force.data(), scratch_.data(), partials, topo_, stream);
+    }
+
+    // --- imaginary part (complex actions; instantiate only when the trait has it) ---
+    [[nodiscard]] double s_imag(Field const& field) const
+        requires HasImagDevice<HostAction, typename Field::value_type>
+    {
+        return traits::s_imag(host_, field.data(), scratch_.data(), topo_, current_stream());
+    }
+
+    void s_imag_into(double* out, Field const& field, double* partials, cudaStream_t stream) const
+        requires HasImagDevice<HostAction, typename Field::value_type>
+    {
+        traits::s_imag_into(out, host_, field.data(), scratch_.data(), partials, topo_, stream);
+    }
+
+    void compute_force_imag(Field const& field, Field& force) const
+        requires HasImagDevice<HostAction, typename Field::value_type>
+    {
+        traits::compute_force_imag(host_, field.data(), force.data(), topo_, current_stream());
+    }
+
+    // Fused: F_I into `force` and S_I into out[0], one field gather.
+    void compute_force_imag_and_s_imag_into(
+        double* out, Field const& field, Field& force, double* partials, cudaStream_t stream) const
+        requires HasFusedImagDevice<HostAction, typename Field::value_type>
+    {
+        traits::force_imag_and_s_imag_into(
             out, host_, field.data(), force.data(), scratch_.data(), partials, topo_, stream);
     }
 

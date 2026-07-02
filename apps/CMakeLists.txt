@@ -90,6 +90,8 @@ if(RETICOLO_ENABLE_CUDA)
     reticolo_add_cuda_app(su2_cuda_hmc      cuda/su2_cuda_hmc.cu)
     reticolo_add_cuda_app(su2_llr_cuda      cuda/su2_llr_cuda.cu)
     reticolo_add_cuda_app(su3_llr_cuda      cuda/su3_llr_cuda.cu)
+    reticolo_add_cuda_app(bose_gas_cuda_hmc cuda/bose_gas_cuda_hmc.cu)
+    reticolo_add_cuda_app(bose_gas_llr_cuda cuda/bose_gas_llr_cuda.cu)
     # Nightly physics harness: runs CPU alg::Hmc and GPU cuda::Hmc side-by-side
     # and asserts the [nightly] identities (<exp(-dH)>=1, CPU-vs-GPU equivalence,
     # plaquette at beta). App-level, not a ctest gate (it runs full simulations).

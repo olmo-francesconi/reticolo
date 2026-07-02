@@ -1,5 +1,6 @@
 #pragma once
 
+#include <reticolo/core/cplx.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
@@ -19,6 +20,12 @@ struct real_scalar {
 };
 template <class T>
 struct real_scalar<std::complex<T>> {
+    using type = T;
+};
+// cplx<T> is the device-side complex used by DeviceField (the layout-compatible
+// twin of std::complex<T>); it takes the same real underlying scalar.
+template <class T>
+struct real_scalar<cplx<T>> {
     using type = T;
 };
 template <class T>

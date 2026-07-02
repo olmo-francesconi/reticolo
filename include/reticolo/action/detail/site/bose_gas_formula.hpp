@@ -16,6 +16,13 @@
 //
 // weighted_fwd: forward neighbours only (reduce convention), time dir ×cosh(μ).
 // staple:       all 2d neighbours, time dir ×cosh(μ).
+//
+// The imaginary part is μ-independent and touches only the time direction τ (the
+// last dim). Same source-of-truth rule: both the CPU action::BoseGas (s_imag /
+// compute_force_imag) and the CUDA device kernels call these.
+//
+//   S_I(x) = 2·Im(conj(φ_x)·φ_{x+τ})           (forward τ neighbour only)
+//   F_I(x) = 2i·(φ_{x+τ} − φ_{x−τ})            (both τ neighbours)
 
 namespace reticolo::action::detail {
 
@@ -31,6 +38,20 @@ template <class T>
 bose_gas_force_site(cplx<T> phi, cplx<T> staple, T coef_mass, T lambda) {
     T const abs2 = norm2(phi);
     return ((T{-2} * coef_mass) * phi) - ((T{4} * lambda * abs2) * phi) + (T{2} * staple);
+}
+
+// Per-site contribution to S_I = 2 Σ_x Im(conj(φ_x)·φ_{x+τ}); the ×2 is folded
+// in so a plain sum over sites is S_I directly.
+template <class T>
+[[nodiscard]] RETICOLO_HD T bose_gas_action_imag_site(cplx<T> phi, cplx<T> phi_fwd_tau) {
+    return T{2} * im_conj_mul(phi, phi_fwd_tau);
+}
+
+// F_I(x) = 2i·(φ_{x+τ} − φ_{x−τ}). Only the time-direction neighbours contribute.
+template <class T>
+[[nodiscard]] RETICOLO_HD cplx<T>
+bose_gas_force_imag_site(cplx<T> phi_fwd_tau, cplx<T> phi_bwd_tau) {
+    return cplx<T>{T{0}, T{2}} * (phi_fwd_tau - phi_bwd_tau);
 }
 
 }  // namespace reticolo::action::detail

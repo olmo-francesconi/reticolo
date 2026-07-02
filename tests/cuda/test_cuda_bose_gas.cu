@@ -10,7 +10,9 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
+#include <reticolo/cuda/llr/windowed_action.cuh>
 #include <reticolo/cuda/reduce.cuh>
+#include <reticolo/llr/windowed_action.hpp>
 
 #include <cmath>
 #include <complex>
@@ -205,6 +207,111 @@ bool bose_gas_hmc_runs_f32() {
     return hmc_runs_impl<float>();
 }
 
+// Device S_I vs CPU action::BoseGas::s_imag — both call the shared imag formula.
+bool bose_gas_s_imag_matches_cpu() {
+    Lattice<std::complex<double>> const host = make_field<double>();
+    action::BoseGas<double> const a          = make_action<double>();
+
+    double const s_cpu = a.s_imag(host);
+
+    DeviceField<cplx<double>> dfield{kShape};
+    dfield.copy_from_host(as_dev(host.data()));
+    DeviceAction<action::BoseGas<double>, DeviceField<cplx<double>>> const act{a, dfield.topology()};
+    double const s_dev = act.s_imag(dfield);
+    RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+
+    return std::abs(s_cpu - s_dev) <= 1e-9 * (1.0 + std::abs(s_cpu));
+}
+
+// Device F_I vs CPU compute_force_imag.
+bool bose_gas_force_imag_matches_cpu() {
+    Lattice<std::complex<double>> const host = make_field<double>();
+    action::BoseGas<double> const a          = make_action<double>();
+
+    Lattice<std::complex<double>> f_cpu{host.indexing()};
+    a.compute_force_imag(host, f_cpu);
+
+    DeviceField<cplx<double>> dfield{kShape};
+    DeviceField<cplx<double>> dforce{dfield.topology()};
+    dfield.copy_from_host(as_dev(host.data()));
+    DeviceAction<action::BoseGas<double>, DeviceField<cplx<double>>> const act{a, dfield.topology()};
+    act.compute_force_imag(dfield, dforce);
+
+    std::vector<std::complex<double>> f_dev(dforce.size());
+    dforce.copy_to_host(as_dev(f_dev.data()));
+    RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+
+    for (std::size_t i = 0; i < f_dev.size(); ++i) {
+        std::complex<double> const c = f_cpu.data()[i];
+        if (std::abs(c.real() - f_dev[i].real()) > 1e-9 * (1.0 + std::abs(c.real())) ||
+            std::abs(c.imag() - f_dev[i].imag()) > 1e-9 * (1.0 + std::abs(c.imag()))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// The whole mode-B windowed path: device cuda::llr::WindowedAction<BoseGas> must
+// reproduce the CPU llr::WindowedAction<BoseGas> for both the windowed action
+// S_LLR = S_R + a·S_I + (S_I−E_n)²/2δ² and the combined force F_R + scale·F_I.
+// Templated so the same check runs in f64 (roundoff) and f32 (device sin/cos +
+// the f32 field precision, looser tolerance).
+template <class T>
+bool bose_gas_windowed_modeB_matches_cpu_impl(double s_tol, double f_tol) {
+    Lattice<std::complex<T>> const host = make_field<T>();
+    action::BoseGas<T> const a          = make_action<T>();
+    constexpr double a_slope = 0.3;
+    constexpr double e_n     = 1.5;
+    constexpr double delta   = 4.0;
+
+    // CPU windowed (mode B via HasImagPart).
+    reticolo::llr::WindowedAction<action::BoseGas<T>> w{
+        a, static_cast<T>(a_slope), static_cast<T>(e_n), static_cast<T>(delta)};
+    static_assert(decltype(w)::k_complex, "BoseGas CPU WindowedAction must be mode B");
+    double const s_cpu = w.s_full(host);
+    Lattice<std::complex<T>> f_cpu{host.indexing()};
+    w.compute_force(host, f_cpu);
+
+    // Device windowed.
+    using DField = DeviceField<cplx<T>>;
+    DField dfield{kShape};
+    dfield.copy_from_host(as_dev(host.data()));
+    llr::WindowedAction<action::BoseGas<T>, DField> dw{a, dfield.topology(), a_slope, e_n, delta};
+    static_assert(decltype(dw)::k_complex, "BoseGas device WindowedAction must be mode B");
+
+    DeviceBuffer<double> s_dev_buf{1};
+    DeviceBuffer<double> partials{static_cast<std::size_t>(k_reduce_max_grid)};
+    dw.s_full_into(s_dev_buf.data(), dfield, partials.data(), nullptr);
+    DField dforce{dfield.topology()};
+    dw.compute_force(dfield, dforce);
+
+    double s_dev = 0.0;
+    s_dev_buf.copy_to_host(&s_dev);
+    std::vector<std::complex<T>> f_dev(dforce.size());
+    dforce.copy_to_host(as_dev(f_dev.data()));
+    RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+
+    if (std::abs(s_cpu - s_dev) > s_tol * (1.0 + std::abs(s_cpu))) {
+        return false;
+    }
+    for (std::size_t i = 0; i < f_dev.size(); ++i) {
+        double const cr = static_cast<double>(f_cpu.data()[i].real());
+        double const ci = static_cast<double>(f_cpu.data()[i].imag());
+        if (std::abs(cr - static_cast<double>(f_dev[i].real())) > f_tol * (1.0 + std::abs(cr)) ||
+            std::abs(ci - static_cast<double>(f_dev[i].imag())) > f_tol * (1.0 + std::abs(ci))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool bose_gas_windowed_modeB_matches_cpu() {
+    return bose_gas_windowed_modeB_matches_cpu_impl<double>(1e-8, 1e-8);
+}
+bool bose_gas_windowed_modeB_matches_cpu_f32() {
+    return bose_gas_windowed_modeB_matches_cpu_impl<float>(2e-4, 2e-3);
+}
+
 }  // namespace reticolo::cuda
 
 // BoseGas — complex scalar (relativistic Bose gas at finite mu). Validated in
@@ -227,4 +334,23 @@ TEST_CASE("cuda BoseGas host-free HMC runs (f64)", "[cuda]") {
 
 TEST_CASE("cuda BoseGas host-free HMC runs (f32)", "[cuda]") {
     REQUIRE(reticolo::cuda::bose_gas_hmc_runs_f32());
+}
+
+// Imaginary part: device S_I / F_I share the formula header with the CPU action.
+TEST_CASE("cuda BoseGas S_I matches CPU s_imag", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_s_imag_matches_cpu());
+}
+
+TEST_CASE("cuda BoseGas F_I matches CPU compute_force_imag", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_force_imag_matches_cpu());
+}
+
+// The complex-LLR (mode B) windowed action + combined force, device vs CPU. The
+// f32 case also exercises the fused F_I+S_I path in field precision.
+TEST_CASE("cuda BoseGas mode-B WindowedAction matches CPU", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_windowed_modeB_matches_cpu());
+}
+
+TEST_CASE("cuda BoseGas mode-B WindowedAction matches CPU (f32)", "[cuda]") {
+    REQUIRE(reticolo::cuda::bose_gas_windowed_modeB_matches_cpu_f32());
 }

@@ -5,6 +5,7 @@
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/actions/site_launchers.hpp>
+#include <reticolo/cuda/bose_imag.cuh>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/macros.hpp>
 #include <reticolo/cuda/rng_philox.cuh>
@@ -138,6 +139,53 @@ struct device_functors<action::BoseGas<T>> {
             s);
     }
 
+    // --- imaginary part (complex-LLR / phase-quenched S_I tracking) ----------
+    // S_I / F_I are μ-independent and touch only the time direction; they call
+    // the shared bose_gas_*_imag_site formula (bose_imag.cuh). Presence of these
+    // two members is what makes the device LLR WindowedAction pick mode B.
+
+    // S_I to a host double — used by the phase-quenched HMC app to append S_I to
+    // its output Series (no window involved).
+    [[nodiscard]] static double s_imag(action::BoseGas<T> const& /*a*/,
+                                       cplx<T> const* field,
+                                       double* scratch,
+                                       DeviceTopology const& topo,
+                                       cudaStream_t s) {
+        return bose_s_imag_launch<T>(field, scratch, topo, s);
+    }
+
+    // Device-scalar S_I for the LLR hot loop (windowed action + constraint).
+    static void s_imag_into(double* out,
+                            action::BoseGas<T> const& /*a*/,
+                            cplx<T> const* field,
+                            double* scratch,
+                            double* partials,
+                            DeviceTopology const& topo,
+                            cudaStream_t s) {
+        bose_s_imag_into<T>(out, field, scratch, partials, topo, s);
+    }
+
+    static void compute_force_imag(action::BoseGas<T> const& /*a*/,
+                                   cplx<T> const* field,
+                                   cplx<T>* force,
+                                   DeviceTopology const& topo,
+                                   cudaStream_t s) {
+        bose_force_imag_launch<T>(field, force, topo, s);
+    }
+
+    // Fused F_I + S_I in one τ-sweep — the LLR WindowedAction's mode-B force uses
+    // this (drops the separate S_I reduction the two-pass path pays per MD step).
+    static void force_imag_and_s_imag_into(double* out,
+                                           action::BoseGas<T> const& /*a*/,
+                                           cplx<T> const* field,
+                                           cplx<T>* force,
+                                           double* scratch,
+                                           double* partials,
+                                           DeviceTopology const& topo,
+                                           cudaStream_t s) {
+        bose_force_imag_and_s_imag_into<T>(out, field, force, scratch, partials, topo, s);
+    }
+
     // Complex momentum: 2 iid normals per site = 2·n reals over the cplx buffer.
     static void sample_momenta(cplx<T>* mom,
                                long n,
@@ -146,6 +194,18 @@ struct device_functors<action::BoseGas<T>> {
                                std::uint64_t const* traj,
                                cudaStream_t s) {
         fill_normals(reinterpret_cast<T*>(mom), 2 * n, seed, traj, s);
+    }
+
+    // LLR hot-start: disorder φ ~ N(0, sigma²) over the 2·n underlying reals
+    // before warm-in — the complex twin of the gauge hot_start, mirroring the
+    // CPU bose_gas_llr hot_start. `n` is the cplx-buffer length (nsites).
+    static void hot_start(cplx<T>* field,
+                          long n,
+                          double sigma,
+                          std::uint64_t seed,
+                          std::uint64_t const* traj,
+                          cudaStream_t s) {
+        fill_normals(reinterpret_cast<T*>(field), 2 * n, seed, traj, s, sigma);
     }
 };
 

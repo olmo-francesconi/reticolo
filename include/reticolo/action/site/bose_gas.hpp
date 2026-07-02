@@ -151,10 +151,12 @@ struct BoseGas {
             std::size_t const base   = w * s_tau;
             std::size_t const base_p = wp * s_tau;
             for (std::size_t k = 0; k < s_tau; ++k) {
-                acc += static_cast<double>(im_conj_mul_(in[base + k], in[base_p + k]));
+                acc += static_cast<double>(detail::bose_gas_action_imag_site<T>(
+                    cplx<T>{in[base + k].real(), in[base + k].imag()},
+                    cplx<T>{in[base_p + k].real(), in[base_p + k].imag()}));
             }
         }
-        double const s = 2.0 * acc;
+        double const s = acc;  // the ×2 lives in bose_gas_action_imag_site
         last_s_imag_   = s;
         return s;
     }
@@ -171,7 +173,6 @@ struct BoseGas {
         std::size_t const s_tau   = n / L_tau;
         complex_t const* const in = l.data();
         complex_t* const out      = force.data();
-        complex_t const two_i{T{0}, T{2}};
         for (std::size_t w = 0; w < L_tau; ++w) {
             std::size_t const wm     = (w == 0) ? (L_tau - 1) : (w - 1);
             std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
@@ -179,7 +180,10 @@ struct BoseGas {
             std::size_t const base_m = wm * s_tau;
             std::size_t const base_p = wp * s_tau;
             for (std::size_t k = 0; k < s_tau; ++k) {
-                out[base + k] = two_i * (in[base_p + k] - in[base_m + k]);
+                cplx<T> const f = detail::bose_gas_force_imag_site<T>(
+                    cplx<T>{in[base_p + k].real(), in[base_p + k].imag()},
+                    cplx<T>{in[base_m + k].real(), in[base_m + k].imag()});
+                out[base + k] = complex_t{f.re, f.im};
             }
         }
     }
@@ -227,7 +231,6 @@ struct BoseGas {
         std::size_t const s_tau   = n / L_tau;
         complex_t const* const in = l.data();
         T const k_i               = k_dt * scale_i;
-        complex_t const k_i_two_i{T{0}, T{2} * k_i};  // pre-scale 2i by k_i
         for (std::size_t w = 0; w < L_tau; ++w) {
             std::size_t const wm     = (w == 0) ? (L_tau - 1) : (w - 1);
             std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
@@ -235,7 +238,10 @@ struct BoseGas {
             std::size_t const base_m = wm * s_tau;
             std::size_t const base_p = wp * s_tau;
             for (std::size_t k = 0; k < s_tau; ++k) {
-                mp[base + k] += k_i_two_i * (in[base_p + k] - in[base_m + k]);
+                cplx<T> const f = detail::bose_gas_force_imag_site<T>(
+                    cplx<T>{in[base_p + k].real(), in[base_p + k].imag()},
+                    cplx<T>{in[base_m + k].real(), in[base_m + k].imag()});
+                mp[base + k] += k_i * complex_t{f.re, f.im};
             }
         }
     }
@@ -250,12 +256,6 @@ struct BoseGas {
     mutable T cosh_mu_val_ = std::numeric_limits<T>::quiet_NaN();
 
 private:
-    // Im(conj(a) * b) without the full complex product — 2 mul + 1 add instead
-    // of 4 mul + 2 add with half the result discarded.
-    [[nodiscard]] static T im_conj_mul_(complex_t a, complex_t b) noexcept {
-        return (a.real() * b.imag()) - (a.imag() * b.real());
-    }
-
     // cosh(mu) memoised on the current mu — `mu` is a fixed action parameter,
     // but the force/action kernels read it per site, so a fresh cosh per call
     // would be pure overhead.
