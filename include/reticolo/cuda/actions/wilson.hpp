@@ -72,6 +72,13 @@ struct device_functors<action::Wilson<G, T>> {
                                cudaStream_t s) {
         su_sample_algebra_launch<GD>(mom, topo, seed, traj, s);
     }
+
+    // Valid cold start = every link the group identity (the zero the default
+    // buffer holds is not a group element). Detected by Replica::cold_start; the
+    // abelian U(1) omits this (θ = 0 is already identity, memset suffices).
+    static void set_cold(T* field, DeviceTopology const& topo, cudaStream_t s) {
+        su_set_identity_launch<GD>(field, topo, s);
+    }
 };
 
 // Wilson<U(1)> — abelian specialization (more specialized than Wilson<G> above,

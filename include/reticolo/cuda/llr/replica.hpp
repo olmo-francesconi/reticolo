@@ -55,9 +55,20 @@ public:
     Replica& operator=(Replica&&)      = delete;
     ~Replica()                         = default;
 
-    // Cold config (phi = 0). memset of doubles/floats to 0 is the 0.0 bit pattern.
+    // Cold config. Scalars / U(1): phi = 0 (memset — 0.0 is the identity there).
+    // Matrix groups: the zero matrix is not a group element, so route through the
+    // trait's set_cold (identity fill) when it provides one.
     void cold_start() {
-        RETICOLO_CUDA_CHECK(cudaMemset(field_.data(), 0, field_.size() * sizeof(value_type)));
+        using traits = device_functors<HostAction>;
+        if constexpr (requires(cudaStream_t s) {
+                          traits::set_cold(field_.data(), field_.topology(), s);
+                      }) {
+            traits::set_cold(field_.data(), field_.topology(), nullptr);
+            RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+        } else {
+            RETICOLO_CUDA_CHECK(
+                cudaMemset(field_.data(), 0, field_.size() * sizeof(value_type)));
+        }
     }
     void upload(Lattice<value_type> const& l) {
         field_.copy_from_host(l);

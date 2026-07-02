@@ -171,6 +171,24 @@ __global__ void __launch_bounds__(MaxT, MinB)
     GD::store(u, mu, x, ns, un);
 }
 
+// Per-link cold start: every link = group identity. The zero matrix the default
+// buffer holds is not a valid group element, so LLR/HMC cold starts route through
+// this (Replica::cold_start) instead of a memset.
+template <class GD>
+__global__ void su_set_identity_kernel(double* __restrict__ u, DeviceTopology topo) {
+    long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
+    long const ns    = topo.nsites;
+    long const total = ns * topo.ndim;
+    if (tid >= total) {
+        return;
+    }
+    int const mu = static_cast<int>(tid / ns);
+    long const x = tid % ns;
+    double id[GD::nc];
+    GD::identity(id);
+    GD::store(u, mu, x, ns, id);
+}
+
 // Per-link Gell-Mann momentum sampler: h_a ~ N(0,½), P = Σ_a h_a T_a.
 template <class GD>
 __global__ void su_sample_algebra_kernel(double* __restrict__ mom,
@@ -236,6 +254,15 @@ void su_expi_lmul_launch(
     long const total = topo.nsites * topo.ndim;
     auto const grid  = static_cast<unsigned>((total + MaxT - 1) / MaxT);
     su_expi_lmul_kernel<GD, MaxT, MinB><<<grid, MaxT, 0, stream>>>(u, p, topo, dt);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+}
+
+template <class GD>
+void su_set_identity_launch(double* u, DeviceTopology const& topo, cudaStream_t stream) {
+    constexpr int kBlock = 256;
+    long const total     = topo.nsites * topo.ndim;
+    auto const grid      = static_cast<unsigned>((total + kBlock - 1) / kBlock);
+    su_set_identity_kernel<GD><<<grid, kBlock, 0, stream>>>(u, topo);
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 

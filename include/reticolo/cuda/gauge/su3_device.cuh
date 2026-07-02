@@ -50,6 +50,16 @@ struct SU3Device {
         }
     }
 
+    // The 3×3 identity in the 18-real layout: Re on the diagonal, zero elsewhere.
+    RETICOLO_HD static void identity(double* m) {
+        for (int k = 0; k < nc; ++k) {
+            m[k] = 0.0;
+        }
+        for (int i = 0; i < 3; ++i) {
+            m[idx_re(i, i)] = 1.0;
+        }
+    }
+
     // out = a · b
     RETICOLO_HD static void mul(double* out, double const* a, double const* b) {
         for (int i = 0; i < 3; ++i) {

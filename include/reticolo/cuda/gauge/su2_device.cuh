@@ -43,6 +43,16 @@ struct SU2Device {
         }
     }
 
+    // The 2×2 identity in the 8-real (row-major, re/im-interleaved) layout:
+    // Re U_00 = comp 0, Re U_11 = comp 6.
+    RETICOLO_HD static void identity(double* m) {
+        for (int k = 0; k < nc; ++k) {
+            m[k] = 0.0;
+        }
+        m[0] = 1.0;
+        m[6] = 1.0;
+    }
+
     // out = a · b
     RETICOLO_HD static void mul(double* o, double const* a, double const* b) {
         cset(o, 0, a[0], a[1], b[0], b[1], a[2], a[3], b[4], b[5]);
