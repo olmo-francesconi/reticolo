@@ -84,7 +84,8 @@ public:
     }
     RETICOLO_HD void bwd(T nbr) { full_ += nbr; }
     [[nodiscard]] RETICOLO_HD T force() const {
-        return action::detail::sine_gordon_force_site<T>(phi_, full_, std::sin(phi_), kappa_, alpha_);
+        return action::detail::sine_gordon_force_site<T>(
+            phi_, full_, std::sin(phi_), kappa_, alpha_);
     }
     [[nodiscard]] RETICOLO_HD double energy() const {
         return static_cast<double>(
@@ -142,8 +143,14 @@ struct device_functors<action::SineGordon<T>> {
                                  double* partials,
                                  DeviceTopology const& topo,
                                  cudaStream_t s) {
-        detail::site_s_full_and_force(out, SineGordonForceEnergyFunctor<T>{a.kappa, a.alpha}, field,
-                                      force, scratch, partials, topo, s);
+        detail::site_s_full_and_force(out,
+                                      SineGordonForceEnergyFunctor<T>{a.kappa, a.alpha},
+                                      field,
+                                      force,
+                                      scratch,
+                                      partials,
+                                      topo,
+                                      s);
     }
 };
 

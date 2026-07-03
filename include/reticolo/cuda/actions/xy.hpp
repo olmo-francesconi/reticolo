@@ -79,9 +79,7 @@ public:
     }
     RETICOLO_HD void bwd(T nbr) { fsum_ += action::detail::xy_force_bond<T>(theta_, nbr); }
     [[nodiscard]] RETICOLO_HD T force() const { return -beta_ * fsum_; }
-    [[nodiscard]] RETICOLO_HD double energy() const {
-        return static_cast<double>(-beta_ * esum_);
-    }
+    [[nodiscard]] RETICOLO_HD double energy() const { return static_cast<double>(-beta_ * esum_); }
 
 private:
     T beta_;
@@ -132,8 +130,8 @@ struct device_functors<action::Xy<T>> {
                                  double* partials,
                                  DeviceTopology const& topo,
                                  cudaStream_t s) {
-        detail::site_s_full_and_force(out, XyForceEnergyFunctor<T>{a.beta}, field, force, scratch,
-                                      partials, topo, s);
+        detail::site_s_full_and_force(
+            out, XyForceEnergyFunctor<T>{a.beta}, field, force, scratch, partials, topo, s);
     }
 };
 

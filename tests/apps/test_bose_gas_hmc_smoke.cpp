@@ -20,12 +20,11 @@ TEST_CASE("bose_gas_hmc binary writes S_R + S_I schema", "[app][e2e][bose_gas_hm
     constexpr int k_n_therm = 8;
     constexpr int k_n_prod  = 12;
 
-    std::string const cmd = std::string{BOSE_GAS_HMC_BINARY} +
-                            " --size=4 --ndim=2 --mass=1.0 --lambda=1.0 --mu=0.5" +
-                            " --n_therm=" + std::to_string(k_n_therm) +
-                            " --n_prod=" + std::to_string(k_n_prod) + " --meas_every=1" +
-                            " --seed=20260701 --workspace=" + out.parent_path().string() +
-                            " --out=" + out.filename().string();
+    std::string const cmd =
+        std::string{BOSE_GAS_HMC_BINARY} + " --size=4 --ndim=2 --mass=1.0 --lambda=1.0 --mu=0.5" +
+        " --n_therm=" + std::to_string(k_n_therm) + " --n_prod=" + std::to_string(k_n_prod) +
+        " --meas_every=1" + " --seed=20260701 --workspace=" + out.parent_path().string() +
+        " --out=" + out.filename().string();
     run_and_require_exit(cmd);
     REQUIRE(std::filesystem::exists(out));
 

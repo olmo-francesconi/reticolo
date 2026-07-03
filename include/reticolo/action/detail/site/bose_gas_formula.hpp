@@ -49,8 +49,8 @@ template <class T>
 
 // F_I(x) = 2i·(φ_{x+τ} − φ_{x−τ}). Only the time-direction neighbours contribute.
 template <class T>
-[[nodiscard]] RETICOLO_HD cplx<T>
-bose_gas_force_imag_site(cplx<T> phi_fwd_tau, cplx<T> phi_bwd_tau) {
+[[nodiscard]] RETICOLO_HD cplx<T> bose_gas_force_imag_site(cplx<T> phi_fwd_tau,
+                                                           cplx<T> phi_bwd_tau) {
     return cplx<T>{T{0}, T{2}} * (phi_fwd_tau - phi_bwd_tau);
 }
 

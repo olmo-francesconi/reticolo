@@ -44,8 +44,8 @@ TEST_CASE("BoseGas: compute_force matches finite difference of s_full", "[physic
     constexpr double k_tol = 1e-6;
 
     for (std::size_t trial = 0; trial < 25; ++trial) {
-        Site const x   = Site{rng.uniform_int(phi.nsites())};
-        C const old    = phi[x];
+        Site const x = Site{rng.uniform_int(phi.nsites())};
+        C const old  = phi[x];
 
         phi[x]            = old + C{k_eps, 0.0};
         double const sr_p = action.s_full(phi);

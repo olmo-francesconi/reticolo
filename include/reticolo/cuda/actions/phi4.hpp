@@ -149,9 +149,14 @@ struct device_functors<action::Phi4<T>> {
                                  double* partials,
                                  DeviceTopology const& topo,
                                  cudaStream_t s) {
-        detail::site_s_full_and_force(
-            out, Phi4ForceEnergyFunctor<T>{a.kappa, a.lambda}, field, force, scratch, partials, topo,
-            s);
+        detail::site_s_full_and_force(out,
+                                      Phi4ForceEnergyFunctor<T>{a.kappa, a.lambda},
+                                      field,
+                                      force,
+                                      scratch,
+                                      partials,
+                                      topo,
+                                      s);
     }
 };
 

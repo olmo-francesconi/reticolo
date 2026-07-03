@@ -66,8 +66,7 @@ public:
             traits::set_cold(field_.data(), field_.topology(), nullptr);
             RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
         } else {
-            RETICOLO_CUDA_CHECK(
-                cudaMemset(field_.data(), 0, field_.size() * sizeof(value_type)));
+            RETICOLO_CUDA_CHECK(cudaMemset(field_.data(), 0, field_.size() * sizeof(value_type)));
         }
     }
     void upload(Lattice<value_type> const& l) {
@@ -88,8 +87,7 @@ public:
                       }) {
             DeviceBuffer<std::uint64_t> ctr{1};
             std::uint64_t const tag = k_hot_counter;
-            RETICOLO_CUDA_CHECK(
-                cudaMemcpy(ctr.data(), &tag, sizeof(tag), cudaMemcpyHostToDevice));
+            RETICOLO_CUDA_CHECK(cudaMemcpy(ctr.data(), &tag, sizeof(tag), cudaMemcpyHostToDevice));
             traits::hot_start(
                 field_.data(), static_cast<long>(field_.size()), sigma, seed_, ctr.data(), nullptr);
             RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());

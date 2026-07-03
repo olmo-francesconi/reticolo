@@ -17,13 +17,12 @@ TEST_CASE("bose_gas_llr binary writes the expected HDF5 schema", "[app][e2e][bos
     std::filesystem::remove(out, ec);
 
     // Tiny config: symmetric S_I windows, 2 NR + 2 RM with short sample counts.
-    std::string const cmd = std::string{BOSE_GAS_LLR_BINARY} +
-                            " --size=4 --ndim=2 --mass=1.0 --lambda=1.0 --mu=0.5" +
-                            " --E_min=-6 --E_max=6 --delta=3" + " --tau=1.0 --n_md=10" +
-                            " --n_nr=2 --n_therm_nr=4 --n_meas_nr=8" +
-                            " --n_rm=2 --n_therm_rm=4 --n_meas_rm=8" +
-                            " --seed=20260701 --workspace=" + out.parent_path().string() +
-                            " --out=" + out.filename().string();
+    std::string const cmd =
+        std::string{BOSE_GAS_LLR_BINARY} + " --size=4 --ndim=2 --mass=1.0 --lambda=1.0 --mu=0.5" +
+        " --E_min=-6 --E_max=6 --delta=3" + " --tau=1.0 --n_md=10" +
+        " --n_nr=2 --n_therm_nr=4 --n_meas_nr=8" + " --n_rm=2 --n_therm_rm=4 --n_meas_rm=8" +
+        " --seed=20260701 --workspace=" + out.parent_path().string() +
+        " --out=" + out.filename().string();
     run_and_require_exit(cmd);
     REQUIRE(std::filesystem::exists(out));
 
