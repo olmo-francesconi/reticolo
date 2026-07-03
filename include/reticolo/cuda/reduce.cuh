@@ -204,7 +204,9 @@ reduce_sumsq_f32(float const* x, long n, cudaStream_t stream = nullptr) {
 }
 
 // Capacity a `partials` scratch buffer must have for the *_into reductions.
-inline constexpr long k_reduce_max_grid = 1024;
+// Derived from the grid cap so the two can never drift apart: `grid_for` never
+// returns more than kMaxGrid blocks, so partials of this size never overrun.
+inline constexpr long k_reduce_max_grid = kMaxGrid;
 
 // Device-scalar reductions for the HMC hot loop: write the result to out[0] on
 // the device (no host sync, no per-call allocation). `partials` is a caller-
