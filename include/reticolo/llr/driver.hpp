@@ -62,13 +62,20 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
         e_n_series.append(r->E_n());
     }
 
+    // Small flush chunk for these low-cardinality per-iteration series: with the
+    // default 4096 nothing reaches the file until the Series dtor at run end, so
+    // a crash loses the whole adaptation history. 64 rows bounds the loss to a
+    // handful of iterations at negligible HDF5 overhead.
+    constexpr std::size_t k_adapt_chunk = 64;
     std::vector<io::Series<double>> a_series;
     std::vector<io::Series<double>> de_series;
     a_series.reserve(n_rep_u);
     de_series.reserve(n_rep_u);
     for (int n = 0; n < n_rep; ++n) {
-        a_series.emplace_back(out.series<double>(std::format("/replica_{:03d}/a", n)));
-        de_series.emplace_back(out.series<double>(std::format("/replica_{:03d}/dE", n)));
+        a_series.emplace_back(
+            out.series<double>(std::format("/replica_{:03d}/a", n), k_adapt_chunk));
+        de_series.emplace_back(
+            out.series<double>(std::format("/replica_{:03d}/dE", n), k_adapt_chunk));
     }
     auto exch_series = out.series<int>("/exchange/accepted");
 
@@ -98,24 +105,26 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     for (int s = 0; s < spec.n_rm; ++s) {
 #pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            // Scope needed: iter() below logs from driver code inside the
-            // parallel region (Replica methods self-bind their own).
-            auto _  = log::scope(reps[n]->id());
             auto& r = *reps[n];
             r.thermalize(spec.n_therm_rm, log::Mode::silent);
             de_buf[n] = r.sample(spec.n_meas_rm, log::Mode::silent);
             a_buf[n]  = rm_update(r.a(), de_buf[n], spec.delta, s);
             r.set_a(a_buf[n]);
+        }
+        // Drain + per-replica progress log serially: the iter() call takes the
+        // global sink mutex and flushes two log files, so it must stay out of
+        // the parallel region (mirrors smoothed_driver). Bind each replica's
+        // scope here since we're no longer inside the Replica's own methods.
+        for (std::size_t n = 0; n < n_rep_u; ++n) {
+            auto _ = log::scope(reps[n]->id());
+            a_series[n].append(a_buf[n]);
+            de_series[n].append(de_buf[n]);
             iter("RM",
                  static_cast<std::size_t>(s + 1),
                  static_cast<std::size_t>(spec.n_rm),
                  a_buf[n],
                  de_buf[n],
                  spec.delta);
-        }
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            a_series[n].append(a_buf[n]);
-            de_series[n].append(de_buf[n]);
         }
 
         // Even/odd alternating nearest-neighbour exchange: serial — pairs
