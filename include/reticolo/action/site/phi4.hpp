@@ -89,7 +89,7 @@ struct Phi4 {
         detail::visit_nn<T>(l, [k, lam, out, sb](std::size_t i, T phi, T nbrs) {
             T const phi2 = phi * phi;
             T const dev  = phi2 - T{1};
-            out[i]       = detail::phi4_force_site<T>(phi, nbrs, k, lam);
+            out[i]       = detail::phi4_force_site_p2<T>(phi, phi2, nbrs, k, lam);
             sb[i]        = (-k * phi * nbrs) + phi2 + (lam * dev * dev);
         });
         double s = 0.0;

@@ -10,6 +10,11 @@
 
 namespace reticolo::math::su2 {
 
+// NOTE: the per-link formulas here are copied verbatim into the device path
+// cuda::SU2Device (cuda/gauge/su2_device.cuh) — CPU side is Sleef-batched slabs,
+// device side is register-local, so they can't share code. Edit one, mirror the
+// other; test_cuda_su2 asserts device-vs-host agreement and fails on drift.
+//
 // Hand-written 2×2 complex matrix kernels for SU(2) lattice gauge fields.
 //
 // Storage layout (one link element, 8 real doubles):
@@ -345,19 +350,33 @@ template <std::size_t B, class T>
     double const b_re = 0.5 * (m[2] - m[4]);
     double const b_im = 0.5 * (m[3] + m[5]);
     double const n_sq = (a_re * a_re) + (a_im * a_im) + (b_re * b_re) + (b_im * b_im);
-    double const inv  = 1.0 / std::sqrt(n_sq);
-    double const ar   = a_re * inv;
-    double const ai   = a_im * inv;
-    double const br   = b_re * inv;
-    double const bi   = b_im * inv;
-    m[0]              = ar;
-    m[1]              = ai;
-    m[2]              = br;
-    m[3]              = bi;
-    m[4]              = -br;
-    m[5]              = bi;
-    m[6]              = ar;
-    m[7]              = -ai;
+    // Degenerate input (near-zero quaternion) has no meaningful SU(2)
+    // projection; fall back to the identity rather than divide by ~0. Mirrors
+    // the h≈0 guard in exp_su2. Physically unreachable post-trajectory.
+    if (n_sq < 1.0e-24) {
+        m[0] = 1.0;
+        m[1] = 0.0;
+        m[2] = 0.0;
+        m[3] = 0.0;
+        m[4] = 0.0;
+        m[5] = 0.0;
+        m[6] = 1.0;
+        m[7] = 0.0;
+        return;
+    }
+    double const inv = 1.0 / std::sqrt(n_sq);
+    double const ar  = a_re * inv;
+    double const ai  = a_im * inv;
+    double const br  = b_re * inv;
+    double const bi  = b_im * inv;
+    m[0]             = ar;
+    m[1]             = ai;
+    m[2]             = br;
+    m[3]             = bi;
+    m[4]             = -br;
+    m[5]             = bi;
+    m[6]             = ar;
+    m[7]             = -ai;
 }
 
 // ---------- slab driver: walk n sites, call per-site kernel inline ----------

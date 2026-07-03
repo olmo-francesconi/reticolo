@@ -10,6 +10,13 @@
 
 namespace reticolo::math::su3 {
 
+// NOTE: the per-link formulas here (mul/mul_adj/adj_mul/traceless_antiherm/
+// exp_su3) are copied verbatim into the device path cuda::SU3Device
+// (cuda/gauge/su3_device.cuh) — the CPU side is Sleef-batched slabs, the device
+// side is register-local, so they can't literally share code. If you edit the
+// math below, mirror it there; test_cuda_su3 asserts device-vs-host agreement
+// and will fail on drift.
+//
 // Hand-written 3×3 complex matrix kernels for SU(3) lattice gauge fields.
 //
 // Storage layout (one link element, 18 real doubles):

@@ -20,13 +20,19 @@ namespace reticolo::alg::integ {
 // the additive update is correct for the momentum buffer regardless of
 // whether the *field* lives on a group.
 
+// The MD time step is always a real scalar even when the field is complex —
+// using `real_scalar_t<F>` for the coefficient turns `c * p[i]` into a
+// real×complex (2 mults, no inf/NaN-recovery branch) instead of a full
+// complex×complex, which also unblocks vectorisation. `__restrict` on the
+// output tells the vectoriser the store buffer can't alias the input (field,
+// mom, and force are always distinct sibling lattices).
 template <class Field, class Mom>
 inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
-    using F             = typename Field::value_type;
-    F* const f          = field.data();
-    auto const* const p = mom.data();
-    std::size_t const n = flat_size(field);
-    F const c           = static_cast<F>(cdt);
+    using F                        = typename Field::value_type;
+    F* __restrict const f          = field.data();
+    auto const* __restrict const p = mom.data();
+    std::size_t const n            = flat_size(field);
+    real_scalar_t<F> const c       = static_cast<real_scalar_t<F>>(cdt);
     for (std::size_t i = 0; i < n; ++i) {
         f[i] += c * p[i];
     }
@@ -34,11 +40,11 @@ inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
 
 template <class Mom, class Force>
 inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
-    using F              = typename Mom::value_type;
-    F* const m           = mom.data();
-    auto const* const fp = force.data();
-    std::size_t const n  = flat_size(mom);
-    F const c            = static_cast<F>(kdt);
+    using F                         = typename Mom::value_type;
+    F* __restrict const m           = mom.data();
+    auto const* __restrict const fp = force.data();
+    std::size_t const n             = flat_size(mom);
+    real_scalar_t<F> const c        = static_cast<real_scalar_t<F>>(kdt);
     for (std::size_t i = 0; i < n; ++i) {
         m[i] += c * fp[i];
     }

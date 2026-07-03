@@ -111,6 +111,18 @@ public:
         }
     }
 
+    // The action is retained by `const&` — binding it to a temporary would
+    // dangle for the life of the driver. Delete construction from an rvalue
+    // action so the mistake is a compile error. (field_/rng_ are non-const
+    // lvalue references, so temporaries there already fail to bind — only the
+    // const-ref action needs an explicit guard.)
+    Hmc(A const&& action,
+        Field& field,
+        R& rng,
+        HmcSpec const& spec,
+        Integrator         = {},
+        log::Mode announce = log::Mode::normal) = delete;
+
     void describe(log::Entry& e) const {
         e.line("HMC<{}>", Integrator::name);
         e.param("τ={:.3f}", tau_);

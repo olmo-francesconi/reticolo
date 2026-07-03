@@ -11,11 +11,17 @@
 
 namespace reticolo::action::detail {
 
-// F(x) = -dS/dphi(x), given phi and the sum over ALL 2*ndims neighbours.
+// F(x) = -dS/dphi(x), given phi, phi², and the sum over ALL 2*ndims neighbours.
+// The phi²-taking form lets callers that already hold phi² (s_full_and_force)
+// skip the recompute; the plain overload delegates to it.
+template <class T>
+[[nodiscard]] RETICOLO_HD inline T phi4_force_site_p2(T phi, T phi2, T nbrs, T kappa, T lambda) {
+    return (T{2} * kappa * nbrs) - (T{2} * phi) - (T{4} * lambda * phi * (phi2 - T{1}));
+}
+
 template <class T>
 [[nodiscard]] RETICOLO_HD inline T phi4_force_site(T phi, T nbrs, T kappa, T lambda) {
-    T const phi2 = phi * phi;
-    return (T{2} * kappa * nbrs) - (T{2} * phi) - (T{4} * lambda * phi * (phi2 - T{1}));
+    return phi4_force_site_p2<T>(phi, phi * phi, nbrs, kappa, lambda);
 }
 
 // Per-site action contribution, given phi and the sum over the d FORWARD
