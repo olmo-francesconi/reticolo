@@ -93,6 +93,10 @@ Plain structs satisfying C++20 concepts in
 [`<reticolo/action/detail/concepts.hpp>`](../include/reticolo/action/detail/concepts.hpp).
 No base class, no virtual, no `register_action`. An action just *has* the
 right member functions; the HMC updater concept-checks at the call site.
+(The "no virtual" invariant is about the HMC hot loop — actions, integrators,
+the updater. It is not a blanket ban: `cli::Parser`'s `VarSlotBase` type-erasure
+is one small virtual hierarchy off the hot path, in the CLI layer, and that's
+fine. A bare `grep virtual` will hit it; that's not an invariant break.)
 Actions split into two families by field type — site actions (`Lattice<F>`)
 under `action/site/`, gauge actions (`LinkLattice<F>` /
 `MatrixLinkLattice<G,F>`) under `action/gauge/` — but they satisfy the **same**
