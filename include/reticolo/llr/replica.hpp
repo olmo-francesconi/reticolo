@@ -138,13 +138,20 @@ public:
         return dE;
     }
 
-    // Exchange energy E = S_base of the current config. Reads the base
-    // action's post-trajectory cache (populated by HMC's h1 s_full, rolled
-    // back on reject) instead of a fresh O(V) sweep — valid once at least
-    // one trajectory has run, which the drivers guarantee (exchange only
-    // happens after `sample`).
+    // Exchange energy E = the LLR constraint observable of the current config:
+    // S_I (imaginary part) in the complex mode-B path, S_base in real mode A.
+    // This is the observable `a` couples to, so the swap acceptance must use it
+    // (mode A: S_base == s_full; mode B: S_I == s_imag — mirrors `sample()`).
+    // Reads the base action's post-trajectory cache (populated by HMC, rolled
+    // back on reject) instead of a fresh O(V) sweep — valid once at least one
+    // trajectory has run, which the drivers guarantee (exchange only happens
+    // after `sample`).
     [[nodiscard]] scalar_t energy() const noexcept {
-        return static_cast<scalar_t>(windowed_.base.last_s_full());
+        if constexpr (Windowed::k_complex) {
+            return static_cast<scalar_t>(windowed_.base.last_s_imag());
+        } else {
+            return static_cast<scalar_t>(windowed_.base.last_s_full());
+        }
     }
 
     // After an accepted exchange swaps the two fields, each base action's

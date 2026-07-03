@@ -8,9 +8,10 @@
 // Reuses the CPU host math verbatim — llr::nr_update / rm_update. Exchange is
 // param-swap (see Replica::swap_window): windows migrate across slots, so E_n is
 // written as a per-slot series and analysis groups by E_n. The acceptance is the
-// same linear LLR form the CPU uses, exp((a_i - a_j)(E_i - E_j)); param-swap
-// gives the identical acceptance and a slot-relabeled state, so the ensemble
-// matches the CPU config-swap up to the (E_n-grouped) relabeling.
+// same Gaussian-window form the CPU uses (linear tilt + window quadratic
+// cross-term, see llr::try_exchange); param-swap gives the identical acceptance
+// and a slot-relabeled state, so the ensemble matches the CPU config-swap up to
+// the (E_n-grouped) relabeling.
 
 #include <reticolo/core/log.hpp>
 #include <reticolo/io/writer.hpp>
@@ -162,9 +163,20 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
             std::size_t const off = static_cast<std::size_t>(s & 1);
             for (std::size_t i = off; i + 1 < reps.size(); i += 2) {
                 ++attempts;
-                double const e_i   = reps[i]->energy();
-                double const e_j   = reps[i + 1]->energy();
-                double const log_p = (reps[i]->a() - reps[i + 1]->a()) * (e_i - e_j);
+                double const e_i = reps[i]->energy();
+                double const e_j = reps[i + 1]->energy();
+                // Gaussian-window acceptance: linear tilt + the window quadratic
+                // cross-term (exact for the Gaussian window; vanishes only when
+                // the two windows share E_n and δ). Mirrors CPU llr::try_exchange.
+                double const dq   = e_i - e_j;
+                double const qsum = e_i + e_j;
+                double const d_i  = reps[i]->delta();
+                double const d_j  = reps[i + 1]->delta();
+                double const lin  = (reps[i]->a() - reps[i + 1]->a()) * dq;
+                double const win =
+                    (dq / 2.0) * (((qsum - (2.0 * reps[i]->e_n())) / (d_i * d_i)) -
+                                  ((qsum - (2.0 * reps[i + 1]->e_n())) / (d_j * d_j)));
+                double const log_p = lin + win;
                 if (log_p >= 0.0 || exch_rng.uniform() < std::exp(log_p)) {
                     reps[i]->swap_window(*reps[i + 1]);
                     ++accepted;
