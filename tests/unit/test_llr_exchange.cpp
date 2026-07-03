@@ -81,6 +81,34 @@ TEST_CASE("llr::try_exchange: accepted swap moves fields and energy caches",
     REQUIRE(probe.s_full(r1.phi()) == Catch::Approx(e0).epsilon(1e-12));
 }
 
+TEST_CASE("llr::try_exchange: acceptance includes the Gaussian-window term",
+          "[unit][llr][exchange]") {
+    // Engineer a swap whose FULL log_p >= 0 (deterministic accept, no rng draw)
+    // while the linear-only part is hugely negative (would essentially always
+    // reject). Only passes if the window quadratic term is in the acceptance.
+    auto r0 = make_replica("r000", 77, 0.0);
+    auto r1 = make_replica("r001", 88, 0.0);
+    r0.hot_start(0.5);
+    r1.hot_start(0.5);
+
+    double const e0 = prime_energy_cache(r0);
+    double const e1 = prime_energy_cache(r1);
+    REQUIRE(e0 != e1);
+
+    // δ_0 = δ_1 = 1 ⇒ window term = (e0 − e1)(E_n1 − E_n0). Pick E_n so it = +60,
+    // and a so the linear term = −50 ⇒ full log_p = +10 ≥ 0 (accept), but the
+    // linear-only value −50 would reject with probability 1 − e^{−50} ≈ 1.
+    r0.set_delta(1.0);
+    r1.set_delta(1.0);
+    r0.set_E_n(0.0);
+    r1.set_E_n(60.0 / (e0 - e1));
+    r0.set_a(-50.0 / (e0 - e1));
+    r1.set_a(0.0);
+
+    FastRng rng{9};
+    REQUIRE(llr::try_exchange(r0, r1, rng));
+}
+
 TEST_CASE("llr::try_exchange: rejected swap leaves fields and energies untouched",
           "[unit][llr][exchange]") {
     auto r0 = make_replica("r000", 33, 0.0);
