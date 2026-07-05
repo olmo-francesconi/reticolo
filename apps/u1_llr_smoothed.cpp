@@ -20,9 +20,12 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action = action::CompactU1<double>;
-    using ReplicaT =
-        llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, LinkLattice<double>>;
+    using Action   = action::Wilson<gauge_group::U1, double>;
+    using ReplicaT = llr::Replica<Action,
+                                  FastRng,
+                                  alg::integ::Omelyan2,
+                                  double,
+                                  MatrixLinkLattice<gauge_group::U1, double>>;
 
     cli::Parser p{"u1_llr_smoothed", "Smoothed LLR for compact U(1) Wilson action"};
     auto const cf     = app::common_flags(p, {.L = 4, .out = "u1_llr_smoothed.h5"});
@@ -61,8 +64,8 @@ int main(int argc, char** argv) {
     log::start(cf.workspace, cf.out, /*replicas=*/true);
     std::string const outpath = app::out_path(cf);
 
-    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim),
-                                       static_cast<std::size_t>(cf.L));
+    MatrixLinkLattice<gauge_group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
+                                                              static_cast<std::size_t>(cf.L));
     Action const base{.beta = beta};
     log::act(base);
 

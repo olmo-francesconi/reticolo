@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/action/detail/gauge/gauge_group/su2.hpp>
+#include <reticolo/math/gauge_group/su2.hpp>
 #include <reticolo/core/hd.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/gauge/group_device.hpp>

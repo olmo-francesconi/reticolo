@@ -1,5 +1,5 @@
-#include <reticolo/action/detail/concepts.hpp>
-#include <reticolo/action/site/bose_gas.hpp>
+#include <reticolo/action/complex/bose_gas.hpp>
+#include <reticolo/action/concepts.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>

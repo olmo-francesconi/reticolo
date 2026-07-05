@@ -1,7 +1,8 @@
 #pragma once
 
-#include <reticolo/action/detail/site/helpers.hpp>
-#include <reticolo/action/detail/site/sine_gordon_formula.hpp>
+#include <reticolo/action/site/detail/site_action.hpp>
+#include <reticolo/action/site/detail/traversal.hpp>
+#include <reticolo/action/site/formula/sine_gordon_formula.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
@@ -9,9 +10,7 @@
 
 #include <cmath>
 #include <cstddef>
-#include <limits>
 #include <type_traits>
-#include <vector>
 
 namespace reticolo::action {
 
@@ -21,9 +20,14 @@ namespace reticolo::action {
 //   S = sum_x [ -2 kappa phi(x) sum_{mu>0} phi(x+mu)
 //               + phi(x)^2
 //               - alpha * cos(phi(x)) ]
+//
+// The per-site transcendental is the only reason this doesn't reduce to the
+// plain SiteAction kernels: on the f64 hot path sin(phi) is Sleef-batched into
+// the shared scratch by `prep`, and cos(phi) is batched inside the bespoke
+// `s_full`. The physics still lives entirely in `detail/sine_gordon_formula.hpp`.
 
 template <class T = double>
-struct SineGordon {
+struct SineGordon : detail::SiteAction<SineGordon<T>, T> {
     using value_type = T;
 
     T kappa = T{0};
@@ -35,100 +39,59 @@ struct SineGordon {
         e.param("α={:.3f}", alpha);
     }
 
-    // Per-site math in `T`, volume sum accumulated in (and returned as) `double`
-    // — see Phi4::s_full for the rationale.
+    // Fill the shared scratch with sin(phi) per site — Sleef-batched on f64,
+    // a scalar loop otherwise. Called by SiteAction before each force pass.
+    void prep(Lattice<T> const& l) const noexcept {
+        std::size_t const n = l.nsites();
+        this->ensure_scratch(n);
+        T* const sp       = this->scratch_.data();
+        T const* const in = l.data();
+        if constexpr (std::is_same_v<T, double>) {
+            math::sin_batch(sp, in, n);
+        } else {
+            for (std::size_t i = 0; i < n; ++i) {
+                sp[i] = std::sin(in[i]);
+            }
+        }
+    }
+
+    // force(x) = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x) - alpha sin(phi(x)).
+    // sin(phi) was staged into scratch by `prep`.
+    [[nodiscard]] auto force_kernel() const noexcept {
+        return [k = kappa, alp = alpha, sp = this->scratch_.data()](std::size_t i, T phi, T nbrs) {
+            return detail::sine_gordon_force_site<T>(phi, nbrs, sp[i], k, alp);
+        };
+    }
+
+    // Per-site math in `T`, volume sum accumulated in (and returned as) `double`.
+    // The -alpha*cos term is a Sleef-batched cos_sum on f64; the hopping+mass
+    // goes through the shared formula (cos folded to 0 there).
     [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
+        T const k   = kappa;
+        T const alp = alpha;
         double s{};
         if constexpr (std::is_same_v<T, double>) {
             std::size_t const n = l.nsites();
-            ensure_scratch_(n);
-            math::cos_batch(scratch.data(), l.data(), n);
-            T const k         = kappa;
-            T const alp       = alpha;
-            T const* const cs = scratch.data();
-            // Walk sites in the same row-major order as reduce_fwd; we
-            // accumulate -alpha*cos contributions via the scratch index
-            // since reduce_fwd's body has no i.
-            double cos_sum = 0.0;
+            this->ensure_scratch(n);
+            math::cos_batch(this->scratch_.data(), l.data(), n);
+            T const* const cs = this->scratch_.data();
+            double cos_sum    = 0.0;
             for (std::size_t i = 0; i < n; ++i) {
                 cos_sum += cs[i];
             }
-            // cos folded to 0 here — the -alpha·cos term is the Sleef-batched
-            // cos_sum added below; the per-site hopping+mass goes through the
-            // shared formula.
             double const hopping = detail::reduce_fwd<T, double>(l, [k, alp](T phi, T fwd_sum) {
                 return static_cast<double>(
                     detail::sine_gordon_action_site<T>(phi, fwd_sum, T{0}, k, alp));
             });
             s                    = hopping - (static_cast<double>(alp) * cos_sum);
         } else {
-            T const k   = kappa;
-            T const alp = alpha;
-            s           = detail::reduce_fwd<T, double>(l, [k, alp](T phi, T fwd_sum) {
+            s = detail::reduce_fwd<T, double>(l, [k, alp](T phi, T fwd_sum) {
                 return static_cast<double>(
                     detail::sine_gordon_action_site<T>(phi, fwd_sum, std::cos(phi), k, alp));
             });
         }
-        last_s_full_ = s;
+        this->last_s_full_ = s;
         return s;
-    }
-
-    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
-
-    // force(x) = -dS/dphi(x)
-    //         = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x) - alpha sin(phi(x))
-    void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-        T const k    = kappa;
-        T const alp  = alpha;
-        T* const out = force.data();
-        if constexpr (std::is_same_v<T, double>) {
-            std::size_t const n = l.nsites();
-            ensure_scratch_(n);
-            math::sin_batch(scratch.data(), l.data(), n);
-            T const* const sp = scratch.data();
-            detail::visit_nn<T>(l, [k, alp, out, sp](std::size_t i, T phi, T nbrs) {
-                out[i] = detail::sine_gordon_force_site<T>(phi, nbrs, sp[i], k, alp);
-            });
-        } else {
-            detail::visit_nn<T>(l, [k, alp, out](std::size_t i, T phi, T nbrs) {
-                out[i] = detail::sine_gordon_force_site<T>(phi, nbrs, std::sin(phi), k, alp);
-            });
-        }
-    }
-
-    // Fused force + leapfrog kick.
-    void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept {
-        T const k   = kappa;
-        T const alp = alpha;
-        T* const m  = mom.data();
-        if constexpr (std::is_same_v<T, double>) {
-            std::size_t const n = l.nsites();
-            ensure_scratch_(n);
-            math::sin_batch(scratch.data(), l.data(), n);
-            T const* const sp = scratch.data();
-            detail::visit_nn<T>(l, [k, alp, k_dt, m, sp](std::size_t i, T phi, T nbrs) {
-                m[i] += k_dt * detail::sine_gordon_force_site<T>(phi, nbrs, sp[i], k, alp);
-            });
-        } else {
-            detail::visit_nn<T>(l, [k, alp, k_dt, m](std::size_t i, T phi, T nbrs) {
-                m[i] += k_dt * detail::sine_gordon_force_site<T>(phi, nbrs, std::sin(phi), k, alp);
-            });
-        }
-    }
-
-    // Lazy per-site sin/cos scratch — populated by vector libm at the start
-    // of each force / s_full call and reused across MD steps. `mutable` so
-    // the public force/s_full methods can stay const.
-    mutable std::vector<T> scratch{};
-
-    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
-
-private:
-    void ensure_scratch_(std::size_t n) const noexcept {
-        if (scratch.size() < n) {
-            scratch.resize(n);
-        }
     }
 };
 

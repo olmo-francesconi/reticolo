@@ -18,8 +18,8 @@
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/log.hpp>
-#include <reticolo/cuda/actions/phi4.hpp>
-#include <reticolo/cuda/actions/wilson.hpp>
+#include <reticolo/cuda/actions/site/phi4.hpp>
+#include <reticolo/cuda/actions/gauge/wilson.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_field.hpp>

@@ -2,12 +2,12 @@
 // (io::Writer::field / io::Writer::rng_state / io::Reader / io::checkpoint).
 
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/io/checkpoint.hpp>
 #include <reticolo/io/reader.hpp>
 #include <reticolo/io/writer.hpp>
+#include <reticolo/math/gauge_group/u1.hpp>
 
 #include "../test_helpers.hpp"
 
@@ -76,27 +76,6 @@ TEST_CASE("scalar Lattice<complex<double>> round-trips bit-exact", "[io][checkpo
 
     for (std::size_t i = 0; i < phi.nsites(); ++i) {
         REQUIRE(phi.data()[i] == rt.data()[i]);
-    }
-}
-
-TEST_CASE("LinkLattice<double> round-trips bit-exact", "[io][checkpoint][link]") {
-    test::ScratchH5 scratch{"ckpt_link"};
-
-    LinkLattice<double>::SizeVec const shape{4, 4, 4};
-    LinkLattice<double> theta{shape};
-    fill_lattice(theta, [](std::size_t i) { return static_cast<double>(i % 17) * 0.1; });
-
-    {
-        io::Writer w{scratch.path()};
-        w.field("/field", theta);
-    }
-
-    io::Reader r{scratch.path()};
-    LinkLattice<double> rt{shape};
-    r.field("/field", rt);
-
-    for (std::size_t i = 0; i < theta.nlinks(); ++i) {
-        REQUIRE(theta.data()[i] == rt.data()[i]);
     }
 }
 
@@ -186,7 +165,8 @@ TEST_CASE("Reader::field rejects shape, scalar-type, and kind mismatches",
     }
 
     SECTION("wrong field kind throws") {
-        LinkLattice<double> bad{LinkLattice<double>::SizeVec{4, 4}};
+        MatrixLinkLattice<gauge_group::U1, double> bad{
+            MatrixLinkLattice<gauge_group::U1, double>::SizeVec{4, 4}};
         REQUIRE_THROWS_AS(r.field("/field", bad), std::runtime_error);
     }
 }

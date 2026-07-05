@@ -58,7 +58,7 @@ CLI flags are declared exactly as in a CPU app (`cli::Parser`, `app::common_flag
 
 ## Step 3 — stage the field, build the HMC
 
-Cold-start or `--resume` on the host `Lattice`/`MatrixLinkLattice`, copy to the
+Cold-start or `--resume` on the host `Lattice`/`MatrixMatrixLinkLattice<U1>`, copy to the
 device, then construct the generic device HMC with a reused integrator tag:
 
 ```cpp
@@ -131,10 +131,10 @@ still apply). Add a smoke test by mirroring
 ## Adding a new action to the GPU backend
 
 You do **not** rewrite the physics. The per-site formula already lives in
-`action/detail/site/<name>_formula.hpp` (or `action/detail/gauge/<name>_formula.hpp`),
+`action/<family>/formula/<name>_formula.hpp` (or `action/gauge/formula/<name>_formula.hpp`),
 annotated `RETICOLO_HD`. To run it on the GPU:
 
-1. Add `include/reticolo/cuda/actions/<name>.hpp`: device functors whose
+1. Add `include/reticolo/cuda/actions/<family>/<name>.hpp`: device functors whose
    `finalize()` calls the *same* `action::detail::<name>_*_site<T>(...)` formula,
    plus a `device_functors<action::<Name><T>>` trait wiring them to the site/
    plaquette launchers (copy `actions/phi4.hpp` for a scalar, `actions/wilson.hpp`

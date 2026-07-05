@@ -354,8 +354,7 @@ RETICOLO_IO_READER_INSTANTIATE(unsigned long long)
 template std::string Reader::attr<std::string>(std::string_view) const;
 
 #define RETICOLO_IO_READER_INSTANTIATE_FIELD(T)                                                    \
-    template void Reader::field<T>(std::string_view, Lattice<T>&) const;                           \
-    template void Reader::field<T>(std::string_view, LinkLattice<T>&) const;
+    template void Reader::field<T>(std::string_view, Lattice<T>&) const;
 RETICOLO_IO_READER_INSTANTIATE_FIELD(float)
 RETICOLO_IO_READER_INSTANTIATE_FIELD(double)
 RETICOLO_IO_READER_INSTANTIATE_FIELD(std::complex<float>)

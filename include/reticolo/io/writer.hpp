@@ -1,7 +1,6 @@
 #pragma once
 
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
 
@@ -122,9 +121,6 @@ public:
     template <class T>
     void field(std::string_view path, Lattice<T> const& lat);
 
-    template <class T>
-    void field(std::string_view path, LinkLattice<T> const& lat);
-
     template <class G, class T>
     void field(std::string_view path, MatrixLinkLattice<G, T> const& lat);
 
@@ -190,12 +186,6 @@ template <class T>
 void Writer::field(std::string_view path, Lattice<T> const& lat) {
     write_field_raw_(
         path, lat.data(), lat.nsites(), scalar_kind_of<T>(), FieldKind::scalar, lat.shape(), 1, "");
-}
-
-template <class T>
-void Writer::field(std::string_view path, LinkLattice<T> const& lat) {
-    write_field_raw_(
-        path, lat.data(), lat.nlinks(), scalar_kind_of<T>(), FieldKind::link, lat.shape(), 1, "");
 }
 
 template <class G, class T>

@@ -6,7 +6,7 @@ for four representative actions:
 | action       | field type                            |
 |--------------|---------------------------------------|
 | `phi4`       | scalar `Lattice<double>`              |
-| `compact_u1` | `LinkLattice<double>` (angle per link) |
+| `compact_u1` | `MatrixLinkLattice<U1>` (angle per link) |
 | `wilson_su2` | `MatrixLinkLattice<SU2>`              |
 | `wilson_su3` | `MatrixLinkLattice<SU3>`              |
 

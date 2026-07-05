@@ -1,0 +1,170 @@
+#pragma once
+
+#include <reticolo/action/complex/detail/traversal.hpp>
+#include <reticolo/core/lattice.hpp>
+
+#include <complex>
+#include <cstddef>
+#include <limits>
+
+// ComplexAction<Derived, T> — the common interface for complex scalar actions
+// with a sign problem, i.e. a total S = S_R + i·S_I where HMC samples the
+// real (phase-quenched) part S_R and S_I is the LLR constraint observable
+// (BoseGas today). It provides the full `HasImagPart` surface on top of the
+// baseline HMC one:
+//
+//   real part  : s_full / compute_force / compute_force_and_kick  (S_R, F_R)
+//   imag part  : s_imag / compute_force_imag                      (S_I, F_I)
+//   LLR mode B : compute_force_combined_and_kick                  (F_R + F_I)
+//   caches     : last_s_full / last_s_imag (+ restore_*)
+//
+// The real part is anisotropic (the last direction — "time" — may carry a
+// different weight, e.g. cosh(mu)), so it runs on the split-last drivers that
+// hand the leaf the full neighbour sum *and* the last-direction sum separately.
+// The imaginary part touches only the time direction, so it runs on the slab
+// sweeps below. All physics is in the leaf's kernels, which receive the lattice
+// (to read geometry-dependent prefactors like 2d + m²):
+//
+//   auto action_kernel(l) const;       // (phi, fwd_total, fwd_last) -> T (real S_R site)
+//   auto force_kernel(l)  const;       // (i, phi, nbrs_total, nbrs_last) -> complex (F_R)
+//   auto imag_action_kernel(l) const;  // (phi, phi_fwd_tau) -> T   (S_I site, ×2 folded in)
+//   auto imag_force_kernel(l)  const;  // (phi_fwd_tau, phi_bwd_tau) -> complex (F_I)
+
+namespace reticolo::action::detail {
+
+template <class Derived, class T>
+struct ComplexAction {
+    using complex_t = std::complex<T>;
+
+    // ---- real part (phase-quenched, what HMC samples) ----
+
+    [[nodiscard]] double s_full(Lattice<complex_t> const& l) const noexcept {
+        auto kern             = derived_().action_kernel(l);
+        complex_t const total = reduce_fwd_split_last<complex_t>(
+            l, [&kern](complex_t phi, complex_t fwd_total, complex_t fwd_last) {
+                return complex_t{kern(phi, fwd_total, fwd_last), T{0}};
+            });
+        double const s = static_cast<double>(std::real(total));
+        last_s_full_   = s;
+        return s;
+    }
+
+    void compute_force(Lattice<complex_t> const& l, Lattice<complex_t>& force) const noexcept {
+        auto kern            = derived_().force_kernel(l);
+        complex_t* const out = force.data();
+        visit_nn_split_last<complex_t>(
+            l, [&kern, out](std::size_t i, complex_t phi, complex_t nt, complex_t nl) {
+                out[i] = kern(i, phi, nt, nl);
+            });
+    }
+
+    void compute_force_and_kick(Lattice<complex_t> const& l,
+                                Lattice<complex_t>& mom,
+                                T k_dt) const noexcept {
+        auto kern          = derived_().force_kernel(l);
+        complex_t* const m = mom.data();
+        visit_nn_split_last<complex_t>(
+            l, [&kern, m, k_dt](std::size_t i, complex_t phi, complex_t nt, complex_t nl) {
+                m[i] += k_dt * kern(i, phi, nt, nl);
+            });
+    }
+
+    // ---- imaginary part (LLR constraint observable, time-direction only) ----
+
+    [[nodiscard]] double s_imag(Lattice<complex_t> const& l) const noexcept {
+        auto kern  = derived_().imag_action_kernel(l);
+        double acc = 0.0;
+        slab_reduce_tau_(l, [&](complex_t self, complex_t fwd_tau) {
+            acc += static_cast<double>(kern(self, fwd_tau));
+        });
+        last_s_imag_ = acc;
+        return acc;
+    }
+
+    void compute_force_imag(Lattice<complex_t> const& l, Lattice<complex_t>& force) const noexcept {
+        auto kern            = derived_().imag_force_kernel(l);
+        complex_t* const out = force.data();
+        slab_visit_tau_(l, [&](std::size_t i, complex_t fwd_tau, complex_t bwd_tau) {
+            out[i] = kern(fwd_tau, bwd_tau);
+        });
+    }
+
+    // Fused F_R + F_I into momentum: mom[i] += k_dt*(scale_r*F_R + scale_i*F_I),
+    // avoiding the imag-force scratch buffer and the merge round-trip. Picked up
+    // by WindowedAction (mode B) via concept detection.
+    void compute_force_combined_and_kick(Lattice<complex_t> const& l,
+                                         Lattice<complex_t>& mom,
+                                         T scale_r,
+                                         T scale_i,
+                                         T k_dt) const noexcept {
+        auto fk            = derived_().force_kernel(l);
+        complex_t* const m = mom.data();
+        T const k_r        = k_dt * scale_r;
+        visit_nn_split_last<complex_t>(
+            l, [&fk, m, k_r](std::size_t i, complex_t phi, complex_t nt, complex_t nl) {
+                m[i] += k_r * fk(i, phi, nt, nl);
+            });
+        auto ik     = derived_().imag_force_kernel(l);
+        T const k_i = k_dt * scale_i;
+        slab_visit_tau_(l, [&](std::size_t i, complex_t fwd_tau, complex_t bwd_tau) {
+            m[i] += k_i * ik(fwd_tau, bwd_tau);
+        });
+    }
+
+    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
+    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
+    [[nodiscard]] double last_s_imag() const noexcept { return last_s_imag_; }
+    void restore_last_s_imag(double v) const noexcept { last_s_imag_ = v; }
+
+    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
+    mutable double last_s_imag_ = std::numeric_limits<double>::quiet_NaN();
+
+private:
+    [[nodiscard]] Derived const& derived_() const noexcept {
+        return static_cast<Derived const&>(*this);
+    }
+
+    // Last dim τ ("time"): stride along τ is s_tau = nsites / L_tau, so the
+    // (w,·) → (w±1,·) shift is a constant ±s_tau in the flat layout — a plain
+    // bulk-vs-slab sweep with no per-site neighbour-table lookup.
+
+    // Forward-τ reduction: body(self, phi_{x+τ}).
+    template <class Body>
+    void slab_reduce_tau_(Lattice<complex_t> const& l, Body&& body) const noexcept {
+        std::size_t const d         = l.ndims();
+        std::size_t const L_tau     = l.shape()[d - 1];
+        std::size_t const n         = l.nsites();
+        std::size_t const s_tau     = n / L_tau;
+        complex_t const* const data = l.data();
+        for (std::size_t w = 0; w < L_tau; ++w) {
+            std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
+            std::size_t const base   = w * s_tau;
+            std::size_t const base_p = wp * s_tau;
+            for (std::size_t k = 0; k < s_tau; ++k) {
+                body(data[base + k], data[base_p + k]);
+            }
+        }
+    }
+
+    // Both-τ visit: body(i, phi_{x+τ}, phi_{x-τ}).
+    template <class Body>
+    void slab_visit_tau_(Lattice<complex_t> const& l, Body&& body) const noexcept {
+        std::size_t const d         = l.ndims();
+        std::size_t const L_tau     = l.shape()[d - 1];
+        std::size_t const n         = l.nsites();
+        std::size_t const s_tau     = n / L_tau;
+        complex_t const* const data = l.data();
+        for (std::size_t w = 0; w < L_tau; ++w) {
+            std::size_t const wm     = (w == 0) ? (L_tau - 1) : (w - 1);
+            std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
+            std::size_t const base   = w * s_tau;
+            std::size_t const base_m = wm * s_tau;
+            std::size_t const base_p = wp * s_tau;
+            for (std::size_t k = 0; k < s_tau; ++k) {
+                body(base + k, data[base_p + k], data[base_m + k]);
+            }
+        }
+    }
+};
+
+}  // namespace reticolo::action::detail

@@ -1,7 +1,6 @@
-#include <reticolo/action/gauge/compact_u1.hpp>
+#include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
-#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 
@@ -13,9 +12,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 using reticolo::FastRng;
-using reticolo::LinkLattice;
+using reticolo::MatrixLinkLattice;
 using reticolo::Site;
-using reticolo::action::CompactU1;
+using reticolo::action::Wilson;
+namespace gauge_group = reticolo::gauge_group;
 using reticolo::alg::Hmc;
 using reticolo::alg::integ::Leapfrog;
 using reticolo::alg::integ::Omelyan2;
@@ -23,13 +23,13 @@ using reticolo::alg::integ::Omelyan4;
 
 template <class Integrator>
 static void check_reversibility() {
-    CompactU1<double> const action{.beta = 1.0};
+    Wilson<gauge_group::U1, double> const action{.beta = 1.0};
 
-    LinkLattice<double> links{{4, 4, 4, 4}};
+    MatrixLinkLattice<gauge_group::U1, double> links{{4, 4, 4, 4}};
     FastRng rng{31415};
     {
         double* const d     = links.data();
-        std::size_t const n = links.nlinks();
+        std::size_t const n = links.ncomponents();
         for (std::size_t i = 0; i < n; ++i) {
             d[i] = rng.normal();
         }
@@ -44,7 +44,7 @@ static void check_reversibility() {
             mp[i] = rng.normal();
         }
     }
-    std::size_t const nl = links.nlinks();
+    std::size_t const nl = links.ncomponents();
     std::vector<double> q0(nl);
     std::vector<double> p0(nl);
     double const* const qp = links.data();

@@ -1,4 +1,4 @@
-#include <reticolo/cuda/actions/phi4.hpp>
+#include <reticolo/cuda/actions/site/phi4.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>
@@ -74,9 +74,9 @@ bool stencil_force_matches_fd() {
 
 }  // namespace reticolo::cuda
 
-#include <reticolo/action/detail/gauge/gauge_group/su2.hpp>
-#include <reticolo/action/detail/gauge/gauge_group/su3.hpp>
-#include <reticolo/action/detail/gauge/gauge_group/u1.hpp>
+#include <reticolo/math/gauge_group/su2.hpp>
+#include <reticolo/math/gauge_group/su3.hpp>
+#include <reticolo/math/gauge_group/u1.hpp>
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 

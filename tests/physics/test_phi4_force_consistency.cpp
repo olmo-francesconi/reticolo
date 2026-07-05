@@ -1,4 +1,4 @@
-#include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/action/concepts.hpp>
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng.hpp>

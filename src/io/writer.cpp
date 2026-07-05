@@ -1,6 +1,5 @@
 #include <reticolo/cli/parser.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
@@ -660,8 +659,7 @@ void Writer::rng_state(std::string_view path, FastRng const& rng) {
 }
 
 #define RETICOLO_IO_INSTANTIATE_FIELD(T)                                                           \
-    template void Writer::field<T>(std::string_view, Lattice<T> const&);                           \
-    template void Writer::field<T>(std::string_view, LinkLattice<T> const&);
+    template void Writer::field<T>(std::string_view, Lattice<T> const&);
 RETICOLO_IO_INSTANTIATE_FIELD(float)
 RETICOLO_IO_INSTANTIATE_FIELD(double)
 RETICOLO_IO_INSTANTIATE_FIELD(std::complex<float>)

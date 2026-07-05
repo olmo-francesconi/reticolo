@@ -220,10 +220,10 @@ int main(int argc, char** argv) {
                 bench_kernels(os, ndim, L, "phi4", action, phi, phi.nsites(), budget);
             }
             if (actions.contains("compact_u1")) {
-                LinkLattice<double>::SizeVec const shape(nd, Lz);
-                LinkLattice<double> theta{shape, 0.0};
+                MatrixLinkLattice<gauge_group::U1, double>::SizeVec const shape(nd, Lz);
+                MatrixLinkLattice<gauge_group::U1, double> theta{shape};
                 hot_init(theta, rng);
-                action::CompactU1<double> const action{.beta = 1.0};
+                action::Wilson<gauge_group::U1, double> const action{.beta = 1.0};
                 bench_kernels(os, ndim, L, "compact_u1", action, theta, theta.nlinks(), budget);
             }
             if (actions.contains("wilson_su2")) {

@@ -128,7 +128,7 @@ void run_all() {
         std::size_t const nd = static_cast<std::size_t>(c.ndim);
         std::size_t const L_ = static_cast<std::size_t>(c.L);
         Lattice<double>::SizeVec const shape_s(nd, L_);
-        LinkLattice<double>::SizeVec const shape_l(nd, L_);
+        MatrixLinkLattice<gauge_group::U1, double>::SizeVec const shape_l(nd, L_);
 
         FastRng init_rng{42};
 
@@ -160,12 +160,12 @@ void run_all() {
             act::BoseGas<double> const action{.mass = 1.0, .lambda = 1.0, .mu = 0.9};
             bench_one(c.ndim, c.L, "BoseGas", action, phi, phi.nsites());
         }
-        // CompactU1 (LinkLattice<double>)
+        // CompactU1 (MatrixLinkLattice<gauge_group::U1, double>)
         {
-            LinkLattice<double> theta{shape_l, 0.0};
+            MatrixLinkLattice<gauge_group::U1, double> theta{shape_l};
             hot_init(theta, init_rng);
-            action::CompactU1<double> const action{.beta = 1.0};
-            bench_one(c.ndim, c.L, "CompactU1", action, theta, theta.nlinks());
+            action::Wilson<gauge_group::U1, double> const action{.beta = 1.0};
+            bench_one(c.ndim, c.L, "Wilson<U1>", action, theta, theta.nlinks());
         }
         // Wilson<SU2>
         {

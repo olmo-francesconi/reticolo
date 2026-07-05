@@ -7,7 +7,7 @@
 // link field is direction-major (link (mu, x) at flat index mu·nsites + x), the
 // same order as the host LinkLattice<T>.
 
-#include <reticolo/action/detail/gauge/compact_u1_formula.hpp>
+#include <reticolo/action/gauge/formula/wilson_u1_formula.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/reduce.cuh>

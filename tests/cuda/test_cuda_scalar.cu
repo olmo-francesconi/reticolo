@@ -1,12 +1,12 @@
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/action/site/phi6.hpp>
 #include <reticolo/action/site/sine_gordon.hpp>
-#include <reticolo/action/site/xy.hpp>
+#include <reticolo/action/bond/xy.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/cuda/actions/phi4.hpp>
-#include <reticolo/cuda/actions/phi6.hpp>
-#include <reticolo/cuda/actions/sine_gordon.hpp>
-#include <reticolo/cuda/actions/xy.hpp>
+#include <reticolo/cuda/actions/site/phi4.hpp>
+#include <reticolo/cuda/actions/site/phi6.hpp>
+#include <reticolo/cuda/actions/site/sine_gordon.hpp>
+#include <reticolo/cuda/actions/bond/xy.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_buffer.hpp>

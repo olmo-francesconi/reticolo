@@ -13,7 +13,7 @@
 // links rather than the full 2d stencil. The S_I reduction reuses the
 // deterministic reduce_sum primitive (reduce.cuh) for run-to-run reproducibility.
 
-#include <reticolo/action/detail/site/bose_gas_formula.hpp>
+#include <reticolo/action/complex/formula/bose_gas_formula.hpp>
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_topology.hpp>

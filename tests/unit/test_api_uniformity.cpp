@@ -52,9 +52,10 @@ TEST_CASE("s_full and its cache return double across actions", "[api][sfull]") {
     STATIC_REQUIRE(s_full_returns_double<act::SineGordon<float>, float>);
 
     // Gauge link action.
-    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<act::CompactU1<double> const&>().s_full(
-                                      std::declval<LinkLattice<double> const&>())),
-                                  double>);
+    STATIC_REQUIRE(
+        std::is_same_v<decltype(std::declval<act::Wilson<gauge_group::U1, double> const&>().s_full(
+                           std::declval<MatrixLinkLattice<gauge_group::U1, double> const&>())),
+                       double>);
 }
 
 TEST_CASE("BoseGas s_full / s_imag and caches return double", "[api][sfull][bose]") {
@@ -76,7 +77,8 @@ TEST_CASE("BoseGas fused kick takes a real coefficient and satisfies HasFusedKic
     using C = std::complex<double>;
     STATIC_REQUIRE(action::HasFusedKick<act::BoseGas<double>, Lattice<C>>);
     STATIC_REQUIRE(action::HasFusedKick<act::Phi4<double>, Lattice<double>>);
-    STATIC_REQUIRE(action::HasFusedKick<act::CompactU1<double>, LinkLattice<double>>);
+    STATIC_REQUIRE(action::HasFusedKick<act::Wilson<gauge_group::U1, double>,
+                                        MatrixLinkLattice<gauge_group::U1, double>>);
 
     // The kick coefficient parameter is a real double, not std::complex.
     using KickArg = double;

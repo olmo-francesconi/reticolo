@@ -1,10 +1,9 @@
 #pragma once
 
-#include <reticolo/action/detail/gauge/gauge_group/su2.hpp>
-#include <reticolo/action/detail/gauge/gauge_group/su3.hpp>
-#include <reticolo/action/detail/gauge/gauge_group/u1.hpp>
+#include <reticolo/math/gauge_group/su2.hpp>
+#include <reticolo/math/gauge_group/su3.hpp>
+#include <reticolo/math/gauge_group/u1.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/math/su2_ops.hpp>
 #include <reticolo/math/su3_ops.hpp>
@@ -61,14 +60,6 @@ void hot_init(Lattice<std::array<double, N>>& f, Rng& rng) noexcept {
             d[i][k] *= inv;
         }
     }
-}
-
-// ---- LinkLattice<double> ----------------------------------------------------
-template <class Rng>
-void hot_init(LinkLattice<double>& f, Rng& rng) noexcept {
-    double* const d     = f.data();
-    std::size_t const n = f.nlinks();
-    rng.normal_fill(d, n);
 }
 
 // ---- MatrixLinkLattice<SU2, double> -----------------------------------------

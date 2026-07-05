@@ -1,4 +1,4 @@
-#include <reticolo/action/detail/site/helpers.hpp>
+#include <reticolo/action/site/detail/traversal.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>

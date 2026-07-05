@@ -23,12 +23,12 @@
 // SU(N) staple force independently of the reversibility/order tests (which pin
 // the integrator to itself, not to s_full).
 
-#include <reticolo/action/detail/concepts.hpp>
-#include <reticolo/action/detail/gauge/gauge_group/su2.hpp>
-#include <reticolo/action/detail/gauge/gauge_group/su3.hpp>
+#include <reticolo/action/concepts.hpp>
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
+#include <reticolo/math/gauge_group/su2.hpp>
+#include <reticolo/math/gauge_group/su3.hpp>
 
 #include <cstddef>
 

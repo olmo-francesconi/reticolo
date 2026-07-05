@@ -4,7 +4,6 @@
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
 #include <reticolo/llr/windowed_action.hpp>

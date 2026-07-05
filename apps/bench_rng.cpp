@@ -111,7 +111,7 @@ void bench_rng_for(char const* rng_name) {
         char field_name[64];
         std::snprintf(field_name,
                       sizeof(field_name),
-                      "LinkLattice<double> %dD L=%zu",
+                      "gauge links %dD L=%zu",
                       static_cast<int>(shape.size()),
                       shape[0]);
         double const t = time_per_call([&] { rng.normal_fill(buf.data(), buf.size()); });

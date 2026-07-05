@@ -1,7 +1,6 @@
-#include <reticolo/action/gauge/compact_u1.hpp>
+#include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 
@@ -15,10 +14,11 @@
 using reticolo::FastRng;
 using reticolo::flat_size;
 using reticolo::Lattice;
-using reticolo::LinkLattice;
+using reticolo::MatrixLinkLattice;
 using reticolo::Site;
-using reticolo::action::CompactU1;
 using reticolo::action::Phi4;
+using reticolo::action::Wilson;
+namespace gauge_group = reticolo::gauge_group;
 
 // `s_full_and_force` must reproduce what the separate `s_full` +
 // `compute_force` kernels compute: the force exactly (same per-site
@@ -63,13 +63,13 @@ TEST_CASE("Phi4: s_full_and_force leaves the last_s_full cache untouched", "[uni
     REQUIRE(action.last_s_full() == cached);
 }
 
-TEST_CASE("CompactU1: s_full_and_force matches s_full + compute_force",
+TEST_CASE("Wilson<U1>: s_full_and_force matches s_full + compute_force",
           "[unit][compact_u1][fused]") {
-    CompactU1<double> const action{.beta = 1.0};
+    Wilson<gauge_group::U1, double> const action{.beta = 1.0};
 
-    LinkLattice<double> u{{4, 4, 4, 4}};
-    LinkLattice<double> f_fused{u.indexing()};
-    LinkLattice<double> f_ref{u.indexing()};
+    MatrixLinkLattice<gauge_group::U1, double> u{{4, 4, 4, 4}};
+    MatrixLinkLattice<gauge_group::U1, double> f_fused{u.indexing()};
+    MatrixLinkLattice<gauge_group::U1, double> f_ref{u.indexing()};
     FastRng rng{4321};
     for (auto& link : u) {
         link = (rng.uniform() - 0.5) * 2.0 * std::numbers::pi;
@@ -87,13 +87,13 @@ TEST_CASE("CompactU1: s_full_and_force matches s_full + compute_force",
     }
 }
 
-TEST_CASE("CompactU1<float>: s_full_and_force matches s_full + compute_force",
-          "[unit][compact_u1][fused]") {
-    CompactU1<float> const action{.beta = 1.0F};
+TEST_CASE("Wilson<gauge_group::U1, float>: s_full_and_force matches s_full + compute_force",
+          "[unit][wilson_u1][fused]") {
+    Wilson<gauge_group::U1, float> const action{.beta = 1.0F};
 
-    LinkLattice<float> u{{4, 4, 4, 4}};
-    LinkLattice<float> f_fused{u.indexing()};
-    LinkLattice<float> f_ref{u.indexing()};
+    MatrixLinkLattice<gauge_group::U1, float> u{{4, 4, 4, 4}};
+    MatrixLinkLattice<gauge_group::U1, float> f_fused{u.indexing()};
+    MatrixLinkLattice<gauge_group::U1, float> f_ref{u.indexing()};
     FastRng rng{999};
     for (auto& link : u) {
         link = static_cast<float>((rng.uniform() - 0.5) * 2.0 * std::numbers::pi);

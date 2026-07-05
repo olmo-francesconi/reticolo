@@ -3,12 +3,12 @@
 // must return to its starting configuration and the momentum to its negated
 // value to ~1e-9. Exercises Cayley-Hamilton drift + link-centric force.
 
-#include <reticolo/action/detail/gauge/gauge_group/su3.hpp>
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/rng.hpp>
+#include <reticolo/math/gauge_group/su3.hpp>
 #include <reticolo/math/su3_ops.hpp>
 
 #include <algorithm>

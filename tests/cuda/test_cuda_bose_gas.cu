@@ -1,9 +1,9 @@
-#include <reticolo/action/site/bose_gas.hpp>
+#include <reticolo/action/complex/bose_gas.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng.hpp>
-#include <reticolo/cuda/actions/bose_gas.hpp>
+#include <reticolo/cuda/actions/complex/bose_gas.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_buffer.hpp>
@@ -27,7 +27,7 @@
 // 2 reals/site), so the host Lattice<std::complex<T>> flat-copies in via a
 // reinterpret (layout-compatible). device_functors<BoseGas<T>> shares the S_R/F_R
 // per-site formula with the CPU action; the complex HMC atoms (drift/kick/kinetic
-// over 2·n reals) live in cuda/actions/bose_gas.hpp. (Excluded from the
+// over 2·n reals) live in cuda/actions/complex/bose_gas.hpp. (Excluded from the
 // no-integrator-kernels lint gate: it names alg::integ::Leapfrog.)
 
 namespace reticolo::cuda {

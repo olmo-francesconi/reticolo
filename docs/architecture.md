@@ -90,17 +90,21 @@ it.
 ## Actions
 
 Plain structs satisfying C++20 concepts in
-[`<reticolo/action/detail/concepts.hpp>`](../include/reticolo/action/detail/concepts.hpp).
+[`<reticolo/action/concepts.hpp>`](../include/reticolo/action/concepts.hpp).
 No base class, no virtual, no `register_action`. An action just *has* the
 right member functions; the HMC updater concept-checks at the call site.
 (The "no virtual" invariant is about the HMC hot loop — actions, integrators,
 the updater. It is not a blanket ban: `cli::Parser`'s `VarSlotBase` type-erasure
 is one small virtual hierarchy off the hot path, in the CLI layer, and that's
 fine. A bare `grep virtual` will hit it; that's not an invariant break.)
-Actions split into two families by field type — site actions (`Lattice<F>`)
-under `action/site/`, gauge actions (`LinkLattice<F>` /
-`MatrixLinkLattice<G,F>`) under `action/gauge/` — but they satisfy the **same**
-field-agnostic concepts; only the `Field` they name differs.
+Actions split into four families by interaction shape, one folder each:
+`action/site/` (scalar `Lattice<T>`, self + NN-sum: Phi4/Phi6/SineGordon),
+`action/bond/` (scalar `Lattice<T>`, endpoint-difference: XY), `action/complex/`
+(`Lattice<complex<T>>` sign problem: BoseGas), and `action/gauge/`
+(`MatrixLinkLattice<G,T>`: Wilson). All satisfy the
+**same** field-agnostic concepts; only the `Field` they name differs. Each family
+folder holds its leaf structs at the top, its per-action physics in `formula/`,
+and its shared machinery (the family base + traversal drivers) in `detail/`.
 
 ### The concepts
 
@@ -125,25 +129,54 @@ Earlier revisions carried a `LocalAction` Metropolis baseline
 are gone: HMC's `s_full`/`compute_force` are field-agnostic, so one concept set
 covers site and gauge alike.
 
+### Family bases — the physics is the only per-action code
+
+The concepts say *what members* an action needs; the **family bases** supply
+them so a leaf action carries only physics. Each base is a stateless CRTP mixin
+in its family's `detail/` (`action/<family>/detail/<family>_action.hpp`) that
+owns the loop shells, the fused kick, and the `last_s_full` cache, and calls back
+into the leaf's coupling-hoisting kernels:
+
+| base | field | leaf kernels (bind the shared `<family>/formula/*`) |
+| ---- | ----- | ---------------------------------------------------- |
+| `detail::SiteAction<D,T>`    | `Lattice<T>`              | `action_kernel()`, `force_kernel()` (NN-local: Phi4/Phi6/SineGordon) |
+| `detail::BondAction<D,T>`    | `Lattice<T>`              | `action_bond_kernel()`, `force_bond_kernel()`, `bond_scale()` (XY)   |
+| `detail::ComplexAction<D,T>` | `Lattice<complex<T>>`     | real + `imag_*` kernels (`HasImagPart`: BoseGas) |
+| `detail::GaugeAction<D>`     | link field               | `s_full_uncached()`, `force_into()` (Wilson`<G>`) |
+
+The scalar kernels return a lambda that captures the couplings by value, so the
+base hoists them into the hot loop exactly as a hand-written action would — the
+vectorised inner loop is unchanged. The gauge family is the odd one out: the
+plaquette *traversal* can't be shared (U(1) batches four signed angles through a
+Sleef cos/sin scratch on a `MatrixLinkLattice<U1,T>`; SU(N) batches complex matrix
+products on a `MatrixLinkLattice<G,T>`), so `detail::GaugeAction` only owns the
+cache + the concept surface and the leaf provides `s_full_uncached`/`force_into`
+(delegating the per-plaquette physics to `detail::wilson_kernels<G>` in the action layer; the group model `G` under `math/gauge_group/` holds only the core group ops).
+
 ### Example: `act::Phi4`
 
 ```cpp
 template <class T = double>
-struct Phi4 {
-    using value_type = T;
+struct Phi4 : detail::SiteAction<Phi4<T>, T> {   // base supplies s_full / compute_force /
+    using value_type = T;                        //   compute_force_and_kick / caches
     T kappa  = 0;
     T lambda = 0;
+    void describe(log::Entry&) const;
 
-    double s_full(Lattice<T> const&) const noexcept;
-    void   compute_force(Lattice<T> const&, Lattice<T>& force) const noexcept;
-    void   compute_force_and_kick(Lattice<T> const&, Lattice<T>& mom, T k) const noexcept;
+    auto force_kernel()  const { return [k=kappa,lam=lambda](std::size_t, T phi, T nbrs)
+                                        { return detail::phi4_force_site<T>(phi,nbrs,k,lam); }; }
+    auto action_kernel() const { return [k=kappa,lam=lambda](T phi, T fwd)
+                                        { return detail::phi4_action_site<T>(phi,fwd,k,lam); }; }
+    // optional LLR fast-path: double s_full_and_force(...) via this->staged_force_energy(...)
 };
 ```
 
-Satisfies `HmcAction<Phi4<double>, Lattice<double>>` and `HasFusedKick`, so it
-drives `alg::Hmc<Phi4<double>, FastRng>` directly. A new action is one header
-under `action/site/` (or `action/gauge/`) added to the family aggregator
-(`action/site.hpp` / `action/gauge.hpp`); nothing else changes.
+Deriving from `SiteAction` still leaves `Phi4` an aggregate (the base is
+stateless-by-designated-init), so `act::Phi4<double>{.kappa=…, .lambda=…}` is
+unchanged. It satisfies `HmcAction` + `HasFusedKick` and drives
+`alg::Hmc<Phi4<double>, FastRng>` directly. A new action is a formula file plus
+this ~10-line struct, added to the family aggregator (`action/site.hpp` /
+`action/gauge.hpp`); nothing else changes.
 
 Concept failures at the `alg::Hmc` instantiation site point at the missing
 member — read the compiler error.
@@ -339,11 +372,11 @@ neither is includable from a pure-host TU.
 
 The seam is a four-hop chain (Phi4 shown):
 
-1. `action/detail/phi4_formula.hpp` — the per-site formula, `RETICOLO_HD`, the
-   single source of truth.
+1. `action/site/formula/phi4_formula.hpp` — the per-site formula, `RETICOLO_HD`,
+   the single source of truth.
 2. `action::Phi4` (CPU) and `cuda::Phi4ForceFunctor` (GPU) **both call that same
    formula** — they cannot silently diverge.
-3. `cuda/actions/phi4.hpp` — the `device_functors<action::Phi4<T>>` trait adapts
+3. `cuda/actions/site/phi4.hpp` — the `device_functors<action::Phi4<T>>` trait adapts
    a *host* action struct into device launchers (force / s_full / sample_momenta).
 4. `cuda::DeviceAction<HostAction, Field>` + `cuda::Hmc<DAct, Integ, Field>` — the
    generic device HMC, reusing the *same* `alg::integ::*` integrator tags as the
@@ -431,7 +464,7 @@ sets `RETICOLO_ENABLE_OPENMP=OFF` explicitly.
 - `tests/unit/` — types in isolation: `Site`, `Indexing`, pool, `Lattice`,
   `FastRng`, `Parser`, observers, analysis.
 - `tests/physics/` — force-vs-FD consistency for every action,
-  HMC reversibility & integrator-order, Wilson<U1>-vs-CompactU1 equivalence.
+  HMC reversibility & integrator-order across the gauge groups.
 - `tests/io/` — Writer round-trips, metadata stamping, phase collision
   rejection, `/vars` stamping.
 - `tests/apps/` — every reference app smoke-tested end-to-end: run the

@@ -1,9 +1,8 @@
 #pragma once
 
-#include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/action/concepts.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/llr/detail/window_formula.hpp>
 
 #include <complex>

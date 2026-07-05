@@ -1,10 +1,9 @@
 #pragma once
 
-#include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/action/concepts.hpp>
 #include <reticolo/algorithm/integ_ops.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
 
 #include <cstddef>
 #include <string_view>

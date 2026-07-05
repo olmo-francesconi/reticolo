@@ -21,9 +21,9 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action = action::CompactU1<double>;
+    using Action = action::Wilson<gauge_group::U1, double>;
     using ReplicaT =
-        llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, LinkLattice<double>>;
+        llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, MatrixLinkLattice<gauge_group::U1, double>>;
 
     cli::Parser p{"u1_llr_smoothed", "Smoothed LLR for compact U(1) Wilson action"};
     auto const& L     = p.opt<int>("L,size", 4, "linear lattice extent");
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
     log::start(workspace, outfile, /*replicas=*/true);
     std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
 
-    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    MatrixLinkLattice<gauge_group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Action const base{.beta = beta};
     log::act(base);
 

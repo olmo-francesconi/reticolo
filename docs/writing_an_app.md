@@ -191,23 +191,30 @@ thermalisation).
 
 # Adding an action
 
-Two families, two recipes. Both keep the action a plain aggregate that
-satisfies `HmcAction` (`s_full` + `compute_force`) — the compiler is the only
-registry, there is nothing to "register" beyond an `#include` in the family
-aggregator.
+Three steps: **pick a family**, **write the formula**, **wire it up**. The
+family base supplies all the machinery (`s_full` / `compute_force` / the fused
+kick / the `last_s_full` cache); the leaf carries only the physics. The compiler
+is the only registry — there is nothing to "register" beyond an `#include` in
+the family aggregator.
+
+Pick the family base by the shape of the interaction:
+
+| family | base / handle | field | when |
+| ------ | ------------- | ----- | ---- |
+| site   | `detail::SiteAction<D,T>`    | `Lattice<T>`          | self + nearest-neighbour sum (Phi4/Phi6/SineGordon) |
+| bond   | `detail::BondAction<D,T>`    | `Lattice<T>`          | transcendental of the endpoint *difference* (XY) |
+| complex| `detail::ComplexAction<D,T>` | `Lattice<complex<T>>` | S = S_R + i·S_I sign problem (BoseGas) |
+| gauge  | `detail::GaugeAction<D>`     | link field            | plaquette gauge theory — usually just write a group model (see below) |
 
 ## A new site action
 
-A site action lives on a `Lattice<F>`. The per-site math is a `RETICOLO_HD`
-formula (shared verbatim with the CUDA backend); the struct is a thin wrapper
-around the shared `detail::reduce_fwd` / `detail::visit_nn` traversal
-primitives. Copy `site/phi4.hpp` + `detail/site/phi4_formula.hpp` and swap
-three things: the formula body, the couplings, and `describe`.
+Copy `site/phi4.hpp` + `site/formula/phi4_formula.hpp` and swap the formula body,
+the couplings, and `describe`.
 
-1. **Formula** — `include/reticolo/action/detail/site/<name>_formula.hpp`. Two
+1. **Formula** — `include/reticolo/action/<family>/formula/<name>_formula.hpp`. Two
    `RETICOLO_HD inline` free templates in `namespace reticolo::action::detail`,
-   taking pre-gathered neighbour sums (this is the single source of truth — the
-   CUDA functors call the *same* functions):
+   taking pre-gathered neighbour sums. **This is all the physics**, and the
+   single source of truth — the CUDA functors call the *same* functions:
 
    ```cpp
    template <class T>
@@ -218,39 +225,36 @@ three things: the formula body, the couplings, and `describe`.
    //   `nbrs` = sum over all 2·ndim neighbours; returns the force -dS/dphi(x)
    ```
 
-2. **Struct** — `include/reticolo/action/site/<name>.hpp`, a designated-init
-   aggregate:
+2. **Struct** — `include/reticolo/action/site/<name>.hpp`. Derive from the base
+   and bind the couplings into the formula with two kernels. It stays a
+   designated-init aggregate:
 
    ```cpp
    template <class T = double>
-   struct MyAction {
+   struct MyAction : detail::SiteAction<MyAction<T>, T> {
        using value_type = T;
        T c1 = T{0};                       // couplings
        void describe(log::Entry& e) const { e.line("MyAction<{}>", scalar_name<T>()); e.param("c1={:.3f}", c1); }
 
-       [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
-           double const s = detail::reduce_fwd<T, double>(l, [c = c1](T phi, T fwd) {
-               return static_cast<double>(detail::myaction_action_site<T>(phi, fwd, c)); });
-           last_s_full_ = s; return s;
-       }
-       void compute_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
-           T* const out = force.data();
-           detail::visit_nn<T>(l, [c = c1, out](std::size_t i, T phi, T nbrs) {
-               out[i] = detail::myaction_force_site<T>(phi, nbrs, c); });
-       }
-       // Optional → HasFusedKick: the same visit_nn doing `mom[i] += k_dt * force_site(...)` in place.
-       void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept { /* ... */ }
-
-       [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
-       void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
-       mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
+       auto force_kernel()  const { return [c = c1](std::size_t /*i*/, T phi, T nbrs)
+                                           { return detail::myaction_force_site<T>(phi, nbrs, c); }; }
+       auto action_kernel() const { return [c = c1](T phi, T fwd)
+                                           { return detail::myaction_action_site<T>(phi, fwd, c); }; }
    };
    ```
 
-   `s_full` + `compute_force` ⇒ `HmcAction`; add `compute_force_and_kick` for
-   `HasFusedKick` (the integrator's preferred path). A complex action with a
-   sign problem adds `s_imag` + `compute_force_imag` for `HasImagPart` — copy
-   `site/bose_gas.hpp`.
+   The base gives you `HmcAction` + `HasFusedKick` from these two kernels. The
+   couplings are captured by value, so the hot loop is byte-for-byte what a
+   hand-written action would emit. Two opt-in refinements the base picks up by
+   concept when the leaf provides them: a `prep(l)` hook (called before each
+   force pass — `SineGordon` uses it to Sleef-batch `sin` into `this->scratch_`),
+   and an LLR fast-path `s_full_and_force` built from `this->staged_force_energy`
+   (see `phi4.hpp`).
+
+   Other shapes: for a bond action derive `detail::BondAction` and provide
+   `action_bond_kernel` / `force_bond_kernel` / `bond_scale` (copy `site/xy.hpp`);
+   for a complex sign-problem action derive `detail::ComplexAction` and add the
+   `imag_*` kernels (copy `site/bose_gas.hpp`).
 
 3. **Register** — add `#include <reticolo/action/site/<name>.hpp>` to
    `include/reticolo/action/site.hpp`. `alg::Hmc<MyAction<double>, FastRng>`
@@ -259,20 +263,32 @@ three things: the formula body, the couplings, and `describe`.
 4. **App + test** — copy `apps/phi4_hmc.cpp`; add a force-vs-FD test (pattern
    #2 below) under `tests/physics/`.
 
-Two scalar actions deviate from this skeleton — `sine_gordon` Sleef-batches
-`sin`/`cos` into a scratch buffer before the visit, and `xy` is bond-based with
-no fused kick. If your action is shaped like one of those, copy it instead.
-
 ## A new gauge group
 
-A gauge group `G` is the template parameter to the generic `Wilson<G>` action
-over `MatrixLinkLattice<G, T>`. This is a bigger job than a site action: `G`
-owns the group representation, the HMC algebra, *and* the plaquette/force
-kernels. **Copy `SU2`** (`detail/gauge/gauge_group/su2.hpp` +
-`math/su2_ops.hpp`) — it's the simplest matrix group.
+A gauge group `G` is the template parameter to the generic `Wilson<G>` plaquette
+action over `MatrixLinkLattice<G, T>`. The work splits in two, along the
+core-math / action-physics line:
 
-1. **Concept members** (the `GaugeGroup` concept lives in
-   `detail/gauge/gauge_group/base.hpp`):
+- **the group model** — `include/reticolo/math/gauge_group/<g>.hpp`: the *core
+  group operations only* — the constants (`n_color`, `n_real_components`, `name`)
+  and the HMC algebra hooks (`sample_algebra_slab` / `kinetic_slab` /
+  `expi_lmul_slab`) the integrator calls. This is pure group math; it lives under
+  `math/` and knows nothing about the Wilson action.
+- **the Wilson kernels** — `include/reticolo/action/gauge/formula/wilson_<g>.hpp`:
+  a `detail::wilson_kernels<G>` specialization holding the plaquette *physics*
+  (`plaq_re_tr`, the `s_full_plane_re_tr_sum` fast-path, `compute_force`,
+  `compute_force_and_kick`). This is action-specific and lives in the action layer.
+
+`Wilson<G>` (and the hand-tuned U(1) `CompactU1`) derive from the
+`detail::GaugeAction<D>` base, which owns the `last_s_full` cache and the concept
+surface; `Wilson<G>` dispatches its plaquette work to `wilson_kernels<G>`. (A
+genuinely new gauge *action* — improved, rectangle — derives from
+`detail::GaugeAction` and writes its own `s_full_uncached` / `force_into`.)
+**Copy `SU2`** (`math/gauge_group/su2.hpp` + `action/gauge/formula/wilson_su2.hpp`
++ `math/su2_ops.hpp`) — the simplest matrix group.
+
+1. **Group model: concept members** (the `GaugeGroup` concept lives in
+   `math/gauge_group/base.hpp`):
 
    ```cpp
    struct MyGroup {
@@ -298,8 +314,9 @@ kernels. **Copy `SU2`** (`detail/gauge/gauge_group/su2.hpp` +
    piece — the SU(N) analogue of the scalar `phi += dt·mom`, and the one device
    exception to the shared-formula rule.
 
-3. **Plaquette + force kernels** — the statics `Wilson<G>` delegates to
-   (see `gauge/wilson.hpp`):
+3. **Wilson kernels** — a `template <> struct detail::wilson_kernels<MyGroup>`
+   in `action/gauge/formula/wilson_<g>.hpp` with the statics `Wilson<G>`
+   dispatches to:
 
    ```cpp
    static double plaq_re_tr(mb, nb, s, s_pmu, s_pnu, stride);                    // Re Tr U_p
@@ -310,14 +327,15 @@ kernels. **Copy `SU2`** (`detail/gauge/gauge_group/su2.hpp` +
 
    Component `k` of the link at site `s` in direction `μ`'s block is at
    `block_ptr[k·stride + s]` (stride = `nsites`). SU(2)/SU(3) batch these over
-   `k_gauge_batch<T>` sites — start unbatched (a plain per-site loop, like the
-   Abelian `CompactU1`) and add batching only if it's a measured bottleneck.
+   `gauge_group::k_gauge_batch<T>` sites — start unbatched (a plain per-site loop,
+   like the Abelian `CompactU1`) and add batching only if it's a measured
+   bottleneck.
 
-4. **Register + use** — add the group header next to the other
-   `gauge_group/*` includes in `include/reticolo/reticolo.hpp`; `Wilson<MyGroup,
-   double>` is then an `HmcAction`. Copy `apps/su2_hmc.cpp`, and add a
-   reversibility test (pattern #3) plus an equivalence check against a known
-   limit.
+4. **Register + use** — `#include` the new `wilson_<g>.hpp` from
+   `action/gauge/wilson.hpp` (it bundles the shipped groups so `Wilson<G>`
+   resolves from a single include). `Wilson<MyGroup, double>` is then an
+   `HmcAction`. Copy `apps/su2_hmc.cpp`, and add a reversibility test (pattern #3)
+   plus an equivalence check against a known limit.
 
 The Abelian case (`U(1)`) is degenerate — `n_real_components = 1` (just the
 angle), no matrix exponential — and already ships both the hand-tuned

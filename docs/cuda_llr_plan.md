@@ -424,5 +424,5 @@ per MD step pays outsized. The fraction shrinks on larger V / faster f64 GPUs.
    consequence of param-swap) vs. keeping windows slot-fixed via config D2D-swap.
 2. ~~Force-scale reduction cost: one extra base-S reduction per force eval.~~
    **Resolved** — folded into the force stencil/staple gather (site + gauge fusion).
-3. ~~First app = Phi4 (scalar). Add CompactU1 / Wilson variants.~~ **Done** —
+3. ~~First app = Phi4 (scalar). Add Wilson<U1> / Wilson variants.~~ **Done** —
    Phi4/Phi6/SineGordon/Xy + U(1)/SU(2)/SU(3), all fused.

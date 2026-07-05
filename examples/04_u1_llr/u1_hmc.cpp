@@ -8,7 +8,7 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action = action::CompactU1<double>;
+    using Action = action::Wilson<gauge_group::U1, double>;
 
     // ---- CLI ----
     cli::Parser p{"u1_hmc", "Compact U(1) Wilson action, HMC (link-field)"};
@@ -33,8 +33,8 @@ int main(int argc, char** argv) {
     std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
 
     // ---- State: links, RNG, action ----
-    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
-    LinkLattice<double> links{shape, 0.0};
+    MatrixLinkLattice<gauge_group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    MatrixLinkLattice<gauge_group::U1, double> links{shape};
     FastRng rng{seed};
     Action const action{.beta = beta};
     log::act(action);

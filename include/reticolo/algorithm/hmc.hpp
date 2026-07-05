@@ -1,10 +1,9 @@
 #pragma once
 
-#include <reticolo/action/detail/concepts.hpp>
+#include <reticolo/action/concepts.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
 #include <reticolo/core/rng.hpp>
@@ -57,7 +56,7 @@ struct HmcResult {
 //   - anything else:          per-element static_cast<F>(rng_.normal())
 
 // The field-agnostic action gate `action::HmcAction<A, Field>` (defined in
-// action/detail/concepts.hpp) is the single source of truth: any action with
+// action/concepts.hpp) is the single source of truth: any action with
 // `s_full(field)` and `compute_force(field, force)` qualifies — scalar, U(1),
 // and `Wilson<G>` over `MatrixLinkLattice<G, T>` all satisfy it directly.
 using action::HmcAction;

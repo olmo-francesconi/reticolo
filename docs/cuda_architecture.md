@@ -45,7 +45,7 @@ per link, double precision):
 | 2 | `expi_lmul_slab` (drift, Cayley–Hamilton exp) | SU(3) | ~200 multi-pass | ~0.15 F/B | transcendental (sincos/acos) |
 | 3 | `compute_force` | Wilson SU(2) | ~200 | ~0.25 F/B | matrix-mul |
 | 4 | `s_full` plaquette `ReTr U_p` | SU(3) | ~72 | ~0.13 F/B | bandwidth-bound |
-| 5 | `compute_force` (sin scatter) | CompactU1 / Wilson U(1) | ~10 | ~0.6 F/B | transcendental, bandwidth |
+| 5 | `compute_force` (sin scatter) | Wilson<U1> / Wilson U(1) | ~10 | ~0.6 F/B | transcendental, bandwidth |
 | 6 | `compute_force` NN stencil | Phi4/Phi6/SineGordon/XY/BoseGas | ~10–20 (+1 sin) | low | memory-bound |
 | 7 | drift / kick (`axpy`) | all | 2 | ~0.1 F/B | pure bandwidth |
 | 8 | observables (mean / m2 / m4 / two_point) | all | O(V) reductions | low | bandwidth-bound |
@@ -72,7 +72,7 @@ U·V + TA), revised up from an earlier under-count.
 └──────────────────────────────────────────────────────────────────────────┘
         ▲ shared_ptr                  ▲                        ▲
 ┌───────┴────────┐         ┌──────────┴─────────┐   ┌──────────┴─────────────┐
-│ Lattice<T>     │         │ LinkLattice<T>     │   │ MatrixLinkLattice<G,T> │
+│ Lattice<T>     │         │ MatrixLinkLattice<U1><T>     │   │ MatrixMatrixLinkLattice<U1><G,T> │
 │ scalar field   │         │ U(1) links         │   │ SU(N) links            │
 │ data: vector<T>│         │ data: vector<T>    │   │ data: vector<T>        │
 │  one T / site  │         │ [ndim][nsites]     │   │ [ndim][2N²][nsites]    │
@@ -106,9 +106,9 @@ Layout facts that matter for CUDA:
   but slow-axis neighbours are strided by the sub-volume regardless. Lean on
   L2 reuse (adjacent sites share neighbours) and, for SU(N), shared-memory
   staging of staple sub-products.
-- **U(1) has two distinct field layouts.** `CompactU1` runs on
-  `LinkLattice<T>` (direction-major, one angle per link); `Wilson<U1>` runs
-  on `MatrixLinkLattice<U1,T>` with `n_real_components = 1`. A device backend
+- **U(1) has two distinct field layouts.** `Wilson<U1>` runs on
+  `MatrixLinkLattice<U1><T>` (direction-major, one angle per link); `Wilson<U1>` runs
+  on `MatrixMatrixLinkLattice<U1><U1,T>` with `n_real_components = 1`. A device backend
   must pick one path per app.
 - **Force kernels must be gather, not scatter.** For HMC reversibility the
   force must be a deterministic function of `U`; `atomicAdd` scatter makes it

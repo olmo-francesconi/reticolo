@@ -29,7 +29,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using DField   = cuda::DeviceField<double, cuda::LinkLayout>;
-    using ReplicaT = cuda::llr::Replica<act::CompactU1<double>, alg::integ::Omelyan2, DField>;
+    using ReplicaT = cuda::llr::Replica<act::Wilson<gauge_group::U1, double>, alg::integ::Omelyan2, DField>;
 
     // ---- CLI (mirrors u1_llr.cpp) ----
     cli::Parser p{"u1_llr_cuda", "LLR (Gaussian-penalty) + replica exchange for compact U(1) (CUDA)"};
@@ -60,9 +60,9 @@ int main(int argc, char** argv) {
     std::string const outpath = app::out_path(cf);
 
     // ---- Base action ----
-    LinkLattice<double>::SizeVec shape(static_cast<std::size_t>(ndim),
+    MatrixLinkLattice<gauge_group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
                                        static_cast<std::size_t>(cf.L));
-    act::CompactU1<double> const base{.beta = beta};
+    act::Wilson<gauge_group::U1, double> const base{.beta = beta};
     log::act(base);
 
     // ---- Replica geometry ----

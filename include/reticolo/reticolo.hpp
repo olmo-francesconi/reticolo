@@ -4,14 +4,12 @@
 // core types (lattice, indexing, site, bc, rng, log).
 
 // NOLINTBEGIN(misc-include-cleaner): re-exports are the whole point of the umbrella.
-#include <reticolo/action/detail/concepts.hpp>
-#include <reticolo/action/detail/gauge/gauge_group/base.hpp>
-#include <reticolo/action/detail/gauge/gauge_group/su2.hpp>
-#include <reticolo/action/detail/gauge/gauge_group/su3.hpp>
-#include <reticolo/action/detail/gauge/gauge_group/u1.hpp>
-#include <reticolo/action/detail/site/helpers.hpp>
+#include <reticolo/action/bond.hpp>
+#include <reticolo/action/complex.hpp>
+#include <reticolo/action/concepts.hpp>
 #include <reticolo/action/gauge.hpp>
 #include <reticolo/action/site.hpp>
+#include <reticolo/action/site/detail/traversal.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/app/setup.hpp>
@@ -19,7 +17,6 @@
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
 #include <reticolo/core/mt19937_rng.hpp>
@@ -38,6 +35,9 @@
 #include <reticolo/llr/smoothed_driver.hpp>
 #include <reticolo/llr/update_a.hpp>
 #include <reticolo/llr/windowed_action.hpp>
+#include <reticolo/math/gauge_group/su2.hpp>
+#include <reticolo/math/gauge_group/su3.hpp>
+#include <reticolo/math/gauge_group/u1.hpp>
 #include <reticolo/obs/analysis.hpp>
 #include <reticolo/obs/catalog.hpp>
 #include <reticolo/obs/concepts.hpp>

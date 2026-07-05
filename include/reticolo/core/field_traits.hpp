@@ -2,7 +2,6 @@
 
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/link_lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 
 #include <complex>
@@ -41,11 +40,6 @@ using real_scalar_t = typename real_scalar<T>::type;
 template <class T>
 [[nodiscard]] inline std::size_t flat_size(Lattice<T> const& f) noexcept {
     return f.nsites();
-}
-
-template <class T>
-[[nodiscard]] inline std::size_t flat_size(LinkLattice<T> const& f) noexcept {
-    return f.nlinks();
 }
 
 template <class G, class T>

@@ -71,25 +71,6 @@ void bench_scalar_action(char const* name, int ndim, int L, Action const& action
     }
 }
 
-template <class Action>
-void bench_link_action(
-    char const* name, int ndim, int L, Action const& action, reticolo::LinkLattice<double>& phi) {
-    reticolo::LinkLattice<double> force{phi.indexing()};
-    std::size_t const dofs = phi.nlinks();
-
-    double const t_sfull = time_per_call([&] { consume(action.s_full(phi)); });
-    print_row(ndim, L, name, dofs, "s_full", t_sfull);
-
-    double const t_force = time_per_call([&] { action.compute_force(phi, force); });
-    print_row(ndim, L, name, dofs, "compute_force", t_force);
-
-    if constexpr (requires { action.compute_force_and_kick(phi, force, 0.123); }) {
-        double const t_fk =
-            time_per_call([&] { action.compute_force_and_kick(phi, force, 0.123); });
-        print_row(ndim, L, name, dofs, "compute_force_and_kick", t_fk);
-    }
-}
-
 template <class Group>
 void bench_wilson(char const* name,
                   int ndim,
@@ -133,7 +114,6 @@ void run_all() {
         std::size_t const nd = static_cast<std::size_t>(c.ndim);
         std::size_t const L_ = static_cast<std::size_t>(c.L);
         Lattice<double>::SizeVec const shape_s(nd, L_);
-        LinkLattice<double>::SizeVec const shape_l(nd, L_);
 
         FastRng rng{42};
 
@@ -180,13 +160,6 @@ void run_all() {
             print_row(c.ndim, c.L, "BoseGas", dofs, "s_imag", t_simag);
             double const t_fimag = time_per_call([&] { action.compute_force_imag(phi, force); });
             print_row(c.ndim, c.L, "BoseGas", dofs, "compute_force_imag", t_fimag);
-        }
-        // CompactU1 (hand-tuned U(1) gauge)
-        {
-            LinkLattice<double> theta{shape_l, 0.0};
-            hot_init(theta, rng);
-            action::CompactU1<double> const action{.beta = 1.0};
-            bench_link_action("CompactU1", c.ndim, c.L, action, theta);
         }
         // Wilson<U1>
         {
