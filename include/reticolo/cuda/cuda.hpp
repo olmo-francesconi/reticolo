@@ -20,6 +20,7 @@
 // NOLINTBEGIN(misc-include-cleaner): re-exports are the whole point of the umbrella.
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
+#include <reticolo/cuda/device_info.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/device_topology.hpp>

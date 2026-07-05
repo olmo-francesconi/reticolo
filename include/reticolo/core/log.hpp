@@ -25,6 +25,7 @@
 //    code inside a parallel region.
 
 #include <reticolo/core/build_info.hpp>
+#include <reticolo/core/host_info.hpp>
 
 #include <array>
 #include <chrono>
@@ -214,6 +215,28 @@ inline std::ofstream* run_file_for_locked(std::string const& run_id) {
     auto path     = cfg().workspace / std::format("{}.{}.log", cfg().stem, run_id);
     auto [ins, _] = files.emplace(run_id, std::ofstream(path));
     return &ins->second;
+}
+
+// Optional banner extensions filled by the cuda umbrella. Core cannot include
+// <cuda_runtime.h> (the one-way core ← cuda rule) nor see the nvcc version
+// macros — those are only defined in the .cu TUs the cuda headers reach. So
+// cuda/device_info.hpp sets these hooks at load time (a [[gnu::constructor]]);
+// when non-null, banner() calls them. A pure-host build leaves them null and
+// falls back to the compile-time host compiler / omits the gpu row. Raw
+// function pointers, not a registry: nullable extension points, set once.
+using BannerHook = std::string (*)();
+
+// Device description for the `gpu` row (e.g. "Tesla T4 · sm_75 · …").
+inline BannerHook& gpu_banner_hook() noexcept {
+    static BannerHook hook = nullptr;
+    return hook;
+}
+
+// nvcc toolkit version (e.g. "12.8") for the `compiler` row; when set, the row
+// reads `nvcc <version> (<host compiler>)`.
+inline BannerHook& nvcc_banner_hook() noexcept {
+    static BannerHook hook = nullptr;
+    return hook;
 }
 
 inline bool detect_color(int fd) noexcept {
@@ -490,8 +513,10 @@ inline bool& banner_shown() {
 // Heavy-rule frame (┏ ━ ┓ ┃ ┗ ━ ┛) so the left wall reuses the same ┃ as
 // the log sigil — the banner flows visually into the log lines below.
 // ANSI Shadow figlet for "reticolo"; version spliced into the bottom rule.
-// All metadata is compile-time-baked via <reticolo/core/build_info.hpp>;
-// only the live OpenMP thread count is read at runtime.
+// Build metadata (branch/compiler/simd) is compile-time-baked via
+// <reticolo/core/build_info.hpp>; the host/cpu/threads rows are read live via
+// <reticolo/core/host_info.hpp>, and the gpu row is filled by the cuda umbrella
+// through detail::gpu_banner_hook() when the app links the CUDA backend.
 inline void banner() {
     if (!detail::cfg().enabled || detail::banner_shown()) {
         return;
@@ -560,13 +585,26 @@ inline void banner() {
 
     // Metadata block — same ┃ sigil as log lines, no frame, so it bridges
     // into the run log naturally.
+    auto const cores = host::logical_cores();
+    std::string compiler_line{build::compiler};
+    if (auto* const hook = detail::nvcc_banner_hook(); hook != nullptr) {
+        if (auto const ver = hook(); !ver.empty()) {
+            compiler_line = std::format("nvcc {} ({})", ver, build::compiler);
+        }
+    }
     emit(std::format("┃ branch   : {} @ {}\n", build::git_branch, build::git_commit));
-    emit(std::format("┃ compiler : {}\n", build::compiler));
+    emit(std::format("┃ compiler : {}\n", compiler_line));
     emit(std::format("┃ build    : {} · {}\n", build::build_type, build::simd));
-    emit(std::format("┃ openmp   : {}\n",
-                     build::openmp_enabled
-                         ? std::format("{} thread{}", omp_threads, omp_threads == 1 ? "" : "s")
-                         : std::string{"disabled"}));
+    emit(std::format("┃ host     : {}\n", host::name()));
+    emit(std::format("┃ cpu      : {} · {} logical cores\n", host::cpu_brand(), cores));
+    emit(std::format("┃ threads  : {}\n",
+                     build::openmp_enabled ? std::format("OpenMP {} of {}", omp_threads, cores)
+                                           : std::format("serial (1 of {})", cores)));
+    if (auto* const hook = detail::gpu_banner_hook(); hook != nullptr) {
+        if (auto const gpu = hook(); !gpu.empty()) {
+            emit(std::format("┃ gpu      : {}\n", gpu));
+        }
+    }
     emit(std::format("┃ started  : {} (local)\n", detail::format_wall(detail::wall_start())));
 
     // Section break between banner metadata and the live log stream.
