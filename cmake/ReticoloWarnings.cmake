@@ -59,6 +59,13 @@ function(reticolo_configure_warnings target)
         -Wduplicated-branches
         -Wlogical-op
         -Wuseless-cast
+        # -Wno-missing-field-initializers: the family-base actions are designated-init
+        # aggregates deriving from detail::SiteAction/BondAction/... The base subobject
+        # cannot be named with a designator, so GCC's -Wextra flags it as an
+        # uninitialised `<anonymous>` member at every `Phi4{.kappa=…}` site. Clang does
+        # not (its jobs are green). The base is value-initialised by design; the warning
+        # is a false positive for this deliberate pattern.
+        -Wno-missing-field-initializers
     )
 
     set(_msvc_warnings /W4 /permissive-)
