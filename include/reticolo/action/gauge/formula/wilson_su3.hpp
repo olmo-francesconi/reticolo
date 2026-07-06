@@ -56,22 +56,28 @@ struct wilson_kernels<gauge_group::SU3> {
     // widen-to-double per component); per-batch partials are folded into the
     // double accumulator so the volume-sized sum keeps the double invariant
     // and the b-loops stay free of a loop-carried double chain.
+    // Σ Re Tr U_p over the sites [base, base+cnt) of one (μ, ν) plane. Pure per-
+    // range worker — no threading. The gauge base parallelises by calling this
+    // over a fixed block partition (gauge_traverse_reduce); `base` is k_batch-
+    // aligned so the batched groupings match the whole-plane sweep exactly.
     template <class T>
-    static double s_full_plane_re_tr_sum(MatrixLinkLattice<gauge_group::SU3, T> const& u,
-                                         std::size_t mu,
-                                         std::size_t nu) noexcept {
+    static double s_full_plane_range(MatrixLinkLattice<gauge_group::SU3, T> const& u,
+                                     std::size_t mu,
+                                     std::size_t nu,
+                                     std::size_t base,
+                                     std::size_t cnt) noexcept {
         constexpr std::size_t k_batch = gauge_group::k_gauge_batch<T>;
         std::size_t const ns          = u.nsites();
         Indexing const& idx           = u.indexing_ref();
         T const* const u_mu_blk       = u.mu_block_data(mu);
         T const* const u_nu_blk       = u.mu_block_data(nu);
 
-        std::size_t const n_batches = ns / k_batch;
-        std::size_t const tail_base = n_batches * k_batch;
-        double total                = 0.0;
+        std::size_t const n_full  = (cnt / k_batch) * k_batch;  // full-batch part
+        std::size_t const tail_lo = base + n_full;
+        std::size_t const end     = base + cnt;
+        double total              = 0.0;
 
-        for (std::size_t bi = 0; bi < n_batches; ++bi) {
-            std::size_t const s_base = bi * k_batch;
+        for (std::size_t s_base = base; s_base < tail_lo; s_base += k_batch) {
             std::size_t s_pmu[k_batch];
             std::size_t s_pnu[k_batch];
             for (std::size_t b = 0; b < k_batch; ++b) {
@@ -111,12 +117,22 @@ struct wilson_kernels<gauge_group::SU3> {
                 total += static_cast<double>(acc[b]);
             }
         }
-        for (std::size_t s = tail_base; s < ns; ++s) {
+        for (std::size_t s = tail_lo; s < end; ++s) {
             std::size_t const s_pmu = idx.next(Site{s}, mu).value();
             std::size_t const s_pnu = idx.next(Site{s}, nu).value();
             total += plaq_re_tr(u_mu_blk, u_nu_blk, s, s_pmu, s_pnu, ns);
         }
         return total;
+    }
+
+    // Whole-plane Σ Re Tr U_p (serial). The `Wilson<G>::s_full` present/absent
+    // probe binds to this name; the parallel path calls `s_full_plane_range`
+    // per block via gauge_traverse_reduce.
+    template <class T>
+    static double s_full_plane_re_tr_sum(MatrixLinkLattice<gauge_group::SU3, T> const& u,
+                                         std::size_t mu,
+                                         std::size_t nu) noexcept {
+        return s_full_plane_range<T>(u, mu, nu, 0, u.nsites());
     }
 
     // -------- link-centric Wilson force --------------------------------------
@@ -126,7 +142,7 @@ struct wilson_kernels<gauge_group::SU3> {
     //
     // Body shared between the plain force (out = F) and the fused kick
     // (mom += k_dt · F) via a templated `Fused` non-type parameter.
-private:
+public:
     // ---------------- Portable batched fast path ---------------------------
     //
     // Batched version of compute_force_impl_ that processes K_BATCH sites at
@@ -146,18 +162,26 @@ private:
     // `ci += ar*bi + ai*br` becomes pure stride-1 vector arithmetic with no
     // cross-lane permutation. That's the structural fix that frees the
     // auto-vectoriser to pack `b`.
+    // Pure per-range staple force/kick worker over the links [base, base+cnt).
+    // No threading — the gauge base parallelises via gauge_traverse_apply, whose
+    // k_batch-aligned `base` keeps every non-final chunk on the batched path so
+    // the result is bit-identical to the whole-field sweep. Each (μ, s) is written
+    // exactly once, so chunks are write-disjoint.
     template <bool Fused, class T>
     [[gnu::always_inline]] static inline void
-    compute_force_batched_(MatrixLinkLattice<gauge_group::SU3, T> const& u,
-                           MatrixLinkLattice<gauge_group::SU3, T>& out,
-                           double scale) noexcept {
+    compute_force_range(MatrixLinkLattice<gauge_group::SU3, T> const& u,
+                        MatrixLinkLattice<gauge_group::SU3, T>& out,
+                        double scale,
+                        std::size_t base,
+                        std::size_t cnt) noexcept {
         constexpr std::size_t k_batch = gauge_group::k_gauge_batch<T>;
         std::size_t const d           = u.ndims();
         std::size_t const ns          = u.nsites();
         Indexing const& idx           = u.indexing_ref();
 
-        std::size_t const n_batches = ns / k_batch;
-        std::size_t const tail_base = n_batches * k_batch;
+        std::size_t const n_full  = (cnt / k_batch) * k_batch;  // full-batch part
+        std::size_t const tail_lo = base + n_full;
+        std::size_t const end     = base + cnt;
         // Force math runs at the field precision T: float packs k_batch sites
         // into 4-wide lanes (8-wide on AVX2), double into 2-wide. No widen.
         T const scl = static_cast<T>(scale);
@@ -166,9 +190,7 @@ private:
             T const* const u_mu_blk = u.mu_block_data(mu);
             T* const out_mu_blk     = out.mu_block_data(mu);
 
-            for (std::size_t bi = 0; bi < n_batches; ++bi) {
-                std::size_t const s_base = bi * k_batch;
-
+            for (std::size_t s_base = base; s_base < tail_lo; s_base += k_batch) {
                 // ---- Neighbour indices for this batch ------------------
                 std::size_t s_pmu[k_batch];
                 for (std::size_t b = 0; b < k_batch; ++b) {
@@ -258,14 +280,15 @@ private:
             }
         }
 
-        // Scalar tail for the last ns % k_batch sites (rare — only when ns
-        // isn't a multiple of 8, e.g. odd lattice volumes).
-        if (tail_base < ns) {
-            compute_force_impl_tail_<Fused>(u, out, scale, tail_base);
+        // Scalar tail for the chunk's [tail_lo, end) remainder (nonzero only on
+        // the final chunk, carrying the global ns % k_batch sites).
+        if (tail_lo < end) {
+            compute_force_impl_tail_<Fused>(u, out, scale, tail_lo, end);
         }
     }
 
-    // Scalar fallback covering [tail_base, ns). Same math as the batched
+private:
+    // Scalar fallback covering [s_start, s_end). Same math as the batched
     // kernel but per-site. Cold path (only when ns % k_batch ≠ 0) — kept out
     // of line so its ~900 straight-line FP ops don't double the I-cache
     // footprint of every force instantiation.
@@ -274,7 +297,8 @@ private:
     compute_force_impl_tail_(MatrixLinkLattice<gauge_group::SU3, T> const& u,
                              MatrixLinkLattice<gauge_group::SU3, T>& out,
                              double scale,
-                             std::size_t s_start) noexcept {
+                             std::size_t s_start,
+                             std::size_t s_end) noexcept {
         std::size_t const d  = u.ndims();
         std::size_t const ns = u.nsites();
         Indexing const& idx  = u.indexing_ref();
@@ -288,7 +312,7 @@ private:
         for (std::size_t mu = 0; mu < d; ++mu) {
             T const* const u_mu_blk = u.mu_block_data(mu);
             T* const out_mu_blk     = out.mu_block_data(mu);
-            for (std::size_t s = s_start; s < ns; ++s) {
+            for (std::size_t s = s_start; s < s_end; ++s) {
                 double v[18] = {};
                 Site const x{s};
                 std::size_t const s_pmu = idx.next(x, mu).value();
@@ -359,7 +383,7 @@ public:
     static void compute_force(MatrixLinkLattice<gauge_group::SU3, T> const& u,
                               MatrixLinkLattice<gauge_group::SU3, T>& force,
                               double beta_over_n) noexcept {
-        compute_force_batched_<false>(u, force, -beta_over_n);
+        compute_force_range<false>(u, force, -beta_over_n, 0, u.nsites());
     }
 
     template <class T>
@@ -367,7 +391,7 @@ public:
                                        MatrixLinkLattice<gauge_group::SU3, T>& mom,
                                        double beta_over_n,
                                        double k_dt) noexcept {
-        compute_force_batched_<true>(u, mom, -k_dt * beta_over_n);
+        compute_force_range<true>(u, mom, -k_dt * beta_over_n, 0, u.nsites());
     }
 };
 

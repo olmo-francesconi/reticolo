@@ -1,10 +1,12 @@
 #pragma once
 
+#include <reticolo/core/philox.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <numbers>
 #include <vector>
 
@@ -734,27 +736,35 @@ inline void ch_coeff_pass_(double* __restrict f0_re,
 // exponential itself is evaluated in double — the acos near ±1, the 9u²−w²
 // denominator and the Taylor blend are precision-delicate. The site batching
 // recovers the SIMD width the double arithmetic allows.
+// Range worker: apply U ← exp(i·dt·P)·U to the `cnt` links [base, base+cnt) of
+// one direction slab whose per-component stride is `stride` (= full nsites).
+// Pure — no threading. Scratch is sized to the chunk and indexed locally in
+// [0, cnt); the link/momentum loads and stores use the global site index
+// `base + s` with the full stride. When the caller keeps chunk boundaries
+// k_b-aligned, the batched pass-5 groupings match the whole-slab sweep exactly,
+// so the result is bit-identical for any partition.
 template <class T>
-inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {
+inline void expi_lmul_range(
+    T* u, T const* p, double dt, std::size_t stride, std::size_t base, std::size_t cnt) noexcept {
     thread_local std::vector<double> scratch;
     constexpr std::size_t k_slabs = 14;
-    if (scratch.size() < k_slabs * n) {
-        scratch.resize(k_slabs * n);
+    if (scratch.size() < k_slabs * cnt) {
+        scratch.resize(k_slabs * cnt);
     }
-    double* const ratio_buf = scratch.data() + (0 * n);  // pass1→pass2
-    double* const theta_buf = scratch.data() + (1 * n);  // pass2→pass3 prep
-    double* const t3_buf    = scratch.data() + (2 * n);  // pass3 input
-    double* const sqrt_c1_3 = scratch.data() + (3 * n);
-    double* const sqrt_c1   = scratch.data() + (4 * n);
-    double* const c0_buf    = scratch.data() + (5 * n);
-    double* const u_buf     = scratch.data() + (6 * n);
-    double* const w_buf     = scratch.data() + (7 * n);
-    double* const cu_buf    = scratch.data() + (8 * n);
-    double* const su_buf    = scratch.data() + (9 * n);
-    double* const cw_buf    = scratch.data() + (10 * n);
-    double* const sw_buf    = scratch.data() + (11 * n);
-    double* const s_t3_buf  = scratch.data() + (12 * n);
-    double* const c1_buf    = scratch.data() + (13 * n);
+    double* const ratio_buf = scratch.data() + (0 * cnt);  // pass1→pass2
+    double* const theta_buf = scratch.data() + (1 * cnt);  // pass2→pass3 prep
+    double* const t3_buf    = scratch.data() + (2 * cnt);  // pass3 input
+    double* const sqrt_c1_3 = scratch.data() + (3 * cnt);
+    double* const sqrt_c1   = scratch.data() + (4 * cnt);
+    double* const c0_buf    = scratch.data() + (5 * cnt);
+    double* const u_buf     = scratch.data() + (6 * cnt);
+    double* const w_buf     = scratch.data() + (7 * cnt);
+    double* const cu_buf    = scratch.data() + (8 * cnt);
+    double* const su_buf    = scratch.data() + (9 * cnt);
+    double* const cw_buf    = scratch.data() + (10 * cnt);
+    double* const sw_buf    = scratch.data() + (11 * cnt);
+    double* const s_t3_buf  = scratch.data() + (12 * cnt);
+    double* const c1_buf    = scratch.data() + (13 * cnt);
 
     constexpr double k_inv_3 = 1.0 / 3.0;
 
@@ -764,12 +774,13 @@ inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept 
     // swapped entries. Every load is stride-1 in s; the loop body is
     // branchless (clamps and the c0_max guard are selects), so this
     // vectorises across sites.
-    for (std::size_t s = 0; s < n; ++s) {
+    for (std::size_t s = 0; s < cnt; ++s) {
+        std::size_t const g = base + s;
         double q_re[9];
         double q_im[9];
         for (std::size_t k = 0; k < 9; ++k) {
-            q_re[k] = dt * static_cast<double>(p[(((2 * k) + 1) * n) + s]);
-            q_im[k] = -dt * static_cast<double>(p[((2 * k) * n) + s]);
+            q_re[k] = dt * static_cast<double>(p[(((2 * k) + 1) * stride) + g]);
+            q_im[k] = -dt * static_cast<double>(p[((2 * k) * stride) + g]);
         }
         double sum_sq = 0.0;
         for (std::size_t k = 0; k < 9; ++k) {
@@ -813,18 +824,18 @@ inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept 
     }
 
     // ----- Pass 2: theta = acos(ratio) -----------------------------------
-    reticolo::math::acos_batch(theta_buf, ratio_buf, n);
+    reticolo::math::acos_batch(theta_buf, ratio_buf, cnt);
 
     // ----- Pass 3: theta/3 → sincos --------------------------------------
-    for (std::size_t s = 0; s < n; ++s) {
+    for (std::size_t s = 0; s < cnt; ++s) {
         t3_buf[s] = theta_buf[s] * k_inv_3;
     }
-    reticolo::math::sincos_batch(s_t3_buf, /*cos*/ theta_buf, t3_buf, n);
+    reticolo::math::sincos_batch(s_t3_buf, /*cos*/ theta_buf, t3_buf, cnt);
     //   ↑ reuse theta_buf for cos(theta/3) — its acos contents are no longer
     //     needed. Calling convention of sincos_batch is (sin_dst, cos_dst, src, n).
 
     // ----- Pass 3.5: u, w ------------------------------------------------
-    for (std::size_t s = 0; s < n; ++s) {
+    for (std::size_t s = 0; s < cnt; ++s) {
         double const c_t3 = theta_buf[s];
         double const s_t3 = s_t3_buf[s];
         u_buf[s]          = sqrt_c1_3[s] * c_t3;
@@ -832,8 +843,8 @@ inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept 
     }
 
     // ----- Pass 4: sincos(u), sincos(w) ----------------------------------
-    reticolo::math::sincos_batch(su_buf, cu_buf, u_buf, n);
-    reticolo::math::sincos_batch(sw_buf, cw_buf, w_buf, n);
+    reticolo::math::sincos_batch(su_buf, cu_buf, u_buf, cnt);
+    reticolo::math::sincos_batch(sw_buf, cw_buf, w_buf, cnt);
 
     // ----- Pass 4.5: Cayley-Hamilton coefficients f₀, f₁, f₂ --------------
     // The f slabs reuse buffers that are dead after pass 3.5; the kernel is
@@ -860,23 +871,24 @@ inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept 
                            sw_buf,
                            c0_buf,
                            c1_buf,
-                           n);
+                           cnt);
 
     // ----- Pass 5: batched V = f₀·I + f₁·Q + f₂·Q², U ← V·U ---------------
     // AoSoA batches of B sites: q/q²/u slabs split into [9][B] re/im scratch
     // so the matrix products vectorise across sites (stride-1 in b).
     constexpr std::size_t k_b   = 8;
-    std::size_t const tail_base = (n / k_b) * k_b;
+    std::size_t const tail_base = (cnt / k_b) * k_b;
     for (std::size_t s0 = 0; s0 < tail_base; s0 += k_b) {
+        std::size_t const g0 = base + s0;
         double q_re[9][k_b];
         double q_im[9][k_b];
         double uo_re[9][k_b];
         double uo_im[9][k_b];
         for (std::size_t k = 0; k < 9; ++k) {
-            T const* p_re = p + ((2 * k) * n) + s0;
-            T const* p_im = p + (((2 * k) + 1) * n) + s0;
-            T const* u_re = u + ((2 * k) * n) + s0;
-            T const* u_im = u + (((2 * k) + 1) * n) + s0;
+            T const* p_re = p + ((2 * k) * stride) + g0;
+            T const* p_im = p + (((2 * k) + 1) * stride) + g0;
+            T const* u_re = u + ((2 * k) * stride) + g0;
+            T const* u_im = u + (((2 * k) + 1) * stride) + g0;
             for (std::size_t b = 0; b < k_b; ++b) {
                 q_re[k][b]  = dt * static_cast<double>(p_im[b]);
                 q_im[k][b]  = -dt * static_cast<double>(p_re[b]);
@@ -913,8 +925,8 @@ inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept 
         double o_im[9][k_b];
         mul_3x3_batched<false>(o_re, o_im, v_re, v_im, uo_re, uo_im);
         for (std::size_t k = 0; k < 9; ++k) {
-            T* u_re = u + ((2 * k) * n) + s0;
-            T* u_im = u + (((2 * k) + 1) * n) + s0;
+            T* u_re = u + ((2 * k) * stride) + g0;
+            T* u_im = u + (((2 * k) + 1) * stride) + g0;
             for (std::size_t b = 0; b < k_b; ++b) {
                 u_re[b] = static_cast<T>(o_re[k][b]);
                 u_im[b] = static_cast<T>(o_im[k][b]);
@@ -922,12 +934,13 @@ inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept 
         }
     }
 
-    // Scalar tail for the last n % k_b sites, same math per site.
-    for (std::size_t s = tail_base; s < n; ++s) {
+    // Scalar tail for the last cnt % k_b sites, same math per site.
+    for (std::size_t s = tail_base; s < cnt; ++s) {
+        std::size_t const g = base + s;
         double q[18];
         for (std::size_t k = 0; k < 9; ++k) {
-            q[2 * k]       = dt * static_cast<double>(p[(((2 * k) + 1) * n) + s]);
-            q[(2 * k) + 1] = -dt * static_cast<double>(p[((2 * k) * n) + s]);
+            q[2 * k]       = dt * static_cast<double>(p[(((2 * k) + 1) * stride) + g]);
+            q[(2 * k) + 1] = -dt * static_cast<double>(p[((2 * k) * stride) + g]);
         }
         double q2[18];
         mul_3x3(q2, q, q);
@@ -953,14 +966,22 @@ inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept 
 
         double u_old[18];
         for (std::size_t k = 0; k < 18; ++k) {
-            u_old[k] = static_cast<double>(u[(k * n) + s]);
+            u_old[k] = static_cast<double>(u[(k * stride) + g]);
         }
         double o_s[18];
         mul_3x3(o_s, v, u_old);
         for (std::size_t k = 0; k < 18; ++k) {
-            u[(k * n) + s] = static_cast<T>(o_s[k]);
+            u[(k * stride) + g] = static_cast<T>(o_s[k]);
         }
     }
+}
+
+// U ← exp(i·dt·P)·U over a full direction slab of `n` links (serial). The
+// parallel drift partition lives in the integrator op layer (integ_ops.hpp),
+// which calls `expi_lmul_range` per thread-chunk; this stays pure math.
+template <class T>
+inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {
+    expi_lmul_range(u, p, dt, n, 0, n);
 }
 
 [[gnu::always_inline]] inline void project_slab(double* u, std::size_t n) noexcept {
@@ -1033,24 +1054,78 @@ template <class T, class Rng>
     }
 }
 
-// K_per_link = (1/2) Tr(P† P) = (1/2)·sum_18 P_storage[k]². Returns sum over
-// n links in this direction. Matches the SU(2) convention.
+// Parallel counter-based momentum sampler over links [base, base+cnt) of one
+// direction `mu` (component stride `stride`). Each site's 8 Gell-Mann coordinates
+// come from Philox keyed by (key, mu, site) — a pure function of the site index,
+// so the draw worksplits, is identical for any thread count, and is bit-exact on
+// resume (the caller draws `key` once per trajectory from its RNG). The ½√2 / √3
+// basis scaling and 18-slot packing are identical to sample_algebra_slab; only
+// the entropy source changes. Opt-in SU(3) replacement for the serial FastRng
+// fill — unifies the CPU sampler with the counter-based device path.
 template <class T>
-[[gnu::always_inline]] inline double kinetic_slab(T const* p, std::size_t n) noexcept {
-    // Blocked: T-precision lane accumulators over k_b sites, folded into the
-    // double total once per block. Keeps the reduction-returns-double
-    // invariant at block granularity while breaking the per-site double
-    // chain that stops the x86 cost model from vectorising the loop.
-    constexpr std::size_t k_b   = 8;
-    std::size_t const tail_base = (n / k_b) * k_b;
-    double k                    = 0.0;
-    for (std::size_t s0 = 0; s0 < tail_base; s0 += k_b) {
+inline void sample_algebra_philox_range(T* p,
+                                        std::uint64_t key,
+                                        std::uint64_t mu,
+                                        std::size_t stride,
+                                        std::size_t base,
+                                        std::size_t cnt) noexcept {
+    constexpr double k_inv_sqrt2 = std::numbers::sqrt2 / 2.0;
+    constexpr double k_inv_sqrt3 = std::numbers::inv_sqrt3;
+    std::size_t const end        = base + cnt;
+    for (std::size_t s = base; s < end; ++s) {
+        double g[8];
+        for (std::size_t j = 0; j < 4; ++j) {
+            reticolo::philox_normal2(key, mu, (s * 4) + j, g[2 * j], g[(2 * j) + 1]);
+        }
+        T const h1                     = static_cast<T>(g[0] * k_inv_sqrt2);
+        T const h2                     = static_cast<T>(g[1] * k_inv_sqrt2);
+        T const h3                     = static_cast<T>(g[2] * k_inv_sqrt2);
+        T const h4                     = static_cast<T>(g[3] * k_inv_sqrt2);
+        T const h5                     = static_cast<T>(g[4] * k_inv_sqrt2);
+        T const h6                     = static_cast<T>(g[5] * k_inv_sqrt2);
+        T const h7                     = static_cast<T>(g[6] * k_inv_sqrt2);
+        T const h8                     = static_cast<T>(g[7] * k_inv_sqrt2);
+        T const h8_over_sqrt3          = static_cast<T>(static_cast<double>(h8) * k_inv_sqrt3);
+        p[(idx_re(0, 0) * stride) + s] = T{0};
+        p[(idx_im(0, 0) * stride) + s] = h3 + h8_over_sqrt3;
+        p[(idx_re(1, 1) * stride) + s] = T{0};
+        p[(idx_im(1, 1) * stride) + s] = -h3 + h8_over_sqrt3;
+        p[(idx_re(2, 2) * stride) + s] = T{0};
+        p[(idx_im(2, 2) * stride) + s] = T{-2} * h8_over_sqrt3;
+        p[(idx_re(0, 1) * stride) + s] = h2;
+        p[(idx_im(0, 1) * stride) + s] = h1;
+        p[(idx_re(1, 0) * stride) + s] = -h2;
+        p[(idx_im(1, 0) * stride) + s] = h1;
+        p[(idx_re(0, 2) * stride) + s] = h5;
+        p[(idx_im(0, 2) * stride) + s] = h4;
+        p[(idx_re(2, 0) * stride) + s] = -h5;
+        p[(idx_im(2, 0) * stride) + s] = h4;
+        p[(idx_re(1, 2) * stride) + s] = h7;
+        p[(idx_im(1, 2) * stride) + s] = h6;
+        p[(idx_re(2, 1) * stride) + s] = -h7;
+        p[(idx_im(2, 1) * stride) + s] = h6;
+    }
+}
+
+// Raw Σ_{s ∈ [base, base+cnt)} Σ_c p[c·stride + s]²  (no ½). Pure per-range
+// reduction worker — the ½ and the cross-range fold are applied by the caller.
+// Blocked: T-precision lane accumulators over k_b sites folded to double once per
+// block, so a fixed k_b-block partition (see reduce_blocks) is thread-invariant.
+template <class T>
+[[gnu::always_inline]] inline double
+kinetic_range(T const* p, std::size_t stride, std::size_t base, std::size_t cnt) noexcept {
+    constexpr std::size_t k_b = 8;
+    std::size_t const n_full  = (cnt / k_b) * k_b;
+    std::size_t const tail_lo = base + n_full;
+    std::size_t const end     = base + cnt;
+    double k                  = 0.0;
+    for (std::size_t s0 = base; s0 < tail_lo; s0 += k_b) {
         T acc[k_b];
         for (std::size_t b = 0; b < k_b; ++b) {
             acc[b] = T{0};
         }
         for (std::size_t c = 0; c < 18; ++c) {
-            T const* row = p + (c * n) + s0;
+            T const* row = p + (c * stride) + s0;
             for (std::size_t b = 0; b < k_b; ++b) {
                 acc[b] += row[b] * row[b];
             }
@@ -1061,15 +1136,22 @@ template <class T>
         }
         k += blk;
     }
-    for (std::size_t s = tail_base; s < n; ++s) {
+    for (std::size_t s = tail_lo; s < end; ++s) {
         T per_link = T{0};
         for (std::size_t c = 0; c < 18; ++c) {
-            T const v = p[(c * n) + s];
+            T const v = p[(c * stride) + s];
             per_link += v * v;
         }
         k += static_cast<double>(per_link);
     }
-    return 0.5 * k;
+    return k;
+}
+
+// K_per_link = (1/2) Tr(P† P) = (1/2)·sum_18 P_storage[k]². Returns sum over
+// n links in this direction. Matches the SU(2) convention.
+template <class T>
+[[gnu::always_inline]] inline double kinetic_slab(T const* p, std::size_t n) noexcept {
+    return 0.5 * kinetic_range(p, n, 0, n);
 }
 
 }  // namespace reticolo::math::su3

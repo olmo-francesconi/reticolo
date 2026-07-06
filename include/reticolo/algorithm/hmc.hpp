@@ -15,8 +15,8 @@
 #include <cmath>
 #include <complex>
 #include <concepts>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <type_traits>
@@ -275,8 +275,28 @@ private:
             using Group          = typename Field::group_type;
             std::size_t const d  = mom_.ndims();
             std::size_t const ns = mom_.nsites();
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                Group::sample_algebra_slab(mom_.mu_block_data(mu), rng_, ns);
+            if constexpr (requires(Scalar* p) {
+                              Group::sample_algebra_philox_range(p,
+                                                                 std::uint64_t{},
+                                                                 std::uint64_t{},
+                                                                 std::size_t{},
+                                                                 std::size_t{},
+                                                                 std::size_t{});
+                          }) {
+                // Parallel counter-based sampler: one RNG draw per trajectory keys
+                // Philox, then each direction slab worksplits (site-indexed draws).
+                std::uint64_t const key = rng_.uniform_u64();
+                for (std::size_t mu = 0; mu < d; ++mu) {
+                    Scalar* const pblk = mom_.mu_block_data(mu);
+                    reticolo::detail::apply_chunked(
+                        ns, 8, [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
+                            Group::sample_algebra_philox_range(pblk, key, mu, ns, base, cnt);
+                        });
+                }
+            } else {
+                for (std::size_t mu = 0; mu < d; ++mu) {
+                    Group::sample_algebra_slab(mom_.mu_block_data(mu), rng_, ns);
+                }
             }
         } else if constexpr (std::is_same_v<Scalar, double>) {
             philox_normal_fill_(mom_.data(), flat_size(mom_), rng_.uniform_u64());
@@ -322,8 +342,24 @@ private:
             using Group          = typename Field::group_type;
             std::size_t const d  = mom_.ndims();
             std::size_t const ns = mom_.nsites();
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                kin += Group::kinetic_slab(mom_.mu_block_data(mu), ns);
+            if constexpr (requires(Scalar const* p) {
+                              Group::kinetic_range(p, std::size_t{}, std::size_t{}, std::size_t{});
+                          }) {
+                // Parallel deterministic reduce (fixed k_b-blocks) per direction;
+                // the ½ is applied once after folding all directions.
+                double raw = 0.0;
+                for (std::size_t mu = 0; mu < d; ++mu) {
+                    Scalar const* const pblk = mom_.mu_block_data(mu);
+                    raw += reticolo::detail::reduce_blocks(
+                        ns, 8, [pblk, ns](std::size_t base, std::size_t cnt) {
+                            return Group::kinetic_range(pblk, ns, base, cnt);
+                        });
+                }
+                kin += 0.5 * raw;
+            } else {
+                for (std::size_t mu = 0; mu < d; ++mu) {
+                    kin += Group::kinetic_slab(mom_.mu_block_data(mu), ns);
+                }
             }
         } else {
             Scalar const* const p     = mom_.data();

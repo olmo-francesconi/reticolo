@@ -1,6 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
+#include <utility>
+#include <vector>
 
 #ifdef _OPENMP
     #include <omp.h>
@@ -55,7 +58,7 @@ template <class Body>
 inline void in_traverse_region([[maybe_unused]] bool want, Body const& body) {
 #ifdef _OPENMP
     if (want && omp_in_parallel() == 0) {
-#pragma omp parallel
+    #pragma omp parallel
         {
             bool const prev      = g_in_traverse_region;
             g_in_traverse_region = true;
@@ -66,6 +69,78 @@ inline void in_traverse_region([[maybe_unused]] bool want, Body const& body) {
     }
 #endif
     body();
+}
+
+// Contiguous, `gran`-aligned sub-range [lo, hi) of [0, n) for the calling thread
+// within a reticolo-owned region (SPMD partition). `gran` alignment keeps every
+// non-final chunk on a batch boundary, so batched kernels give the same per-site
+// path — and hence bit-identical results — as the serial full-range sweep; only
+// the final chunk carries the [0, gran) global remainder. `hi - lo` may be 0 when
+// there are more threads than blocks. Outside OpenMP (or serial) returns [0, n).
+[[nodiscard]] inline std::pair<std::size_t, std::size_t>
+spmd_chunk(std::size_t n, [[maybe_unused]] std::size_t gran) noexcept {
+#ifdef _OPENMP
+    std::size_t const nblk = (n + gran - 1) / gran;
+    auto const nt          = static_cast<std::size_t>(omp_get_num_threads());
+    auto const tid         = static_cast<std::size_t>(omp_get_thread_num());
+    std::size_t const lo   = ((nblk * tid) / nt) * gran;
+    std::size_t const hi   = std::min(((nblk * (tid + 1)) / nt) * gran, n);
+    return {lo, hi};
+#else
+    return {std::size_t{0}, n};
+#endif
+}
+
+// Write-disjoint pass: run `worker(base, cnt)` over one `gran`-aligned contiguous
+// chunk of [0, n) per thread (SPMD). For batched kernels the alignment makes each
+// non-final chunk take the same per-site path as the serial full-range sweep, so
+// a write-once pass is bit-identical for any thread count. Standalone opens its
+// own region; nested worksplits the current team; foreign/too-small → serial.
+template <class Worker>
+inline void apply_chunked(std::size_t n, std::size_t gran, Worker const& worker) {
+    in_traverse_region(traverse_want(n), [&] {
+        if (g_in_traverse_region) {
+            auto const [lo, hi] = spmd_chunk(n, gran);
+            if (hi > lo) {
+                worker(lo, hi - lo);
+            }
+        } else {
+            worker(std::size_t{0}, n);
+        }
+    });
+}
+
+// Deterministic blocked reduction: sum `worker(base, cnt) -> double` over a fixed
+// `gran`-block partition of [0, n) into a partials buffer, folded in block order.
+// The partition is independent of thread count, so the result is identical for
+// any number of threads (the reduction analogue of spmd_chunk). Standalone opens
+// its own region; nested worksplits the current team; foreign/too-small → serial.
+template <class Worker>
+[[nodiscard]] inline double reduce_blocks(std::size_t n, std::size_t gran, Worker const& worker) {
+    std::size_t const nblk = (n + gran - 1) / gran;
+    std::vector<double> partials(nblk, 0.0);
+    in_traverse_region(traverse_want(n), [&] {
+        auto block = [&](std::size_t b) {
+            std::size_t const lo = b * gran;
+            std::size_t const hi = std::min(lo + gran, n);
+            partials[b]          = worker(lo, hi - lo);
+        };
+        if (g_in_traverse_region) {
+#pragma omp for schedule(static)
+            for (std::ptrdiff_t b = 0; b < static_cast<std::ptrdiff_t>(nblk); ++b) {
+                block(static_cast<std::size_t>(b));
+            }
+        } else {
+            for (std::size_t b = 0; b < nblk; ++b) {
+                block(b);
+            }
+        }
+    });
+    double total = 0.0;
+    for (double const v : partials) {
+        total += v;
+    }
+    return total;
 }
 
 }  // namespace reticolo::detail

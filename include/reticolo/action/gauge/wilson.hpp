@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/action/gauge/detail/gauge_action.hpp>
+#include <reticolo/action/gauge/detail/gauge_traverse.hpp>
 #include <reticolo/action/gauge/detail/plane.hpp>
 #include <reticolo/action/gauge/detail/wilson_kernels.hpp>
 #include <reticolo/core/log.hpp>
@@ -64,9 +65,23 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
         std::size_t const ns     = U.nsites();
         std::size_t const n_plaq = (d * (d - 1) / 2) * ns;
         double accum_re_tr       = 0.0;
-        // If the group's kernels provide a per-plane batched Σ Re Tr U_p, use it
-        // (Sleef cos path on U(1)); otherwise fall back to per-plaquette plaq_re_tr.
-        if constexpr (requires { kernels::template s_full_plane_re_tr_sum<T>(U, 0, 1); }) {
+        // Prefer the parallel range worker (gauge base worksplits + deterministic
+        // partials) when the group's kernels expose it; else the serial whole-plane
+        // batched Σ Re Tr U_p; else per-plaquette plaq_re_tr.
+        if constexpr (requires {
+                          kernels::template s_full_plane_range<T>(
+                              U, 0, 1, std::size_t{}, std::size_t{});
+                      }) {
+            constexpr std::size_t gran = gauge_group::k_gauge_batch<T>;
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                    accum_re_tr += detail::gauge_traverse_reduce(
+                        ns, gran, [&](std::size_t base, std::size_t cnt) {
+                            return kernels::template s_full_plane_range<T>(U, mu, nu, base, cnt);
+                        });
+                }
+            }
+        } else if constexpr (requires { kernels::template s_full_plane_re_tr_sum<T>(U, 0, 1); }) {
             for (std::size_t mu = 0; mu < d; ++mu) {
                 for (std::size_t nu = mu + 1; nu < d; ++nu) {
                     accum_re_tr += kernels::template s_full_plane_re_tr_sum<T>(U, mu, nu);
@@ -94,7 +109,19 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
     // matches CompactU1 bit-for-bit; SU(N) uses the link-centric staple + TA[U·V].
     void force_into(field_type const& U, field_type& force) const noexcept {
         double const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
-        kernels::compute_force(U, force, beta_over_n_dbl);
+        // Parallel per-range staple force when the kernels expose it (gauge base
+        // worksplits over write-disjoint chunks); else the serial whole-field call.
+        if constexpr (requires(field_type const& cu, field_type& f) {
+                          kernels::template compute_force_range<false>(
+                              cu, f, double{}, std::size_t{}, std::size_t{});
+                      }) {
+            constexpr std::size_t gran = gauge_group::k_gauge_batch<T>;
+            detail::gauge_traverse_apply(U.nsites(), gran, [&](std::size_t base, std::size_t cnt) {
+                kernels::template compute_force_range<false>(U, force, -beta_over_n_dbl, base, cnt);
+            });
+        } else {
+            kernels::compute_force(U, force, beta_over_n_dbl);
+        }
     }
 
     // Fused force-and-kick: scatter the per-plaquette force straight into the
@@ -106,7 +133,18 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
         }
     {
         double const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
-        kernels::compute_force_and_kick(U, mom, beta_over_n_dbl, static_cast<double>(k_dt));
+        if constexpr (requires(field_type const& cu, field_type& m) {
+                          kernels::template compute_force_range<true>(
+                              cu, m, double{}, std::size_t{}, std::size_t{});
+                      }) {
+            constexpr std::size_t gran = gauge_group::k_gauge_batch<T>;
+            double const scale         = -static_cast<double>(k_dt) * beta_over_n_dbl;
+            detail::gauge_traverse_apply(U.nsites(), gran, [&](std::size_t base, std::size_t cnt) {
+                kernels::template compute_force_range<true>(U, mom, scale, base, cnt);
+            });
+        } else {
+            kernels::compute_force_and_kick(U, mom, beta_over_n_dbl, static_cast<double>(k_dt));
+        }
     }
 
     // Fused S_base + force in one pass (LLR fast-path). Present only when the

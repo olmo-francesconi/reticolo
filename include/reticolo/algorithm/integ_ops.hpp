@@ -86,8 +86,26 @@ inline void drift_field(MatrixLinkLattice<G, T>& field,
                         double cdt) noexcept {
     std::size_t const d  = field.ndims();
     std::size_t const ns = field.nsites();
-    for (std::size_t mu = 0; mu < d; ++mu) {
-        G::expi_lmul_slab(field.mu_block_data(mu), mom.mu_block_data(mu), cdt, ns);
+    // Compute-bound matrix-exponential drift → worksplit like the staple force,
+    // when the group exposes a pure per-range worker (SU(3)). Each thread applies
+    // it to an 8-aligned site chunk (matching the group's pass-5 batch), so the
+    // result is bit-identical to the serial slab for any thread count. Own
+    // fork/join, per-op model. Groups without a range worker stay serial.
+    if constexpr (requires(T* uu, T const* pp) {
+                      G::expi_lmul_range(
+                          uu, pp, double{}, std::size_t{}, std::size_t{}, std::size_t{});
+                  }) {
+        constexpr std::size_t gran = 8;  // su(N) pass-5 site batch
+        reticolo::detail::apply_chunked(ns, gran, [&](std::size_t base, std::size_t cnt) {
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                G::expi_lmul_range(
+                    field.mu_block_data(mu), mom.mu_block_data(mu), cdt, ns, base, cnt);
+            }
+        });
+    } else {
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            G::expi_lmul_slab(field.mu_block_data(mu), mom.mu_block_data(mu), cdt, ns);
+        }
     }
 }
 
