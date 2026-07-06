@@ -6,12 +6,16 @@
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
+#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/philox.hpp>
 #include <reticolo/core/rng.hpp>
 #include <reticolo/core/site.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <concepts>
+#include <cstdint>
 #include <cstddef>
 #include <limits>
 #include <optional>
@@ -132,12 +136,8 @@ public:
         sample_momenta_();
 
         // Snapshot for rejection rollback — flat-buffer copy.
-        std::size_t const n    = flat_size(field_);
-        Scalar* const old      = old_field_.data();
-        Scalar const* const fp = field_.data();
-        for (std::size_t i = 0; i < n; ++i) {
-            old[i] = fp[i];
-        }
+        std::size_t const n = flat_size(field_);
+        copy_flat_(old_field_.data(), field_.data(), n);
         double const kin0 = kinetic_();
         double const s0   = static_cast<double>(action_.s_full(field_));
         // Snapshot the action's raw-scalar cache(s) at h0 so a reject can
@@ -146,7 +146,13 @@ public:
         auto const cache_snap = capture_action_cache_();
         double const h0       = kin0 + s0;
 
-        Integrator::run(action_, field_, mom_, force_, tau_, n_md_);
+        // Model B: the whole MD loop runs inside ONE parallel region, so the
+        // per-step force/drift/kick passes worksplit via `omp for` (cheap barriers
+        // on a hot team) instead of each opening its own fork/join. The h0/h1
+        // reductions and momentum/copy stay outside for now (phases 2-3). Only for
+        // actions whose traversal is flag-aware (site family) — otherwise a plain
+        // serial run (opening a region around an unconverted sweep would race).
+        run_md_(tau_, n_md_);
 
         double const kin1 = kinetic_();
         double const s1   = static_cast<double>(action_.s_full(field_));
@@ -162,11 +168,7 @@ public:
 
         bool const accepted = (dH <= 0.0) || (rng_.uniform() < std::exp(-dH));
         if (!accepted) {
-            Scalar* const fmut       = field_.data();
-            Scalar const* const oldp = old_field_.data();
-            for (std::size_t i = 0; i < n; ++i) {
-                fmut[i] = oldp[i];
-            }
+            copy_flat_(field_.data(), old_field_.data(), n);
             // s_full now reflects the field BEFORE the trajectory — restore to s0.
             last_s_full_ = s0;
             restore_action_cache_(cache_snap);
@@ -202,11 +204,82 @@ public:
     [[nodiscard]] Field const& momentum() const noexcept { return mom_; }
     [[nodiscard]] Field& force_buffer() noexcept { return force_; }
 
-    void integrate_only(double tau, int n_md) noexcept {
-        Integrator::run(action_, field_, mom_, force_, tau, n_md);
-    }
+    void integrate_only(double tau, int n_md) noexcept { run_md_(tau, n_md); }
 
 private:
+    // The MD loop runs inside one persistent parallel region when the action's
+    // traversal worksplits (site family, marked k_traverse_threaded); otherwise
+    // plainly, since opening a region around an unconverted (gauge/bond/complex)
+    // sweep would race on the shared force/field buffers.
+    static constexpr bool action_threaded_() {
+        if constexpr (requires { A::k_traverse_threaded; }) {
+            return A::k_traverse_threaded;
+        } else {
+            return false;
+        }
+    }
+
+    void run_md_(double tau, int n_md) noexcept {
+        if constexpr (action_threaded_()) {
+            reticolo::detail::in_traverse_region(
+                reticolo::detail::traverse_want(flat_size(field_)),
+                [&] { Integrator::run(action_, field_, mom_, force_, tau, n_md); });
+        } else {
+            Integrator::run(action_, field_, mom_, force_, tau, n_md);
+        }
+    }
+
+    // Flat elementwise copy (rollback snapshot / restore), worksplit standalone.
+    static void copy_flat_(Scalar* dst, Scalar const* src, std::size_t n) noexcept {
+        reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(n), [&] {
+            if (reticolo::detail::g_in_traverse_region) {
+#pragma omp for schedule(static)
+                for (std::size_t i = 0; i < n; ++i) {
+                    dst[i] = src[i];
+                }
+            } else {
+                for (std::size_t i = 0; i < n; ++i) {
+                    dst[i] = src[i];
+                }
+            }
+        });
+    }
+
+    // Parallel counter-based standard-normal fill: out[2p], out[2p+1] come from
+    // philox_normal2(key, 0, p) — each pair an independent function of the site
+    // index, so the fill worksplits and is bit-identical for any thread count.
+    // `key` is drawn fresh from the driver RNG each trajectory (see
+    // sample_momenta_): one serial draw that advances the RNG identically on a
+    // resumed run, so checkpoint/resume stays bit-exact.
+    static void philox_normal_fill_(double* out, std::size_t n, std::uint64_t key) noexcept {
+        std::size_t const npair = n / 2;
+        auto pair               = [&](std::size_t p) {
+            double n0 = 0.0;
+            double n1 = 0.0;
+            philox_normal2(key, 0, p, n0, n1);
+            out[2 * p]     = n0;
+            out[2 * p + 1] = n1;
+        };
+        reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(n), [&] {
+            if (reticolo::detail::g_in_traverse_region) {
+#pragma omp for schedule(static)
+                for (std::ptrdiff_t p = 0; p < static_cast<std::ptrdiff_t>(npair); ++p) {
+                    pair(static_cast<std::size_t>(p));
+                }
+            } else {
+                for (std::size_t p = 0; p < npair; ++p) {
+                    pair(p);
+                }
+            }
+        });
+        if ((n & 1U) != 0U) {  // odd tail
+            double a = 0.0;
+            double b = 0.0;
+            philox_normal2(key, 0, npair, a, b);
+            out[n - 1] = a;
+        }
+    }
+
     void sample_momenta_() {
         if constexpr (MatrixLinkField<Field>) {
             // Algebra-aware momentum sampling per direction. The group writes
@@ -219,10 +292,10 @@ private:
                 Group::sample_algebra_slab(mom_.mu_block_data(mu), rng_, ns);
             }
         } else if constexpr (std::is_same_v<Scalar, double>) {
-            rng_.normal_fill(mom_.data(), flat_size(mom_));
+            philox_normal_fill_(mom_.data(), flat_size(mom_), rng_.uniform_u64());
         } else if constexpr (std::is_same_v<Scalar, std::complex<double>>) {
             std::size_t const n = flat_size(mom_);
-            rng_.normal_fill(reinterpret_cast<double*>(mom_.data()), 2 * n);
+            philox_normal_fill_(reinterpret_cast<double*>(mom_.data()), 2 * n, rng_.uniform_u64());
         } else if constexpr (std::is_same_v<Scalar, float>) {
             fill_normals_narrowed_(mom_.data(), flat_size(mom_));
         } else if constexpr (std::is_same_v<Scalar, std::complex<float>>) {
@@ -266,17 +339,41 @@ private:
                 kin += Group::kinetic_slab(mom_.mu_block_data(mu), ns);
             }
         } else {
-            Scalar const* const p = mom_.data();
-            std::size_t const n   = flat_size(mom_);
-            if constexpr (is_complex_v_) {
-                for (std::size_t i = 0; i < n; ++i) {
-                    kin += std::norm(p[i]);
+            Scalar const* const p     = mom_.data();
+            std::size_t const n       = flat_size(mom_);
+            constexpr std::size_t chk = 1U << 13;  // fixed chunk → thread-invariant sum
+            std::size_t const nch     = (n + chk - 1) / chk;
+            std::vector<double> partials(nch, 0.0);
+            auto chunk = [&](std::size_t c) {
+                std::size_t const lo = c * chk;
+                std::size_t const hi = std::min(lo + chk, n);
+                double s             = 0.0;
+                if constexpr (is_complex_v_) {
+                    for (std::size_t i = lo; i < hi; ++i) {
+                        s += std::norm(p[i]);
+                    }
+                } else {
+                    for (std::size_t i = lo; i < hi; ++i) {
+                        auto const pi = static_cast<double>(p[i]);
+                        s += pi * pi;
+                    }
                 }
-            } else {
-                for (std::size_t i = 0; i < n; ++i) {
-                    auto const pi = static_cast<double>(p[i]);
-                    kin += pi * pi;
+                partials[c] = s;
+            };
+            reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(n), [&] {
+                if (reticolo::detail::g_in_traverse_region) {
+#pragma omp for schedule(static)
+                    for (std::ptrdiff_t c = 0; c < static_cast<std::ptrdiff_t>(nch); ++c) {
+                        chunk(static_cast<std::size_t>(c));
+                    }
+                } else {
+                    for (std::size_t c = 0; c < nch; ++c) {
+                        chunk(c);
+                    }
                 }
+            });
+            for (double v : partials) {
+                kin += v;
             }
             kin *= 0.5;
         }

@@ -39,6 +39,12 @@ namespace reticolo::action::detail {
 
 template <class Derived, class T>
 struct SiteAction {
+    // Marks the site family's force/s_full as flag-aware (`visit_nn`/`reduce_fwd`
+    // worksplit inside a reticolo region). HMC checks this before opening a
+    // persistent MD region — gauge/bond/complex traversals are not yet converted,
+    // so opening one around them would race on the shared output buffers.
+    static constexpr bool k_traverse_threaded = true;
+
     [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
         auto kern      = derived_().action_kernel();
         double const s = reduce_fwd<T, double>(
@@ -51,15 +57,20 @@ struct SiteAction {
         maybe_prep_(l);
         auto kern    = derived_().force_kernel();
         T* const out = force.data();
-        visit_nn<T>(l, [&kern, out](std::size_t i, T phi, T nbrs) { out[i] = kern(i, phi, nbrs); });
+        reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(l.nsites()), [&] {
+            visit_nn<T>(
+                l, [&kern, out](std::size_t i, T phi, T nbrs) { out[i] = kern(i, phi, nbrs); });
+        });
     }
 
     void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept {
         maybe_prep_(l);
         auto kern  = derived_().force_kernel();
         T* const m = mom.data();
-        visit_nn<T>(l, [&kern, m, k_dt](std::size_t i, T phi, T nbrs) {
-            m[i] += k_dt * kern(i, phi, nbrs);
+        reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(l.nsites()), [&] {
+            visit_nn<T>(l, [&kern, m, k_dt](std::size_t i, T phi, T nbrs) {
+                m[i] += k_dt * kern(i, phi, nbrs);
+            });
         });
     }
 
@@ -81,10 +92,12 @@ struct SiteAction {
         std::size_t const n = l.nsites();
         ensure_scratch(n);
         T* const sb = scratch_.data();
-        visit_nn<T>(l, [&kern, out, sb](std::size_t i, T phi, T nbrs) {
-            auto const [f, s] = kern(i, phi, nbrs);
-            out[i]            = f;
-            sb[i]             = s;
+        reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(n), [&] {
+            visit_nn<T>(l, [&kern, out, sb](std::size_t i, T phi, T nbrs) {
+                auto const [f, s] = kern(i, phi, nbrs);
+                out[i]            = f;
+                sb[i]             = s;
+            });
         });
         double s = 0.0;
         {

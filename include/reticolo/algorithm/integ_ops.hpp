@@ -34,10 +34,17 @@ inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
     auto const* __restrict const p = mom.data();
     std::size_t const n            = flat_size(field);
     real_scalar_t<F> const c       = static_cast<real_scalar_t<F>>(cdt);
-    [[maybe_unused]] bool const par = reticolo::detail::traverse_parallel(n);
-#pragma omp parallel for if (par) schedule(static)
-    for (std::size_t i = 0; i < n; ++i) {
-        f[i] += c * p[i];
+    // Worksplit across the enclosing per-trajectory region (Model B); serial when
+    // called outside one. Kept lambda-free so __restrict survives for the vectoriser.
+    if (reticolo::detail::g_in_traverse_region) {
+#pragma omp for schedule(static)
+        for (std::size_t i = 0; i < n; ++i) {
+            f[i] += c * p[i];
+        }
+    } else {
+        for (std::size_t i = 0; i < n; ++i) {
+            f[i] += c * p[i];
+        }
     }
 }
 
@@ -48,10 +55,15 @@ inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
     auto const* __restrict const fp = force.data();
     std::size_t const n             = flat_size(mom);
     real_scalar_t<F> const c        = static_cast<real_scalar_t<F>>(kdt);
-    [[maybe_unused]] bool const par = reticolo::detail::traverse_parallel(n);
-#pragma omp parallel for if (par) schedule(static)
-    for (std::size_t i = 0; i < n; ++i) {
-        m[i] += c * fp[i];
+    if (reticolo::detail::g_in_traverse_region) {
+#pragma omp for schedule(static)
+        for (std::size_t i = 0; i < n; ++i) {
+            m[i] += c * fp[i];
+        }
+    } else {
+        for (std::size_t i = 0; i < n; ++i) {
+            m[i] += c * fp[i];
+        }
     }
 }
 

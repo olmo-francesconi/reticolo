@@ -330,10 +330,11 @@ inline void visit_nn_4d_(Lattice<T> const& l, Body&& body) noexcept {
     visit_block_nn_4d_<T>(l, 0, sh[0], 0, sh[1], 0, sh[2], 0, sh[3], body);
 }
 
-// Threaded, all-dims-tiled sweep: one omp region, sub-lattices are the work
-// units, collapse(4) flattens the tile grid so threads pull whole blocks. No
-// per-call allocation. Force output is bit-identical to the serial sweep (each
-// site is written exactly once, order-independent).
+// Threaded, tiled sweep: an orphaned `omp for` worksplits the tile grid across
+// the enclosing reticolo region's team (collapse(4) flattens the grid). Only
+// reached with g_in_traverse_region set, so the directive always binds to a live
+// region. Force output is bit-identical to the serial sweep (each site written
+// exactly once, order-independent).
 template <class T, class Body>
 inline void visit_nn_tiled_4d_(Lattice<T> const& l, Body&& body) noexcept {
     auto const& sh       = l.shape();
@@ -347,7 +348,7 @@ inline void visit_nn_tiled_4d_(Lattice<T> const& l, Body&& body) noexcept {
     auto const ntz       = static_cast<std::ptrdiff_t>((L2 + bl.bz - 1) / bl.bz);
     auto const ntw       = static_cast<std::ptrdiff_t>((L3 + bl.bw - 1) / bl.bw);
 
-#pragma omp parallel for collapse(4) schedule(static)
+#pragma omp for collapse(4) schedule(static)
     for (std::ptrdiff_t tw = 0; tw < ntw; ++tw) {
         for (std::ptrdiff_t tz = 0; tz < ntz; ++tz) {
             for (std::ptrdiff_t ty = 0; ty < nty; ++ty) {
@@ -388,7 +389,7 @@ inline void visit_nn(Lattice<T> const& l, Body&& body) noexcept {
             visit_nn_3d_(l, std::forward<Body>(body));
             return;
         case 4:
-            if (reticolo::detail::traverse_parallel(l.nsites())) {
+            if (reticolo::detail::g_in_traverse_region) {
                 visit_nn_tiled_4d_(l, std::forward<Body>(body));
             } else {
                 visit_nn_4d_(l, std::forward<Body>(body));
@@ -584,41 +585,59 @@ template <class T, class Acc = T, class Body>
     std::size_t const L2 = sh[2];
     std::size_t const L3 = sh[3];
     Block4d const bl     = plan_block_4d_<T>(L0, L1, L2, L3);
-    auto const ntx       = (L0 + bl.bx - 1) / bl.bx;
-    auto const nty       = (L1 + bl.by - 1) / bl.by;
-    auto const ntz       = (L2 + bl.bz - 1) / bl.bz;
-    auto const ntw       = (L3 + bl.bw - 1) / bl.bw;
-    std::vector<Acc> partials(ntx * nty * ntz * ntw, Acc{});
-    [[maybe_unused]] bool const par = reticolo::detail::traverse_parallel(l.nsites());
+    auto const ntx       = static_cast<std::ptrdiff_t>((L0 + bl.bx - 1) / bl.bx);
+    auto const nty       = static_cast<std::ptrdiff_t>((L1 + bl.by - 1) / bl.by);
+    auto const ntz       = static_cast<std::ptrdiff_t>((L2 + bl.bz - 1) / bl.bz);
+    auto const ntw       = static_cast<std::ptrdiff_t>((L3 + bl.bw - 1) / bl.bw);
 
-#pragma omp parallel for collapse(4) schedule(static) if (par)
-    for (std::ptrdiff_t tw = 0; tw < static_cast<std::ptrdiff_t>(ntw); ++tw) {
-        for (std::ptrdiff_t tz = 0; tz < static_cast<std::ptrdiff_t>(ntz); ++tz) {
-            for (std::ptrdiff_t ty = 0; ty < static_cast<std::ptrdiff_t>(nty); ++ty) {
-                for (std::ptrdiff_t tx = 0; tx < static_cast<std::ptrdiff_t>(ntx); ++tx) {
-                    std::size_t const x0 = static_cast<std::size_t>(tx) * bl.bx;
-                    std::size_t const y0 = static_cast<std::size_t>(ty) * bl.by;
-                    std::size_t const z0 = static_cast<std::size_t>(tz) * bl.bz;
-                    std::size_t const w0 = static_cast<std::size_t>(tw) * bl.bw;
-                    std::size_t const idx =
-                        ((static_cast<std::size_t>(tw) * ntz + static_cast<std::size_t>(tz)) * nty +
-                         static_cast<std::size_t>(ty)) *
-                            ntx +
-                        static_cast<std::size_t>(tx);
-                    partials[idx] = reduce_block_fwd_4d_<T, Acc>(l,
-                                                                 x0,
-                                                                 std::min(x0 + bl.bx, L0),
-                                                                 y0,
-                                                                 std::min(y0 + bl.by, L1),
-                                                                 z0,
-                                                                 std::min(z0 + bl.bz, L2),
-                                                                 w0,
-                                                                 std::min(w0 + bl.bw, L3),
-                                                                 body);
+    // Allocated BEFORE the region so it is shared across the team; each tile writes
+    // its own slot (disjoint), so the omp-for split is race-free and the sum below
+    // is thread-count invariant.
+    std::vector<Acc> partials(static_cast<std::size_t>(ntx * nty * ntz * ntw), Acc{});
+
+    auto tile = [&](std::ptrdiff_t tw, std::ptrdiff_t tz, std::ptrdiff_t ty, std::ptrdiff_t tx) {
+        std::size_t const x0  = static_cast<std::size_t>(tx) * bl.bx;
+        std::size_t const y0  = static_cast<std::size_t>(ty) * bl.by;
+        std::size_t const z0  = static_cast<std::size_t>(tz) * bl.bz;
+        std::size_t const w0  = static_cast<std::size_t>(tw) * bl.bw;
+        std::size_t const idx = static_cast<std::size_t>(((tw * ntz + tz) * nty + ty) * ntx + tx);
+        partials[idx]         = reduce_block_fwd_4d_<T, Acc>(l,
+                                                     x0,
+                                                     std::min(x0 + bl.bx, L0),
+                                                     y0,
+                                                     std::min(y0 + bl.by, L1),
+                                                     z0,
+                                                     std::min(z0 + bl.bz, L2),
+                                                     w0,
+                                                     std::min(w0 + bl.bw, L3),
+                                                     body);
+    };
+
+    reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(l.nsites()), [&] {
+        if (reticolo::detail::g_in_traverse_region) {
+#pragma omp for collapse(4) schedule(static)
+            for (std::ptrdiff_t tw = 0; tw < ntw; ++tw) {
+                for (std::ptrdiff_t tz = 0; tz < ntz; ++tz) {
+                    for (std::ptrdiff_t ty = 0; ty < nty; ++ty) {
+                        for (std::ptrdiff_t tx = 0; tx < ntx; ++tx) {
+                            tile(tw, tz, ty, tx);
+                        }
+                    }
+                }
+            }
+        } else {
+            for (std::ptrdiff_t tw = 0; tw < ntw; ++tw) {
+                for (std::ptrdiff_t tz = 0; tz < ntz; ++tz) {
+                    for (std::ptrdiff_t ty = 0; ty < nty; ++ty) {
+                        for (std::ptrdiff_t tx = 0; tx < ntx; ++tx) {
+                            tile(tw, tz, ty, tx);
+                        }
+                    }
                 }
             }
         }
-    }
+    });
+
     Acc total{};
     for (Acc const& p : partials) {
         total += p;
