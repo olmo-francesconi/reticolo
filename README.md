@@ -89,26 +89,6 @@ with h5py.File("phi4.h5", "r") as f:
     print(f["/run"].attrs["commit"], s.mean())
 ```
 
-## Benchmarks
-
-Integrator efficiency — energy violation σ(ΔH) vs cost, on a thermalised ensemble:
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/bench_integrator_dark.svg">
-    <img alt="Energy violation vs cost for Leapfrog, Omelyan2 and Omelyan4" src="docs/bench_integrator_light.svg" width="100%">
-  </picture>
-</p>
-
-Double-precision HMC throughput of the CUDA backend on FP64 datacenter GPUs:
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/bench_gpu_dark.svg">
-    <img alt="GPU HMC throughput across A100 / H100 / B200 for phi4 and SU(3)" src="docs/bench_gpu_light.svg" width="100%">
-  </picture>
-</p>
-
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — library design and data model
