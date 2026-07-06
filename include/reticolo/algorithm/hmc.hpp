@@ -216,20 +216,18 @@ private:
         Integrator::run(action_, field_, mom_, force_, tau, n_md);
     }
 
-    // Flat elementwise copy (rollback snapshot / restore), worksplit standalone.
+    // Flat elementwise copy (rollback snapshot / restore) — a write-disjoint map.
     static void copy_flat_(Scalar* dst, Scalar const* src, std::size_t n) noexcept {
-        reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(n), [&] {
-            if (reticolo::detail::g_in_traverse_region) {
-#pragma omp for schedule(static)
-                for (std::size_t i = 0; i < n; ++i) {
-                    dst[i] = src[i];
-                }
-            } else {
-                for (std::size_t i = 0; i < n; ++i) {
-                    dst[i] = src[i];
-                }
-            }
-        });
+        constexpr std::size_t k_chunk = 1UL << 14;
+        reticolo::detail::parallel_map_ranges(reticolo::detail::traverse_want(n),
+                                              n,
+                                              k_chunk,
+                                              [dst, src](std::size_t base, std::size_t cnt) {
+                                                  std::size_t const end = base + cnt;
+                                                  for (std::size_t i = base; i < end; ++i) {
+                                                      dst[i] = src[i];
+                                                  }
+                                              });
     }
 
     // Parallel counter-based standard-normal fill: out[2p], out[2p+1] come from
@@ -239,26 +237,21 @@ private:
     // sample_momenta_): one serial draw that advances the RNG identically on a
     // resumed run, so checkpoint/resume stays bit-exact.
     static void philox_normal_fill_(double* out, std::size_t n, std::uint64_t key) noexcept {
-        std::size_t const npair = n / 2;
-        auto pair               = [&](std::size_t p) {
-            double n0 = 0.0;
-            double n1 = 0.0;
-            philox_normal2(key, 0, p, n0, n1);
-            out[2 * p]     = n0;
-            out[2 * p + 1] = n1;
-        };
-        reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(n), [&] {
-            if (reticolo::detail::g_in_traverse_region) {
-#pragma omp for schedule(static)
-                for (std::ptrdiff_t p = 0; p < static_cast<std::ptrdiff_t>(npair); ++p) {
-                    pair(static_cast<std::size_t>(p));
-                }
-            } else {
-                for (std::size_t p = 0; p < npair; ++p) {
-                    pair(p);
-                }
-            }
-        });
+        std::size_t const npair       = n / 2;
+        constexpr std::size_t k_chunk = 1UL << 13;
+        reticolo::detail::parallel_map_ranges(reticolo::detail::traverse_want(n),
+                                              npair,
+                                              k_chunk,
+                                              [out, key](std::size_t base, std::size_t cnt) {
+                                                  std::size_t const end = base + cnt;
+                                                  for (std::size_t p = base; p < end; ++p) {
+                                                      double n0 = 0.0;
+                                                      double n1 = 0.0;
+                                                      philox_normal2(key, 0, p, n0, n1);
+                                                      out[2 * p]       = n0;
+                                                      out[(2 * p) + 1] = n1;
+                                                  }
+                                              });
         if ((n & 1U) != 0U) {  // odd tail
             double a = 0.0;
             double b = 0.0;
@@ -285,11 +278,16 @@ private:
                           }) {
                 // Parallel counter-based sampler: one RNG draw per trajectory keys
                 // Philox, then each direction slab worksplits (site-indexed draws).
-                std::uint64_t const key = rng_.uniform_u64();
+                std::uint64_t const key             = rng_.uniform_u64();
+                constexpr std::size_t k_gauge_chunk = 512;
+                bool const want                     = reticolo::detail::traverse_want(ns);
                 for (std::size_t mu = 0; mu < d; ++mu) {
                     Scalar* const pblk = mom_.mu_block_data(mu);
-                    reticolo::detail::apply_chunked(
-                        ns, 8, [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
+                    reticolo::detail::parallel_map_ranges(
+                        want,
+                        ns,
+                        k_gauge_chunk,
+                        [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
                             Group::sample_algebra_philox_range(pblk, key, mu, ns, base, cnt);
                         });
                 }
@@ -345,13 +343,14 @@ private:
             if constexpr (requires(Scalar const* p) {
                               Group::kinetic_range(p, std::size_t{}, std::size_t{}, std::size_t{});
                           }) {
-                // Parallel deterministic reduce (fixed k_b-blocks) per direction;
-                // the ½ is applied once after folding all directions.
-                double raw = 0.0;
+                // Parallel deterministic reduce per direction; ½ applied once.
+                double raw                          = 0.0;
+                constexpr std::size_t k_gauge_chunk = 512;
+                bool const want                     = reticolo::detail::traverse_want(ns);
                 for (std::size_t mu = 0; mu < d; ++mu) {
                     Scalar const* const pblk = mom_.mu_block_data(mu);
-                    raw += reticolo::detail::reduce_blocks(
-                        ns, 8, [pblk, ns](std::size_t base, std::size_t cnt) {
+                    raw += reticolo::detail::parallel_reduce_ranges(
+                        want, ns, k_gauge_chunk, [pblk, ns](std::size_t base, std::size_t cnt) {
                             return Group::kinetic_range(pblk, ns, base, cnt);
                         });
                 }
@@ -362,43 +361,29 @@ private:
                 }
             }
         } else {
-            Scalar const* const p     = mom_.data();
-            std::size_t const n       = flat_size(mom_);
-            constexpr std::size_t chk = 1U << 13;  // fixed chunk → thread-invariant sum
-            std::size_t const nch     = (n + chk - 1) / chk;
-            std::vector<double> partials(nch, 0.0);
-            auto chunk = [&](std::size_t c) {
-                std::size_t const lo = c * chk;
-                std::size_t const hi = std::min(lo + chk, n);
-                double s             = 0.0;
-                if constexpr (is_complex_v_) {
-                    for (std::size_t i = lo; i < hi; ++i) {
-                        s += std::norm(p[i]);
+            Scalar const* const p         = mom_.data();
+            std::size_t const n           = flat_size(mom_);
+            constexpr std::size_t k_chunk = 1U << 13;
+            double const sum              = reticolo::detail::parallel_reduce_ranges(
+                reticolo::detail::traverse_want(n),
+                n,
+                k_chunk,
+                [p](std::size_t base, std::size_t cnt) {
+                    double s              = 0.0;
+                    std::size_t const end = base + cnt;
+                    if constexpr (is_complex_v_) {
+                        for (std::size_t i = base; i < end; ++i) {
+                            s += std::norm(p[i]);
+                        }
+                    } else {
+                        for (std::size_t i = base; i < end; ++i) {
+                            auto const pi = static_cast<double>(p[i]);
+                            s += pi * pi;
+                        }
                     }
-                } else {
-                    for (std::size_t i = lo; i < hi; ++i) {
-                        auto const pi = static_cast<double>(p[i]);
-                        s += pi * pi;
-                    }
-                }
-                partials[c] = s;
-            };
-            reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(n), [&] {
-                if (reticolo::detail::g_in_traverse_region) {
-#pragma omp for schedule(static)
-                    for (std::ptrdiff_t c = 0; c < static_cast<std::ptrdiff_t>(nch); ++c) {
-                        chunk(static_cast<std::size_t>(c));
-                    }
-                } else {
-                    for (std::size_t c = 0; c < nch; ++c) {
-                        chunk(c);
-                    }
-                }
-            });
-            for (double v : partials) {
-                kin += v;
-            }
-            kin *= 0.5;
+                    return s;
+                });
+            kin += 0.5 * sum;
         }
         return kin;
     }

@@ -1,11 +1,11 @@
 #pragma once
 
 #include <reticolo/action/gauge/detail/gauge_action.hpp>
-#include <reticolo/action/gauge/detail/gauge_traverse.hpp>
 #include <reticolo/action/gauge/detail/plane.hpp>
 #include <reticolo/action/gauge/detail/wilson_kernels.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/parallel.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/math/gauge_group/base.hpp>
 
@@ -72,11 +72,14 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
                           kernels::template s_full_plane_range<T>(
                               U, 0, 1, std::size_t{}, std::size_t{});
                       }) {
-            constexpr std::size_t gran = gauge_group::k_gauge_batch<T>;
+            // Coarse chunk (multiple of every k_gauge_batch and of the drift's
+            // k_b=8) → keeps the batched plane sum bit-identical to a serial sweep.
+            constexpr std::size_t k_gauge_chunk = 512;
+            bool const want                     = reticolo::detail::traverse_want(ns);
             for (std::size_t mu = 0; mu < d; ++mu) {
                 for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                    accum_re_tr += detail::gauge_traverse_reduce(
-                        ns, gran, [&](std::size_t base, std::size_t cnt) {
+                    accum_re_tr += reticolo::detail::parallel_reduce_ranges(
+                        want, ns, k_gauge_chunk, [&](std::size_t base, std::size_t cnt) {
                             return kernels::template s_full_plane_range<T>(U, mu, nu, base, cnt);
                         });
                 }
@@ -115,10 +118,15 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
                           kernels::template compute_force_range<false>(
                               cu, f, double{}, std::size_t{}, std::size_t{});
                       }) {
-            constexpr std::size_t gran = gauge_group::k_gauge_batch<T>;
-            detail::gauge_traverse_apply(U.nsites(), gran, [&](std::size_t base, std::size_t cnt) {
-                kernels::template compute_force_range<false>(U, force, -beta_over_n_dbl, base, cnt);
-            });
+            constexpr std::size_t k_gauge_chunk = 512;
+            std::size_t const ns                = U.nsites();
+            reticolo::detail::parallel_map_ranges(reticolo::detail::traverse_want(ns),
+                                                  ns,
+                                                  k_gauge_chunk,
+                                                  [&](std::size_t base, std::size_t cnt) {
+                                                      kernels::template compute_force_range<false>(
+                                                          U, force, -beta_over_n_dbl, base, cnt);
+                                                  });
         } else {
             kernels::compute_force(U, force, beta_over_n_dbl);
         }
@@ -137,11 +145,16 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
                           kernels::template compute_force_range<true>(
                               cu, m, double{}, std::size_t{}, std::size_t{});
                       }) {
-            constexpr std::size_t gran = gauge_group::k_gauge_batch<T>;
-            double const scale         = -static_cast<double>(k_dt) * beta_over_n_dbl;
-            detail::gauge_traverse_apply(U.nsites(), gran, [&](std::size_t base, std::size_t cnt) {
-                kernels::template compute_force_range<true>(U, mom, scale, base, cnt);
-            });
+            constexpr std::size_t k_gauge_chunk = 512;
+            std::size_t const ns                = U.nsites();
+            double const scale                  = -static_cast<double>(k_dt) * beta_over_n_dbl;
+            reticolo::detail::parallel_map_ranges(reticolo::detail::traverse_want(ns),
+                                                  ns,
+                                                  k_gauge_chunk,
+                                                  [&](std::size_t base, std::size_t cnt) {
+                                                      kernels::template compute_force_range<true>(
+                                                          U, mom, scale, base, cnt);
+                                                  });
         } else {
             kernels::compute_force_and_kick(U, mom, beta_over_n_dbl, static_cast<double>(k_dt));
         }

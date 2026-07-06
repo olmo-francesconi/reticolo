@@ -2,33 +2,28 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <utility>
 #include <vector>
 
 #ifdef _OPENMP
     #include <omp.h>
 #endif
 
-// OpenMP composability for the lattice-traverse stage (Model B). A kernel pass
-// must thread correctly in three contexts: standalone (a bench calling
-// `compute_force`), nested inside the persistent per-trajectory region, and
+// OpenMP composability + the two parallel primitives for the lattice-traverse
+// stage. A kernel pass must thread correctly in three contexts: standalone (a
+// bench calling `compute_force`), nested inside a per-trajectory region, and
 // nested inside LLR's replica-parallel region (where it must stay serial so it
 // doesn't fight the replica team). The mechanism:
 //
-//   * `in_traverse_region(want, body)` — the entry wrapper. When `want` (the
-//     lattice is large enough) and we're not already inside any parallel region,
-//     it opens ONE `omp parallel` and marks it ours by setting the thread-local
-//     `g_in_traverse_region`. Otherwise it runs `body` inline — nested in our own
-//     region the flag is already set (leaves worksplit); inside a foreign region
-//     or a too-small pass the flag is false (leaves run serial).
-//   * Every LEAF (visit_nn, reduce_fwd, drift, kick, …) branches on
-//     `g_in_traverse_region`: true → orphaned `#pragma omp for` binding to the
-//     enclosing reticolo region; false → a plain serial loop.
+//   * `in_traverse_region(want, body)` — the region entry. When `want` and we're
+//     not already inside any parallel region, it opens ONE `omp parallel` and
+//     marks it ours via the thread-local `g_in_traverse_region`. Otherwise it runs
+//     `body` inline — nested in our own region the flag is already set (worksplit);
+//     inside a foreign region or a too-small pass the flag is false (serial).
+//   * `parallel_map` / `parallel_reduce` — the ONLY places that hold an
+//     `#pragma omp for` and read `g_in_traverse_region`. Kernels are pure workers
+//     over a work-item index; they never see OpenMP. See below.
 //
-// So a trajectory opens the region once and all its kernels worksplit within it
-// — the per-call fork/join barriers of the old model collapse to cheap barriers
-// on a team that stays hot. Without `-fopenmp` every pragma vanishes and this all
-// degrades to serial.
+// Without `-fopenmp` every pragma vanishes and this all degrades to serial.
 
 namespace reticolo::detail {
 
@@ -71,76 +66,85 @@ inline void in_traverse_region([[maybe_unused]] bool want, Body const& body) {
     body();
 }
 
-// Contiguous, `gran`-aligned sub-range [lo, hi) of [0, n) for the calling thread
-// within a reticolo-owned region (SPMD partition). `gran` alignment keeps every
-// non-final chunk on a batch boundary, so batched kernels give the same per-site
-// path — and hence bit-identical results — as the serial full-range sweep; only
-// the final chunk carries the [0, gran) global remainder. `hi - lo` may be 0 when
-// there are more threads than blocks. Outside OpenMP (or serial) returns [0, n).
-[[nodiscard]] inline std::pair<std::size_t, std::size_t>
-spmd_chunk(std::size_t n, [[maybe_unused]] std::size_t gran) noexcept {
-#ifdef _OPENMP
-    std::size_t const nblk = (n + gran - 1) / gran;
-    auto const nt          = static_cast<std::size_t>(omp_get_num_threads());
-    auto const tid         = static_cast<std::size_t>(omp_get_thread_num());
-    std::size_t const lo   = ((nblk * tid) / nt) * gran;
-    std::size_t const hi   = std::min(((nblk * (tid + 1)) / nt) * gran, n);
-    return {lo, hi};
-#else
-    return {std::size_t{0}, n};
-#endif
-}
+// The two parallel primitives. Every threaded kernel in the tree is expressed as
+// one of these over an abstract work-item count; the `omp for` and the
+// `g_in_traverse_region` branch live here and nowhere else. A *work item* is
+// whatever the caller makes it — a lattice tile, a stencil row, a site chunk.
+//
+//  * parallel_map    — write-disjoint. Each item's worker writes its own region,
+//                      so the result is order-independent → bit-identical for any
+//                      thread count. (force, kick, drift, momentum, copy.)
+//  * parallel_reduce — deterministic. The item partition is fixed (independent of
+//                      thread count), so one partial per item folded in canonical
+//                      item order is identical for any thread count. (s_full,
+//                      kinetic.)
+//
+// `want` gates threading — the caller knows the problem size (traverse_want).
+// Standalone opens its own region; nested in a reticolo region worksplits the
+// current team; a foreign region or !want runs the serial branch.
 
-// Write-disjoint pass: run `worker(base, cnt)` over one `gran`-aligned contiguous
-// chunk of [0, n) per thread (SPMD). For batched kernels the alignment makes each
-// non-final chunk take the same per-site path as the serial full-range sweep, so
-// a write-once pass is bit-identical for any thread count. Standalone opens its
-// own region; nested worksplits the current team; foreign/too-small → serial.
 template <class Worker>
-inline void apply_chunked(std::size_t n, std::size_t gran, Worker const& worker) {
-    in_traverse_region(traverse_want(n), [&] {
-        if (g_in_traverse_region) {
-            auto const [lo, hi] = spmd_chunk(n, gran);
-            if (hi > lo) {
-                worker(lo, hi - lo);
-            }
-        } else {
-            worker(std::size_t{0}, n);
-        }
-    });
-}
-
-// Deterministic blocked reduction: sum `worker(base, cnt) -> double` over a fixed
-// `gran`-block partition of [0, n) into a partials buffer, folded in block order.
-// The partition is independent of thread count, so the result is identical for
-// any number of threads (the reduction analogue of spmd_chunk). Standalone opens
-// its own region; nested worksplits the current team; foreign/too-small → serial.
-template <class Worker>
-[[nodiscard]] inline double reduce_blocks(std::size_t n, std::size_t gran, Worker const& worker) {
-    std::size_t const nblk = (n + gran - 1) / gran;
-    std::vector<double> partials(nblk, 0.0);
-    in_traverse_region(traverse_want(n), [&] {
-        auto block = [&](std::size_t b) {
-            std::size_t const lo = b * gran;
-            std::size_t const hi = std::min(lo + gran, n);
-            partials[b]          = worker(lo, hi - lo);
-        };
+inline void parallel_map(bool want, std::size_t n_items, Worker const& worker) {
+    in_traverse_region(want, [&] {
         if (g_in_traverse_region) {
 #pragma omp for schedule(static)
-            for (std::ptrdiff_t b = 0; b < static_cast<std::ptrdiff_t>(nblk); ++b) {
-                block(static_cast<std::size_t>(b));
+            for (std::ptrdiff_t i = 0; i < static_cast<std::ptrdiff_t>(n_items); ++i) {
+                worker(static_cast<std::size_t>(i));
             }
         } else {
-            for (std::size_t b = 0; b < nblk; ++b) {
-                block(b);
+            for (std::size_t i = 0; i < n_items; ++i) {
+                worker(i);
             }
         }
     });
-    double total = 0.0;
-    for (double const v : partials) {
+}
+
+template <class Acc = double, class Worker>
+[[nodiscard]] inline Acc parallel_reduce(bool want, std::size_t n_items, Worker const& worker) {
+    std::vector<Acc> partials(n_items, Acc{});
+    in_traverse_region(want, [&] {
+        if (g_in_traverse_region) {
+#pragma omp for schedule(static)
+            for (std::ptrdiff_t i = 0; i < static_cast<std::ptrdiff_t>(n_items); ++i) {
+                partials[static_cast<std::size_t>(i)] = worker(static_cast<std::size_t>(i));
+            }
+        } else {
+            for (std::size_t i = 0; i < n_items; ++i) {
+                partials[i] = worker(i);
+            }
+        }
+    });
+    Acc total{};
+    for (Acc const& v : partials) {
         total += v;
     }
     return total;
+}
+
+// Range-convenience: map `worker(base, cnt)` over `chunk`-sized, chunk-aligned
+// pieces of [0, n). The caller picks the granularity — coarse for a heavy per-site
+// pipeline (the SU(N) drift amortises its multi-pass scratch), fine for cheap
+// elementwise ops. Chunk alignment keeps batched kernels bit-identical to a serial
+// full-range sweep. (Only the final chunk carries the [0, chunk) remainder.)
+template <class Worker>
+inline void parallel_map_ranges(bool want, std::size_t n, std::size_t chunk, Worker const& worker) {
+    std::size_t const n_items = (n + chunk - 1) / chunk;
+    parallel_map(want, n_items, [&](std::size_t i) {
+        std::size_t const base = i * chunk;
+        worker(base, std::min(chunk, n - base));
+    });
+}
+
+// Range-convenience: reduce `worker(base, cnt) -> Acc` over chunk-aligned pieces of
+// [0, n), folded in canonical chunk order → thread-count invariant.
+template <class Acc = double, class Worker>
+[[nodiscard]] inline Acc
+parallel_reduce_ranges(bool want, std::size_t n, std::size_t chunk, Worker const& worker) {
+    std::size_t const n_items = (n + chunk - 1) / chunk;
+    return parallel_reduce<Acc>(want, n_items, [&](std::size_t i) {
+        std::size_t const base = i * chunk;
+        return worker(base, std::min(chunk, n - base));
+    });
 }
 
 }  // namespace reticolo::detail
