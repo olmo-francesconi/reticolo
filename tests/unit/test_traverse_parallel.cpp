@@ -5,6 +5,7 @@
 #include <reticolo/core/rng.hpp>
 
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -20,11 +21,11 @@ using reticolo::action::detail::visit_nn_fallback_;
 
 namespace {
 
-// A 4D lattice above k_traverse_min_sites, so compute_force / s_full take the
-// cache-tiled (and, on an OpenMP build, threaded) traversal path rather than the
-// small-lattice serial one.
-Lattice<double> hot_4d(std::size_t side) {
-    Lattice<double> phi{Lattice<double>::SizeVec(4, side)};
+// A lattice above k_traverse_min_sites, so compute_force / s_full take the
+// threaded traversal path rather than the small-lattice serial one. One shape per
+// dimensionality (2D/3D/4D) so all the per-dim parallel paths are exercised.
+Lattice<double> hot_lattice(Lattice<double>::SizeVec const& shape) {
+    Lattice<double> phi{shape};
     FastRng rng{2024};
     double* const d = phi.data();
     for (std::size_t i = 0; i < phi.nsites(); ++i) {
@@ -39,53 +40,67 @@ std::vector<double> force_vec(Phi4<double> const& action, Lattice<double> const&
     return {f.data(), f.data() + f.nsites()};
 }
 
+// {2D 160², 3D 26³, 4D 16⁴} — each above 16384 sites.
+std::vector<Lattice<double>::SizeVec> hot_shapes() {
+    return {{160, 160}, {26, 26, 26}, {16, 16, 16, 16}};
+}
+
 }  // namespace
 
-// The tiled force pass must land on the identical answer as the plain gather
-// through the neighbour table — each site is written exactly once, so the tiling
-// and thread decomposition are bit-for-bit irrelevant to the result.
-TEST_CASE("tiled compute_force equals the gather fallback (above threshold)", "[hot_loop][parallel]") {
-    auto const phi = hot_4d(16);  // 16^4 = 65536 > 16384
-    REQUIRE(phi.nsites() > reticolo::detail::k_traverse_min_sites);
+// The threaded per-dim force pass must land on the identical answer as the plain
+// gather through the neighbour table — each site is written exactly once and its
+// neighbour sum is in the same order, so the tiling/row decomposition and thread
+// count are bit-for-bit irrelevant.
+TEST_CASE("threaded compute_force equals the gather fallback, every dimension",
+          "[hot_loop][parallel]") {
     Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
+    for (auto const& shape : hot_shapes()) {
+        auto const phi = hot_lattice(shape);
+        REQUIRE(phi.nsites() > reticolo::detail::k_traverse_min_sites);
 
-    auto kern = action.force_kernel();
-    std::vector<double> ref(phi.nsites(), 0.0);
-    visit_nn_fallback_<double>(
-        phi, [&](std::size_t i, double p, double nb) { ref[i] = kern(i, p, nb); });
+        auto kern = action.force_kernel();
+        std::vector<double> ref(phi.nsites(), 0.0);
+        visit_nn_fallback_<double>(
+            phi, std::size_t{0}, phi.nsites(), [&](std::size_t i, double p, double nb) {
+                ref[i] = kern(i, p, nb);
+            });
 
-    auto const got = force_vec(action, phi);
-    for (std::size_t i = 0; i < ref.size(); ++i) {
-        INFO("site " << i);
-        REQUIRE(got[i] == ref[i]);
+        auto const got = force_vec(action, phi);
+        for (std::size_t i = 0; i < ref.size(); ++i) {
+            INFO("ndims=" << shape.size() << " site=" << i);
+            REQUIRE(got[i] == ref[i]);
+        }
     }
 }
 
-// The force output is order-independent (each site written once) and the s_full
-// reduction is decomposed into a fixed tile grid summed in canonical order, so
-// both are identical for any thread count. On a serial build this runs once and
-// trivially holds; on an OpenMP build it varies the team size for real.
-TEST_CASE("tiled force + s_full are thread-count invariant", "[hot_loop][parallel]") {
-    auto const phi = hot_4d(16);
-    REQUIRE(phi.nsites() > reticolo::detail::k_traverse_min_sites);
+// Force output is order-independent (each site written once) and the s_full
+// reduction is a fixed work-item partition summed in canonical order, so both are
+// identical for any thread count — in every dimension. On a serial build this runs
+// once and trivially holds; on an OpenMP build it varies the team size for real.
+TEST_CASE("threaded force + s_full are thread-count invariant, every dimension",
+          "[hot_loop][parallel]") {
     Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
+    for (auto const& shape : hot_shapes()) {
+        auto const phi = hot_lattice(shape);
+        REQUIRE(phi.nsites() > reticolo::detail::k_traverse_min_sites);
 
-    auto at = [&](int nthr) {
+        auto at = [&](int nthr) {
 #ifdef _OPENMP
-        omp_set_num_threads(nthr);
+            omp_set_num_threads(nthr);
 #else
-        (void)nthr;
+            (void)nthr;
 #endif
-        return std::pair{force_vec(action, phi), action.s_full(phi)};
-    };
+            return std::pair{force_vec(action, phi), action.s_full(phi)};
+        };
 
-    auto const [f_ref, s_ref] = at(1);
-    for (int nthr : {1, 2, 4, 8}) {
-        auto const [f, s] = at(nthr);
-        REQUIRE(s == s_ref);  // deterministic partials -> thread-invariant
-        for (std::size_t i = 0; i < f.size(); ++i) {
-            INFO("threads=" << nthr << " site=" << i);
-            REQUIRE(f[i] == f_ref[i]);  // bit-identical force
+        auto const [f_ref, s_ref] = at(1);
+        for (int nthr : {1, 2, 4, 8}) {
+            auto const [f, s] = at(nthr);
+            INFO("ndims=" << shape.size() << " threads=" << nthr);
+            REQUIRE(s == s_ref);  // deterministic partials -> thread-invariant
+            for (std::size_t i = 0; i < f.size(); ++i) {
+                REQUIRE(f[i] == f_ref[i]);  // bit-identical force
+            }
         }
     }
 }

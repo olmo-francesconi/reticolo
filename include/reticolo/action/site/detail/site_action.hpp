@@ -51,20 +51,16 @@ struct SiteAction {
         maybe_prep_(l);
         auto kern    = derived_().force_kernel();
         T* const out = force.data();
-        reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(l.nsites()), [&] {
-            visit_nn<T>(
-                l, [&kern, out](std::size_t i, T phi, T nbrs) { out[i] = kern(i, phi, nbrs); });
-        });
+        // visit_nn self-threads via the parallel primitives (write-disjoint map).
+        visit_nn<T>(l, [&kern, out](std::size_t i, T phi, T nbrs) { out[i] = kern(i, phi, nbrs); });
     }
 
     void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept {
         maybe_prep_(l);
         auto kern  = derived_().force_kernel();
         T* const m = mom.data();
-        reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(l.nsites()), [&] {
-            visit_nn<T>(l, [&kern, m, k_dt](std::size_t i, T phi, T nbrs) {
-                m[i] += k_dt * kern(i, phi, nbrs);
-            });
+        visit_nn<T>(l, [&kern, m, k_dt](std::size_t i, T phi, T nbrs) {
+            m[i] += k_dt * kern(i, phi, nbrs);
         });
     }
 
@@ -86,21 +82,27 @@ struct SiteAction {
         std::size_t const n = l.nsites();
         ensure_scratch(n);
         T* const sb = scratch_.data();
-        reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(n), [&] {
-            visit_nn<T>(l, [&kern, out, sb](std::size_t i, T phi, T nbrs) {
-                auto const [f, s] = kern(i, phi, nbrs);
-                out[i]            = f;
-                sb[i]             = s;
-            });
+        // Force + staged per-site action: write-disjoint map (self-threaded).
+        visit_nn<T>(l, [&kern, out, sb](std::size_t i, T phi, T nbrs) {
+            auto const [f, s] = kern(i, phi, nbrs);
+            out[i]            = f;
+            sb[i]             = s;
         });
-        double s = 0.0;
-        {
-            RETICOLO_FP_REASSOCIATE
-            for (std::size_t i = 0; i < n; ++i) {
-                s += static_cast<double>(sb[i]);
-            }
-        }
-        return s;
+        // Reduce the staged action in a fixed-block partition (thread-count
+        // invariant), matching s_full's parallel reduce.
+        return reticolo::detail::parallel_reduce_ranges(reticolo::detail::traverse_want(n),
+                                                        n,
+                                                        k_site_chunk,
+                                                        [sb](std::size_t base, std::size_t cnt) {
+                                                            RETICOLO_FP_REASSOCIATE
+                                                            double s              = 0.0;
+                                                            std::size_t const end = base + cnt;
+                                                            for (std::size_t i = base; i < end;
+                                                                 ++i) {
+                                                                s += static_cast<double>(sb[i]);
+                                                            }
+                                                            return s;
+                                                        });
     }
 
     [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }

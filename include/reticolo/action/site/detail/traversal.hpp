@@ -22,6 +22,10 @@
 
 namespace reticolo::action::detail {
 
+// Chunk for the flat-iteration paths (1D and the D>4 fallback), in sites. The
+// row/plane/tile paths use their own natural work items instead.
+inline constexpr std::size_t k_site_chunk = 1UL << 13;  // 8192 sites
+
 // Hot-loop helpers for scalar nearest-neighbour kernels on periodic hypercubic
 // lattices. Two patterns:
 //
@@ -52,16 +56,21 @@ namespace reticolo::action::detail {
 
 // ---------- visit_nn ---------------------------------------------------------
 
+// Flat neighbour-table sweep over sites [s0, s0+cnt). Any dimension; the general
+// per-item worker for D>4 (and the forced-fallback bench path).
 template <class T, class Body>
-inline void visit_nn_fallback_(Lattice<T> const& l, Body&& body) noexcept {
+inline void visit_nn_fallback_(Lattice<T> const& l,
+                               std::size_t s0,
+                               std::size_t cnt,
+                               Body const& body) noexcept {
     auto const& idx              = l.indexing_ref();
     T const* data                = l.data();
     Site::value_type const* next = idx.next_data();
     Site::value_type const* prev = idx.prev_data();
-    std::size_t const n          = idx.nsites();
     std::size_t const d          = idx.ndims();
+    std::size_t const end        = s0 + cnt;
 
-    for (std::size_t i = 0; i < n; ++i) {
+    for (std::size_t i = s0; i < end; ++i) {
         T nbrs                 = T{0};
         std::size_t const base = i * d;
         for (std::size_t mu = 0; mu < d; ++mu) {
@@ -72,31 +81,43 @@ inline void visit_nn_fallback_(Lattice<T> const& l, Body&& body) noexcept {
     }
 }
 
+// x-range [x0, x1) of a 1D lattice. Interior x reads data[x±1]; the global x=0 /
+// x=Lx-1 wraps are peeled off when they fall in range, so any chunk partition is
+// bit-identical to the full sweep. Order: next[0] + prev[0] (matches fallback).
 template <class T, class Body>
-inline void visit_nn_1d_(Lattice<T> const& l, Body&& body) noexcept {
+inline void
+visit_nn_1d_(Lattice<T> const& l, std::size_t x0, std::size_t x1, Body const& body) noexcept {
     T const* data        = l.data();
     std::size_t const Lx = l.shape()[0];
-
-    // Order: next[0] + prev[0]  (matches gather fallback bit-for-bit).
-    // x = 0
-    body(std::size_t{0}, data[0], data[1] + data[Lx - 1]);
-    // x in (0, Lx-1)
-    for (std::size_t x = 1; x + 1 < Lx; ++x) {
+    std::size_t xb       = x0;
+    std::size_t xe       = x1;
+    if (x0 == 0) {  // global -x wrap
+        body(std::size_t{0}, data[0], data[1] + data[Lx - 1]);
+        xb = 1;
+    }
+    if (x1 == Lx) {
+        xe = Lx - 1;
+    }
+    for (std::size_t x = xb; x < xe; ++x) {
         body(x, data[x], data[x + 1] + data[x - 1]);
     }
-    // x = Lx-1
-    body(Lx - 1, data[Lx - 1], data[0] + data[Lx - 2]);
+    if (x1 == Lx) {  // global +x wrap
+        body(Lx - 1, data[Lx - 1], data[0] + data[Lx - 2]);
+    }
 }
 
+// Rows [y0, y1) of a 2D lattice (inner x full). Each row is a self-contained
+// work unit — the parallel map hands one y-range to each thread.
 template <class T, class Body>
-inline void visit_nn_2d_(Lattice<T> const& l, Body&& body) noexcept {
+inline void
+visit_nn_2d_(Lattice<T> const& l, std::size_t y0, std::size_t y1, Body const& body) noexcept {
     T const* data        = l.data();
     auto const& sh       = l.shape();
     std::size_t const Lx = sh[0];
     std::size_t const Ly = sh[1];
     std::size_t const sy = Lx;
 
-    for (std::size_t y = 0; y < Ly; ++y) {
+    for (std::size_t y = y0; y < y1; ++y) {
         std::size_t const ym     = (y == 0) ? (Ly - 1) : (y - 1);
         std::size_t const yp     = (y + 1 == Ly) ? 0 : (y + 1);
         std::size_t const row    = y * sy;
@@ -124,8 +145,10 @@ inline void visit_nn_2d_(Lattice<T> const& l, Body&& body) noexcept {
     }
 }
 
+// Planes [z0, z1) of a 3D lattice (inner y,x full). One z-range per work item.
 template <class T, class Body>
-inline void visit_nn_3d_(Lattice<T> const& l, Body&& body) noexcept {
+inline void
+visit_nn_3d_(Lattice<T> const& l, std::size_t z0, std::size_t z1, Body const& body) noexcept {
     T const* data        = l.data();
     auto const& sh       = l.shape();
     std::size_t const Lx = sh[0];
@@ -134,7 +157,7 @@ inline void visit_nn_3d_(Lattice<T> const& l, Body&& body) noexcept {
     std::size_t const sy = Lx;
     std::size_t const sz = Lx * Ly;
 
-    for (std::size_t z = 0; z < Lz; ++z) {
+    for (std::size_t z = z0; z < z1; ++z) {
         std::size_t const zm       = (z == 0) ? (Lz - 1) : (z - 1);
         std::size_t const zp       = (z + 1 == Lz) ? 0 : (z + 1);
         std::size_t const plane    = z * sz;
@@ -323,80 +346,86 @@ plan_block_4d_(std::size_t L0, std::size_t L1, std::size_t L2, std::size_t L3) n
     return {L0, std::min(ub, L1), std::min(ub, L2), std::min(ub, L3)};
 }
 
-// Serial full-lattice sweep — one block spanning the whole lattice.
+// 4D handler: work items = tiles of the y/z/w grid (x full — see plan_block_4d_).
+// The cache tiling caps each work unit's halo working set; `parallel_map` splits
+// the tile grid across the team. Force output is bit-identical to the serial
+// sweep (each site written once, order-independent). The serial branch (!want or
+// foreign region) walks all tiles on one thread = the full sweep.
 template <class T, class Body>
-inline void visit_nn_4d_(Lattice<T> const& l, Body&& body) noexcept {
-    auto const& sh = l.shape();
-    visit_block_nn_4d_<T>(l, 0, sh[0], 0, sh[1], 0, sh[2], 0, sh[3], body);
+inline void visit_nn_tiled_4d_(Lattice<T> const& l, bool want, Body const& body) noexcept {
+    auto const& sh        = l.shape();
+    std::size_t const L0  = sh[0];
+    std::size_t const L1  = sh[1];
+    std::size_t const L2  = sh[2];
+    std::size_t const L3  = sh[3];
+    Block4d const bl      = plan_block_4d_<T>(L0, L1, L2, L3);
+    std::size_t const ntx = (L0 + bl.bx - 1) / bl.bx;
+    std::size_t const nty = (L1 + bl.by - 1) / bl.by;
+    std::size_t const ntz = (L2 + bl.bz - 1) / bl.bz;
+    std::size_t const ntw = (L3 + bl.bw - 1) / bl.bw;
+
+    reticolo::detail::parallel_map(want, ntx * nty * ntz * ntw, [&](std::size_t item) {
+        std::size_t const tx = item % ntx;
+        std::size_t r        = item / ntx;
+        std::size_t const ty = r % nty;
+        r /= nty;
+        std::size_t const tz = r % ntz;
+        std::size_t const tw = r / ntz;
+        std::size_t const x0 = tx * bl.bx;
+        std::size_t const y0 = ty * bl.by;
+        std::size_t const z0 = tz * bl.bz;
+        std::size_t const w0 = tw * bl.bw;
+        visit_block_nn_4d_<T>(l,
+                              x0,
+                              std::min(x0 + bl.bx, L0),
+                              y0,
+                              std::min(y0 + bl.by, L1),
+                              z0,
+                              std::min(z0 + bl.bz, L2),
+                              w0,
+                              std::min(w0 + bl.bw, L3),
+                              body);
+    });
 }
 
-// Threaded, tiled sweep: an orphaned `omp for` worksplits the tile grid across
-// the enclosing reticolo region's team (collapse(4) flattens the grid). Only
-// reached with g_in_traverse_region set, so the directive always binds to a live
-// region. Force output is bit-identical to the serial sweep (each site written
-// exactly once, order-independent).
-template <class T, class Body>
-inline void visit_nn_tiled_4d_(Lattice<T> const& l, Body&& body) noexcept {
-    auto const& sh       = l.shape();
-    std::size_t const L0 = sh[0];
-    std::size_t const L1 = sh[1];
-    std::size_t const L2 = sh[2];
-    std::size_t const L3 = sh[3];
-    Block4d const bl     = plan_block_4d_<T>(L0, L1, L2, L3);
-    auto const ntx       = static_cast<std::ptrdiff_t>((L0 + bl.bx - 1) / bl.bx);
-    auto const nty       = static_cast<std::ptrdiff_t>((L1 + bl.by - 1) / bl.by);
-    auto const ntz       = static_cast<std::ptrdiff_t>((L2 + bl.bz - 1) / bl.bz);
-    auto const ntw       = static_cast<std::ptrdiff_t>((L3 + bl.bw - 1) / bl.bw);
-
-#pragma omp for collapse(4) schedule(static)
-    for (std::ptrdiff_t tw = 0; tw < ntw; ++tw) {
-        for (std::ptrdiff_t tz = 0; tz < ntz; ++tz) {
-            for (std::ptrdiff_t ty = 0; ty < nty; ++ty) {
-                for (std::ptrdiff_t tx = 0; tx < ntx; ++tx) {
-                    std::size_t const x0 = static_cast<std::size_t>(tx) * bl.bx;
-                    std::size_t const y0 = static_cast<std::size_t>(ty) * bl.by;
-                    std::size_t const z0 = static_cast<std::size_t>(tz) * bl.bz;
-                    std::size_t const w0 = static_cast<std::size_t>(tw) * bl.bw;
-                    visit_block_nn_4d_<T>(l,
-                                          x0,
-                                          std::min(x0 + bl.bx, L0),
-                                          y0,
-                                          std::min(y0 + bl.by, L1),
-                                          z0,
-                                          std::min(z0 + bl.bz, L2),
-                                          w0,
-                                          std::min(w0 + bl.bw, L3),
-                                          body);
-                }
-            }
-        }
-    }
-}
-
+// Dispatch by dimension. Every dimension threads through the two primitives: 1D
+// and the D>4 fallback over site chunks, 2D over rows, 3D over planes, 4D over
+// cache tiles. The per-dim inner kernel stays the hand-written vectorised loop.
 template <class T, class Body>
 inline void visit_nn(Lattice<T> const& l, Body&& body) noexcept {
+    std::size_t const n = l.nsites();
+    bool const want     = reticolo::detail::traverse_want(n);
+    Body const& b       = body;
 #if RETICOLO_HOT_LOOP_FORCE_FALLBACK
-    visit_nn_fallback_(l, std::forward<Body>(body));
+    reticolo::detail::parallel_map_ranges(
+        want, n, k_site_chunk, [&](std::size_t s0, std::size_t cnt) {
+            visit_nn_fallback_(l, s0, cnt, b);
+        });
 #else
+    auto const& sh = l.shape();
     switch (l.ndims()) {
         case 1:
-            visit_nn_1d_(l, std::forward<Body>(body));
+            reticolo::detail::parallel_map_ranges(
+                want, sh[0], k_site_chunk, [&](std::size_t x0, std::size_t cnt) {
+                    visit_nn_1d_(l, x0, x0 + cnt, b);
+                });
             return;
         case 2:
-            visit_nn_2d_(l, std::forward<Body>(body));
+            reticolo::detail::parallel_map(
+                want, sh[1], [&](std::size_t y) { visit_nn_2d_(l, y, y + 1, b); });
             return;
         case 3:
-            visit_nn_3d_(l, std::forward<Body>(body));
+            reticolo::detail::parallel_map(
+                want, sh[2], [&](std::size_t z) { visit_nn_3d_(l, z, z + 1, b); });
             return;
         case 4:
-            if (reticolo::detail::g_in_traverse_region) {
-                visit_nn_tiled_4d_(l, std::forward<Body>(body));
-            } else {
-                visit_nn_4d_(l, std::forward<Body>(body));
-            }
+            visit_nn_tiled_4d_(l, want, b);
             return;
         default:
-            visit_nn_fallback_(l, std::forward<Body>(body));
+            reticolo::detail::parallel_map_ranges(
+                want, n, k_site_chunk, [&](std::size_t s0, std::size_t cnt) {
+                    visit_nn_fallback_(l, s0, cnt, b);
+                });
             return;
     }
 #endif
@@ -405,16 +434,19 @@ inline void visit_nn(Lattice<T> const& l, Body&& body) noexcept {
 // ---------- reduce_fwd -------------------------------------------------------
 
 template <class T, class Acc = T, class Body>
-[[nodiscard]] inline Acc reduce_fwd_fallback_(Lattice<T> const& l, Body&& body) noexcept {
+[[nodiscard]] inline Acc reduce_fwd_fallback_(Lattice<T> const& l,
+                                              std::size_t s0,
+                                              std::size_t cnt,
+                                              Body const& body) noexcept {
     RETICOLO_FP_REASSOCIATE
     auto const& idx              = l.indexing_ref();
     T const* data                = l.data();
     Site::value_type const* next = idx.next_data();
-    std::size_t const n          = idx.nsites();
     std::size_t const d          = idx.ndims();
+    std::size_t const end        = s0 + cnt;
 
     Acc total{};
-    for (std::size_t i = 0; i < n; ++i) {
+    for (std::size_t i = s0; i < end; ++i) {
         T fwd_sum              = T{0};
         std::size_t const base = i * d;
         for (std::size_t mu = 0; mu < d; ++mu) {
@@ -426,20 +458,25 @@ template <class T, class Acc = T, class Body>
 }
 
 template <class T, class Acc = T, class Body>
-[[nodiscard]] inline Acc reduce_fwd_1d_(Lattice<T> const& l, Body&& body) noexcept {
+[[nodiscard]] inline Acc
+reduce_fwd_1d_(Lattice<T> const& l, std::size_t x0, std::size_t x1, Body const& body) noexcept {
     RETICOLO_FP_REASSOCIATE
     T const* data        = l.data();
     std::size_t const Lx = l.shape()[0];
+    std::size_t const xe = (x1 == Lx) ? (Lx - 1) : x1;
     Acc total{};
-    for (std::size_t x = 0; x + 1 < Lx; ++x) {
+    for (std::size_t x = x0; x < xe; ++x) {
         total += body(data[x], data[x + 1]);
     }
-    total += body(data[Lx - 1], data[0]);
+    if (x1 == Lx) {  // global +x wrap
+        total += body(data[Lx - 1], data[0]);
+    }
     return total;
 }
 
 template <class T, class Acc = T, class Body>
-[[nodiscard]] inline Acc reduce_fwd_2d_(Lattice<T> const& l, Body&& body) noexcept {
+[[nodiscard]] inline Acc
+reduce_fwd_2d_(Lattice<T> const& l, std::size_t y0, std::size_t y1, Body const& body) noexcept {
     RETICOLO_FP_REASSOCIATE
     T const* data        = l.data();
     auto const& sh       = l.shape();
@@ -447,7 +484,7 @@ template <class T, class Acc = T, class Body>
     std::size_t const Ly = sh[1];
     std::size_t const sy = Lx;
     Acc total{};
-    for (std::size_t y = 0; y < Ly; ++y) {
+    for (std::size_t y = y0; y < y1; ++y) {
         std::size_t const yp     = (y + 1 == Ly) ? 0 : (y + 1);
         std::size_t const row    = y * sy;
         std::size_t const row_yp = yp * sy;
@@ -462,7 +499,8 @@ template <class T, class Acc = T, class Body>
 }
 
 template <class T, class Acc = T, class Body>
-[[nodiscard]] inline Acc reduce_fwd_3d_(Lattice<T> const& l, Body&& body) noexcept {
+[[nodiscard]] inline Acc
+reduce_fwd_3d_(Lattice<T> const& l, std::size_t z0, std::size_t z1, Body const& body) noexcept {
     RETICOLO_FP_REASSOCIATE
     T const* data        = l.data();
     auto const& sh       = l.shape();
@@ -472,7 +510,7 @@ template <class T, class Acc = T, class Body>
     std::size_t const sy = Lx;
     std::size_t const sz = Lx * Ly;
     Acc total{};
-    for (std::size_t z = 0; z < Lz; ++z) {
+    for (std::size_t z = z0; z < z1; ++z) {
         std::size_t const zp       = (z + 1 == Lz) ? 0 : (z + 1);
         std::size_t const plane    = z * sz;
         std::size_t const plane_zp = zp * sz;
@@ -511,7 +549,8 @@ template <class T, class Acc, class Body>
     std::size_t const xe = (x1 == L0) ? (L0 - 1) : x1;
     for (std::size_t x = x0; x < xe; ++x) {
         std::size_t const i = row + x;
-        total += body(data[i], data[i + 1] + data[row_yp + x] + data[row_zp + x] + data[row_wp + x]);
+        total +=
+            body(data[i], data[i + 1] + data[row_yp + x] + data[row_zp + x] + data[row_wp + x]);
     }
     if (x1 == L0) {  // global +x wrap
         std::size_t const i = row + (L0 - 1);
@@ -577,90 +616,79 @@ template <class T, class Acc, class Body>
 // order-fixed, partials summed in canonical tile order). Threaded only past the
 // size/nesting gate. NB: the tile grouping changes the summation order vs the
 // pre-tiling single running sum — a one-time bit-level re-baseline of s_full.
+// 4D s_full reduction: work items = tiles of the same fixed grid as the force map,
+// so the result is thread-count invariant (each tile's partial is order-fixed,
+// partials folded in canonical tile order). NB: the tile grouping changes the
+// summation order vs a single running sum — a one-time bit re-baseline of s_full.
 template <class T, class Acc = T, class Body>
-[[nodiscard]] inline Acc reduce_fwd_4d_(Lattice<T> const& l, Body&& body) noexcept {
-    auto const& sh       = l.shape();
-    std::size_t const L0 = sh[0];
-    std::size_t const L1 = sh[1];
-    std::size_t const L2 = sh[2];
-    std::size_t const L3 = sh[3];
-    Block4d const bl     = plan_block_4d_<T>(L0, L1, L2, L3);
-    auto const ntx       = static_cast<std::ptrdiff_t>((L0 + bl.bx - 1) / bl.bx);
-    auto const nty       = static_cast<std::ptrdiff_t>((L1 + bl.by - 1) / bl.by);
-    auto const ntz       = static_cast<std::ptrdiff_t>((L2 + bl.bz - 1) / bl.bz);
-    auto const ntw       = static_cast<std::ptrdiff_t>((L3 + bl.bw - 1) / bl.bw);
+[[nodiscard]] inline Acc reduce_fwd_4d_(Lattice<T> const& l, bool want, Body const& body) noexcept {
+    auto const& sh        = l.shape();
+    std::size_t const L0  = sh[0];
+    std::size_t const L1  = sh[1];
+    std::size_t const L2  = sh[2];
+    std::size_t const L3  = sh[3];
+    Block4d const bl      = plan_block_4d_<T>(L0, L1, L2, L3);
+    std::size_t const ntx = (L0 + bl.bx - 1) / bl.bx;
+    std::size_t const nty = (L1 + bl.by - 1) / bl.by;
+    std::size_t const ntz = (L2 + bl.bz - 1) / bl.bz;
+    std::size_t const ntw = (L3 + bl.bw - 1) / bl.bw;
 
-    // Allocated BEFORE the region so it is shared across the team; each tile writes
-    // its own slot (disjoint), so the omp-for split is race-free and the sum below
-    // is thread-count invariant.
-    std::vector<Acc> partials(static_cast<std::size_t>(ntx * nty * ntz * ntw), Acc{});
-
-    auto tile = [&](std::ptrdiff_t tw, std::ptrdiff_t tz, std::ptrdiff_t ty, std::ptrdiff_t tx) {
-        std::size_t const x0  = static_cast<std::size_t>(tx) * bl.bx;
-        std::size_t const y0  = static_cast<std::size_t>(ty) * bl.by;
-        std::size_t const z0  = static_cast<std::size_t>(tz) * bl.bz;
-        std::size_t const w0  = static_cast<std::size_t>(tw) * bl.bw;
-        std::size_t const idx = static_cast<std::size_t>(((tw * ntz + tz) * nty + ty) * ntx + tx);
-        partials[idx]         = reduce_block_fwd_4d_<T, Acc>(l,
-                                                     x0,
-                                                     std::min(x0 + bl.bx, L0),
-                                                     y0,
-                                                     std::min(y0 + bl.by, L1),
-                                                     z0,
-                                                     std::min(z0 + bl.bz, L2),
-                                                     w0,
-                                                     std::min(w0 + bl.bw, L3),
-                                                     body);
-    };
-
-    reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(l.nsites()), [&] {
-        if (reticolo::detail::g_in_traverse_region) {
-#pragma omp for collapse(4) schedule(static)
-            for (std::ptrdiff_t tw = 0; tw < ntw; ++tw) {
-                for (std::ptrdiff_t tz = 0; tz < ntz; ++tz) {
-                    for (std::ptrdiff_t ty = 0; ty < nty; ++ty) {
-                        for (std::ptrdiff_t tx = 0; tx < ntx; ++tx) {
-                            tile(tw, tz, ty, tx);
-                        }
-                    }
-                }
-            }
-        } else {
-            for (std::ptrdiff_t tw = 0; tw < ntw; ++tw) {
-                for (std::ptrdiff_t tz = 0; tz < ntz; ++tz) {
-                    for (std::ptrdiff_t ty = 0; ty < nty; ++ty) {
-                        for (std::ptrdiff_t tx = 0; tx < ntx; ++tx) {
-                            tile(tw, tz, ty, tx);
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    Acc total{};
-    for (Acc const& p : partials) {
-        total += p;
-    }
-    return total;
+    return reticolo::detail::parallel_reduce<Acc>(
+        want, ntx * nty * ntz * ntw, [&](std::size_t item) {
+            std::size_t const tx = item % ntx;
+            std::size_t r        = item / ntx;
+            std::size_t const ty = r % nty;
+            r /= nty;
+            std::size_t const tz = r % ntz;
+            std::size_t const tw = r / ntz;
+            std::size_t const x0 = tx * bl.bx;
+            std::size_t const y0 = ty * bl.by;
+            std::size_t const z0 = tz * bl.bz;
+            std::size_t const w0 = tw * bl.bw;
+            return reduce_block_fwd_4d_<T, Acc>(l,
+                                                x0,
+                                                std::min(x0 + bl.bx, L0),
+                                                y0,
+                                                std::min(y0 + bl.by, L1),
+                                                z0,
+                                                std::min(z0 + bl.bz, L2),
+                                                w0,
+                                                std::min(w0 + bl.bw, L3),
+                                                body);
+        });
 }
 
 template <class T, class Acc = T, class Body>
 [[nodiscard]] inline Acc reduce_fwd(Lattice<T> const& l, Body&& body) noexcept {
+    std::size_t const n = l.nsites();
+    bool const want     = reticolo::detail::traverse_want(n);
+    Body const& b       = body;
 #if RETICOLO_HOT_LOOP_FORCE_FALLBACK
-    return reduce_fwd_fallback_<T, Acc>(l, std::forward<Body>(body));
+    return reticolo::detail::parallel_reduce_ranges<Acc>(
+        want, n, k_site_chunk, [&](std::size_t s0, std::size_t cnt) {
+            return reduce_fwd_fallback_<T, Acc>(l, s0, cnt, b);
+        });
 #else
+    auto const& sh = l.shape();
     switch (l.ndims()) {
         case 1:
-            return reduce_fwd_1d_<T, Acc>(l, std::forward<Body>(body));
+            return reticolo::detail::parallel_reduce_ranges<Acc>(
+                want, sh[0], k_site_chunk, [&](std::size_t x0, std::size_t cnt) {
+                    return reduce_fwd_1d_<T, Acc>(l, x0, x0 + cnt, b);
+                });
         case 2:
-            return reduce_fwd_2d_<T, Acc>(l, std::forward<Body>(body));
+            return reticolo::detail::parallel_reduce<Acc>(
+                want, sh[1], [&](std::size_t y) { return reduce_fwd_2d_<T, Acc>(l, y, y + 1, b); });
         case 3:
-            return reduce_fwd_3d_<T, Acc>(l, std::forward<Body>(body));
+            return reticolo::detail::parallel_reduce<Acc>(
+                want, sh[2], [&](std::size_t z) { return reduce_fwd_3d_<T, Acc>(l, z, z + 1, b); });
         case 4:
-            return reduce_fwd_4d_<T, Acc>(l, std::forward<Body>(body));
+            return reduce_fwd_4d_<T, Acc>(l, want, b);
         default:
-            return reduce_fwd_fallback_<T, Acc>(l, std::forward<Body>(body));
+            return reticolo::detail::parallel_reduce_ranges<Acc>(
+                want, n, k_site_chunk, [&](std::size_t s0, std::size_t cnt) {
+                    return reduce_fwd_fallback_<T, Acc>(l, s0, cnt, b);
+                });
     }
 #endif
 }

@@ -49,9 +49,10 @@ TEST_CASE("visit_nn dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_loop
             out_dispatch[i] = phi * 7.0 + nbrs;  // arbitrary linear body
         });
         // Fallback (gather through Indexing).
-        visit_nn_fallback_<double>(l, [&out_fallback](std::size_t i, double phi, double nbrs) {
-            out_fallback[i] = phi * 7.0 + nbrs;
-        });
+        visit_nn_fallback_<double>(
+            l, std::size_t{0}, l.nsites(), [&out_fallback](std::size_t i, double phi, double nbrs) {
+                out_fallback[i] = phi * 7.0 + nbrs;
+            });
 
         for (std::size_t i = 0; i < l.nsites(); ++i) {
             INFO("ndims=" << shape.size() << " i=" << i);
@@ -74,7 +75,7 @@ TEST_CASE("reduce_fwd dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_lo
         auto body = [](double phi, double fwd) { return (phi * phi) - phi * fwd; };
 
         double const a = reduce_fwd<double>(l, body);
-        double const b = reduce_fwd_fallback_<double>(l, body);
+        double const b = reduce_fwd_fallback_<double>(l, std::size_t{0}, l.nsites(), body);
 
         // Both paths visit every (site, mu) pair with the same body; the
         // dispatch path accumulates in vector lanes and the fallback in a
