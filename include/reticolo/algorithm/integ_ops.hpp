@@ -29,42 +29,52 @@ namespace reticolo::alg::integ {
 // mom, and force are always distinct sibling lattices).
 template <class Field, class Mom>
 inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
-    using F                        = typename Field::value_type;
-    F* __restrict const f          = field.data();
-    auto const* __restrict const p = mom.data();
-    std::size_t const n            = flat_size(field);
-    real_scalar_t<F> const c       = static_cast<real_scalar_t<F>>(cdt);
-    // Worksplit across the enclosing per-trajectory region (Model B); serial when
-    // called outside one. Kept lambda-free so __restrict survives for the vectoriser.
-    if (reticolo::detail::g_in_traverse_region) {
+    using F                  = typename Field::value_type;
+    std::size_t const n      = flat_size(field);
+    real_scalar_t<F> const c = static_cast<real_scalar_t<F>>(cdt);
+    F* const fd              = field.data();
+    auto const* const pd     = mom.data();
+    // Own fork/join region (like compute_force). libgomp's worksharing barriers
+    // are far slower than its fork/join, so per-op regions beat one persistent
+    // region with many internal barriers. __restrict is re-applied inside the
+    // lambda so the vectoriser still sees the no-alias guarantee.
+    reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(n), [fd, pd, c, n] {
+        F* __restrict const f          = fd;
+        auto const* __restrict const p = pd;
+        if (reticolo::detail::g_in_traverse_region) {
 #pragma omp for schedule(static)
-        for (std::size_t i = 0; i < n; ++i) {
-            f[i] += c * p[i];
+            for (std::size_t i = 0; i < n; ++i) {
+                f[i] += c * p[i];
+            }
+        } else {
+            for (std::size_t i = 0; i < n; ++i) {
+                f[i] += c * p[i];
+            }
         }
-    } else {
-        for (std::size_t i = 0; i < n; ++i) {
-            f[i] += c * p[i];
-        }
-    }
+    });
 }
 
 template <class Mom, class Force>
 inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
-    using F                         = typename Mom::value_type;
-    F* __restrict const m           = mom.data();
-    auto const* __restrict const fp = force.data();
-    std::size_t const n             = flat_size(mom);
-    real_scalar_t<F> const c        = static_cast<real_scalar_t<F>>(kdt);
-    if (reticolo::detail::g_in_traverse_region) {
+    using F                  = typename Mom::value_type;
+    std::size_t const n      = flat_size(mom);
+    real_scalar_t<F> const c = static_cast<real_scalar_t<F>>(kdt);
+    F* const md              = mom.data();
+    auto const* const fd     = force.data();
+    reticolo::detail::in_traverse_region(reticolo::detail::traverse_want(n), [md, fd, c, n] {
+        F* __restrict const m           = md;
+        auto const* __restrict const fp = fd;
+        if (reticolo::detail::g_in_traverse_region) {
 #pragma omp for schedule(static)
-        for (std::size_t i = 0; i < n; ++i) {
-            m[i] += c * fp[i];
+            for (std::size_t i = 0; i < n; ++i) {
+                m[i] += c * fp[i];
+            }
+        } else {
+            for (std::size_t i = 0; i < n; ++i) {
+                m[i] += c * fp[i];
+            }
         }
-    } else {
-        for (std::size_t i = 0; i < n; ++i) {
-            m[i] += c * fp[i];
-        }
-    }
+    });
 }
 
 // Matrix-link drift overload: U ← exp(dt·P)·U per direction, dispatched

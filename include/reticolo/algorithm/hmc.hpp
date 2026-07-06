@@ -207,26 +207,13 @@ public:
     void integrate_only(double tau, int n_md) noexcept { run_md_(tau, n_md); }
 
 private:
-    // The MD loop runs inside one persistent parallel region when the action's
-    // traversal worksplits (site family, marked k_traverse_threaded); otherwise
-    // plainly, since opening a region around an unconverted (gauge/bond/complex)
-    // sweep would race on the shared force/field buffers.
-    static constexpr bool action_threaded_() {
-        if constexpr (requires { A::k_traverse_threaded; }) {
-            return A::k_traverse_threaded;
-        } else {
-            return false;
-        }
-    }
-
+    // No persistent region around the MD loop: each force/drift/kick opens its
+    // own fork/join region (see integ_ops / SiteAction). Measured on libgomp,
+    // per-op fork/join scales to ~22x on 32 cores while a persistent region with
+    // many internal `omp for` barriers collapses to ~2x — libgomp worksharing
+    // barriers are the bottleneck, its fork/join is not.
     void run_md_(double tau, int n_md) noexcept {
-        if constexpr (action_threaded_()) {
-            reticolo::detail::in_traverse_region(
-                reticolo::detail::traverse_want(flat_size(field_)),
-                [&] { Integrator::run(action_, field_, mom_, force_, tau, n_md); });
-        } else {
-            Integrator::run(action_, field_, mom_, force_, tau, n_md);
-        }
+        Integrator::run(action_, field_, mom_, force_, tau, n_md);
     }
 
     // Flat elementwise copy (rollback snapshot / restore), worksplit standalone.

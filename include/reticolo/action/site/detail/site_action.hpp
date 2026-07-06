@@ -39,12 +39,6 @@ namespace reticolo::action::detail {
 
 template <class Derived, class T>
 struct SiteAction {
-    // Marks the site family's force/s_full as flag-aware (`visit_nn`/`reduce_fwd`
-    // worksplit inside a reticolo region). HMC checks this before opening a
-    // persistent MD region — gauge/bond/complex traversals are not yet converted,
-    // so opening one around them would race on the shared output buffers.
-    static constexpr bool k_traverse_threaded = true;
-
     [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
         auto kern      = derived_().action_kernel();
         double const s = reduce_fwd<T, double>(
