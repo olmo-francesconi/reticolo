@@ -1,5 +1,6 @@
 #include <reticolo/action/site/detail/traversal.hpp>
 #include <reticolo/action/site/phi4.hpp>
+#include <reticolo/action/site/sine_gordon.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/parallel.hpp>
 #include <reticolo/core/rng.hpp>
@@ -17,6 +18,7 @@
 using reticolo::FastRng;
 using reticolo::Lattice;
 using reticolo::action::Phi4;
+using reticolo::action::SineGordon;
 using reticolo::action::detail::visit_nn_fallback_;
 
 namespace {
@@ -101,6 +103,37 @@ TEST_CASE("threaded force + s_full are thread-count invariant, every dimension",
             for (std::size_t i = 0; i < f.size(); ++i) {
                 REQUIRE(f[i] == f_ref[i]);  // bit-identical force
             }
+        }
+    }
+}
+
+// SineGordon exercises the extra per-site transcendental passes: prep() sin-batches
+// the force scratch, and s_full cos-batches + reduces. Both are now worksplit, so
+// force + s_full must stay bit-identical for any thread count (chunks are a SIMD-
+// width multiple, so the Sleef batch takes the same vector path regardless).
+TEST_CASE("SineGordon force + s_full are thread-count invariant", "[hot_loop][parallel]") {
+    auto const phi = hot_lattice({16, 16, 16, 16});
+    REQUIRE(phi.nsites() > reticolo::detail::k_traverse_min_sites);
+    SineGordon<double> const action{.kappa = 0.18, .alpha = 0.7};
+
+    auto at = [&](int nthr) {
+#ifdef _OPENMP
+        omp_set_num_threads(nthr);
+#else
+        (void)nthr;
+#endif
+        Lattice<double> f{phi.indexing()};
+        action.compute_force(phi, f);  // triggers prep() sin-batch + visit_nn
+        return std::pair{std::vector<double>{f.data(), f.data() + f.nsites()}, action.s_full(phi)};
+    };
+
+    auto const [f_ref, s_ref] = at(1);
+    for (int nthr : {1, 2, 4, 8}) {
+        auto const [f, s] = at(nthr);
+        INFO("threads=" << nthr);
+        REQUIRE(s == s_ref);
+        for (std::size_t i = 0; i < f.size(); ++i) {
+            REQUIRE(f[i] == f_ref[i]);
         }
     }
 }

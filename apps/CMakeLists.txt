@@ -39,6 +39,7 @@ reticolo_add_app(sine_gordon_hmc     sine_gordon_hmc.cpp)
 reticolo_add_bench(bench_scalars       bench_scalars.cpp)
 reticolo_add_bench(bench_gauge_vs_scalar bench_gauge_vs_scalar.cpp)
 reticolo_add_bench(bench_scaling_su3     bench_scaling_su3.cpp)
+reticolo_add_bench(bench_scaling_site    bench_scaling_site.cpp)
 reticolo_add_bench(bench_phase_quenched  bench_phase_quenched.cpp)
 reticolo_add_bench(bench_precision_hmc   bench_precision_hmc.cpp)
 
