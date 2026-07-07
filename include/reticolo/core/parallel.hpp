@@ -30,7 +30,11 @@ namespace reticolo::detail {
 // Per-core working-set target for cache tiling. Fixed on purpose: for the
 // bandwidth-bound stencil the block sweet spot is ~L2-size-independent (filling a
 // detected L2 overshoots and regresses moderate volumes). ~½ of a common 1 MB L2.
-inline constexpr std::size_t k_traverse_l2_bytes = 512UL * 1024;
+// Overridable via -DRETICOLO_TRAVERSE_L2_BYTES=<n> for per-machine tuning probes.
+#ifndef RETICOLO_TRAVERSE_L2_BYTES
+    #define RETICOLO_TRAVERSE_L2_BYTES (512UL * 1024)
+#endif
+inline constexpr std::size_t k_traverse_l2_bytes = RETICOLO_TRAVERSE_L2_BYTES;
 
 // A pass is worth threading only when it moves at least this many bytes — below it,
 // fork/join dominates. Calibrated on the Linux/libgomp 32-core SPR node: the

@@ -40,6 +40,12 @@ reticolo_add_bench(bench_scalars       bench_scalars.cpp)
 reticolo_add_bench(bench_gauge_vs_scalar bench_gauge_vs_scalar.cpp)
 reticolo_add_bench(bench_scaling_su3     bench_scaling_su3.cpp)
 reticolo_add_bench(bench_scaling_site    bench_scaling_site.cpp)
+reticolo_add_bench(bench_scaling_all     bench_scaling_all.cpp)
+# Per-machine cache-tile tuning probe: `cmake ... -DRETICOLO_L2=<bytes>` overrides
+# the traverse working-set target for this bench only (no global rebuild).
+if(DEFINED RETICOLO_L2)
+    target_compile_definitions(bench_scaling_all PRIVATE RETICOLO_TRAVERSE_L2_BYTES=${RETICOLO_L2})
+endif()
 reticolo_add_bench(bench_phase_quenched  bench_phase_quenched.cpp)
 reticolo_add_bench(bench_precision_hmc   bench_precision_hmc.cpp)
 
