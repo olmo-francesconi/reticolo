@@ -36,10 +36,7 @@ reticolo_add_app(u1_llr              u1_llr.cpp)
 reticolo_add_app(u1_llr_smoothed       u1_llr_smoothed.cpp)
 reticolo_add_app(phi6_hmc            phi6_hmc.cpp)
 reticolo_add_app(sine_gordon_hmc     sine_gordon_hmc.cpp)
-reticolo_add_bench(bench_scalars       bench_scalars.cpp)
 reticolo_add_bench(bench_gauge_vs_scalar bench_gauge_vs_scalar.cpp)
-reticolo_add_bench(bench_scaling_su3     bench_scaling_su3.cpp)
-reticolo_add_bench(bench_scaling_site    bench_scaling_site.cpp)
 reticolo_add_bench(bench_scaling_all     bench_scaling_all.cpp)
 # Per-machine cache-tile tuning probe: `cmake ... -DRETICOLO_L2=<bytes>` overrides
 # the traverse working-set target for this bench only (no global rebuild).
