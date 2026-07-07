@@ -94,6 +94,10 @@ template <class T>
     return sum / static_cast<double>(l.nsites());
 }
 
+// Namespace convention: generic field reducers (mean, susceptibility, …) sit
+// bare in `reticolo::obs`; observable *families* tied to a specific quantity get
+// a sub-namespace — `obs::mag` (magnetisation) here, `obs::analysis` (statistics)
+// in analysis.hpp. So the nesting is a rule, not case-by-case.
 namespace mag {
 
 // Magnetisation per site: |m| where m = (1/N) Σ phi(x). Useful in broken-

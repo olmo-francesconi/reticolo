@@ -271,7 +271,7 @@ private:
                 std::uint64_t const key = rng_.uniform_u64();
                 for (std::size_t mu = 0; mu < d; ++mu) {
                     Scalar* const pblk = mom_.mu_block_data(mu);
-                    reticolo::detail::field_apply(
+                    reticolo::detail::field_visit(
                         mom_, 1, [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
                             Group::sample_algebra_philox_range(pblk, key, mu, ns, base, cnt);
                         });

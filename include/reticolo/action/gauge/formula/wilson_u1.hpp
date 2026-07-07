@@ -39,7 +39,7 @@
 
 namespace reticolo::action::detail {
 
-namespace u1_detail {
+namespace detail {
 
 // Thread-local scratch shared by every U(1) Wilson kernel entry point below.
 // Each entry point calls this exactly once per invocation, with the total
@@ -66,7 +66,7 @@ plane_idx(std::size_t d, std::size_t a, std::size_t b) noexcept {
     return idx + (b - a - 1);
 }
 
-}  // namespace u1_detail
+}  // namespace detail
 
 template <>
 struct wilson_kernels<gauge_group::U1> {
@@ -143,7 +143,7 @@ struct wilson_kernels<gauge_group::U1> {
                 }
                 std::size_t const a = mu < nu ? mu : nu;
                 std::size_t const b = mu < nu ? nu : mu;
-                sp_nu[n_nu]         = sinP + (u1_detail::plane_idx(d, a, b) * ns);
+                sp_nu[n_nu]         = sinP + (detail::plane_idx(d, a, b) * ns);
                 sgn_nu[n_nu]        = (mu < nu) ? 1.0 : -1.0;
                 dir_nu[n_nu]        = nu;
                 ++n_nu;
@@ -173,7 +173,7 @@ struct wilson_kernels<gauge_group::U1> {
         std::size_t const d       = u.ndims();
         std::size_t const ns      = u.nsites();
         std::size_t const nplanes = (d * (d - 1)) / 2;
-        double* const sinP        = u1_detail::plane_scratch(nplanes * ns);
+        double* const sinP        = detail::plane_scratch(nplanes * ns);
         fill_sin_planes_(u, sinP, d, ns);
         reticolo::detail::parallel_map_ranges(
             ns, u.bytes_per_site(), 1, [&](std::size_t base, std::size_t cnt) {
@@ -191,7 +191,7 @@ struct wilson_kernels<gauge_group::U1> {
         std::size_t const d       = u.ndims();
         std::size_t const ns      = u.nsites();
         std::size_t const nplanes = (d * (d - 1)) / 2;
-        double* const sinP        = u1_detail::plane_scratch(nplanes * ns);
+        double* const sinP        = detail::plane_scratch(nplanes * ns);
         fill_sin_planes_(u, sinP, d, ns);
         double const scale = -k_dt * beta_over_n;
         reticolo::detail::parallel_map_ranges(
@@ -213,7 +213,7 @@ struct wilson_kernels<gauge_group::U1> {
         Indexing const& idx     = u.indexing_ref();
         T const* const u_mu_blk = u.mu_block_data(mu);
         T const* const u_nu_blk = u.mu_block_data(nu);
-        double* const buf       = u1_detail::plane_scratch(cnt);
+        double* const buf       = detail::plane_scratch(cnt);
         std::size_t const end   = base + cnt;
         for (std::size_t s = base; s < end; ++s) {
             std::size_t const s_pmu = idx.next(Site{s}, mu).value();
@@ -256,7 +256,7 @@ struct wilson_kernels<gauge_group::U1> {
         std::size_t const d       = u.ndims();
         std::size_t const ns      = u.nsites();
         std::size_t const nplanes = (d * (d - 1)) / 2;
-        double* const scratch     = u1_detail::plane_scratch((nplanes + 1) * ns);
+        double* const scratch     = detail::plane_scratch((nplanes + 1) * ns);
         double* const sinP        = scratch;
         double* const cbuf        = scratch + (nplanes * ns);
         Indexing const& idx       = u.indexing_ref();

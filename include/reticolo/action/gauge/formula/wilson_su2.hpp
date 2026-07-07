@@ -168,7 +168,7 @@ public:
     // auto-vectorises the b-loop on any target SIMD width.
     //
     // Pure per-range staple force/kick worker over the links [base, base+cnt).
-    // No threading — the gauge base parallelises via field_apply, whose
+    // No threading — the gauge base parallelises via field_visit, whose
     // k_batch-aligned `base` keeps every non-final chunk on the batched path so
     // the result is bit-identical to the whole-field sweep. Each (μ, s) is written
     // exactly once, so chunks are write-disjoint.
@@ -379,12 +379,12 @@ public:
     // The batched kernel is precision-generic (T-native: float → 4-wide,
     // double → 2-wide) and handles the ns % k_batch remainder via the per-site
     // tail, so both precisions take the same path. Write-disjoint per (μ, s), so
-    // `field_apply` worksplits it over k_batch-aligned chunks bit-identically.
+    // `field_visit` worksplits it over k_batch-aligned chunks bit-identically.
     template <class T>
     static void compute_force(MatrixLinkLattice<gauge_group::SU2, T> const& u,
                               MatrixLinkLattice<gauge_group::SU2, T>& force,
                               double beta_over_n) noexcept {
-        reticolo::detail::field_apply(
+        reticolo::detail::field_visit(
             u, gauge_group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
                 compute_force_range<false>(u, force, -beta_over_n, base, cnt);
             });
@@ -395,7 +395,7 @@ public:
                                        MatrixLinkLattice<gauge_group::SU2, T>& mom,
                                        double beta_over_n,
                                        double k_dt) noexcept {
-        reticolo::detail::field_apply(
+        reticolo::detail::field_visit(
             u, gauge_group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
                 compute_force_range<true>(u, mom, -k_dt * beta_over_n, base, cnt);
             });

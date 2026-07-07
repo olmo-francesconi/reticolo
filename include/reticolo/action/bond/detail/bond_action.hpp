@@ -1,7 +1,7 @@
 #pragma once
 
 #include <reticolo/action/detail/cache.hpp>
-#include <reticolo/action/detail/traverse.hpp>
+#include <reticolo/action/detail/stencil.hpp>
 #include <reticolo/core/lattice.hpp>
 
 #include <cstddef>

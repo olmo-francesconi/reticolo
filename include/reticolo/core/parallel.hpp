@@ -190,7 +190,7 @@ template <class Acc = double, class Worker>
 // shape that was otherwise copied verbatim across the action + HMC + integrator
 // layers; any field exposing `nsites()` + `bytes_per_site()` qualifies.
 template <class Field, class Worker>
-inline void field_apply(Field const& field, std::size_t gran, Worker const& worker) {
+inline void field_visit(Field const& field, std::size_t gran, Worker const& worker) {
     parallel_map_ranges(field.nsites(), field.bytes_per_site(), gran, worker);
 }
 

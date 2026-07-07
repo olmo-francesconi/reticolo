@@ -87,7 +87,7 @@ inline void drift_field(MatrixLinkLattice<G, T>& field,
         // gran = pass-5 k_b=8 batch so chunks stay batch-aligned; threshold/chunk
         // from the (large) gauge footprint, bit-identical to the serial slab per
         // chunk.
-        reticolo::detail::field_apply(field, 8, [&](std::size_t base, std::size_t cnt) {
+        reticolo::detail::field_visit(field, 8, [&](std::size_t base, std::size_t cnt) {
             for (std::size_t mu = 0; mu < d; ++mu) {
                 G::expi_lmul_range(
                     field.mu_block_data(mu), mom.mu_block_data(mu), cdt, ns, base, cnt);

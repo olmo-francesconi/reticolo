@@ -112,7 +112,7 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
     void force_into(field_type const& U, field_type& force) const noexcept {
         double const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
         // Each group's compute_force owns its own threading — SU(N) worksplit the
-        // staple kernel over write-disjoint chunks via field_apply; U(1) runs its
+        // staple kernel over write-disjoint chunks via field_visit; U(1) runs its
         // two-phase sinP fill+gather — so the action layer stays uniform with no
         // parallel-vs-serial branch of its own.
         kernels::compute_force(U, force, beta_over_n_dbl);

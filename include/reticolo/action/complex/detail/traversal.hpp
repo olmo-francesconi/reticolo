@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/action/detail/traverse.hpp>
+#include <reticolo/action/detail/stencil.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/parallel.hpp>
 #include <reticolo/core/site.hpp>
@@ -13,7 +13,7 @@
 // (BoseGas): the last direction ("time") carries a different weight, so these
 // hand the body the full 2·ndims neighbour sum AND the last-direction sum
 // separately. They reuse the shared dimension-generic engine
-// (<reticolo/action/detail/traverse.hpp>) — its tiling, per-dim vectorised
+// (<reticolo/action/detail/stencil.hpp>) — its tiling, per-dim vectorised
 // neighbour-base geometry (`walk_outer_`, `agg_*`), and threading — adding only
 // the second (last-direction) aggregate. The last direction is dim D-1, which is
 // the OUTERMOST axis of the walk, so its pre-wrapped row bases fwd[D-1]/bwd[D-1]

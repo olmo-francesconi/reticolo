@@ -1,13 +1,13 @@
 #pragma once
 
-#include <reticolo/action/detail/traverse.hpp>
+#include <reticolo/action/detail/stencil.hpp>
 #include <reticolo/core/lattice.hpp>
 
 #include <cstddef>
 #include <utility>
 
 // Site nearest-neighbour drivers — the identity-combine specialisation of the
-// shared dimension-generic engine in <reticolo/action/detail/traverse.hpp>. A
+// shared dimension-generic engine in <reticolo/action/detail/stencil.hpp>. A
 // site action consumes the raw neighbour sum (self + Σ neighbours), so the
 // per-neighbour combine is the identity; the shared engine supplies the tiling,
 // the per-dim vectorised stencil, threading, and the D>4 gather fallback

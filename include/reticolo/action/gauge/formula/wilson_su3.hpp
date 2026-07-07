@@ -379,14 +379,14 @@ public:
     // Precision-generic: the batched kernel is T-native (float → 4-/8-wide,
     // double → 2-wide) and folds the ns % k_batch remainder into the per-site
     // tail, so both precisions take the same path. The batched kernel writes
-    // each (μ, s) exactly once, so the pass is a write-disjoint map — `field_apply`
+    // each (μ, s) exactly once, so the pass is a write-disjoint map — `field_visit`
     // worksplits it over k_batch-aligned site chunks, bit-identical to the serial
     // whole-field sweep for any thread count (no force zero-init needed).
     template <class T>
     static void compute_force(MatrixLinkLattice<gauge_group::SU3, T> const& u,
                               MatrixLinkLattice<gauge_group::SU3, T>& force,
                               double beta_over_n) noexcept {
-        reticolo::detail::field_apply(
+        reticolo::detail::field_visit(
             u, gauge_group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
                 compute_force_range<false>(u, force, -beta_over_n, base, cnt);
             });
@@ -397,7 +397,7 @@ public:
                                        MatrixLinkLattice<gauge_group::SU3, T>& mom,
                                        double beta_over_n,
                                        double k_dt) noexcept {
-        reticolo::detail::field_apply(
+        reticolo::detail::field_visit(
             u, gauge_group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
                 compute_force_range<true>(u, mom, -k_dt * beta_over_n, base, cnt);
             });

@@ -204,23 +204,23 @@ void Writer::field(std::string_view path, MatrixLinkLattice<G, T> const& lat) {
 // only sane way to write three correlated extern-template declarations per
 // type; a `constexpr` template helper can't issue declarations.
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
-#define RETICOLO_IO_DECLARE(T)                                                                     \
+#define RETICOLO_IO_WRITER_DECLARE(T)                                                              \
     extern template class Series<T>;                                                               \
     extern template Series<T> Writer::series<T>(std::string_view, std::size_t);                    \
     extern template void Writer::attr<T>(std::string_view, T const&);
 
-RETICOLO_IO_DECLARE(float)
-RETICOLO_IO_DECLARE(double)
-RETICOLO_IO_DECLARE(int)
-RETICOLO_IO_DECLARE(long)
-RETICOLO_IO_DECLARE(long long)
-RETICOLO_IO_DECLARE(unsigned int)
-RETICOLO_IO_DECLARE(unsigned long)
-RETICOLO_IO_DECLARE(unsigned long long)
-RETICOLO_IO_DECLARE(std::complex<float>)
-RETICOLO_IO_DECLARE(std::complex<double>)
+RETICOLO_IO_WRITER_DECLARE(float)
+RETICOLO_IO_WRITER_DECLARE(double)
+RETICOLO_IO_WRITER_DECLARE(int)
+RETICOLO_IO_WRITER_DECLARE(long)
+RETICOLO_IO_WRITER_DECLARE(long long)
+RETICOLO_IO_WRITER_DECLARE(unsigned int)
+RETICOLO_IO_WRITER_DECLARE(unsigned long)
+RETICOLO_IO_WRITER_DECLARE(unsigned long long)
+RETICOLO_IO_WRITER_DECLARE(std::complex<float>)
+RETICOLO_IO_WRITER_DECLARE(std::complex<double>)
 
-#undef RETICOLO_IO_DECLARE
+#undef RETICOLO_IO_WRITER_DECLARE
 
 // String attributes are a separate codepath (variable-length on disk).
 extern template void Writer::attr<std::string>(std::string_view, std::string const&);
