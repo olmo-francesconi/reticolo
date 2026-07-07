@@ -70,18 +70,18 @@ U·V + TA), revised up from an earlier under-count.
 │   parity_[nsites]      even_[] / odd_[]                                     │
 │   ── ONE per shape; shared by all sibling lattices via shared_ptr ──        │
 └──────────────────────────────────────────────────────────────────────────┘
-        ▲ shared_ptr                  ▲                        ▲
-┌───────┴────────┐         ┌──────────┴─────────┐   ┌──────────┴─────────────┐
-│ Lattice<T>     │         │ MatrixLinkLattice<U1><T>     │   │ MatrixMatrixLinkLattice<U1><G,T> │
-│ scalar field   │         │ U(1) links         │   │ SU(N) links            │
-│ data: vector<T>│         │ data: vector<T>    │   │ data: vector<T>        │
-│  one T / site  │         │ [ndim][nsites]     │   │ [ndim][2N²][nsites]    │
-│  AoS-of-scalar │         │ direction-major    │   │  SoA per-component slab │
-│  T∈{double,    │         │  (θ per link)      │   │  flat=((μ·2N²+k)·ns)+s │
-│   float,       │         └────────────────────┘   │  stride-1 over sites ◄──┼ coalescing-ready
-│   array<,N>,   │                                   └────────────────────────┘
-│   complex}     │
-└────────────────┘
+         ▲ shared_ptr              ▲                                     ▲
+┌─────────────────┐   ┌─────────────────────────┐   ┌────────────────────────────────────────┐
+│ Lattice<T>      │   │ MatrixLinkLattice<U1,T> │   │ MatrixLinkLattice<G,T>                 │
+│ scalar field    │   │ U(1) links              │   │ SU(N) links                            │
+│ data: vector<T> │   │ data: vector<T>         │   │ data: vector<T>                        │
+│ one T / site    │   │ [ndim][nsites]          │   │ [ndim][2N²][nsites]                    │
+│ AoS-of-scalar   │   │ direction-major         │   │ SoA per-component slab                 │
+│ T∈{double,      │   │ (θ per link)            │   │ flat=((μ·2N²+k)·ns)+s                  │
+│   float,        │   └─────────────────────────┘   │ stride-1 over sites (coalescing-ready) │
+│   array<,N>,    │                                 └────────────────────────────────────────┘
+│   complex}      │
+└─────────────────┘
 
 HMC sibling buffers (share ONE Indexing, separate data arrays):
    field U ── momentum P ── force F ── old_field (rollback snapshot)
