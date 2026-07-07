@@ -1,6 +1,6 @@
 #pragma once
 
-#include <limits>
+#include <reticolo/action/detail/cache.hpp>
 
 // GaugeAction<Derived> — the common interface for gauge (link-field) actions,
 // the gauge analogue of SiteAction / BondAction / ComplexAction. It owns the
@@ -26,13 +26,13 @@
 // This split is "general for non-Wilson": a future improved/rectangle action
 // derives from GaugeAction and writes its own `s_full_uncached`/`force_into`
 // with a different loop functional; `Wilson<G>` (plaquette, generic over group)
-// and `CompactU1` (plaquette, hand-tuned U(1) on the lighter LinkLattice) are
-// simply the two plaquette leaves that ship today.
+// is the one plaquette leaf that ships today (`Wilson<gauge_group::U1>` covers the
+// Abelian case directly, with n_real_components = 1).
 
 namespace reticolo::action::detail {
 
 template <class Derived>
-struct GaugeAction {
+struct GaugeAction : SFullCache {
     template <class Field>
     [[nodiscard]] double s_full(Field const& U) const noexcept {
         double const s = derived_().s_full_uncached(U);
@@ -44,11 +44,6 @@ struct GaugeAction {
     void compute_force(Field const& U, Field& force) const noexcept {
         derived_().force_into(U, force);
     }
-
-    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
-
-    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 
 private:
     [[nodiscard]] Derived const& derived_() const noexcept {

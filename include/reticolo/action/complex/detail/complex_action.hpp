@@ -1,12 +1,12 @@
 #pragma once
 
 #include <reticolo/action/complex/detail/traversal.hpp>
+#include <reticolo/action/detail/cache.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/parallel.hpp>
 
 #include <complex>
 #include <cstddef>
-#include <limits>
 
 // ComplexAction<Derived, T> — the common interface for complex scalar actions
 // with a sign problem, i.e. a total S = S_R + i·S_I where HMC samples the
@@ -34,7 +34,7 @@
 namespace reticolo::action::detail {
 
 template <class Derived, class T>
-struct ComplexAction {
+struct ComplexAction : SFullCache, SImagCache {
     using complex_t = std::complex<T>;
 
     // ---- real part (phase-quenched, what HMC samples) ----
@@ -110,14 +110,6 @@ struct ComplexAction {
             m[i] += k_i * ik(fwd_tau, bwd_tau);
         });
     }
-
-    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
-    [[nodiscard]] double last_s_imag() const noexcept { return last_s_imag_; }
-    void restore_last_s_imag(double v) const noexcept { last_s_imag_ = v; }
-
-    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
-    mutable double last_s_imag_ = std::numeric_limits<double>::quiet_NaN();
 
 private:
     [[nodiscard]] Derived const& derived_() const noexcept {

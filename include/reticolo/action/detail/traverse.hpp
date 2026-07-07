@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <type_traits>
 #include <utility>
 
 // Function-scope FP-reassociation hint for reduction loops. On clang this
@@ -326,6 +327,27 @@ inline void walk_outer_(std::array<std::size_t, D> const& stride,
     }
 }
 
+// Pre-wrapped outer-dim neighbour ROW bases for one row: for each outer dim
+// nu∈[1,D), fwd[nu]/bwd[nu] are the row-base offsets of the +nu / -nu neighbour
+// (periodic). The one place this odometer arithmetic lives — shared by the map and
+// reduce item drivers (site and complex split-last).
+template <std::size_t D>
+[[gnu::always_inline]] inline void item_bases_(std::size_t own,
+                                               std::array<std::size_t, D> const& coord,
+                                               std::array<std::size_t, D> const& L,
+                                               std::array<std::size_t, D> const& stride,
+                                               std::array<std::size_t, D>& fwd,
+                                               std::array<std::size_t, D>& bwd) noexcept {
+    for (std::size_t nu = 1; nu < D; ++nu) {
+        std::size_t const c   = coord[nu];
+        std::size_t const bnu = own - (c * stride[nu]);
+        std::size_t const cf  = (c + 1 == L[nu]) ? std::size_t{0} : (c + 1);
+        std::size_t const cb  = (c == 0) ? (L[nu] - 1) : (c - 1);
+        fwd[nu]               = bnu + (cf * stride[nu]);
+        bwd[nu]               = bnu + (cb * stride[nu]);
+    }
+}
+
 // Run one work item (a rectangular sub-lattice [lo, hi), inner dim full) as a map.
 // The emit lambda derives each row's pre-wrapped outer neighbour bases from `own`
 // and `coord`, then maps the row.
@@ -344,14 +366,7 @@ inline void map_item_(Lattice<T> const& l,
         stride, lo, hi, std::size_t{0}, coord, [&](std::size_t own, auto const& cc) {
             std::array<std::size_t, D> fwd{};
             std::array<std::size_t, D> bwd{};
-            for (std::size_t nu = 1; nu < D; ++nu) {
-                std::size_t const c   = cc[nu];
-                std::size_t const bnu = own - (c * stride[nu]);
-                std::size_t const cf  = (c + 1 == L[nu]) ? std::size_t{0} : (c + 1);
-                std::size_t const cb  = (c == 0) ? (L[nu] - 1) : (c - 1);
-                fwd[nu]               = bnu + (cf * stride[nu]);
-                bwd[nu]               = bnu + (cb * stride[nu]);
-            }
+            item_bases_<D>(own, cc, L, stride, fwd, bwd);
             map_row_<D, Policy>(data, own, fwd, bwd, std::size_t{0}, L0, L0, comb, body);
         });
 }
@@ -375,14 +390,7 @@ template <std::size_t D, class Policy, class Acc, class T, class Comb, class Bod
         stride, lo, hi, std::size_t{0}, coord, [&](std::size_t own, auto const& cc) {
             std::array<std::size_t, D> fwd{};
             std::array<std::size_t, D> bwd{};
-            for (std::size_t nu = 1; nu < D; ++nu) {
-                std::size_t const c   = cc[nu];
-                std::size_t const bnu = own - (c * stride[nu]);
-                std::size_t const cf  = (c + 1 == L[nu]) ? std::size_t{0} : (c + 1);
-                std::size_t const cb  = (c == 0) ? (L[nu] - 1) : (c - 1);
-                fwd[nu]               = bnu + (cf * stride[nu]);
-                bwd[nu]               = bnu + (cb * stride[nu]);
-            }
+            item_bases_<D>(own, cc, L, stride, fwd, bwd);
             total += reduce_row_<D, Policy, Acc>(
                 data, own, fwd, bwd, std::size_t{0}, L0, L0, comb, body);
         });
@@ -440,46 +448,65 @@ plan_block_4d_(std::size_t L0, std::size_t L1, std::size_t L2, std::size_t L3) n
 
 // ---------- dispatch ---------------------------------------------------------
 
-// Map body(i, self, agg) over every site (agg folds all 2·ndims neighbours via
-// `comb`). Write-disjoint → bit-identical for any partition / thread count.
-template <class T, class Comb, class Body>
-inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
+// Map (Acc = void) or reduce (Acc = fold type) selector, so one dispatcher serves
+// both. `run_items_` splits an abstract work-item count; `run_ranges_` splits a
+// flat [0,n) into gran-aligned chunks.
+template <class Acc, class Work>
+inline Acc run_items_(bool want, std::size_t n_items, Work const& work) {
+    if constexpr (std::is_void_v<Acc>) {
+        reticolo::detail::parallel_map(want, n_items, work);
+    } else {
+        return reticolo::detail::parallel_reduce<Acc>(want, n_items, work);
+    }
+}
+
+template <class Acc, class Range>
+inline Acc run_ranges_(std::size_t n, std::size_t bps, std::size_t gran, Range const& r) {
+    if constexpr (std::is_void_v<Acc>) {
+        reticolo::detail::parallel_map_ranges(n, bps, gran, r);
+    } else {
+        return reticolo::detail::parallel_reduce_ranges<Acc>(n, bps, gran, r);
+    }
+}
+
+// The single ndims → work-item dispatch, shared by the site stencil AND the complex
+// split-last drivers, for both map (Acc = void) and reduce. It owns the whole per-
+// dimension partition (1D inner chunks, 2D rows, 3D planes, 4D cache tiles) and the
+// D>4 gather fallback; the caller supplies only the per-item behaviour:
+//   item.template operator()<D>(L, stride, lo, hi) — a tiled sub-lattice, D∈{2,3,4}
+//   one_d(x0, cnt)  — one inner-axis chunk of a 1D lattice
+//   flat(s0, cnt)   — a flat neighbour-table gather (D>4 / forced fallback)
+// each returning void (map) or Acc (reduce). The tile grid, item→(lo,hi) decode and
+// the row/plane ranges live here once instead of in four near-identical switches.
+template <class Acc, class T, class Item, class OneD, class Flat>
+inline Acc
+traverse_dispatch_(Lattice<T> const& l, Item const& item, OneD const& one_d, Flat const& flat) {
     std::size_t const n   = l.nsites();
     std::size_t const bps = l.bytes_per_site();
     bool const want       = reticolo::detail::want_threads(n, bps);
-    Body const& b         = body;
 #if RETICOLO_HOT_LOOP_FORCE_FALLBACK
-    reticolo::detail::parallel_map_ranges(n, bps, 1, [&](std::size_t s0, std::size_t cnt) {
-        stencil_map_flat_<T>(l, s0, cnt, comb, b);
-    });
+    return run_ranges_<Acc>(n, bps, 1, flat);
 #else
     switch (l.ndims()) {
-        case 1: {
-            std::size_t const L0 = l.shape()[0];
-            T const* const data  = l.data();
-            std::array<std::size_t, 1> const nb{};  // no outer dims
-            reticolo::detail::parallel_map_ranges(L0, bps, 1, [&](std::size_t x0, std::size_t cnt) {
-                map_row_<1, AllDirs>(data, 0, nb, nb, x0, x0 + cnt, L0, comb, b);
-            });
-            return;
-        }
+        case 1:
+            return run_ranges_<Acc>(l.shape()[0], bps, 1, one_d);
         case 2: {
             auto const [L, stride] = geometry_<2>(l);
-            reticolo::detail::parallel_map(want, L[1], [&](std::size_t y) {
-                std::array<std::size_t, 2> const lo{0, y};
-                std::array<std::size_t, 2> const hi{L[0], y + 1};
-                map_item_<2, AllDirs>(l, L, stride, lo, hi, comb, b);
+            return run_items_<Acc>(want, L[1], [&](std::size_t y) {
+                return item.template operator()<2>(L,
+                                                   stride,
+                                                   std::array<std::size_t, 2>{0, y},
+                                                   std::array<std::size_t, 2>{L[0], y + 1});
             });
-            return;
         }
         case 3: {
             auto const [L, stride] = geometry_<3>(l);
-            reticolo::detail::parallel_map(want, L[2], [&](std::size_t z) {
-                std::array<std::size_t, 3> const lo{0, 0, z};
-                std::array<std::size_t, 3> const hi{L[0], L[1], z + 1};
-                map_item_<3, AllDirs>(l, L, stride, lo, hi, comb, b);
+            return run_items_<Acc>(want, L[2], [&](std::size_t z) {
+                return item.template operator()<3>(L,
+                                                   stride,
+                                                   std::array<std::size_t, 3>{0, 0, z},
+                                                   std::array<std::size_t, 3>{L[0], L[1], z + 1});
             });
-            return;
         }
         case 4: {
             auto const [L, stride] = geometry_<4>(l);
@@ -487,9 +514,9 @@ inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) no
             std::size_t const nty  = (L[1] + bl.by - 1) / bl.by;
             std::size_t const ntz  = (L[2] + bl.bz - 1) / bl.bz;
             std::size_t const ntw  = (L[3] + bl.bw - 1) / bl.bw;
-            reticolo::detail::parallel_map(want, nty * ntz * ntw, [&](std::size_t item) {
-                std::size_t const ty = item % nty;
-                std::size_t const r  = item / nty;
+            return run_items_<Acc>(want, nty * ntz * ntw, [&](std::size_t it) {
+                std::size_t const ty = it % nty;
+                std::size_t const r  = it / nty;
                 std::size_t const tz = r % ntz;
                 std::size_t const tw = r / ntz;
                 std::array<std::size_t, 4> const lo{0, ty * bl.by, tz * bl.bz, tw * bl.bw};
@@ -497,17 +524,30 @@ inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) no
                                                     std::min(lo[1] + bl.by, L[1]),
                                                     std::min(lo[2] + bl.bz, L[2]),
                                                     std::min(lo[3] + bl.bw, L[3])};
-                map_item_<4, AllDirs>(l, L, stride, lo, hi, comb, b);
+                return item.template operator()<4>(L, stride, lo, hi);
             });
-            return;
         }
         default:
-            reticolo::detail::parallel_map_ranges(n, bps, 1, [&](std::size_t s0, std::size_t cnt) {
-                stencil_map_flat_<T>(l, s0, cnt, comb, b);
-            });
-            return;
+            return run_ranges_<Acc>(n, bps, 1, flat);
     }
 #endif
+}
+
+// Map body(i, self, agg) over every site (agg folds all 2·ndims neighbours via
+// `comb`). Write-disjoint → bit-identical for any partition / thread count.
+template <class T, class Comb, class Body>
+inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
+    Body const& b = body;
+    traverse_dispatch_<void>(
+        l,
+        [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
+            map_item_<D, AllDirs>(l, L, stride, lo, hi, comb, b);
+        },
+        [&](std::size_t x0, std::size_t cnt) {
+            std::array<std::size_t, 1> const nb{};
+            map_row_<1, AllDirs>(l.data(), 0, nb, nb, x0, x0 + cnt, l.shape()[0], comb, b);
+        },
+        [&](std::size_t s0, std::size_t cnt) { stencil_map_flat_<T>(l, s0, cnt, comb, b); });
 }
 
 // Reduce body(self, agg) over every site (agg folds the ndims forward neighbours
@@ -516,69 +556,20 @@ inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) no
 template <class T, class Acc = T, class Comb, class Body>
 [[nodiscard]] inline Acc
 reduce_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
-    std::size_t const n   = l.nsites();
-    std::size_t const bps = l.bytes_per_site();
-    bool const want       = reticolo::detail::want_threads(n, bps);
-    Body const& b         = body;
-#if RETICOLO_HOT_LOOP_FORCE_FALLBACK
-    return reticolo::detail::parallel_reduce_ranges<Acc>(
-        n, bps, 1, [&](std::size_t s0, std::size_t cnt) {
+    Body const& b = body;
+    return traverse_dispatch_<Acc>(
+        l,
+        [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
+            return reduce_item_<D, FwdOnly, Acc>(l, L, stride, lo, hi, comb, b);
+        },
+        [&](std::size_t x0, std::size_t cnt) {
+            std::array<std::size_t, 1> const nb{};
+            return reduce_row_<1, FwdOnly, Acc>(
+                l.data(), 0, nb, nb, x0, x0 + cnt, l.shape()[0], comb, b);
+        },
+        [&](std::size_t s0, std::size_t cnt) {
             return stencil_reduce_flat_<T, Acc>(l, s0, cnt, comb, b);
         });
-#else
-    switch (l.ndims()) {
-        case 1: {
-            std::size_t const L0 = l.shape()[0];
-            T const* const data  = l.data();
-            std::array<std::size_t, 1> const nb{};
-            return reticolo::detail::parallel_reduce_ranges<Acc>(
-                L0, bps, 1, [&](std::size_t x0, std::size_t cnt) {
-                    return reduce_row_<1, FwdOnly, Acc>(data, 0, nb, nb, x0, x0 + cnt, L0, comb, b);
-                });
-        }
-        case 2: {
-            auto const [L, stride] = geometry_<2>(l);
-            return reticolo::detail::parallel_reduce<Acc>(want, L[1], [&](std::size_t y) {
-                std::array<std::size_t, 2> const lo{0, y};
-                std::array<std::size_t, 2> const hi{L[0], y + 1};
-                return reduce_item_<2, FwdOnly, Acc>(l, L, stride, lo, hi, comb, b);
-            });
-        }
-        case 3: {
-            auto const [L, stride] = geometry_<3>(l);
-            return reticolo::detail::parallel_reduce<Acc>(want, L[2], [&](std::size_t z) {
-                std::array<std::size_t, 3> const lo{0, 0, z};
-                std::array<std::size_t, 3> const hi{L[0], L[1], z + 1};
-                return reduce_item_<3, FwdOnly, Acc>(l, L, stride, lo, hi, comb, b);
-            });
-        }
-        case 4: {
-            auto const [L, stride] = geometry_<4>(l);
-            Block4d const bl       = plan_block_4d_<T>(L[0], L[1], L[2], L[3]);
-            std::size_t const nty  = (L[1] + bl.by - 1) / bl.by;
-            std::size_t const ntz  = (L[2] + bl.bz - 1) / bl.bz;
-            std::size_t const ntw  = (L[3] + bl.bw - 1) / bl.bw;
-            return reticolo::detail::parallel_reduce<Acc>(
-                want, nty * ntz * ntw, [&](std::size_t item) {
-                    std::size_t const ty = item % nty;
-                    std::size_t const r  = item / nty;
-                    std::size_t const tz = r % ntz;
-                    std::size_t const tw = r / ntz;
-                    std::array<std::size_t, 4> const lo{0, ty * bl.by, tz * bl.bz, tw * bl.bw};
-                    std::array<std::size_t, 4> const hi{L[0],
-                                                        std::min(lo[1] + bl.by, L[1]),
-                                                        std::min(lo[2] + bl.bz, L[2]),
-                                                        std::min(lo[3] + bl.bw, L[3])};
-                    return reduce_item_<4, FwdOnly, Acc>(l, L, stride, lo, hi, comb, b);
-                });
-        }
-        default:
-            return reticolo::detail::parallel_reduce_ranges<Acc>(
-                n, bps, 1, [&](std::size_t s0, std::size_t cnt) {
-                    return stencil_reduce_flat_<T, Acc>(l, s0, cnt, comb, b);
-                });
-    }
-#endif
 }
 
 }  // namespace reticolo::action::detail

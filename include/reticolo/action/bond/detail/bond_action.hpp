@@ -1,10 +1,10 @@
 #pragma once
 
+#include <reticolo/action/detail/cache.hpp>
 #include <reticolo/action/detail/traverse.hpp>
 #include <reticolo/core/lattice.hpp>
 
 #include <cstddef>
-#include <limits>
 
 // BondAction<Derived, T> — the common interface for scalar actions whose energy
 // is a sum over *bonds* of a function of the two endpoint values (XY / planar
@@ -25,7 +25,7 @@
 namespace reticolo::action::detail {
 
 template <class Derived, class T>
-struct BondAction {
+struct BondAction : SFullCache {
     // The bond kernel IS the per-neighbour combine: unlike a site action the
     // endpoint-difference energy can't be pre-summed, so `reduce_stencil` /
     // `visit_stencil` fold `bond(self, nbr)` over the forward (total) / all
@@ -56,11 +56,6 @@ struct BondAction {
             m[i] += k_dt * (sc * agg);
         });
     }
-
-    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
-
-    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 
 private:
     [[nodiscard]] Derived const& derived_() const noexcept {

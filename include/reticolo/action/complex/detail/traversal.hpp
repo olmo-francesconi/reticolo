@@ -155,14 +155,7 @@ inline void map_item_split_(Lattice<T> const& l,
         stride, lo, hi, std::size_t{0}, coord, [&](std::size_t own, auto const& cc) {
             std::array<std::size_t, D> fwd{};
             std::array<std::size_t, D> bwd{};
-            for (std::size_t nu = 1; nu < D; ++nu) {
-                std::size_t const c   = cc[nu];
-                std::size_t const bnu = own - (c * stride[nu]);
-                std::size_t const cf  = (c + 1 == L[nu]) ? std::size_t{0} : (c + 1);
-                std::size_t const cb  = (c == 0) ? (L[nu] - 1) : (c - 1);
-                fwd[nu]               = bnu + (cf * stride[nu]);
-                bwd[nu]               = bnu + (cb * stride[nu]);
-            }
+            item_bases_<D>(own, cc, L, stride, fwd, bwd);
             map_row_split_<D>(data, own, fwd, bwd, L0, body);
         });
 }
@@ -183,14 +176,7 @@ template <std::size_t D, class Acc, class T, class Body>
         stride, lo, hi, std::size_t{0}, coord, [&](std::size_t own, auto const& cc) {
             std::array<std::size_t, D> fwd{};
             std::array<std::size_t, D> bwd{};
-            for (std::size_t nu = 1; nu < D; ++nu) {
-                std::size_t const c   = cc[nu];
-                std::size_t const bnu = own - (c * stride[nu]);
-                std::size_t const cf  = (c + 1 == L[nu]) ? std::size_t{0} : (c + 1);
-                std::size_t const cb  = (c == 0) ? (L[nu] - 1) : (c - 1);
-                fwd[nu]               = bnu + (cf * stride[nu]);
-                bwd[nu]               = bnu + (cb * stride[nu]);
-            }
+            item_bases_<D>(own, cc, L, stride, fwd, bwd);
             total += reduce_row_split_<D, Acc>(data, own, fwd, bwd, L0, body);
         });
     return total;
@@ -199,122 +185,38 @@ template <std::size_t D, class Acc, class T, class Body>
 // ---------- dispatch ---------------------------------------------------------
 
 //  visit_nn_split_last(l, body): body(i, phi, nbrs_total, nbrs_last) -> void.
+//  Reuses the shared `traverse_dispatch_` (site and split-last share the tiling and
+//  partition); the split item drivers add only the second (last-direction)
+//  aggregate. 1D and D>4 route to the flat split-last gather.
 template <class T, class Body>
 inline void visit_nn_split_last(Lattice<T> const& l, Body&& body) noexcept {
-    std::size_t const n   = l.nsites();
-    std::size_t const bps = l.bytes_per_site();
-    bool const want       = reticolo::detail::want_threads(n, bps);
-    Body const& b         = body;
-#if RETICOLO_HOT_LOOP_FORCE_FALLBACK
-    reticolo::detail::parallel_map_ranges(n, bps, 1, [&](std::size_t s0, std::size_t cnt) {
+    Body const& b = body;
+    auto flat     = [&](std::size_t s0, std::size_t cnt) {
         visit_nn_split_last_fallback_(l, s0, cnt, b);
-    });
-#else
-    switch (l.ndims()) {
-        case 2: {
-            auto const [L, stride] = geometry_<2>(l);
-            reticolo::detail::parallel_map(want, L[1], [&](std::size_t y) {
-                std::array<std::size_t, 2> const lo{0, y};
-                std::array<std::size_t, 2> const hi{L[0], y + 1};
-                map_item_split_<2>(l, L, stride, lo, hi, b);
-            });
-            return;
-        }
-        case 3: {
-            auto const [L, stride] = geometry_<3>(l);
-            reticolo::detail::parallel_map(want, L[2], [&](std::size_t z) {
-                std::array<std::size_t, 3> const lo{0, 0, z};
-                std::array<std::size_t, 3> const hi{L[0], L[1], z + 1};
-                map_item_split_<3>(l, L, stride, lo, hi, b);
-            });
-            return;
-        }
-        case 4: {
-            auto const [L, stride] = geometry_<4>(l);
-            Block4d const bl       = plan_block_4d_<T>(L[0], L[1], L[2], L[3]);
-            std::size_t const nty  = (L[1] + bl.by - 1) / bl.by;
-            std::size_t const ntz  = (L[2] + bl.bz - 1) / bl.bz;
-            std::size_t const ntw  = (L[3] + bl.bw - 1) / bl.bw;
-            reticolo::detail::parallel_map(want, nty * ntz * ntw, [&](std::size_t item) {
-                std::size_t const ty = item % nty;
-                std::size_t const r  = item / nty;
-                std::size_t const tz = r % ntz;
-                std::size_t const tw = r / ntz;
-                std::array<std::size_t, 4> const lo{0, ty * bl.by, tz * bl.bz, tw * bl.bw};
-                std::array<std::size_t, 4> const hi{L[0],
-                                                    std::min(lo[1] + bl.by, L[1]),
-                                                    std::min(lo[2] + bl.bz, L[2]),
-                                                    std::min(lo[3] + bl.bw, L[3])};
-                map_item_split_<4>(l, L, stride, lo, hi, b);
-            });
-            return;
-        }
-        default:
-            reticolo::detail::parallel_map_ranges(n, bps, 1, [&](std::size_t s0, std::size_t cnt) {
-                visit_nn_split_last_fallback_(l, s0, cnt, b);
-            });
-            return;
-    }
-#endif
+    };
+    traverse_dispatch_<void>(
+        l,
+        [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
+            map_item_split_<D>(l, L, stride, lo, hi, b);
+        },
+        flat,
+        flat);
 }
 
 //  reduce_fwd_split_last(l, body): body(phi, fwd_total, fwd_last) -> T.
 template <class T, class Body>
 [[nodiscard]] inline T reduce_fwd_split_last(Lattice<T> const& l, Body&& body) noexcept {
-    std::size_t const n   = l.nsites();
-    std::size_t const bps = l.bytes_per_site();
-    bool const want       = reticolo::detail::want_threads(n, bps);
-    Body const& b         = body;
-#if RETICOLO_HOT_LOOP_FORCE_FALLBACK
-    return reticolo::detail::parallel_reduce_ranges<T>(
-        n, bps, 1, [&](std::size_t s0, std::size_t cnt) {
-            return reduce_fwd_split_last_fallback_<T, T>(l, s0, cnt, b);
-        });
-#else
-    switch (l.ndims()) {
-        case 2: {
-            auto const [L, stride] = geometry_<2>(l);
-            return reticolo::detail::parallel_reduce<T>(want, L[1], [&](std::size_t y) {
-                std::array<std::size_t, 2> const lo{0, y};
-                std::array<std::size_t, 2> const hi{L[0], y + 1};
-                return reduce_item_split_<2, T>(l, L, stride, lo, hi, b);
-            });
-        }
-        case 3: {
-            auto const [L, stride] = geometry_<3>(l);
-            return reticolo::detail::parallel_reduce<T>(want, L[2], [&](std::size_t z) {
-                std::array<std::size_t, 3> const lo{0, 0, z};
-                std::array<std::size_t, 3> const hi{L[0], L[1], z + 1};
-                return reduce_item_split_<3, T>(l, L, stride, lo, hi, b);
-            });
-        }
-        case 4: {
-            auto const [L, stride] = geometry_<4>(l);
-            Block4d const bl       = plan_block_4d_<T>(L[0], L[1], L[2], L[3]);
-            std::size_t const nty  = (L[1] + bl.by - 1) / bl.by;
-            std::size_t const ntz  = (L[2] + bl.bz - 1) / bl.bz;
-            std::size_t const ntw  = (L[3] + bl.bw - 1) / bl.bw;
-            return reticolo::detail::parallel_reduce<T>(
-                want, nty * ntz * ntw, [&](std::size_t item) {
-                    std::size_t const ty = item % nty;
-                    std::size_t const r  = item / nty;
-                    std::size_t const tz = r % ntz;
-                    std::size_t const tw = r / ntz;
-                    std::array<std::size_t, 4> const lo{0, ty * bl.by, tz * bl.bz, tw * bl.bw};
-                    std::array<std::size_t, 4> const hi{L[0],
-                                                        std::min(lo[1] + bl.by, L[1]),
-                                                        std::min(lo[2] + bl.bz, L[2]),
-                                                        std::min(lo[3] + bl.bw, L[3])};
-                    return reduce_item_split_<4, T>(l, L, stride, lo, hi, b);
-                });
-        }
-        default:
-            return reticolo::detail::parallel_reduce_ranges<T>(
-                n, bps, 1, [&](std::size_t s0, std::size_t cnt) {
-                    return reduce_fwd_split_last_fallback_<T, T>(l, s0, cnt, b);
-                });
-    }
-#endif
+    Body const& b = body;
+    auto flat     = [&](std::size_t s0, std::size_t cnt) {
+        return reduce_fwd_split_last_fallback_<T, T>(l, s0, cnt, b);
+    };
+    return traverse_dispatch_<T>(
+        l,
+        [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
+            return reduce_item_split_<D, T>(l, L, stride, lo, hi, b);
+        },
+        flat,
+        flat);
 }
 
 }  // namespace reticolo::action::detail

@@ -1,10 +1,10 @@
 #pragma once
 
+#include <reticolo/action/detail/cache.hpp>
 #include <reticolo/action/site/detail/traversal.hpp>
 #include <reticolo/core/lattice.hpp>
 
 #include <cstddef>
-#include <limits>
 #include <utility>
 #include <vector>
 
@@ -38,7 +38,7 @@
 namespace reticolo::action::detail {
 
 template <class Derived, class T>
-struct SiteAction {
+struct SiteAction : SFullCache {
     [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
         auto kern      = derived_().action_kernel();
         double const s = reduce_fwd<T, double>(
@@ -102,12 +102,9 @@ struct SiteAction {
             });
     }
 
-    [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
-    void restore_last_s_full(double v) const noexcept { last_s_full_ = v; }
-
     // Lazy per-site scratch, sized to nsites — shared by the LLR fast-path and by
     // any leaf `prep`/`s_full` that batches a transcendental (SineGordon). Public
-    // (like the caches) to keep the derived struct an aggregate.
+    // (like the cache) to keep the derived struct an aggregate.
     void ensure_scratch(std::size_t n) const {
         if (scratch_.size() < n) {
             scratch_.resize(n);
@@ -115,7 +112,6 @@ struct SiteAction {
     }
 
     mutable std::vector<T> scratch_{};
-    mutable double last_s_full_ = std::numeric_limits<double>::quiet_NaN();
 
 private:
     [[nodiscard]] Derived const& derived_() const noexcept {

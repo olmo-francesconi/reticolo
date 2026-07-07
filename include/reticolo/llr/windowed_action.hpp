@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/action/concepts.hpp>
+#include <reticolo/algorithm/integ_ops.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/llr/detail/window_formula.hpp>
@@ -99,12 +100,7 @@ struct WindowedAction {
             scalar_t const scale = detail::force_scale_imag(s, a, E_n, delta);
             Field& imag_force    = scratch_(force.indexing());
             base.compute_force_imag(l, imag_force);
-            T* const fp         = force.data();
-            T const* const ip   = imag_force.data();
-            std::size_t const n = flat_size(force);
-            for (std::size_t i = 0; i < n; ++i) {
-                fp[i] += scale * ip[i];
-            }
+            alg::integ::kick_add(force, imag_force, scale);  // force += scale·F_I
         } else {
             // Fused base kernel when available: one neighbour pass yields
             // both S_base and the force, dropping the separate full-lattice
@@ -144,13 +140,7 @@ struct WindowedAction {
                 base.compute_force_and_kick(l, mom, k_dt);
                 Field& imag_force = scratch_(mom.indexing());
                 base.compute_force_imag(l, imag_force);
-                T* const mp         = mom.data();
-                T const* const ip   = imag_force.data();
-                std::size_t const n = flat_size(mom);
-                scalar_t const k    = k_dt * scale;
-                for (std::size_t i = 0; i < n; ++i) {
-                    mp[i] += k * ip[i];
-                }
+                alg::integ::kick_add(mom, imag_force, k_dt * scale);
             }
         } else {
             if constexpr (requires(Field& f) { base.s_full_and_force(l, f); }) {
@@ -161,13 +151,7 @@ struct WindowedAction {
                 Field& f             = scratch_(mom.indexing());
                 auto const s         = static_cast<scalar_t>(base.s_full_and_force(l, f));
                 scalar_t const scale = detail::force_scale(s, a, E_n, delta);
-                scalar_t const c     = k_dt * scale;
-                T* const mp          = mom.data();
-                T const* const fp    = f.data();
-                std::size_t const n  = flat_size(mom);
-                for (std::size_t i = 0; i < n; ++i) {
-                    mp[i] += c * fp[i];
-                }
+                alg::integ::kick_add(mom, f, k_dt * scale);
             } else {
                 scalar_t const s     = base.s_full(l);
                 scalar_t const scale = detail::force_scale(s, a, E_n, delta);
