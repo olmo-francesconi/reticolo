@@ -2,6 +2,7 @@
 
 #include <reticolo/action/complex/detail/traversal.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/parallel.hpp>
 
 #include <complex>
 #include <cstddef>
@@ -72,12 +73,11 @@ struct ComplexAction {
     // ---- imaginary part (LLR constraint observable, time-direction only) ----
 
     [[nodiscard]] double s_imag(Lattice<complex_t> const& l) const noexcept {
-        auto kern  = derived_().imag_action_kernel(l);
-        double acc = 0.0;
-        slab_reduce_tau_(l, [&](complex_t self, complex_t fwd_tau) {
-            acc += static_cast<double>(kern(self, fwd_tau));
+        auto kern        = derived_().imag_action_kernel(l);
+        double const acc = slab_reduce_tau_<double>(l, [&](complex_t self, complex_t fwd_tau) {
+            return static_cast<double>(kern(self, fwd_tau));
         });
-        last_s_imag_ = acc;
+        last_s_imag_     = acc;
         return acc;
     }
 
@@ -126,35 +126,42 @@ private:
 
     // Last dim τ ("time"): stride along τ is s_tau = nsites / L_tau, so the
     // (w,·) → (w±1,·) shift is a constant ±s_tau in the flat layout — a plain
-    // bulk-vs-slab sweep with no per-site neighbour-table lookup.
+    // slab sweep with no per-site neighbour-table lookup. Each τ-slab (fixed w) is
+    // an independent work item: the visit is write-disjoint and the reduce folds
+    // per-slab partials in canonical w order, so both are thread-count invariant.
 
-    // Forward-τ reduction: body(self, phi_{x+τ}).
-    template <class Body>
-    void slab_reduce_tau_(Lattice<complex_t> const& l, Body&& body) const noexcept {
+    // Forward-τ reduction: body(self, phi_{x+τ}) -> Acc, summed over all sites.
+    template <class Acc, class Body>
+    [[nodiscard]] Acc slab_reduce_tau_(Lattice<complex_t> const& l,
+                                       Body const& body) const noexcept {
         std::size_t const d         = l.ndims();
         std::size_t const L_tau     = l.shape()[d - 1];
         std::size_t const n         = l.nsites();
         std::size_t const s_tau     = n / L_tau;
         complex_t const* const data = l.data();
-        for (std::size_t w = 0; w < L_tau; ++w) {
+        bool const want             = reticolo::detail::want_threads(n, l.bytes_per_site());
+        return reticolo::detail::parallel_reduce<Acc>(want, L_tau, [&](std::size_t w) {
             std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
             std::size_t const base   = w * s_tau;
             std::size_t const base_p = wp * s_tau;
+            Acc partial{};
             for (std::size_t k = 0; k < s_tau; ++k) {
-                body(data[base + k], data[base_p + k]);
+                partial += body(data[base + k], data[base_p + k]);
             }
-        }
+            return partial;
+        });
     }
 
     // Both-τ visit: body(i, phi_{x+τ}, phi_{x-τ}).
     template <class Body>
-    void slab_visit_tau_(Lattice<complex_t> const& l, Body&& body) const noexcept {
+    void slab_visit_tau_(Lattice<complex_t> const& l, Body const& body) const noexcept {
         std::size_t const d         = l.ndims();
         std::size_t const L_tau     = l.shape()[d - 1];
         std::size_t const n         = l.nsites();
         std::size_t const s_tau     = n / L_tau;
         complex_t const* const data = l.data();
-        for (std::size_t w = 0; w < L_tau; ++w) {
+        bool const want             = reticolo::detail::want_threads(n, l.bytes_per_site());
+        reticolo::detail::parallel_map(want, L_tau, [&](std::size_t w) {
             std::size_t const wm     = (w == 0) ? (L_tau - 1) : (w - 1);
             std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
             std::size_t const base   = w * s_tau;
@@ -163,7 +170,7 @@ private:
             for (std::size_t k = 0; k < s_tau; ++k) {
                 body(base + k, data[base_p + k], data[base_m + k]);
             }
-        }
+        });
     }
 };
 
