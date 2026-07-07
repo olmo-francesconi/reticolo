@@ -149,6 +149,16 @@ target_compile_definitions(reticolo_core INTERFACE
 
 target_compile_options(reticolo_core INTERFACE
     $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:Release>>:-fno-math-errno>
+    # Pin FP contraction to per-expression (the C FP_CONTRACT default, and Clang's
+    # default) so multiply-adds fuse identically across compilers and code paths.
+    # GCC otherwise defaults to `fast` (contraction ACROSS statements), which makes
+    # the tiled hot-loop kernels round ~1 ULP differently from the scalar gather
+    # reference at data-dependent sites — breaking the cross-thread / cross-compiler
+    # bit-reproducibility the HMC and LLR checkpoints rely on. Intra-expression FMA
+    # (e.g. the SU(N) matrix kernels, written as single expressions) still contracts,
+    # so this is perf-neutral for the compute-bound gauge paths. CXX-only: nvcc device
+    # code uses -fmad, unaffected.
+    $<$<COMPILE_LANGUAGE:CXX>:-ffp-contract=on>
 )
 
 if(RETICOLO_TUNE_NATIVE)
