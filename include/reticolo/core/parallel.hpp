@@ -174,4 +174,25 @@ template <class Acc = double, class Worker>
     });
 }
 
+// Field-convenience: the single call-site shell for a per-site-range pass over a
+// whole field. `field` supplies its own site count and per-site footprint, so the
+// threshold/chunk plumbing (want_threads / chunk_for) is derived, not repeated at
+// every call. `worker(base, cnt)` owns whatever inner structure the pass needs —
+// e.g. a gauge kernel's direction (μ) loop — and must be write-disjoint over the
+// site range for the map form. `gran` is the kernel's site-batch width, kept so
+// batched kernels stay bit-identical to a serial full-field sweep.
+//
+// These name the gauge force / fused-kick / drift / kinetic / s_full-plane call
+// shape that was otherwise copied verbatim across the action + HMC + integrator
+// layers; any field exposing `nsites()` + `bytes_per_site()` qualifies.
+template <class Field, class Worker>
+inline void field_apply(Field const& field, std::size_t gran, Worker const& worker) {
+    parallel_map_ranges(field.nsites(), field.bytes_per_site(), gran, worker);
+}
+
+template <class Acc = double, class Field, class Worker>
+[[nodiscard]] inline Acc field_reduce(Field const& field, std::size_t gran, Worker const& worker) {
+    return parallel_reduce_ranges<Acc>(field.nsites(), field.bytes_per_site(), gran, worker);
+}
+
 }  // namespace reticolo::detail

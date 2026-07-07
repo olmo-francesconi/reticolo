@@ -275,11 +275,10 @@ private:
                 // Parallel counter-based sampler: one RNG draw per trajectory keys
                 // Philox, then each direction slab worksplits (site-indexed draws).
                 std::uint64_t const key = rng_.uniform_u64();
-                std::size_t const bps   = mom_.bytes_per_site();
                 for (std::size_t mu = 0; mu < d; ++mu) {
                     Scalar* const pblk = mom_.mu_block_data(mu);
-                    reticolo::detail::parallel_map_ranges(
-                        ns, bps, 1, [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
+                    reticolo::detail::field_apply(
+                        mom_, 1, [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
                             Group::sample_algebra_philox_range(pblk, key, mu, ns, base, cnt);
                         });
                 }
@@ -337,12 +336,11 @@ private:
                           }) {
                 // Parallel deterministic reduce per direction; ½ applied once.
                 // gran = 8 (kinetic_range's internal batch).
-                double raw            = 0.0;
-                std::size_t const bps = mom_.bytes_per_site();
+                double raw = 0.0;
                 for (std::size_t mu = 0; mu < d; ++mu) {
                     Scalar const* const pblk = mom_.mu_block_data(mu);
-                    raw += reticolo::detail::parallel_reduce_ranges(
-                        ns, bps, 8, [pblk, ns](std::size_t base, std::size_t cnt) {
+                    raw += reticolo::detail::field_reduce(
+                        mom_, 8, [pblk, ns](std::size_t base, std::size_t cnt) {
                             return Group::kinetic_range(pblk, ns, base, cnt);
                         });
                 }

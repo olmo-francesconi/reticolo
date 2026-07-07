@@ -4,6 +4,7 @@
 #include <reticolo/action/gauge/detail/wilson_kernels.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/parallel.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/math/gauge_group/su2.hpp>
 #include <reticolo/math/su2_ops.hpp>
@@ -50,7 +51,7 @@ struct wilson_kernels<gauge_group::SU2> {
 
     // Σ Re Tr U_p over the sites [base, base+cnt) of one (μ, ν) plane. Pure per-
     // range worker — no threading. The gauge base parallelises by calling this
-    // over a fixed block partition (gauge_traverse_reduce); `base` is k_batch-
+    // over a fixed block partition (field_reduce); `base` is k_batch-
     // aligned so the batched groupings match the whole-plane sweep exactly.
     // Same shape as SU3::s_full_plane_range, [4][B] slabs.
     //
@@ -138,7 +139,7 @@ struct wilson_kernels<gauge_group::SU2> {
 
     // Whole-plane Σ Re Tr U_p (serial). The `Wilson<G>::s_full` present/absent
     // probe binds to this name; the parallel path calls `s_full_plane_range`
-    // per block via gauge_traverse_reduce.
+    // per block via field_reduce.
     template <class T>
     static double s_full_plane_re_tr_sum(MatrixLinkLattice<gauge_group::SU2, T> const& u,
                                          std::size_t mu,
@@ -167,7 +168,7 @@ public:
     // auto-vectorises the b-loop on any target SIMD width.
     //
     // Pure per-range staple force/kick worker over the links [base, base+cnt).
-    // No threading — the gauge base parallelises via gauge_traverse_apply, whose
+    // No threading — the gauge base parallelises via field_apply, whose
     // k_batch-aligned `base` keeps every non-final chunk on the batched path so
     // the result is bit-identical to the whole-field sweep. Each (μ, s) is written
     // exactly once, so chunks are write-disjoint.
@@ -377,12 +378,16 @@ private:
 public:
     // The batched kernel is precision-generic (T-native: float → 4-wide,
     // double → 2-wide) and handles the ns % k_batch remainder via the per-site
-    // tail, so both precisions take the same path.
+    // tail, so both precisions take the same path. Write-disjoint per (μ, s), so
+    // `field_apply` worksplits it over k_batch-aligned chunks bit-identically.
     template <class T>
     static void compute_force(MatrixLinkLattice<gauge_group::SU2, T> const& u,
                               MatrixLinkLattice<gauge_group::SU2, T>& force,
                               double beta_over_n) noexcept {
-        compute_force_range<false>(u, force, -beta_over_n, 0, u.nsites());
+        reticolo::detail::field_apply(
+            u, gauge_group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
+                compute_force_range<false>(u, force, -beta_over_n, base, cnt);
+            });
     }
 
     template <class T>
@@ -390,7 +395,10 @@ public:
                                        MatrixLinkLattice<gauge_group::SU2, T>& mom,
                                        double beta_over_n,
                                        double k_dt) noexcept {
-        compute_force_range<true>(u, mom, -k_dt * beta_over_n, 0, u.nsites());
+        reticolo::detail::field_apply(
+            u, gauge_group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
+                compute_force_range<true>(u, mom, -k_dt * beta_over_n, base, cnt);
+            });
     }
 };
 

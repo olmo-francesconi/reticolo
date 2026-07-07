@@ -4,6 +4,7 @@
 #include <reticolo/action/gauge/detail/wilson_kernels.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/parallel.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/math/gauge_group/su3.hpp>
 #include <reticolo/math/su3_ops.hpp>
@@ -378,12 +379,17 @@ public:
     // Precision-generic: the batched kernel is T-native (float → 4-/8-wide,
     // double → 2-wide) and folds the ns % k_batch remainder into the per-site
     // tail, so both precisions take the same path. The batched kernel writes
-    // each (μ, s) exactly once, so no force zero-init is needed (Fused=false).
+    // each (μ, s) exactly once, so the pass is a write-disjoint map — `field_apply`
+    // worksplits it over k_batch-aligned site chunks, bit-identical to the serial
+    // whole-field sweep for any thread count (no force zero-init needed).
     template <class T>
     static void compute_force(MatrixLinkLattice<gauge_group::SU3, T> const& u,
                               MatrixLinkLattice<gauge_group::SU3, T>& force,
                               double beta_over_n) noexcept {
-        compute_force_range<false>(u, force, -beta_over_n, 0, u.nsites());
+        reticolo::detail::field_apply(
+            u, gauge_group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
+                compute_force_range<false>(u, force, -beta_over_n, base, cnt);
+            });
     }
 
     template <class T>
@@ -391,7 +397,10 @@ public:
                                        MatrixLinkLattice<gauge_group::SU3, T>& mom,
                                        double beta_over_n,
                                        double k_dt) noexcept {
-        compute_force_range<true>(u, mom, -k_dt * beta_over_n, 0, u.nsites());
+        reticolo::detail::field_apply(
+            u, gauge_group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
+                compute_force_range<true>(u, mom, -k_dt * beta_over_n, base, cnt);
+            });
     }
 };
 
