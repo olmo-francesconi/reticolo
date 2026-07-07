@@ -115,9 +115,9 @@ int main() {
         bench_phi4(L);
     }
     for (int L : k_sizes) {
-        bench_wilson<gauge_group::SU2>("Wilson<SU2>", L, 2.4);
+        bench_wilson<math::group::SU2>("Wilson<SU2>", L, 2.4);
     }
     for (int L : k_sizes) {
-        bench_wilson<gauge_group::SU3>("Wilson<SU3>", L, 6.0);
+        bench_wilson<math::group::SU3>("Wilson<SU3>", L, 6.0);
     }
 }

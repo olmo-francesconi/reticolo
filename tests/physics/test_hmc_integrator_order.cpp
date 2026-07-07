@@ -2,7 +2,7 @@
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/rng.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <array>

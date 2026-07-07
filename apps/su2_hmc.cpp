@@ -14,7 +14,7 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Group  = gauge_group::SU2;
+    using Group  = math::group::SU2;
     using Action = action::Wilson<Group, double>;
     using Field  = MatrixLinkLattice<Group, double>;
 

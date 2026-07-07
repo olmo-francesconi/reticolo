@@ -1,7 +1,7 @@
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
-#include <reticolo/math/gauge_group/su3.hpp>
+#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/math/group/su3.hpp>
 
 #include <cstddef>
 #include <type_traits>
@@ -14,7 +14,7 @@
 using reticolo::FastRng;
 using reticolo::MatrixLinkLattice;
 using reticolo::action::Wilson;
-using SU3 = reticolo::gauge_group::SU3;
+using SU3 = reticolo::math::group::SU3;
 
 static_assert(std::is_same_v<decltype(std::declval<Wilson<SU3, float> const&>().s_full(
                                  std::declval<MatrixLinkLattice<SU3, float> const&>())),

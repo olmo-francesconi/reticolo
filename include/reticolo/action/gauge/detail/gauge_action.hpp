@@ -26,7 +26,7 @@
 // This split is "general for non-Wilson": a future improved/rectangle action
 // derives from GaugeAction and writes its own `s_full_uncached`/`force_into`
 // with a different loop functional; `Wilson<G>` (plaquette, generic over group)
-// is the one plaquette leaf that ships today (`Wilson<gauge_group::U1>` covers the
+// is the one plaquette leaf that ships today (`Wilson<math::group::U1>` covers the
 // Abelian case directly, with n_real_components = 1).
 
 namespace reticolo::action::detail {

@@ -11,7 +11,7 @@
 //   drift :  U_μ(x) ← exp(dt·P_μ(x))·U_μ(x)        (group exp, ADL atom)
 //   sample:  P = Σ_a h_a T_a, h_a ~ N(0,½)         (Gell-Mann scatter)
 
-#include <reticolo/core/philox.hpp>
+#include <reticolo/core/rng/philox.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/device_topology.hpp>

@@ -1,7 +1,7 @@
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/rng.hpp>
 #include <reticolo/cuda/actions/site/phi4.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>

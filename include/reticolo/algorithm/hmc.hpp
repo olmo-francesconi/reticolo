@@ -7,8 +7,8 @@
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
 #include <reticolo/core/parallel.hpp>
-#include <reticolo/core/philox.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/philox.hpp>
+#include <reticolo/core/rng/rng.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <algorithm>

@@ -4,7 +4,7 @@
 #include <reticolo/algorithm/integ_ops.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/llr/detail/window_formula.hpp>
+#include <reticolo/llr/formula/window_formula.hpp>
 
 #include <complex>
 #include <cstddef>

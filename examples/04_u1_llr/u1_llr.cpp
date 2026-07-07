@@ -20,9 +20,12 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action = action::Wilson<gauge_group::U1, double>;
-    using ReplicaT =
-        llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, MatrixLinkLattice<gauge_group::U1, double>>;
+    using Action   = action::Wilson<math::group::U1, double>;
+    using ReplicaT = llr::Replica<Action,
+                                  FastRng,
+                                  alg::integ::Omelyan2,
+                                  double,
+                                  MatrixLinkLattice<math::group::U1, double>>;
 
     // ---- CLI ----
     cli::Parser p{"u1_llr", "LLR with replica exchange for compact U(1) Wilson action"};
@@ -61,7 +64,8 @@ int main(int argc, char** argv) {
     std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
 
     // ---- Base action ----
-    MatrixLinkLattice<gauge_group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    MatrixLinkLattice<math::group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
+                                                              static_cast<std::size_t>(L));
     Action const base{.beta = beta};
     log::act(base);
 

@@ -74,11 +74,11 @@ bool stencil_force_matches_fd() {
 
 }  // namespace reticolo::cuda
 
-#include <reticolo/math/gauge_group/su2.hpp>
-#include <reticolo/math/gauge_group/su3.hpp>
-#include <reticolo/math/gauge_group/u1.hpp>
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/math/group/su2.hpp>
+#include <reticolo/math/group/su3.hpp>
+#include <reticolo/math/group/u1.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -116,8 +116,8 @@ template <class G>
 }  // namespace
 
 bool gauge_headers_compile() {
-    return exercise<gauge_group::SU3>() && exercise<gauge_group::SU2>() &&
-           exercise<gauge_group::U1>();
+    return exercise<math::group::SU3>() && exercise<math::group::SU2>() &&
+           exercise<math::group::U1>();
 }
 
 }  // namespace reticolo::cuda

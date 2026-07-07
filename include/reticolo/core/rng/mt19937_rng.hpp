@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/rng.hpp>
 
 #include <cmath>
 #include <cstddef>

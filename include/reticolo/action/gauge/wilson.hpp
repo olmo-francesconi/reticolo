@@ -7,21 +7,21 @@
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/parallel.hpp>
 #include <reticolo/core/site.hpp>
-#include <reticolo/math/gauge_group/base.hpp>
+#include <reticolo/math/group/base.hpp>
 
 // The shipped per-group Wilson kernel specializations, so `Wilson<G>` for any
 // built-in group resolves from a single `wilson.hpp` include. An external group
 // defines its own `wilson_kernels<MyGroup>` and includes it alongside this.
-#include <reticolo/action/gauge/formula/wilson_su2.hpp>
-#include <reticolo/action/gauge/formula/wilson_su3.hpp>
-#include <reticolo/action/gauge/formula/wilson_u1.hpp>
+#include <reticolo/action/gauge/detail/wilson_su2.hpp>
+#include <reticolo/action/gauge/detail/wilson_su3.hpp>
+#include <reticolo/action/gauge/detail/wilson_u1.hpp>
 
 #include <cstddef>
 
 namespace reticolo::action {
 
 // Generic Wilson plaquette action for any SU(N) (and U(1)) gauge group
-// conforming to the `gauge_group::GaugeGroup` concept.
+// conforming to the `math::group::GaugeGroup` concept.
 //
 //     S_W = (β/N) · Σ_x Σ_{μ<ν} ( N − Re Tr U_{μν}(x) )
 //         = β · n_plaq − (β/N) · Σ_p Re Tr U_p
@@ -37,7 +37,7 @@ namespace reticolo::action {
 // At N=1 with U=exp(iθ) this reduces line-for-line to `CompactU1` — the
 // bit-identity is the design point (validated in the physics suite).
 
-template <gauge_group::GaugeGroup G, class T = double>
+template <math::group::GaugeGroup G, class T = double>
 struct Wilson : detail::GaugeAction<Wilson<G, T>> {
     using value_type = T;
     using group_type = G;
@@ -74,7 +74,7 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
                       }) {
             // field_reduce derives the threshold/chunk from the gauge footprint;
             // gran = k_gauge_batch keeps the batched plane sum on batch boundaries.
-            constexpr std::size_t gran = gauge_group::k_gauge_batch<T>;
+            constexpr std::size_t gran = math::group::k_gauge_batch<T>;
             for (std::size_t mu = 0; mu < d; ++mu) {
                 for (std::size_t nu = mu + 1; nu < d; ++nu) {
                     accum_re_tr += reticolo::detail::field_reduce(

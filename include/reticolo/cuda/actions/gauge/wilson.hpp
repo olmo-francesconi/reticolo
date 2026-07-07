@@ -3,12 +3,12 @@
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/device_topology.hpp>
+#include <reticolo/cuda/gauge/gauge_sun.cuh>
+#include <reticolo/cuda/gauge/gauge_u1.cuh>
 #include <reticolo/cuda/gauge/group_device.hpp>
-#include <reticolo/cuda/gauge_sun.cuh>
-#include <reticolo/cuda/gauge_u1.cuh>
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/rng_philox.cuh>
-#include <reticolo/math/gauge_group/u1.hpp>
+#include <reticolo/math/group/u1.hpp>
 
 #include <cstdint>
 
@@ -102,8 +102,8 @@ struct device_functors<action::Wilson<G, T>> {
 // is additive (θ ← θ + dt·p, the generic axpy atom), and the momentum is one iid
 // normal per link. Bodies mirror device_functors<CompactU1> (n_color = 1).
 template <class T>
-struct device_functors<action::Wilson<gauge_group::U1, T>> {
-    static void compute_force(action::Wilson<gauge_group::U1, T> const& a,
+struct device_functors<action::Wilson<math::group::U1, T>> {
+    static void compute_force(action::Wilson<math::group::U1, T> const& a,
                               T const* field,
                               T* force,
                               DeviceTopology const& topo,
@@ -111,7 +111,7 @@ struct device_functors<action::Wilson<gauge_group::U1, T>> {
         plaq_force_launch(field, force, topo, static_cast<double>(a.beta), s);
     }
 
-    [[nodiscard]] static double s_full(action::Wilson<gauge_group::U1, T> const& a,
+    [[nodiscard]] static double s_full(action::Wilson<math::group::U1, T> const& a,
                                        T const* field,
                                        double* scratch,
                                        DeviceTopology const& topo,
@@ -121,7 +121,7 @@ struct device_functors<action::Wilson<gauge_group::U1, T>> {
     }
 
     static void s_full_into(double* out,
-                            action::Wilson<gauge_group::U1, T> const& a,
+                            action::Wilson<math::group::U1, T> const& a,
                             T const* field,
                             double* scratch,
                             double* partials,
@@ -135,7 +135,7 @@ struct device_functors<action::Wilson<gauge_group::U1, T>> {
     // site s_full_and_force, used by the LLR WindowedAction. `scratch` is the
     // ndim·nsites per-link energy partials.
     static void s_full_and_force(double* out,
-                                 action::Wilson<gauge_group::U1, T> const& a,
+                                 action::Wilson<math::group::U1, T> const& a,
                                  T const* field,
                                  T* force,
                                  double* scratch,

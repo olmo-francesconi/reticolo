@@ -2,7 +2,7 @@
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
-#include <reticolo/math/gauge_group/su2.hpp>
+#include <reticolo/math/group/su2.hpp>
 
 #include <filesystem>
 #include <fstream>
@@ -182,7 +182,7 @@ TEST_CASE("rl::act renders any action's describe() with the act tag", "[log]") {
     StreamCapture cap;
 
     reticolo::action::Phi4<double> phi4{.kappa = 0.137, .lambda = 1.000};
-    reticolo::action::Wilson<reticolo::gauge_group::SU2, double> w{.beta = 2.500};
+    reticolo::action::Wilson<reticolo::math::group::SU2, double> w{.beta = 2.500};
 
     rl::act(phi4);
     rl::act(w);

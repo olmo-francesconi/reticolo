@@ -6,12 +6,12 @@
 // tails, every row crosses batch boundaries (gather fallback), and the
 // SU(2) misaligned-L0 visit_plane guard is taken.
 
-#include <reticolo/action/gauge/formula/wilson_su2.hpp>
-#include <reticolo/action/gauge/formula/wilson_su3.hpp>
+#include <reticolo/action/gauge/detail/wilson_su2.hpp>
+#include <reticolo/action/gauge/detail/wilson_su3.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
-#include <reticolo/math/gauge_group/su2.hpp>
-#include <reticolo/math/gauge_group/su3.hpp>
+#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/math/group/su2.hpp>
+#include <reticolo/math/group/su3.hpp>
 #include <reticolo/math/su2_ops.hpp>
 #include <reticolo/math/su3_ops.hpp>
 
@@ -73,25 +73,25 @@ TEST_CASE("batched plane Re Tr sum matches per-plaquette reference", "[gauge][s_
     FastRng rng{20260610ULL};
 
     SECTION("SU3 double") {
-        MatrixLinkLattice<gauge_group::SU3, double> u{{5, 6, 7}};
+        MatrixLinkLattice<math::group::SU3, double> u{{5, 6, 7}};
         fill_random(u, rng);
         double const ref = plane_sum_reference(u);
         CHECK(std::abs(plane_sum_batched(u) - ref) <= 1e-10 * std::abs(ref));
     }
     SECTION("SU3 float") {
-        MatrixLinkLattice<gauge_group::SU3, float> u{{5, 6, 7}};
+        MatrixLinkLattice<math::group::SU3, float> u{{5, 6, 7}};
         fill_random(u, rng);
         double const ref = plane_sum_reference(u);
         CHECK(std::abs(plane_sum_batched(u) - ref) <= 1e-5 * std::abs(ref));
     }
     SECTION("SU2 double, misaligned L0 (visit_plane guard)") {
-        MatrixLinkLattice<gauge_group::SU2, double> u{{5, 6, 7}};
+        MatrixLinkLattice<math::group::SU2, double> u{{5, 6, 7}};
         fill_random(u, rng);
         double const ref = plane_sum_reference(u);
         CHECK(std::abs(plane_sum_batched(u) - ref) <= 1e-10 * std::abs(ref));
     }
     SECTION("SU2 double, aligned L0 (batched path)") {
-        MatrixLinkLattice<gauge_group::SU2, double> u{{16, 6, 5}};
+        MatrixLinkLattice<math::group::SU2, double> u{{16, 6, 5}};
         fill_random(u, rng);
         double const ref = plane_sum_reference(u);
         CHECK(std::abs(plane_sum_batched(u) - ref) <= 1e-10 * std::abs(ref));

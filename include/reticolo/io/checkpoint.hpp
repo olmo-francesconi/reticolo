@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/rng.hpp>
 #include <reticolo/io/reader.hpp>
 #include <reticolo/io/writer.hpp>
 

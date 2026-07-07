@@ -6,20 +6,20 @@
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/parallel.hpp>
 #include <reticolo/core/site.hpp>
-#include <reticolo/math/gauge_group/su3.hpp>
+#include <reticolo/math/group/su3.hpp>
 #include <reticolo/math/su3_ops.hpp>
 
 #include <cstddef>
 
 // Wilson plaquette kernels for SU(3) — the action-specific physics (Re Tr U_p,
 // the Σ Re Tr plane fast-path, the link-centric staple force / fused kick) for
-// the Wilson action on a MatrixLinkLattice<gauge_group::SU3, T>. Kept out of the SU3 group
+// the Wilson action on a MatrixLinkLattice<math::group::SU3, T>. Kept out of the SU3 group
 // model, which holds only the core group operations.
 
 namespace reticolo::action::detail {
 
 template <>
-struct wilson_kernels<gauge_group::SU3> {
+struct wilson_kernels<math::group::SU3> {
     // Re Tr (AB · DC†) where AB = U_μ(s)·U_ν(s+μ), DC = U_ν(s)·U_μ(s+ν).
     // Same identity as SU(2): Re Tr (X · Y†) = sum_{ij} [Re X_{ij}·Re Y_{ij}
     // + Im X_{ij}·Im Y_{ij}] = 18-component inner product of X and Y.
@@ -62,12 +62,12 @@ struct wilson_kernels<gauge_group::SU3> {
     // over a fixed block partition (parallel_reduce_ranges); `base` is k_batch-
     // aligned so the batched groupings match the whole-plane sweep exactly.
     template <class T>
-    static double s_full_plane_range(MatrixLinkLattice<gauge_group::SU3, T> const& u,
+    static double s_full_plane_range(MatrixLinkLattice<math::group::SU3, T> const& u,
                                      std::size_t mu,
                                      std::size_t nu,
                                      std::size_t base,
                                      std::size_t cnt) noexcept {
-        constexpr std::size_t k_batch = gauge_group::k_gauge_batch<T>;
+        constexpr std::size_t k_batch = math::group::k_gauge_batch<T>;
         std::size_t const ns          = u.nsites();
         Indexing const& idx           = u.indexing_ref();
         T const* const u_mu_blk       = u.mu_block_data(mu);
@@ -94,10 +94,10 @@ struct wilson_kernels<gauge_group::SU3> {
             T c_im[9][k_batch];
             T d_re[9][k_batch];
             T d_im[9][k_batch];
-            gauge_group::load_links_batched(a_re, a_im, u_mu_blk, ns, s_base);
-            gauge_group::load_links_batched(b_re, b_im, u_nu_blk, ns, s_pmu);
-            gauge_group::load_links_batched(c_re, c_im, u_mu_blk, ns, s_pnu);
-            gauge_group::load_links_batched(d_re, d_im, u_nu_blk, ns, s_base);
+            math::group::load_links_batched(a_re, a_im, u_mu_blk, ns, s_base);
+            math::group::load_links_batched(b_re, b_im, u_nu_blk, ns, s_pmu);
+            math::group::load_links_batched(c_re, c_im, u_mu_blk, ns, s_pnu);
+            math::group::load_links_batched(d_re, d_im, u_nu_blk, ns, s_base);
             T ab_re[9][k_batch];
             T ab_im[9][k_batch];
             T dc_re[9][k_batch];
@@ -130,7 +130,7 @@ struct wilson_kernels<gauge_group::SU3> {
     // probe binds to this name; the parallel path calls `s_full_plane_range`
     // per block via parallel_reduce_ranges.
     template <class T>
-    static double s_full_plane_re_tr_sum(MatrixLinkLattice<gauge_group::SU3, T> const& u,
+    static double s_full_plane_re_tr_sum(MatrixLinkLattice<math::group::SU3, T> const& u,
                                          std::size_t mu,
                                          std::size_t nu) noexcept {
         return s_full_plane_range<T>(u, mu, nu, 0, u.nsites());
@@ -170,12 +170,12 @@ public:
     // exactly once, so chunks are write-disjoint.
     template <bool Fused, class T>
     [[gnu::always_inline]] static inline void
-    compute_force_range(MatrixLinkLattice<gauge_group::SU3, T> const& u,
-                        MatrixLinkLattice<gauge_group::SU3, T>& out,
+    compute_force_range(MatrixLinkLattice<math::group::SU3, T> const& u,
+                        MatrixLinkLattice<math::group::SU3, T>& out,
                         double scale,
                         std::size_t base,
                         std::size_t cnt) noexcept {
-        constexpr std::size_t k_batch = gauge_group::k_gauge_batch<T>;
+        constexpr std::size_t k_batch = math::group::k_gauge_batch<T>;
         std::size_t const d           = u.ndims();
         std::size_t const ns          = u.nsites();
         Indexing const& idx           = u.indexing_ref();
@@ -231,9 +231,9 @@ public:
                     T b_im[9][k_batch];
                     T c_re[9][k_batch];
                     T c_im[9][k_batch];
-                    gauge_group::load_links_batched(a_re, a_im, u_nu_blk, ns, s_pmu);
-                    gauge_group::load_links_batched(b_re, b_im, u_mu_blk, ns, s_pnu);
-                    gauge_group::load_links_batched(c_re, c_im, u_nu_blk, ns, s_base);
+                    math::group::load_links_batched(a_re, a_im, u_nu_blk, ns, s_pmu);
+                    math::group::load_links_batched(b_re, b_im, u_mu_blk, ns, s_pnu);
+                    math::group::load_links_batched(c_re, c_im, u_nu_blk, ns, s_base);
 
                     // t1 = a · b† ,  v += t1 · c†
                     T t1_re[9][k_batch];
@@ -243,9 +243,9 @@ public:
 
                     // ------------- Backward staple --------------------------
                     // t1 = U_μ(s-ν̂)† · U_ν(s-ν̂) ,  t2 = U_ν(s+μ̂-ν̂)† · t1
-                    gauge_group::load_links_batched(a_re, a_im, u_nu_blk, ns, s_pmu_mnu);
-                    gauge_group::load_links_batched(b_re, b_im, u_mu_blk, ns, s_mnu);
-                    gauge_group::load_links_batched(c_re, c_im, u_nu_blk, ns, s_mnu);
+                    math::group::load_links_batched(a_re, a_im, u_nu_blk, ns, s_pmu_mnu);
+                    math::group::load_links_batched(b_re, b_im, u_mu_blk, ns, s_mnu);
+                    math::group::load_links_batched(c_re, c_im, u_nu_blk, ns, s_mnu);
                     // t1 = b† · c ,  v += a† · t1
                     math::su3::adj_mul_3x3_batched<false>(t1_re, t1_im, b_re, b_im, c_re, c_im);
                     math::su3::adj_mul_3x3_batched<true>(v_re, v_im, a_re, a_im, t1_re, t1_im);
@@ -254,7 +254,7 @@ public:
                 // ------------ Final: U_μ(s) · V → TA → scatter ------------
                 T u_re[9][k_batch];
                 T u_im[9][k_batch];
-                gauge_group::load_links_batched(u_re, u_im, u_mu_blk, ns, s_base);
+                math::group::load_links_batched(u_re, u_im, u_mu_blk, ns, s_base);
                 // uv = U · V, then TA into the algebra.
                 T uv_re[9][k_batch];
                 T uv_im[9][k_batch];
@@ -295,8 +295,8 @@ private:
     // footprint of every force instantiation.
     template <bool Fused, class T>
     [[gnu::noinline]] static void
-    compute_force_impl_tail_(MatrixLinkLattice<gauge_group::SU3, T> const& u,
-                             MatrixLinkLattice<gauge_group::SU3, T>& out,
+    compute_force_impl_tail_(MatrixLinkLattice<math::group::SU3, T> const& u,
+                             MatrixLinkLattice<math::group::SU3, T>& out,
                              double scale,
                              std::size_t s_start,
                              std::size_t s_end) noexcept {
@@ -383,22 +383,22 @@ public:
     // worksplits it over k_batch-aligned site chunks, bit-identical to the serial
     // whole-field sweep for any thread count (no force zero-init needed).
     template <class T>
-    static void compute_force(MatrixLinkLattice<gauge_group::SU3, T> const& u,
-                              MatrixLinkLattice<gauge_group::SU3, T>& force,
+    static void compute_force(MatrixLinkLattice<math::group::SU3, T> const& u,
+                              MatrixLinkLattice<math::group::SU3, T>& force,
                               double beta_over_n) noexcept {
         reticolo::detail::field_visit(
-            u, gauge_group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
+            u, math::group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
                 compute_force_range<false>(u, force, -beta_over_n, base, cnt);
             });
     }
 
     template <class T>
-    static void compute_force_and_kick(MatrixLinkLattice<gauge_group::SU3, T> const& u,
-                                       MatrixLinkLattice<gauge_group::SU3, T>& mom,
+    static void compute_force_and_kick(MatrixLinkLattice<math::group::SU3, T> const& u,
+                                       MatrixLinkLattice<math::group::SU3, T>& mom,
                                        double beta_over_n,
                                        double k_dt) noexcept {
         reticolo::detail::field_visit(
-            u, gauge_group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
+            u, math::group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
                 compute_force_range<true>(u, mom, -k_dt * beta_over_n, base, cnt);
             });
     }

@@ -53,14 +53,14 @@ void bench_one(char const* name, A const& a, Field& fld, FastRng& rng, int L, ch
 // the gauge OOM/blow-up.
 int main(int argc, char** argv) {
     reticolo::log::off();
-    int const L      = argc > 1 ? std::atoi(argv[1]) : 24;
+    int const L                = argc > 1 ? std::atoi(argv[1]) : 24;
     std::string_view const fam = argc > 2 ? argv[2] : "all";
     g_rf                       = argc > 3 ? std::atoi(argv[3]) : 20;
     g_rt                       = argc > 4 ? std::atoi(argv[4]) : 8;
-    bool const phi_only        = (fam == "phi");           // Phi4 + Phi6 only
+    bool const phi_only        = (fam == "phi");  // Phi4 + Phi6 only
     bool const light           = phi_only || (fam != "gauge");
     bool const gauge           = (fam == "all" || fam == "gauge");
-    char const* th   = std::getenv("OMP_NUM_THREADS");
+    char const* th             = std::getenv("OMP_NUM_THREADS");
     if (th == nullptr) {
         th = "1";
     }
@@ -73,8 +73,12 @@ int main(int argc, char** argv) {
             Lattice<double> phi{Lattice<double>::SizeVec(4, n)};
             reticolo::bench::hot_init(phi, rng);
             bench_one("Phi4", act::Phi4<double>{.kappa = 0.18, .lambda = 1.0}, phi, rng, L, th);
-            bench_one(
-                "Phi6", act::Phi6<double>{.kappa = 0.18, .lambda = 1.0, .g6 = 0.1}, phi, rng, L, th);
+            bench_one("Phi6",
+                      act::Phi6<double>{.kappa = 0.18, .lambda = 1.0, .g6 = 0.1},
+                      phi,
+                      rng,
+                      L,
+                      th);
             if (!phi_only) {
                 bench_one("SineGordon",
                           act::SineGordon<double>{.kappa = 0.18, .alpha = 0.7},
@@ -100,24 +104,25 @@ int main(int argc, char** argv) {
     }
     if (gauge) {
         {
-            using F = MatrixLinkLattice<gauge_group::U1, double>;
-            F u{F::SizeVec(4, n)};
-            reticolo::bench::hot_init(u, rng);
-            bench_one("Wilson<U1>", act::Wilson<gauge_group::U1, double>{.beta = 1.0}, u, rng, L, th);
-        }
-        {
-            using F = MatrixLinkLattice<gauge_group::SU2, double>;
+            using F = MatrixLinkLattice<math::group::U1, double>;
             F u{F::SizeVec(4, n)};
             reticolo::bench::hot_init(u, rng);
             bench_one(
-                "Wilson<SU2>", act::Wilson<gauge_group::SU2, double>{.beta = 2.3}, u, rng, L, th);
+                "Wilson<U1>", act::Wilson<math::group::U1, double>{.beta = 1.0}, u, rng, L, th);
         }
         {
-            using F = MatrixLinkLattice<gauge_group::SU3, double>;
+            using F = MatrixLinkLattice<math::group::SU2, double>;
             F u{F::SizeVec(4, n)};
             reticolo::bench::hot_init(u, rng);
             bench_one(
-                "Wilson<SU3>", act::Wilson<gauge_group::SU3, double>{.beta = 6.0}, u, rng, L, th);
+                "Wilson<SU2>", act::Wilson<math::group::SU2, double>{.beta = 2.3}, u, rng, L, th);
+        }
+        {
+            using F = MatrixLinkLattice<math::group::SU3, double>;
+            F u{F::SizeVec(4, n)};
+            reticolo::bench::hot_init(u, rng);
+            bench_one(
+                "Wilson<SU3>", act::Wilson<math::group::SU3, double>{.beta = 6.0}, u, rng, L, th);
         }
     }
     return 0;

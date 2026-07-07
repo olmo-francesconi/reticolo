@@ -3,7 +3,7 @@
 #include <reticolo/action/site/sine_gordon.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/parallel.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/rng.hpp>
 
 #include <cstddef>
 #include <utility>

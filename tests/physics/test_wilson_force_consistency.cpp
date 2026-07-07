@@ -26,10 +26,10 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
-#include <reticolo/math/gauge_group/su2.hpp>
-#include <reticolo/math/gauge_group/su3.hpp>
-#include <reticolo/math/gauge_group/u1.hpp>
+#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/math/group/su2.hpp>
+#include <reticolo/math/group/su3.hpp>
+#include <reticolo/math/group/u1.hpp>
 
 #include <cstddef>
 
@@ -40,9 +40,9 @@ using reticolo::FastRng;
 using reticolo::MatrixLinkLattice;
 using reticolo::action::HmcAction;
 using reticolo::action::Wilson;
-using reticolo::gauge_group::SU2;
-using reticolo::gauge_group::SU3;
-using reticolo::gauge_group::U1;
+using reticolo::math::group::SU2;
+using reticolo::math::group::SU3;
+using reticolo::math::group::U1;
 
 namespace {
 

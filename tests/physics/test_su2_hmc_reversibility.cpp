@@ -8,9 +8,9 @@
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/rng.hpp>
 #include <reticolo/core/site.hpp>
-#include <reticolo/math/gauge_group/su2.hpp>
+#include <reticolo/math/group/su2.hpp>
 #include <reticolo/math/su2_ops.hpp>
 
 #include <algorithm>
@@ -27,7 +27,7 @@ using reticolo::alg::Hmc;
 using reticolo::alg::integ::Leapfrog;
 using reticolo::alg::integ::Omelyan2;
 using reticolo::alg::integ::Omelyan4;
-using reticolo::gauge_group::SU2;
+using reticolo::math::group::SU2;
 
 namespace {
 

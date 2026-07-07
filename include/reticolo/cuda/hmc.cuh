@@ -26,7 +26,7 @@
 // so every replay reads a fresh counter and the chain is ergodic.
 
 #include <reticolo/algorithm/integrators.hpp>
-#include <reticolo/core/philox.hpp>
+#include <reticolo/core/rng/philox.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_buffer.hpp>

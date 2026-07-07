@@ -23,7 +23,7 @@
 // by the kernels — never baked as kernel literals, so set_a / set_window never
 // forces a graph re-capture. Same discipline as the Philox trajectory counter.
 // The value/scale math is the shared RETICOLO_HD formula
-// (llr/detail/window_formula.hpp), one source of truth with the CPU.
+// (llr/formula/window_formula.hpp), one source of truth with the CPU.
 
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/cuda/check.hpp>
@@ -33,7 +33,7 @@
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/stream.hpp>
-#include <reticolo/llr/detail/window_formula.hpp>
+#include <reticolo/llr/formula/window_formula.hpp>
 
 #include <array>
 #include <cstddef>
@@ -145,30 +145,31 @@ public:
             // Fused F_I + S_I in one τ-sweep when the base provides it; else the
             // two-pass (separate F_I gather + S_I reduction). k_fuse_imag flips
             // this for the A/B wall-clock measurement.
-            if constexpr (k_fuse_imag &&
-                          requires {
+            if constexpr (k_fuse_imag && requires {
                               base_.compute_force_imag_and_s_imag_into(
                                   s_i_.data(), field, fi, partials_.data(), st);
                           }) {
-                base_.compute_force_imag_and_s_imag_into(s_i_.data(), field, fi, partials_.data(), st);
+                base_.compute_force_imag_and_s_imag_into(
+                    s_i_.data(), field, fi, partials_.data(), st);
             } else {
                 base_.compute_force_imag(field, fi);                          // F_I
                 base_.s_imag_into(s_i_.data(), field, partials_.data(), st);  // S_I for the scale
             }
-            auto const n_real =
-                static_cast<long>(force.size()) * static_cast<long>(sizeof(value_type) / sizeof(real_t));
+            auto const n_real = static_cast<long>(force.size()) *
+                                static_cast<long>(sizeof(value_type) / sizeof(real_t));
             constexpr int kBlock = 256;
             auto const grid      = static_cast<unsigned>((n_real + kBlock - 1) / kBlock);
-            merge_imag_force_kernel<real_t><<<grid, kBlock, 0, st>>>(
-                reinterpret_cast<real_t*>(force.data()),
-                reinterpret_cast<real_t const*>(fi.data()),
-                n_real,
-                s_i_.data(),
-                params_.data());
+            merge_imag_force_kernel<real_t>
+                <<<grid, kBlock, 0, st>>>(reinterpret_cast<real_t*>(force.data()),
+                                          reinterpret_cast<real_t const*>(fi.data()),
+                                          n_real,
+                                          s_i_.data(),
+                                          params_.data());
             RETICOLO_CUDA_CHECK_LAUNCH();
         } else {
             if constexpr (requires {
-                              base_.s_full_and_force(s_tmp_.data(), field, force, partials_.data(), st);
+                              base_.s_full_and_force(
+                                  s_tmp_.data(), field, force, partials_.data(), st);
                           }) {
                 base_.s_full_and_force(s_tmp_.data(), field, force, partials_.data(), st);
             } else {

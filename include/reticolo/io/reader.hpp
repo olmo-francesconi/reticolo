@@ -2,7 +2,7 @@
 
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/rng.hpp>
 #include <reticolo/io/writer.hpp>
 
 #include <complex>

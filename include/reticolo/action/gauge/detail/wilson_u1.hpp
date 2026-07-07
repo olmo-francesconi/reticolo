@@ -6,7 +6,7 @@
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/parallel.hpp>
 #include <reticolo/core/site.hpp>
-#include <reticolo/math/gauge_group/u1.hpp>
+#include <reticolo/math/group/u1.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
 #include <cstddef>
@@ -69,8 +69,8 @@ plane_idx(std::size_t d, std::size_t a, std::size_t b) noexcept {
 }  // namespace detail
 
 template <>
-struct wilson_kernels<gauge_group::U1> {
-    using G = gauge_group::U1;
+struct wilson_kernels<math::group::U1> {
+    using G = math::group::U1;
 
     // Chunk-alignment granularity for the parallel sin/cos transcendental passes:
     // ≥ any SIMD width, so a non-final chunk always takes the same batched Sleef

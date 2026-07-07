@@ -1,10 +1,10 @@
 #pragma once
 
-#include <reticolo/math/gauge_group/su2.hpp>
-#include <reticolo/math/gauge_group/su3.hpp>
-#include <reticolo/math/gauge_group/u1.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/math/group/su2.hpp>
+#include <reticolo/math/group/su3.hpp>
+#include <reticolo/math/group/u1.hpp>
 #include <reticolo/math/su2_ops.hpp>
 #include <reticolo/math/su3_ops.hpp>
 
@@ -66,11 +66,11 @@ void hot_init(Lattice<std::array<double, N>>& f, Rng& rng) noexcept {
 // Initialise to identity, then drift each direction by a random algebra
 // element (dt = 0.5) — gives a non-trivial SU(2) on every link.
 template <class Rng>
-void hot_init(MatrixLinkLattice<gauge_group::SU2, double>& f, Rng& rng) noexcept {
+void hot_init(MatrixLinkLattice<math::group::SU2, double>& f, Rng& rng) noexcept {
     std::size_t const d  = f.ndims();
     std::size_t const ns = f.nsites();
     // Zero buffer, write identity per link.
-    std::size_t const total = d * gauge_group::SU2::n_real_components * ns;
+    std::size_t const total = d * math::group::SU2::n_real_components * ns;
     double* const data      = f.data();
     for (std::size_t i = 0; i < total; ++i) {
         data[i] = 0.0;
@@ -82,7 +82,7 @@ void hot_init(MatrixLinkLattice<gauge_group::SU2, double>& f, Rng& rng) noexcept
             blk[(6 * ns) + s] = 1.0;
         }
     }
-    std::vector<double> scratch(gauge_group::SU2::n_real_components * ns);
+    std::vector<double> scratch(math::group::SU2::n_real_components * ns);
     for (std::size_t mu = 0; mu < d; ++mu) {
         math::su2::sample_algebra_slab(scratch.data(), rng, ns);
         math::su2::expi_lmul_slab(f.mu_block_data(mu), scratch.data(), 0.5, ns);
@@ -91,10 +91,10 @@ void hot_init(MatrixLinkLattice<gauge_group::SU2, double>& f, Rng& rng) noexcept
 
 // ---- MatrixLinkLattice<SU3, double> -----------------------------------------
 template <class Rng>
-void hot_init(MatrixLinkLattice<gauge_group::SU3, double>& f, Rng& rng) noexcept {
+void hot_init(MatrixLinkLattice<math::group::SU3, double>& f, Rng& rng) noexcept {
     std::size_t const d     = f.ndims();
     std::size_t const ns    = f.nsites();
-    std::size_t const total = d * gauge_group::SU3::n_real_components * ns;
+    std::size_t const total = d * math::group::SU3::n_real_components * ns;
     double* const data      = f.data();
     for (std::size_t i = 0; i < total; ++i) {
         data[i] = 0.0;
@@ -107,7 +107,7 @@ void hot_init(MatrixLinkLattice<gauge_group::SU3, double>& f, Rng& rng) noexcept
             blk[(16 * ns) + s] = 1.0;  // Re U_{22}
         }
     }
-    std::vector<double> scratch(gauge_group::SU3::n_real_components * ns);
+    std::vector<double> scratch(math::group::SU3::n_real_components * ns);
     for (std::size_t mu = 0; mu < d; ++mu) {
         math::su3::sample_algebra_slab(scratch.data(), rng, ns);
         math::su3::expi_lmul_slab(f.mu_block_data(mu), scratch.data(), 0.5, ns);
@@ -117,7 +117,7 @@ void hot_init(MatrixLinkLattice<gauge_group::SU3, double>& f, Rng& rng) noexcept
 // ---- MatrixLinkLattice<U1, double> ------------------------------------------
 // U(1) "matrix" is just an angle; same as LinkLattice fill.
 template <class Rng>
-void hot_init(MatrixLinkLattice<gauge_group::U1, double>& f, Rng& rng) noexcept {
+void hot_init(MatrixLinkLattice<math::group::U1, double>& f, Rng& rng) noexcept {
     double* const d     = f.data();
     std::size_t const n = f.ndims() * f.nsites();
     rng.normal_fill(d, n);

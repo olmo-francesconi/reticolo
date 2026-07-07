@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <type_traits>
 
-namespace reticolo::gauge_group {
+namespace reticolo::math::group {
 
 // Compile-time site-batch width for the batched SU(N) kernels. The batched
 // kernels vectorise a `for b in 0..k_gauge_batch<T>` loop over packed sites,
@@ -122,4 +122,4 @@ concept GaugeGroup = requires {
     requires G::n_color >= 1;
 };
 
-}  // namespace reticolo::gauge_group
+}  // namespace reticolo::math::group

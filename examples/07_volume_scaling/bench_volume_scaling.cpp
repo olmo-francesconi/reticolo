@@ -220,40 +220,40 @@ int main(int argc, char** argv) {
                 bench_kernels(os, ndim, L, "phi4", action, phi, phi.nsites(), budget);
             }
             if (actions.contains("compact_u1")) {
-                MatrixLinkLattice<gauge_group::U1, double>::SizeVec const shape(nd, Lz);
-                MatrixLinkLattice<gauge_group::U1, double> theta{shape};
+                MatrixLinkLattice<math::group::U1, double>::SizeVec const shape(nd, Lz);
+                MatrixLinkLattice<math::group::U1, double> theta{shape};
                 hot_init(theta, rng);
-                action::Wilson<gauge_group::U1, double> const action{.beta = 1.0};
+                action::Wilson<math::group::U1, double> const action{.beta = 1.0};
                 bench_kernels(os, ndim, L, "compact_u1", action, theta, theta.nlinks(), budget);
             }
             if (actions.contains("wilson_su2")) {
-                using F = MatrixLinkLattice<gauge_group::SU2, double>;
+                using F = MatrixLinkLattice<math::group::SU2, double>;
                 F::SizeVec const shape(nd, Lz);
                 F theta{shape};
                 hot_init(theta, rng);
-                action::Wilson<gauge_group::SU2, double> const action{.beta = 2.4};
+                action::Wilson<math::group::SU2, double> const action{.beta = 2.4};
                 bench_kernels(os,
                               ndim,
                               L,
                               "wilson_su2",
                               action,
                               theta,
-                              gauge_group::SU2::n_real_components * theta.ndims() * theta.nsites(),
+                              math::group::SU2::n_real_components * theta.ndims() * theta.nsites(),
                               budget);
             }
             if (actions.contains("wilson_su3")) {
-                using F = MatrixLinkLattice<gauge_group::SU3, double>;
+                using F = MatrixLinkLattice<math::group::SU3, double>;
                 F::SizeVec const shape(nd, Lz);
                 F theta{shape};
                 hot_init(theta, rng);
-                action::Wilson<gauge_group::SU3, double> const action{.beta = 6.0};
+                action::Wilson<math::group::SU3, double> const action{.beta = 6.0};
                 bench_kernels(os,
                               ndim,
                               L,
                               "wilson_su3",
                               action,
                               theta,
-                              gauge_group::SU3::n_real_components * theta.ndims() * theta.nsites(),
+                              math::group::SU3::n_real_components * theta.ndims() * theta.nsites(),
                               budget);
             }
         }

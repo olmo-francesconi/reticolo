@@ -1,6 +1,6 @@
-#include <reticolo/core/mt19937_rng.hpp>
-#include <reticolo/core/ranlux_rng.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/mt19937_rng.hpp>
+#include <reticolo/core/rng/ranlux_rng.hpp>
+#include <reticolo/core/rng/rng.hpp>
 
 #include <algorithm>
 #include <array>

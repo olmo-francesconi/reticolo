@@ -31,15 +31,20 @@ using namespace reticolo;
 struct Result {
     int n_md;
     int force_evals;
-    double wall;     // s / trajectory
+    double wall;  // s / trajectory
     double acc;
     double dh_mean;
     double dh_std;
 };
 
 template <class Field, class Action, class Integ>
-Result measure(Field const& thermalised, Action const& action, Integ integ,
-               int force_per_step, int n_md, double tau, int n_meas) {
+Result measure(Field const& thermalised,
+               Action const& action,
+               Integ integ,
+               int force_per_step,
+               int n_md,
+               double tau,
+               int n_meas) {
     Field phi = thermalised;  // start each point from the same equilibrium config
     FastRng rng{9001};
     alg::Hmc hmc{action, phi, rng, {.tau = tau, .n_md = n_md}, integ, log::Mode::silent};
@@ -52,9 +57,9 @@ Result measure(Field const& thermalised, Action const& action, Integ integ,
         sum_dh += st.dH;
         sum_dh2 += st.dH * st.dH;
     }
-    double const n  = n_meas;
-    double const mu = sum_dh / n;
-    double const var = (sum_dh2 / n) - (mu * mu);
+    double const n    = n_meas;
+    double const mu   = sum_dh / n;
+    double const var  = (sum_dh2 / n) - (mu * mu);
     double const wall = bench::time_per_call([&] { (void)hmc.step(log::Mode::silent); });
     return {.n_md        = n_md,
             .force_evals = (force_per_step * n_md) + 1,
@@ -86,7 +91,13 @@ void run_action(char const* label, Field& phi, Action const& action, double tau,
 
     std::printf("=== %s (tau=%.2f) ===\n", label, tau);
     std::printf("%-10s %-6s %-12s %-11s %-9s %-11s %-11s\n",
-                "integrator", "n_md", "force_evals", "wall[s]", "acc", "<dH>", "sigma(dH)");
+                "integrator",
+                "n_md",
+                "force_evals",
+                "wall[s]",
+                "acc",
+                "<dH>",
+                "sigma(dH)");
 
     Sweep const sweeps[] = {
         {"Leapfrog", 1, {8, 12, 16, 24, 32, 48, 64}},
@@ -104,7 +115,13 @@ void run_action(char const* label, Field& phi, Action const& action, double tau,
                 r = measure(phi, action, omelyan4, 4, n_md, tau, n_meas);
             }
             std::printf("%-10s %-6d %-12d %-11.3e %-9.4f %-11.3e %-11.3e\n",
-                        s.name, r.n_md, r.force_evals, r.wall, r.acc, r.dh_mean, r.dh_std);
+                        s.name,
+                        r.n_md,
+                        r.force_evals,
+                        r.wall,
+                        r.acc,
+                        r.dh_mean,
+                        r.dh_std);
         }
     }
     std::printf("\n");
@@ -126,12 +143,12 @@ int main() {
         run_action("phi4  4D L=8  kappa=0.12", phi, action, 1.0, 400);
     }
     {
-        using Field = MatrixLinkLattice<gauge_group::SU3, double>;
+        using Field = MatrixLinkLattice<math::group::SU3, double>;
         Field::SizeVec shape(4, 6);
         Field u{shape};
         FastRng seed{7};
         bench::hot_init(u, seed);
-        act::Wilson<gauge_group::SU3, double> const action{.beta = 6.0};
+        act::Wilson<math::group::SU3, double> const action{.beta = 6.0};
         run_action("Wilson<SU3>  4D L=6  beta=6.0", u, action, 1.0, 300);
     }
 }

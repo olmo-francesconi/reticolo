@@ -39,7 +39,7 @@ std::string cfg_path(std::string const& out, long long i) {
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Group  = gauge_group::SU2;
+    using Group  = math::group::SU2;
     using Action = action::Wilson<Group, double>;
     using HField = MatrixLinkLattice<Group, double>;
     using DField = cuda::DeviceField<double, cuda::MatrixLayout<Group>>;

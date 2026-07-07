@@ -1,9 +1,9 @@
 #pragma once
 
-#include <reticolo/math/gauge_group/su2.hpp>
 #include <reticolo/core/hd.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/gauge/group_device.hpp>
+#include <reticolo/math/group/su2.hpp>
 
 #include <cmath>
 
@@ -23,20 +23,22 @@ struct SU2Device {
     static constexpr int n_color = 2;
 
     // SoA gather/scatter: component k of link (mu, x) at field[(mu*nc + k)*ns + x].
-    RETICOLO_HD static void load(double const* __restrict__ field, int mu, long x, long ns, double* m) {
+    RETICOLO_HD static void
+    load(double const* __restrict__ field, int mu, long x, long ns, double* m) {
         long const base = ((static_cast<long>(mu) * nc) * ns) + x;
         for (int k = 0; k < nc; ++k) {
             m[k] = field[base + (static_cast<long>(k) * ns)];
         }
     }
-    RETICOLO_HD static void store(double* __restrict__ field, int mu, long x, long ns, double const* m) {
+    RETICOLO_HD static void
+    store(double* __restrict__ field, int mu, long x, long ns, double const* m) {
         long const base = ((static_cast<long>(mu) * nc) * ns) + x;
         for (int k = 0; k < nc; ++k) {
             field[base + (static_cast<long>(k) * ns)] = m[k];
         }
     }
-    RETICOLO_HD static void
-    store_scaled(double* __restrict__ field, int mu, long x, long ns, double const* m, double scale) {
+    RETICOLO_HD static void store_scaled(
+        double* __restrict__ field, int mu, long x, long ns, double const* m, double scale) {
         long const base = ((static_cast<long>(mu) * nc) * ns) + x;
         for (int k = 0; k < nc; ++k) {
             field[base + (static_cast<long>(k) * ns)] = scale * m[k];
@@ -180,7 +182,7 @@ private:
 };
 
 template <>
-struct group_device<gauge_group::SU2> {
+struct group_device<math::group::SU2> {
     using type = SU2Device;
 };
 

@@ -1,7 +1,7 @@
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
-#include <reticolo/math/gauge_group/su2.hpp>
+#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/math/group/su2.hpp>
 
 #include <cstddef>
 #include <type_traits>
@@ -14,7 +14,7 @@
 using reticolo::FastRng;
 using reticolo::MatrixLinkLattice;
 using reticolo::action::Wilson;
-using SU2 = reticolo::gauge_group::SU2;
+using SU2 = reticolo::math::group::SU2;
 
 // The Wilson S-reduction returns double whatever the link precision — the
 // mixed-precision invariant (the β·n_plaq − (β/N)·Σ combine would cancel

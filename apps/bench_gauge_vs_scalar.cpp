@@ -139,7 +139,7 @@ int main() {
 
     using ScalarPhi4 = act::Phi4<double>;
     using ScalarSG   = act::SineGordon<double>;
-    using GaugeU1    = action::Wilson<gauge_group::U1, double>;
+    using GaugeU1    = action::Wilson<math::group::U1, double>;
 
     ScalarPhi4 const phi4{.kappa = k_kappa, .lambda = k_lambda};
     ScalarSG const sg{.kappa = k_kappa, .alpha = k_alpha};
@@ -151,7 +151,7 @@ int main() {
         std::size_t const nd = static_cast<std::size_t>(c.ndim);
         std::size_t const L_ = static_cast<std::size_t>(c.L);
         Lattice<double>::SizeVec shape_s(nd, L_);
-        MatrixLinkLattice<gauge_group::U1, double>::SizeVec shape_g(nd, L_);
+        MatrixLinkLattice<math::group::U1, double>::SizeVec shape_g(nd, L_);
 
         // Phi4.
         {
@@ -201,7 +201,7 @@ int main() {
 
         // CompactU1 (gauge).
         {
-            MatrixLinkLattice<gauge_group::U1, double> theta{shape_g};
+            MatrixLinkLattice<math::group::U1, double> theta{shape_g};
             FastRng rng{42};
             alg::Hmc hmc{u1, theta, rng, {.tau = k_tau, .n_md = k_n_md}, GaugeInteg{}};
             for (int i = 0; i < k_warmup; ++i) {
