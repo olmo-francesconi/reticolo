@@ -279,7 +279,7 @@ core-math / action-physics line:
   (`plaq_re_tr`, the `s_full_plane_re_tr_sum` fast-path, `compute_force`,
   `compute_force_and_kick`). This is action-specific and lives in the action layer.
 
-`Wilson<G>` (and the hand-tuned U(1) `CompactU1`) derive from the
+`Wilson<G>` derives from the
 `detail::GaugeAction<D>` base, which owns the `last_s_full` cache and the concept
 surface; `Wilson<G>` dispatches its plaquette work to `wilson_kernels<G>`. (A
 genuinely new gauge *action* — improved, rectangle — derives from
@@ -328,7 +328,7 @@ genuinely new gauge *action* — improved, rectangle — derives from
    Component `k` of the link at site `s` in direction `μ`'s block is at
    `block_ptr[k·stride + s]` (stride = `nsites`). SU(2)/SU(3) batch these over
    `gauge_group::k_gauge_batch<T>` sites — start unbatched (a plain per-site loop,
-   like the Abelian `CompactU1`) and add batching only if it's a measured
+   for the Abelian U(1) case) and add batching only if it's a measured
    bottleneck.
 
 4. **Register + use** — `#include` the new `wilson_<g>.hpp` from
@@ -338,9 +338,8 @@ genuinely new gauge *action* — improved, rectangle — derives from
    plus an equivalence check against a known limit.
 
 The Abelian case (`U(1)`) is degenerate — `n_real_components = 1` (just the
-angle), no matrix exponential — and already ships both the hand-tuned
-`CompactU1` action and a `Wilson<gauge_group::U1>` path that reduces to it
-bit-for-bit (`test_wilson_u1_vs_compact`).
+angle), no matrix exponential — and is handled directly by
+`Wilson<gauge_group::U1>` (`test_wilson_force_consistency`).
 
 ---
 
@@ -388,7 +387,8 @@ static_assert(HasFusedKick<Phi4<double>, Lattice<double>>);  // if the action fu
 ```
 
 Put at the top of every action's force-consistency test. Gauge actions name
-their link field instead, e.g. `HmcAction<CompactU1<double>, LinkLattice<double>>`.
+their link field instead, e.g.
+`HmcAction<Wilson<gauge_group::U1>, MatrixLinkLattice<gauge_group::U1, double>>`.
 
 ### 2. `compute_force` matches central FD of `s_full`
 
@@ -437,9 +437,7 @@ accept/reject). See `tests/physics/test_hmc_reversibility.cpp`,
 Pick a limit where the answer is known analytically:
 
 - **Free theory (λ=0)** for Phi4: `force(x) = 2κ·Σ_NN φ_nn − 2φ(x)`.
-- **Aligned config (θ=0)** for CompactU1: every plaquette contributes 0, so `S = 0`.
-- **Wilson<U1> vs CompactU1**: the generic matrix-group action must match the
-  hand-tuned Abelian path bit-for-bit at N=1.
+- **Aligned config (θ=0)** for Wilson<U1>: every plaquette contributes 0, so `S = 0`.
 - **Integrator order** for HMC: `⟨|ΔH|⟩` scales as `Δt²` (Leapfrog,
   Omelyan2) or `Δt⁴` (Omelyan4). See
   `tests/physics/test_hmc_integrator_order.cpp` for the cleanest example

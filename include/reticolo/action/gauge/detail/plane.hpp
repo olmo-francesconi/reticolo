@@ -53,15 +53,6 @@ visit_plane_3d_(Field const& l, std::size_t mu, std::size_t nu, Body const& body
     std::size_t const sy = L0;
     std::size_t const sz = L0 * L1;
 
-    auto wrap_lo = [&](std::size_t dir, std::size_t c) -> std::size_t {
-        // returns -wrap-offset (positive: subtract this from base when wrapping)
-        if (dir == 0)
-            return c * 1;
-        if (dir == 1)
-            return c * sy;
-        return c * sz;
-    };
-
     // Plane (1, 2): inner x has no wrap.
     if (mu == 1 && nu == 2) {
         for (std::size_t z = 0; z < L2; ++z) {
@@ -84,8 +75,7 @@ visit_plane_3d_(Field const& l, std::size_t mu, std::size_t nu, Body const& body
 
     // Plane (0, 1) or (0, 2): inner x has wrap at L0-1.
     if (mu == 0 && (nu == 1 || nu == 2)) {
-        std::size_t const stride_nu = (nu == 1) ? sy : sz;
-        std::size_t const len_nu    = (nu == 1) ? L1 : L2;
+        std::size_t const len_nu = (nu == 1) ? L1 : L2;
         for (std::size_t z = 0; z < L2; ++z) {
             for (std::size_t y = 0; y < L1; ++y) {
                 std::size_t const row = z * sz + y * sy;
@@ -117,8 +107,6 @@ visit_plane_3d_(Field const& l, std::size_t mu, std::size_t nu, Body const& body
                 }
             }
         }
-        (void)stride_nu;
-        (void)wrap_lo;
         return;
     }
 

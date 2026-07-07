@@ -58,7 +58,7 @@ CLI flags are declared exactly as in a CPU app (`cli::Parser`, `app::common_flag
 
 ## Step 3 — stage the field, build the HMC
 
-Cold-start or `--resume` on the host `Lattice`/`MatrixMatrixLinkLattice<U1>`, copy to the
+Cold-start or `--resume` on the host `Lattice`/`MatrixLinkLattice`, copy to the
 device, then construct the generic device HMC with a reused integrator tag:
 
 ```cpp

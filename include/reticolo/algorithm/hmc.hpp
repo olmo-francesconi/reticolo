@@ -146,12 +146,6 @@ public:
         auto const cache_snap = capture_action_cache_();
         double const h0       = kin0 + s0;
 
-        // Model B: the whole MD loop runs inside ONE parallel region, so the
-        // per-step force/drift/kick passes worksplit via `omp for` (cheap barriers
-        // on a hot team) instead of each opening its own fork/join. The h0/h1
-        // reductions and momentum/copy stay outside for now (phases 2-3). Only for
-        // actions whose traversal is flag-aware (site family) — otherwise a plain
-        // serial run (opening a region around an unconverted sweep would race).
         run_md_(tau_, n_md_);
 
         double const kin1 = kinetic_();

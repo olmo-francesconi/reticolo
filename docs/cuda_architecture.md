@@ -106,10 +106,9 @@ Layout facts that matter for CUDA:
   but slow-axis neighbours are strided by the sub-volume regardless. Lean on
   L2 reuse (adjacent sites share neighbours) and, for SU(N), shared-memory
   staging of staple sub-products.
-- **U(1) has two distinct field layouts.** `Wilson<U1>` runs on
-  `MatrixLinkLattice<U1><T>` (direction-major, one angle per link); `Wilson<U1>` runs
-  on `MatrixMatrixLinkLattice<U1><U1,T>` with `n_real_components = 1`. A device backend
-  must pick one path per app.
+- **U(1) is the degenerate matrix group.** `Wilson<gauge_group::U1>` runs on
+  `MatrixLinkLattice<gauge_group::U1, T>` with `n_real_components = 1`
+  (direction-major, one angle per link) — no matrix exponential.
 - **Force kernels must be gather, not scatter.** For HMC reversibility the
   force must be a deterministic function of `U`; `atomicAdd` scatter makes it
   order-dependent and silently breaks detailed balance. The explicit
