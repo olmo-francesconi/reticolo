@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/detail/cache.hpp>
-#include <reticolo/action/site/detail/traversal.hpp>
+#include <reticolo/action/cache.hpp>
+#include <reticolo/action/sweep/site.hpp>
 #include <reticolo/core/lattice.hpp>
 
 #include <cstddef>
@@ -10,7 +10,7 @@
 
 // SiteAction<Derived, T> — the common interface for nearest-neighbour scalar
 // actions on a `Lattice<T>` (Phi4, Phi6, SineGordon, …). It owns everything a
-// site action shares: the `reduce_fwd` / `visit_nn` loop shells, the fused
+// site action shares: the `sweep::reduce_fwd` / `sweep::visit_nn` loop shells, the fused
 // force+kick pass, the `last_s_full` cache, and the LLR `s_full_and_force`
 // fast-path. The leaf action is a small aggregate that derives from this base
 // and supplies only the physics, as coupling-hoisting kernels binding the
@@ -35,13 +35,13 @@
 // batched-transcendental total) simply declare their own `s_full`, which hides
 // the base one; the shared cache still lives here.
 
-namespace reticolo::action::detail {
+namespace reticolo::action {
 
 template <class Derived, class T>
 struct SiteAction : SFullCache {
     [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
         auto kern      = derived_().action_kernel();
-        double const s = reduce_fwd<T, double>(
+        double const s = sweep::reduce_fwd<T, double>(
             l, [&kern](T phi, T fwd) { return static_cast<double>(kern(phi, fwd)); });
         last_s_full_ = s;
         return s;
@@ -51,15 +51,16 @@ struct SiteAction : SFullCache {
         maybe_prep_(l);
         auto kern    = derived_().force_kernel();
         T* const out = force.data();
-        // visit_nn self-threads via the parallel primitives (write-disjoint map).
-        visit_nn<T>(l, [&kern, out](std::size_t i, T phi, T nbrs) { out[i] = kern(i, phi, nbrs); });
+        // sweep::visit_nn self-threads via the parallel primitives (write-disjoint map).
+        sweep::visit_nn<T>(
+            l, [&kern, out](std::size_t i, T phi, T nbrs) { out[i] = kern(i, phi, nbrs); });
     }
 
     void compute_force_and_kick(Lattice<T> const& l, Lattice<T>& mom, T k_dt) const noexcept {
         maybe_prep_(l);
         auto kern  = derived_().force_kernel();
         T* const m = mom.data();
-        visit_nn<T>(l, [&kern, m, k_dt](std::size_t i, T phi, T nbrs) {
+        sweep::visit_nn<T>(l, [&kern, m, k_dt](std::size_t i, T phi, T nbrs) {
             m[i] += k_dt * kern(i, phi, nbrs);
         });
     }
@@ -83,14 +84,14 @@ struct SiteAction : SFullCache {
         ensure_scratch(n);
         T* const sb = scratch_.data();
         // Force + staged per-site action: write-disjoint map (self-threaded).
-        visit_nn<T>(l, [&kern, out, sb](std::size_t i, T phi, T nbrs) {
+        sweep::visit_nn<T>(l, [&kern, out, sb](std::size_t i, T phi, T nbrs) {
             auto const [f, s] = kern(i, phi, nbrs);
             out[i]            = f;
             sb[i]             = s;
         });
         // Reduce the staged action in a fixed-block partition (thread-count
         // invariant), matching s_full's parallel reduce.
-        return reticolo::detail::parallel_reduce_ranges(
+        return reticolo::exec::parallel_reduce_ranges(
             n, l.bytes_per_site(), 1, [sb](std::size_t base, std::size_t cnt) {
                 RETICOLO_FP_REASSOCIATE
                 double s              = 0.0;
@@ -125,4 +126,4 @@ private:
     }
 };
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action

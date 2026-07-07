@@ -8,7 +8,7 @@
 // and inherits the accessors. A tiny mixin so the four family bases (Site/Bond/
 // Complex/Gauge) don't each hand-roll the identical accessor+member triple.
 
-namespace reticolo::action::detail {
+namespace reticolo::action {
 
 struct SFullCache {
     [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
@@ -23,4 +23,4 @@ struct SImagCache {
     mutable double last_s_imag_ = std::numeric_limits<double>::quiet_NaN();
 };
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action

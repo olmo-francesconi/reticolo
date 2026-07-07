@@ -36,7 +36,7 @@
 
 namespace reticolo::math {
 
-namespace detail {
+namespace impl {
 
 // Sleef dispatch warm-up
 //
@@ -74,7 +74,7 @@ inline auto const sleef_dispatch_warmup = [] {
     return static_cast<double>(sink);
 }();
 
-}  // namespace detail
+}  // namespace impl
 
     // Width of the vector path picked at compile time, in doubles per vector.
     // Used by callers that want to size their row scratch buffer to a multiple

@@ -11,7 +11,7 @@ namespace reticolo::math::group {
 // SU(3) gauge group model — CORE group operations only: the constants and the
 // HMC algebra hooks (thin wrappers over math::su3). The Wilson plaquette physics
 // (Re Tr U_p, the staple force) is action-specific — see
-// action/gauge/detail/wilson_su3.hpp (`wilson_kernels<SU3>`).
+// action/gauge/formula/wilson_su3.hpp (`wilson_kernels<SU3>`).
 //
 // Storage: full 3×3 complex matrix, 18 reals per link (see math::su3). N = 3.
 

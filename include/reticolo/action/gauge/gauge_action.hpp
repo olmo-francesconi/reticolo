@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/action/detail/cache.hpp>
+#include <reticolo/action/cache.hpp>
 
 // GaugeAction<Derived> — the common interface for gauge (link-field) actions,
 // the gauge analogue of SiteAction / BondAction / ComplexAction. It owns the
@@ -29,7 +29,7 @@
 // is the one plaquette leaf that ships today (`Wilson<math::group::U1>` covers the
 // Abelian case directly, with n_real_components = 1).
 
-namespace reticolo::action::detail {
+namespace reticolo::action {
 
 template <class Derived>
 struct GaugeAction : SFullCache {
@@ -51,4 +51,4 @@ private:
     }
 };
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action

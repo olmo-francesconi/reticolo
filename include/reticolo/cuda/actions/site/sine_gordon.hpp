@@ -30,7 +30,7 @@ public:
     }
     RETICOLO_HD void accumulate(int /*mu*/, T nbr) { nbrs_ += nbr; }
     [[nodiscard]] RETICOLO_HD T finalize() const {
-        return action::detail::sine_gordon_force_site<T>(
+        return action::formula::sine_gordon_force_site<T>(
             phi_, nbrs_, std::sin(phi_), kappa_, alpha_);
     }
 
@@ -53,8 +53,8 @@ public:
     }
     RETICOLO_HD void accumulate(int /*mu*/, T nbr) { fwd_ += nbr; }
     [[nodiscard]] RETICOLO_HD double finalize() const {
-        return static_cast<double>(
-            action::detail::sine_gordon_action_site<T>(phi_, fwd_, std::cos(phi_), kappa_, alpha_));
+        return static_cast<double>(action::formula::sine_gordon_action_site<T>(
+            phi_, fwd_, std::cos(phi_), kappa_, alpha_));
     }
 
 private:
@@ -84,12 +84,12 @@ public:
     }
     RETICOLO_HD void bwd(T nbr) { full_ += nbr; }
     [[nodiscard]] RETICOLO_HD T force() const {
-        return action::detail::sine_gordon_force_site<T>(
+        return action::formula::sine_gordon_force_site<T>(
             phi_, full_, std::sin(phi_), kappa_, alpha_);
     }
     [[nodiscard]] RETICOLO_HD double energy() const {
-        return static_cast<double>(
-            action::detail::sine_gordon_action_site<T>(phi_, fwd_, std::cos(phi_), kappa_, alpha_));
+        return static_cast<double>(action::formula::sine_gordon_action_site<T>(
+            phi_, fwd_, std::cos(phi_), kappa_, alpha_));
     }
 
 private:
@@ -107,14 +107,14 @@ struct device_functors<action::SineGordon<T>> {
                               T* force,
                               DeviceTopology const& topo,
                               cudaStream_t s) {
-        detail::site_force(SineGordonForceFunctor<T>{a.kappa, a.alpha}, field, force, topo, s);
+        impl::site_force(SineGordonForceFunctor<T>{a.kappa, a.alpha}, field, force, topo, s);
     }
     [[nodiscard]] static double s_full(action::SineGordon<T> const& a,
                                        T const* field,
                                        double* scratch,
                                        DeviceTopology const& topo,
                                        cudaStream_t s) {
-        return detail::site_s_full(
+        return impl::site_s_full(
             SineGordonEnergyFunctor<T>{a.kappa, a.alpha}, field, scratch, topo, s);
     }
     static void s_full_into(double* out,
@@ -124,7 +124,7 @@ struct device_functors<action::SineGordon<T>> {
                             double* partials,
                             DeviceTopology const& topo,
                             cudaStream_t s) {
-        detail::site_s_full_into(
+        impl::site_s_full_into(
             out, SineGordonEnergyFunctor<T>{a.kappa, a.alpha}, field, scratch, partials, topo, s);
     }
     static void sample_momenta(T* mom,
@@ -133,7 +133,7 @@ struct device_functors<action::SineGordon<T>> {
                                std::uint64_t seed,
                                std::uint64_t const* traj,
                                cudaStream_t s) {
-        detail::site_sample_momenta(mom, n, topo, seed, traj, s);
+        impl::site_sample_momenta(mom, n, topo, seed, traj, s);
     }
     static void s_full_and_force(double* out,
                                  action::SineGordon<T> const& a,
@@ -143,14 +143,14 @@ struct device_functors<action::SineGordon<T>> {
                                  double* partials,
                                  DeviceTopology const& topo,
                                  cudaStream_t s) {
-        detail::site_s_full_and_force(out,
-                                      SineGordonForceEnergyFunctor<T>{a.kappa, a.alpha},
-                                      field,
-                                      force,
-                                      scratch,
-                                      partials,
-                                      topo,
-                                      s);
+        impl::site_s_full_and_force(out,
+                                    SineGordonForceEnergyFunctor<T>{a.kappa, a.alpha},
+                                    field,
+                                    force,
+                                    scratch,
+                                    partials,
+                                    topo,
+                                    s);
     }
 };
 

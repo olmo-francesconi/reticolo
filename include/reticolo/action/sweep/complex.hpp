@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/action/detail/stencil.hpp>
+#include <reticolo/action/sweep/stencil.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/parallel.hpp>
 #include <reticolo/core/site.hpp>
@@ -13,7 +13,7 @@
 // (BoseGas): the last direction ("time") carries a different weight, so these
 // hand the body the full 2·ndims neighbour sum AND the last-direction sum
 // separately. They reuse the shared dimension-generic engine
-// (<reticolo/action/detail/stencil.hpp>) — its tiling, per-dim vectorised
+// (<reticolo/action/sweep/stencil.hpp>) — its tiling, per-dim vectorised
 // neighbour-base geometry (`walk_outer_`, `agg_*`), and threading — adding only
 // the second (last-direction) aggregate. The last direction is dim D-1, which is
 // the OUTERMOST axis of the walk, so its pre-wrapped row bases fwd[D-1]/bwd[D-1]
@@ -27,7 +27,7 @@
 // leaf body as nbrs_total + (c_last - 1)·nbrs_last). D in {2,3,4} take the
 // vectorised/threaded path; D==1 and D>4 fall back to the flat gather.
 
-namespace reticolo::action::detail {
+namespace reticolo::action::sweep {
 
 // ---------- flat gather fallback (D==1, D>4) ---------------------------------
 
@@ -219,4 +219,4 @@ template <class T, class Body>
         flat);
 }
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::sweep

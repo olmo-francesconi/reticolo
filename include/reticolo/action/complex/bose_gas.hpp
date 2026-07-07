@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/action/complex/detail/complex_action.hpp>
+#include <reticolo/action/complex/complex_action.hpp>
 #include <reticolo/action/complex/formula/bose_gas_formula.hpp>
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/core/field_traits.hpp>
@@ -57,11 +57,11 @@ template <class T>
 //
 // All the per-site arithmetic lives in `detail/bose_gas_formula.hpp` (shared
 // with the CUDA device functors); the loop shells, the time-slab imag sweeps,
-// the combined kick and the caches come from `detail::ComplexAction`. This
+// the combined kick and the caches come from `ComplexAction`. This
 // struct is the couplings + the four kernel binds + the cosh(mu) memo.
 
 template <class T = double>
-struct BoseGas : detail::ComplexAction<BoseGas<T>, T> {
+struct BoseGas : ComplexAction<BoseGas<T>, T> {
     using value_type = std::complex<T>;
     using complex_t  = std::complex<T>;
 
@@ -83,7 +83,8 @@ struct BoseGas : detail::ComplexAction<BoseGas<T>, T> {
         return [coef_mass, lam = lambda, ch_minus_1](
                    complex_t phi, complex_t fwd_total, complex_t fwd_last) {
             complex_t const weighted = fwd_total + (ch_minus_1 * fwd_last);
-            return detail::bose_gas_action_site<T>(to_cplx(phi), to_cplx(weighted), coef_mass, lam);
+            return formula::bose_gas_action_site<T>(
+                to_cplx(phi), to_cplx(weighted), coef_mass, lam);
         };
     }
 
@@ -95,7 +96,7 @@ struct BoseGas : detail::ComplexAction<BoseGas<T>, T> {
                    std::size_t /*i*/, complex_t phi, complex_t nbrs_total, complex_t nbrs_last) {
             complex_t const staple = nbrs_total + (ch_minus_1 * nbrs_last);
             cplx<T> const f =
-                detail::bose_gas_force_site<T>(to_cplx(phi), to_cplx(staple), coef_mass, lam);
+                formula::bose_gas_force_site<T>(to_cplx(phi), to_cplx(staple), coef_mass, lam);
             return from_cplx(f);
         };
     }
@@ -103,7 +104,7 @@ struct BoseGas : detail::ComplexAction<BoseGas<T>, T> {
     // S_I site = 2 Im(conj(phi_x)·phi_{x+tau}); the ×2 is inside the formula.
     [[nodiscard]] auto imag_action_kernel(Lattice<complex_t> const& /*l*/) const noexcept {
         return [](complex_t phi, complex_t phi_fwd_tau) {
-            return detail::bose_gas_action_imag_site<T>(to_cplx(phi), to_cplx(phi_fwd_tau));
+            return formula::bose_gas_action_imag_site<T>(to_cplx(phi), to_cplx(phi_fwd_tau));
         };
     }
 
@@ -111,7 +112,7 @@ struct BoseGas : detail::ComplexAction<BoseGas<T>, T> {
     [[nodiscard]] auto imag_force_kernel(Lattice<complex_t> const& /*l*/) const noexcept {
         return [](complex_t fwd_tau, complex_t bwd_tau) {
             cplx<T> const f =
-                detail::bose_gas_force_imag_site<T>(to_cplx(fwd_tau), to_cplx(bwd_tau));
+                formula::bose_gas_force_imag_site<T>(to_cplx(fwd_tau), to_cplx(bwd_tau));
             return from_cplx(f);
         };
     }

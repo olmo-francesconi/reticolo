@@ -34,7 +34,7 @@ namespace reticolo::llr::smoothed {
 // (|λ·(â − a_rm)|, the shrinkage step magnitude). At convergence the
 // three a-series must agree to the noise floor.
 
-namespace detail {
+namespace impl {
 
 // In-place Gauss elimination with partial pivoting. `mat` is `n × n`
 // row-major; `vec` is `n`. Returns false if the matrix is singular to
@@ -145,7 +145,7 @@ inline void local_poly_fit(std::vector<double> const& e,
     }
 }
 
-}  // namespace detail
+}  // namespace impl
 
 struct DriverSpec {
     int n_nr;
@@ -265,7 +265,7 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
             a_rm[n]   = rm_update(r.a(), de_buf[n], spec.delta, s);
         }
 
-        detail::local_poly_fit(e_n_vec, a_rm, spec.smooth_K, spec.smooth_degree, a_hat);
+        impl::local_poly_fit(e_n_vec, a_rm, spec.smooth_K, spec.smooth_degree, a_hat);
         double const lam =
             spec.smooth_lambda0 / std::pow(static_cast<double>(s + 1), spec.smooth_lambda_exp);
         double rm_step_sum = 0.0;

@@ -613,7 +613,7 @@ adj_mul_slab(double* out, double const* a, double const* b, std::size_t n) noexc
     }
 }
 
-namespace detail {
+namespace impl {
 
 // Cayley-Hamilton coefficient pass of expi_lmul_slab. Per site: branchless
 // straight-line block (selects only), so the loop vectorises across sites.
@@ -704,7 +704,7 @@ inline void ch_coeff_pass_(double* __restrict f0_re,
     }
 }
 
-}  // namespace detail
+}  // namespace impl
 
 // In-place U ← exp(dt·P) · U, slab edition.
 //
@@ -848,7 +848,7 @@ inline void expi_lmul_range(
 
     // ----- Pass 4.5: Cayley-Hamilton coefficients f₀, f₁, f₂ --------------
     // The f slabs reuse buffers that are dead after pass 3.5; the kernel is
-    // split out (detail::ch_coeff_pass_) so its parameters carry __restrict —
+    // split out (impl::ch_coeff_pass_) so its parameters carry __restrict —
     // without it the vectoriser must prove the 6 stores and 8 loads disjoint
     // at runtime and its cost model gives up.
     double* const f0_re_buf = ratio_buf;
@@ -857,21 +857,21 @@ inline void expi_lmul_range(
     double* const f1_im_buf = sqrt_c1_3;
     double* const f2_re_buf = sqrt_c1;
     double* const f2_im_buf = s_t3_buf;
-    detail::ch_coeff_pass_(f0_re_buf,
-                           f0_im_buf,
-                           f1_re_buf,
-                           f1_im_buf,
-                           f2_re_buf,
-                           f2_im_buf,
-                           u_buf,
-                           w_buf,
-                           cu_buf,
-                           su_buf,
-                           cw_buf,
-                           sw_buf,
-                           c0_buf,
-                           c1_buf,
-                           cnt);
+    impl::ch_coeff_pass_(f0_re_buf,
+                         f0_im_buf,
+                         f1_re_buf,
+                         f1_im_buf,
+                         f2_re_buf,
+                         f2_im_buf,
+                         u_buf,
+                         w_buf,
+                         cu_buf,
+                         su_buf,
+                         cw_buf,
+                         sw_buf,
+                         c0_buf,
+                         c1_buf,
+                         cnt);
 
     // ----- Pass 5: batched V = f₀·I + f₁·Q + f₂·Q², U ← V·U ---------------
     // AoSoA batches of B sites: q/q²/u slabs split into [9][B] re/im scratch

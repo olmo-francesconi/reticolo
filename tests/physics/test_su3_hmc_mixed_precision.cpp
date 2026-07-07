@@ -57,8 +57,8 @@ TEST_CASE("SU(3): float kernels reproduce double on one configuration",
 
     MatrixLinkLattice<SU3, double> fd{ud.indexing()};
     MatrixLinkLattice<SU3, float> ff{uf.indexing()};
-    reticolo::action::detail::wilson_kernels<SU3>::compute_force(ud, fd, k_beta / 3.0);
-    reticolo::action::detail::wilson_kernels<SU3>::compute_force(uf, ff, k_beta / 3.0);
+    reticolo::action::formula::wilson_kernels<SU3>::compute_force(ud, fd, k_beta / 3.0);
+    reticolo::action::formula::wilson_kernels<SU3>::compute_force(uf, ff, k_beta / 3.0);
     for (std::size_t i = 0; i < fd.ncomponents(); ++i) {
         REQUIRE(static_cast<double>(ff.data()[i]) ==
                 Catch::Approx(fd.data()[i]).epsilon(2.0e-3).margin(1.0e-4));

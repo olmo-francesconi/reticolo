@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/detail/cache.hpp>
-#include <reticolo/action/detail/stencil.hpp>
+#include <reticolo/action/cache.hpp>
+#include <reticolo/action/sweep/stencil.hpp>
 #include <reticolo/core/lattice.hpp>
 
 #include <cstddef>
@@ -22,18 +22,18 @@
 // The base owns the loop shells (forward-only for the total, both-directions for
 // the force), the scale, the fused kick and the `last_s_full` cache.
 
-namespace reticolo::action::detail {
+namespace reticolo::action {
 
 template <class Derived, class T>
 struct BondAction : SFullCache {
     // The bond kernel IS the per-neighbour combine: unlike a site action the
-    // endpoint-difference energy can't be pre-summed, so `reduce_stencil` /
-    // `visit_stencil` fold `bond(self, nbr)` over the forward (total) / all
+    // endpoint-difference energy can't be pre-summed, so `sweep::reduce_stencil` /
+    // `sweep::visit_stencil` fold `bond(self, nbr)` over the forward (total) / all
     // (force) neighbours. The shared engine supplies the tiling + threading the
     // bond family previously lacked entirely.
     [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
         auto bond        = derived_().action_bond_kernel();
-        double const raw = reduce_stencil<T, double>(
+        double const raw = sweep::reduce_stencil<T, double>(
             l, bond, [](T /*self*/, T agg) { return static_cast<double>(agg); });
         double const s = static_cast<double>(derived_().bond_scale()) * raw;
         last_s_full_   = s;
@@ -44,7 +44,7 @@ struct BondAction : SFullCache {
         auto bond    = derived_().force_bond_kernel();
         T const sc   = derived_().bond_scale();
         T* const out = force.data();
-        visit_stencil<T>(
+        sweep::visit_stencil<T>(
             l, bond, [sc, out](std::size_t i, T /*self*/, T agg) { out[i] = sc * agg; });
     }
 
@@ -52,7 +52,7 @@ struct BondAction : SFullCache {
         auto bond  = derived_().force_bond_kernel();
         T const sc = derived_().bond_scale();
         T* const m = mom.data();
-        visit_stencil<T>(l, bond, [sc, m, k_dt](std::size_t i, T /*self*/, T agg) {
+        sweep::visit_stencil<T>(l, bond, [sc, m, k_dt](std::size_t i, T /*self*/, T agg) {
             m[i] += k_dt * (sc * agg);
         });
     }
@@ -63,4 +63,4 @@ private:
     }
 };
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action

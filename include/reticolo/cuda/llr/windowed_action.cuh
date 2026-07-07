@@ -47,7 +47,7 @@ namespace reticolo::cuda::llr {
 // Mode A: out[0] = (1+a)·S + (S−E_n)²/2δ². params = {a, E_n, delta}. Single thread.
 template <class Dummy = void>
 __global__ void window_combine_kernel(double* out, double const* s_base, double const* params) {
-    out[0] = reticolo::llr::detail::windowed_value(s_base[0], params[0], params[1], params[2]);
+    out[0] = reticolo::llr::formula::windowed_value(s_base[0], params[0], params[1], params[2]);
 }
 
 // Mode B: out[0] = S_R + a·S_I + (S_I−E_n)²/2δ². Single thread.
@@ -56,7 +56,7 @@ __global__ void window_combine_complex_kernel(double* out,
                                               double const* s_r,
                                               double const* s_i,
                                               double const* params) {
-    out[0] = reticolo::llr::detail::windowed_value_complex(
+    out[0] = reticolo::llr::formula::windowed_value_complex(
         s_r[0], s_i[0], params[0], params[1], params[2]);
 }
 
@@ -68,7 +68,7 @@ __global__ void scale_force_kernel(T* force, long n, double const* s_base, doubl
         return;
     }
     double const scale =
-        reticolo::llr::detail::force_scale(s_base[0], params[0], params[1], params[2]);
+        reticolo::llr::formula::force_scale(s_base[0], params[0], params[1], params[2]);
     force[i] = static_cast<T>(static_cast<double>(force[i]) * scale);
 }
 
@@ -82,7 +82,7 @@ __global__ void merge_imag_force_kernel(
         return;
     }
     double const scale =
-        reticolo::llr::detail::force_scale_imag(s_i[0], params[0], params[1], params[2]);
+        reticolo::llr::formula::force_scale_imag(s_i[0], params[0], params[1], params[2]);
     force[i] =
         static_cast<T>(static_cast<double>(force[i]) + (scale * static_cast<double>(f_imag[i])));
 }

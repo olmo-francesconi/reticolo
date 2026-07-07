@@ -9,7 +9,7 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/gauge.hpp>
 #include <reticolo/action/site.hpp>
-#include <reticolo/action/site/detail/traversal.hpp>
+#include <reticolo/action/sweep/site.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/app/setup.hpp>

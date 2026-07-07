@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/complex/detail/traversal.hpp>
-#include <reticolo/action/detail/cache.hpp>
+#include <reticolo/action/cache.hpp>
+#include <reticolo/action/sweep/complex.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/parallel.hpp>
 
@@ -31,7 +31,7 @@
 //   auto imag_action_kernel(l) const;  // (phi, phi_fwd_tau) -> T   (S_I site, ×2 folded in)
 //   auto imag_force_kernel(l)  const;  // (phi_fwd_tau, phi_bwd_tau) -> complex (F_I)
 
-namespace reticolo::action::detail {
+namespace reticolo::action {
 
 template <class Derived, class T>
 struct ComplexAction : SFullCache, SImagCache {
@@ -41,7 +41,7 @@ struct ComplexAction : SFullCache, SImagCache {
 
     [[nodiscard]] double s_full(Lattice<complex_t> const& l) const noexcept {
         auto kern             = derived_().action_kernel(l);
-        complex_t const total = reduce_fwd_split_last<complex_t>(
+        complex_t const total = sweep::reduce_fwd_split_last<complex_t>(
             l, [&kern](complex_t phi, complex_t fwd_total, complex_t fwd_last) {
                 return complex_t{kern(phi, fwd_total, fwd_last), T{0}};
             });
@@ -53,7 +53,7 @@ struct ComplexAction : SFullCache, SImagCache {
     void compute_force(Lattice<complex_t> const& l, Lattice<complex_t>& force) const noexcept {
         auto kern            = derived_().force_kernel(l);
         complex_t* const out = force.data();
-        visit_nn_split_last<complex_t>(
+        sweep::visit_nn_split_last<complex_t>(
             l, [&kern, out](std::size_t i, complex_t phi, complex_t nt, complex_t nl) {
                 out[i] = kern(i, phi, nt, nl);
             });
@@ -64,7 +64,7 @@ struct ComplexAction : SFullCache, SImagCache {
                                 T k_dt) const noexcept {
         auto kern          = derived_().force_kernel(l);
         complex_t* const m = mom.data();
-        visit_nn_split_last<complex_t>(
+        sweep::visit_nn_split_last<complex_t>(
             l, [&kern, m, k_dt](std::size_t i, complex_t phi, complex_t nt, complex_t nl) {
                 m[i] += k_dt * kern(i, phi, nt, nl);
             });
@@ -100,7 +100,7 @@ struct ComplexAction : SFullCache, SImagCache {
         auto fk            = derived_().force_kernel(l);
         complex_t* const m = mom.data();
         T const k_r        = k_dt * scale_r;
-        visit_nn_split_last<complex_t>(
+        sweep::visit_nn_split_last<complex_t>(
             l, [&fk, m, k_r](std::size_t i, complex_t phi, complex_t nt, complex_t nl) {
                 m[i] += k_r * fk(i, phi, nt, nl);
             });
@@ -131,8 +131,8 @@ private:
         std::size_t const n         = l.nsites();
         std::size_t const s_tau     = n / L_tau;
         complex_t const* const data = l.data();
-        bool const want             = reticolo::detail::want_threads(n, l.bytes_per_site());
-        return reticolo::detail::parallel_reduce<Acc>(want, L_tau, [&](std::size_t w) {
+        bool const want             = reticolo::exec::want_threads(n, l.bytes_per_site());
+        return reticolo::exec::parallel_reduce<Acc>(want, L_tau, [&](std::size_t w) {
             std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
             std::size_t const base   = w * s_tau;
             std::size_t const base_p = wp * s_tau;
@@ -152,8 +152,8 @@ private:
         std::size_t const n         = l.nsites();
         std::size_t const s_tau     = n / L_tau;
         complex_t const* const data = l.data();
-        bool const want             = reticolo::detail::want_threads(n, l.bytes_per_site());
-        reticolo::detail::parallel_map(want, L_tau, [&](std::size_t w) {
+        bool const want             = reticolo::exec::want_threads(n, l.bytes_per_site());
+        reticolo::exec::parallel_map(want, L_tau, [&](std::size_t w) {
             std::size_t const wm     = (w == 0) ? (L_tau - 1) : (w - 1);
             std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
             std::size_t const base   = w * s_tau;
@@ -166,4 +166,4 @@ private:
     }
 };
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action

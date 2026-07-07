@@ -12,7 +12,7 @@ namespace reticolo::math::group {
 // U(1) gauge group model — CORE group operations only: the group constants and
 // the HMC algebra hooks (`sample_algebra_slab` / `kinetic_slab` / `expi_lmul_slab`)
 // the integrator calls. The Wilson plaquette physics (Re Tr U_p, the staple
-// force) is action-specific and lives in `action/gauge/detail/wilson_u1.hpp`
+// force) is action-specific and lives in `action/gauge/formula/wilson_u1.hpp`
 // as `wilson_kernels<U1>`.
 //
 // Each link element is a phase U = exp(iθ) stored as one real angle θ, so

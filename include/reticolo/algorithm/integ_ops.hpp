@@ -37,7 +37,7 @@ inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
     // Elementwise axpy: threshold/chunk from the element size; each element is
     // independent → bit-identical for any partition. __restrict is re-applied
     // inside the worker so the vectoriser keeps the no-alias guarantee.
-    reticolo::detail::parallel_map_ranges(
+    reticolo::exec::parallel_map_ranges(
         n, sizeof(F), 1, [fd, pd, c](std::size_t base, std::size_t cnt) {
             F* __restrict const f          = fd;
             auto const* __restrict const p = pd;
@@ -55,7 +55,7 @@ inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
     real_scalar_t<F> const c = static_cast<real_scalar_t<F>>(kdt);
     F* const md              = mom.data();
     auto const* const fd     = force.data();
-    reticolo::detail::parallel_map_ranges(
+    reticolo::exec::parallel_map_ranges(
         n, sizeof(F), 1, [md, fd, c](std::size_t base, std::size_t cnt) {
             F* __restrict const m           = md;
             auto const* __restrict const fp = fd;
@@ -87,7 +87,7 @@ inline void drift_field(MatrixLinkLattice<G, T>& field,
         // gran = pass-5 k_b=8 batch so chunks stay batch-aligned; threshold/chunk
         // from the (large) gauge footprint, bit-identical to the serial slab per
         // chunk.
-        reticolo::detail::field_visit(field, 8, [&](std::size_t base, std::size_t cnt) {
+        reticolo::exec::field_visit(field, 8, [&](std::size_t base, std::size_t cnt) {
             for (std::size_t mu = 0; mu < d; ++mu) {
                 G::expi_lmul_range(
                     field.mu_block_data(mu), mom.mu_block_data(mu), cdt, ns, base, cnt);

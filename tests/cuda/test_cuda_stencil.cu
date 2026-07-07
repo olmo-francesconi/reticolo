@@ -19,7 +19,7 @@
 // that their access policies (all-2d force vs forward-only action) are mutually
 // consistent — a missing or double-counted neighbour breaks the identity by
 // O(kappa), far above the FD tolerance. The functors call the SHARED HD per-site
-// formula (action::detail::phi4_*), so this also exercises the real device Phi4
+// formula (action::formula::phi4_*), so this also exercises the real device Phi4
 // math, not a stand-in.
 
 namespace reticolo::cuda {

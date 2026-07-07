@@ -1,6 +1,6 @@
-#include <reticolo/action/site/detail/traversal.hpp>
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/action/site/sine_gordon.hpp>
+#include <reticolo/action/sweep/site.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/parallel.hpp>
 #include <reticolo/core/rng/rng.hpp>
@@ -19,7 +19,7 @@ using reticolo::FastRng;
 using reticolo::Lattice;
 using reticolo::action::Phi4;
 using reticolo::action::SineGordon;
-using reticolo::action::detail::visit_nn_fallback_;
+using reticolo::action::sweep::visit_nn_fallback_;
 
 namespace {
 
@@ -58,7 +58,7 @@ TEST_CASE("threaded compute_force equals the gather fallback, every dimension",
     Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
     for (auto const& shape : hot_shapes()) {
         auto const phi = hot_lattice(shape);
-        REQUIRE(reticolo::detail::want_threads(phi.nsites(), phi.bytes_per_site()));
+        REQUIRE(reticolo::exec::want_threads(phi.nsites(), phi.bytes_per_site()));
 
         auto kern = action.force_kernel();
         std::vector<double> ref(phi.nsites(), 0.0);
@@ -84,7 +84,7 @@ TEST_CASE("threaded force + s_full are thread-count invariant, every dimension",
     Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
     for (auto const& shape : hot_shapes()) {
         auto const phi = hot_lattice(shape);
-        REQUIRE(reticolo::detail::want_threads(phi.nsites(), phi.bytes_per_site()));
+        REQUIRE(reticolo::exec::want_threads(phi.nsites(), phi.bytes_per_site()));
 
         auto at = [&](int nthr) {
 #ifdef _OPENMP
@@ -113,7 +113,7 @@ TEST_CASE("threaded force + s_full are thread-count invariant, every dimension",
 // width multiple, so the Sleef batch takes the same vector path regardless).
 TEST_CASE("SineGordon force + s_full are thread-count invariant", "[hot_loop][parallel]") {
     auto const phi = hot_lattice({16, 16, 16, 16});
-    REQUIRE(reticolo::detail::want_threads(phi.nsites(), phi.bytes_per_site()));
+    REQUIRE(reticolo::exec::want_threads(phi.nsites(), phi.bytes_per_site()));
     SineGordon<double> const action{.kappa = 0.18, .alpha = 0.7};
 
     auto at = [&](int nthr) {

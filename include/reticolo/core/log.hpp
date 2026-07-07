@@ -64,7 +64,7 @@ enum class Level : std::uint8_t { debug, info, warn, error };
 // new modes as needed.
 enum class Mode : std::uint8_t { normal, silent };
 
-namespace detail {
+namespace impl {
 
 struct Config {
     bool replicas = false;
@@ -251,7 +251,7 @@ inline bool detect_color(int fd) noexcept {
 #endif
 }
 
-}  // namespace detail
+}  // namespace impl
 
 // Fluent multi-line builder. Move-only. Destructor emits the whole entry
 // atomically — no interleaving across threads.
@@ -260,8 +260,7 @@ public:
     // Suppression is latched at construction: a suppressed Entry skips all
     // line()/param() formatting, so building a never-emitted entry costs
     // nothing beyond the level check.
-    Entry(Level lv, std::string_view tag)
-        : lv_{lv}, tag_{tag}, suppressed_{detail::suppressed(lv)} {}
+    Entry(Level lv, std::string_view tag) : lv_{lv}, tag_{tag}, suppressed_{impl::suppressed(lv)} {}
     Entry(Entry const&)            = delete;
     Entry& operator=(Entry const&) = delete;
     Entry(Entry&& other) noexcept
@@ -326,7 +325,7 @@ public:
         if (emitted_ || lines_.empty()) {
             return;
         }
-        if (detail::suppressed(lv_)) {
+        if (impl::suppressed(lv_)) {
             return;
         }
         emit();
@@ -343,7 +342,7 @@ private:
 };
 
 inline void Entry::emit() {
-    using namespace detail;
+    using namespace impl;
     emitted_ = true;
 
     auto const sig  = sigil(lv_);
@@ -430,28 +429,28 @@ inline Entry error(std::string_view tag) {
 
 template <class... Args>
 inline void debug(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
-    if (detail::suppressed(Level::debug)) {
+    if (impl::suppressed(Level::debug)) {
         return;
     }
     Entry{Level::debug, tag}.line(fmt, std::forward<Args>(a)...);
 }
 template <class... Args>
 inline void info(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
-    if (detail::suppressed(Level::info)) {
+    if (impl::suppressed(Level::info)) {
         return;
     }
     Entry{Level::info, tag}.line(fmt, std::forward<Args>(a)...);
 }
 template <class... Args>
 inline void warn(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
-    if (detail::suppressed(Level::warn)) {
+    if (impl::suppressed(Level::warn)) {
         return;
     }
     Entry{Level::warn, tag}.line(fmt, std::forward<Args>(a)...);
 }
 template <class... Args>
 inline void error(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
-    if (detail::suppressed(Level::error)) {
+    if (impl::suppressed(Level::error)) {
         return;
     }
     Entry{Level::error, tag}.line(fmt, std::forward<Args>(a)...);
@@ -463,8 +462,8 @@ inline void error(std::string_view tag, std::format_string<Args...> fmt, Args&&.
 class Scope {
 public:
     explicit Scope(std::string run_id)
-        : prev_{std::exchange(detail::bound_run(), std::move(run_id))} {}
-    ~Scope() { detail::bound_run() = std::move(prev_); }
+        : prev_{std::exchange(impl::bound_run(), std::move(run_id))} {}
+    ~Scope() { impl::bound_run() = std::move(prev_); }
     Scope(Scope const&)            = delete;
     Scope& operator=(Scope const&) = delete;
     Scope(Scope&&)                 = delete;
@@ -481,31 +480,31 @@ private:
 // Init / config -------------------------------------------------------------
 
 inline void set_min_level(Level lv) {
-    detail::cfg().min_level = lv;
+    impl::cfg().min_level = lv;
 }
 inline void set_color(bool on) {
-    detail::cfg().color = on;
+    impl::cfg().color = on;
 }
 
 // Global on/off — overrides `min_level`. Cheaper than `set_min_level(warn)`
 // because it short-circuits before any formatting. `banner()` is also
 // suppressed while off.
 inline void off() {
-    detail::cfg().enabled = false;
+    impl::cfg().enabled = false;
 }
 inline void on() {
-    detail::cfg().enabled = true;
+    impl::cfg().enabled = true;
 }
 [[nodiscard]] inline bool enabled() {
-    return detail::cfg().enabled;
+    return impl::cfg().enabled;
 }
 
-namespace detail {
+namespace impl {
 inline bool& banner_shown() {
     static bool b = false;
     return b;
 }
-}  // namespace detail
+}  // namespace impl
 
 // Hero banner. Idempotent — calling more than once is a no-op so apps and
 // `log::start` can both invoke it safely.
@@ -516,12 +515,12 @@ inline bool& banner_shown() {
 // Build metadata (branch/compiler/simd) is compile-time-baked via
 // <reticolo/core/build_info.hpp>; the host/cpu/threads rows are read live via
 // <reticolo/core/host_info.hpp>, and the gpu row is filled by the cuda umbrella
-// through detail::gpu_banner_hook() when the app links the CUDA backend.
+// through impl::gpu_banner_hook() when the app links the CUDA backend.
 inline void banner() {
-    if (!detail::cfg().enabled || detail::banner_shown()) {
+    if (!impl::cfg().enabled || impl::banner_shown()) {
         return;
     }
-    detail::banner_shown() = true;
+    impl::banner_shown() = true;
     static constexpr std::array<std::string_view, 6> figlet{{
         "██████╗ ███████╗████████╗██╗ ██████╗ ██████╗ ██╗      ██████╗ ",
         "██╔══██╗██╔════╝╚══██╔══╝██║██╔════╝██╔═══██╗██║     ██╔═══██╗",
@@ -564,8 +563,8 @@ inline void banner() {
     bottom += tag;
     bottom += "━┛";
 
-    std::lock_guard lk{detail::sink_mutex()};
-    auto& mf  = detail::main_file();
+    std::lock_guard lk{impl::sink_mutex()};
+    auto& mf  = impl::main_file();
     auto emit = [&](std::string const& s) {
         std::cout << s;
         if (mf.is_open()) {
@@ -587,7 +586,7 @@ inline void banner() {
     // into the run log naturally.
     auto const cores = host::logical_cores();
     std::string compiler_line{build::compiler};
-    if (auto* const hook = detail::nvcc_banner_hook(); hook != nullptr) {
+    if (auto* const hook = impl::nvcc_banner_hook(); hook != nullptr) {
         if (auto const ver = hook(); !ver.empty()) {
             compiler_line = std::format("nvcc {} ({})", ver, build::compiler);
         }
@@ -600,12 +599,12 @@ inline void banner() {
     emit(std::format("┃ threads  : {}\n",
                      build::openmp_enabled ? std::format("OpenMP {} of {}", omp_threads, cores)
                                            : std::format("serial (1 of {})", cores)));
-    if (auto* const hook = detail::gpu_banner_hook(); hook != nullptr) {
+    if (auto* const hook = impl::gpu_banner_hook(); hook != nullptr) {
         if (auto const gpu = hook(); !gpu.empty()) {
             emit(std::format("┃ gpu      : {}\n", gpu));
         }
     }
-    emit(std::format("┃ started  : {} (local)\n", detail::format_wall(detail::wall_start())));
+    emit(std::format("┃ started  : {} (local)\n", impl::format_wall(impl::wall_start())));
 
     // Section break between banner metadata and the live log stream.
     // Heavy T-junction continues the running ┃ column into a horizontal rule.
@@ -625,18 +624,18 @@ inline void banner() {
 // and additionally land in per-replica <workspace>/<stem>.<rid>.log files.
 inline void
 start(std::filesystem::path const& workspace, std::string_view out_name, bool replicas = false) {
-    auto& c     = detail::cfg();
+    auto& c     = impl::cfg();
     c.replicas  = replicas;
     c.workspace = workspace.empty() ? std::filesystem::path{"."} : workspace;
     c.stem      = std::filesystem::path{out_name}.stem().string();
-    c.color     = detail::detect_color(fileno(stdout));
-    detail::mono_start();
-    detail::wall_start();
+    c.color     = impl::detect_color(fileno(stdout));
+    impl::mono_start();
+    impl::wall_start();
 
     std::error_code ec;
     std::filesystem::create_directories(c.workspace, ec);
     auto const log_path = c.workspace / (c.stem + ".log");
-    auto& mf            = detail::main_file();
+    auto& mf            = impl::main_file();
     if (mf.is_open()) {
         mf.close();
     }

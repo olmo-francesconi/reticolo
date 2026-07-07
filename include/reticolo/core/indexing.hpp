@@ -115,7 +115,7 @@ private:
     std::size_t ndims_ = 0;
 };
 
-namespace detail {
+namespace impl {
 
 struct IndexingPoolKey {
     Indexing::SizeVec shape;
@@ -133,20 +133,20 @@ struct IndexingPoolKeyHash {
     }
 };
 
-}  // namespace detail
+}  // namespace impl
 
 inline std::shared_ptr<Indexing const> Indexing::acquire(SizeVec shape) {
     static std::mutex pool_mutex;
-    static std::unordered_map<detail::IndexingPoolKey,
+    static std::unordered_map<impl::IndexingPoolKey,
                               std::weak_ptr<Indexing const>,
-                              detail::IndexingPoolKeyHash>
+                              impl::IndexingPoolKeyHash>
         pool;
 
     if (shape.empty()) {
         throw std::invalid_argument{"Indexing: shape must be non-empty"};
     }
 
-    detail::IndexingPoolKey key{std::move(shape)};
+    impl::IndexingPoolKey key{std::move(shape)};
 
     std::lock_guard const lock{pool_mutex};
     if (auto it = pool.find(key); it != pool.end()) {

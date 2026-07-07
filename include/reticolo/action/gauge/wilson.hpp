@@ -1,8 +1,8 @@
 #pragma once
 
-#include <reticolo/action/gauge/detail/gauge_action.hpp>
-#include <reticolo/action/gauge/detail/plane.hpp>
-#include <reticolo/action/gauge/detail/wilson_kernels.hpp>
+#include <reticolo/action/gauge/formula/wilson_kernels.hpp>
+#include <reticolo/action/gauge/gauge_action.hpp>
+#include <reticolo/action/sweep/plane.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/parallel.hpp>
@@ -12,9 +12,9 @@
 // The shipped per-group Wilson kernel specializations, so `Wilson<G>` for any
 // built-in group resolves from a single `wilson.hpp` include. An external group
 // defines its own `wilson_kernels<MyGroup>` and includes it alongside this.
-#include <reticolo/action/gauge/detail/wilson_su2.hpp>
-#include <reticolo/action/gauge/detail/wilson_su3.hpp>
-#include <reticolo/action/gauge/detail/wilson_u1.hpp>
+#include <reticolo/action/gauge/formula/wilson_su2.hpp>
+#include <reticolo/action/gauge/formula/wilson_su3.hpp>
+#include <reticolo/action/gauge/formula/wilson_u1.hpp>
 
 #include <cstddef>
 
@@ -26,10 +26,10 @@ namespace reticolo::action {
 //     S_W = (β/N) · Σ_x Σ_{μ<ν} ( N − Re Tr U_{μν}(x) )
 //         = β · n_plaq − (β/N) · Σ_p Re Tr U_p
 //
-// The hot loops walk one plaquette plane (μ, ν) at a time via `detail::visit_plane`
+// The hot loops walk one plaquette plane (μ, ν) at a time via `sweep::visit_plane`
 // (bulk-vs-slab, stride-1 inner site loop, peeled wrap boundaries). The
 // per-plaquette physics — Re Tr U_p and the staple force scatter — is the
-// action-specific `detail::wilson_kernels<G>` (in action/gauge/formula/wilson_<g>.hpp),
+// action-specific `formula::wilson_kernels<G>` (in action/gauge/formula/wilson_<g>.hpp),
 // which is built on the group model `G`'s core operations. `G` itself carries
 // only the group constants (`n_color`, `name`) and the HMC algebra hooks; the
 // Wilson force lives here in the action layer, not in the group math.
@@ -38,11 +38,11 @@ namespace reticolo::action {
 // bit-identity is the design point (validated in the physics suite).
 
 template <math::group::GaugeGroup G, class T = double>
-struct Wilson : detail::GaugeAction<Wilson<G, T>> {
+struct Wilson : GaugeAction<Wilson<G, T>> {
     using value_type = T;
     using group_type = G;
     using field_type = MatrixLinkLattice<G, T>;
-    using kernels    = detail::wilson_kernels<G>;
+    using kernels    = formula::wilson_kernels<G>;
 
     T beta = T{0};
 
@@ -77,7 +77,7 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
             constexpr std::size_t gran = math::group::k_gauge_batch<T>;
             for (std::size_t mu = 0; mu < d; ++mu) {
                 for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                    accum_re_tr += reticolo::detail::field_reduce(
+                    accum_re_tr += reticolo::exec::field_reduce(
                         U, gran, [&](std::size_t base, std::size_t cnt) {
                             return kernels::template s_full_plane_range<T>(U, mu, nu, base, cnt);
                         });
@@ -94,7 +94,7 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
                 T const* mb = U.mu_block_data(mu);
                 for (std::size_t nu = mu + 1; nu < d; ++nu) {
                     T const* nb = U.mu_block_data(nu);
-                    detail::visit_plane(
+                    sweep::visit_plane(
                         U, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
                             accum_re_tr += kernels::plaq_re_tr(mb, nb, s, s_pmu, s_pnu, ns);
                         });

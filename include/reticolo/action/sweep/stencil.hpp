@@ -61,7 +61,7 @@
 // Compile with -DRETICOLO_HOT_LOOP_FORCE_FALLBACK=1 to force every call onto the
 // gather fallback regardless of ndims (the "old hot loop" bench path).
 
-namespace reticolo::action::detail {
+namespace reticolo::action::sweep {
 
 // ---------- neighbour policy + combine ---------------------------------------
 
@@ -436,7 +436,7 @@ plan_block_4d_(std::size_t L0, std::size_t L1, std::size_t L2, std::size_t L3) n
     // hardware prefetcher relies on, so tiling it breaks those streams and costs
     // far more than the halo it saves. Block y,z,w so the halo working set
     // L0·(b+2)³·sizeof(T) fits the fixed per-core target (see k_traverse_l2_bytes).
-    double const cap = static_cast<double>(reticolo::detail::k_traverse_l2_bytes) /
+    double const cap = static_cast<double>(reticolo::exec::k_traverse_l2_bytes) /
                        (static_cast<double>(L0) * static_cast<double>(sizeof(T)));
     long b = static_cast<long>(std::cbrt(cap)) - 2;  // L0·(b+2)³ fits the budget
     if (b < 4) {
@@ -454,18 +454,18 @@ plan_block_4d_(std::size_t L0, std::size_t L1, std::size_t L2, std::size_t L3) n
 template <class Acc, class Work>
 inline Acc run_items_(bool want, std::size_t n_items, Work const& work) {
     if constexpr (std::is_void_v<Acc>) {
-        reticolo::detail::parallel_map(want, n_items, work);
+        reticolo::exec::parallel_map(want, n_items, work);
     } else {
-        return reticolo::detail::parallel_reduce<Acc>(want, n_items, work);
+        return reticolo::exec::parallel_reduce<Acc>(want, n_items, work);
     }
 }
 
 template <class Acc, class Range>
 inline Acc run_ranges_(std::size_t n, std::size_t bps, std::size_t gran, Range const& r) {
     if constexpr (std::is_void_v<Acc>) {
-        reticolo::detail::parallel_map_ranges(n, bps, gran, r);
+        reticolo::exec::parallel_map_ranges(n, bps, gran, r);
     } else {
-        return reticolo::detail::parallel_reduce_ranges<Acc>(n, bps, gran, r);
+        return reticolo::exec::parallel_reduce_ranges<Acc>(n, bps, gran, r);
     }
 }
 
@@ -483,7 +483,7 @@ inline Acc
 traverse_dispatch_(Lattice<T> const& l, Item const& item, OneD const& one_d, Flat const& flat) {
     std::size_t const n   = l.nsites();
     std::size_t const bps = l.bytes_per_site();
-    bool const want       = reticolo::detail::want_threads(n, bps);
+    bool const want       = reticolo::exec::want_threads(n, bps);
 #if RETICOLO_HOT_LOOP_FORCE_FALLBACK
     return run_ranges_<Acc>(n, bps, 1, flat);
 #else
@@ -572,4 +572,4 @@ reduce_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
         });
 }
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::sweep

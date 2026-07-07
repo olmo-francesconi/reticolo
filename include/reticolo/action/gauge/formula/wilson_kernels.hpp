@@ -8,9 +8,9 @@
 // with the plaquette Re Tr, the Σ Re Tr plane fast-path, and the staple force /
 // fused-kick scatter. `Wilson<G>` (action/gauge/wilson.hpp) dispatches to it.
 
-namespace reticolo::action::detail {
+namespace reticolo::action::formula {
 
 template <class G>
 struct wilson_kernels;  // primary left undefined; each group provides a specialization
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::formula

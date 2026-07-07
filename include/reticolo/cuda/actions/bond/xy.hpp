@@ -27,7 +27,7 @@ public:
         sum_   = T{0};
     }
     RETICOLO_HD void accumulate(int /*mu*/, T nbr) {
-        sum_ += action::detail::xy_force_bond<T>(theta_, nbr);
+        sum_ += action::formula::xy_force_bond<T>(theta_, nbr);
     }
     [[nodiscard]] RETICOLO_HD T finalize() const { return -beta_ * sum_; }
 
@@ -48,7 +48,7 @@ public:
         sum_   = T{0};
     }
     RETICOLO_HD void accumulate(int /*mu*/, T nbr) {
-        sum_ += action::detail::xy_action_bond<T>(theta_, nbr);
+        sum_ += action::formula::xy_action_bond<T>(theta_, nbr);
     }
     [[nodiscard]] RETICOLO_HD double finalize() const { return static_cast<double>(-beta_ * sum_); }
 
@@ -74,10 +74,10 @@ public:
         esum_  = T{0};
     }
     RETICOLO_HD void fwd(T nbr) {
-        fsum_ += action::detail::xy_force_bond<T>(theta_, nbr);
-        esum_ += action::detail::xy_action_bond<T>(theta_, nbr);
+        fsum_ += action::formula::xy_force_bond<T>(theta_, nbr);
+        esum_ += action::formula::xy_action_bond<T>(theta_, nbr);
     }
-    RETICOLO_HD void bwd(T nbr) { fsum_ += action::detail::xy_force_bond<T>(theta_, nbr); }
+    RETICOLO_HD void bwd(T nbr) { fsum_ += action::formula::xy_force_bond<T>(theta_, nbr); }
     [[nodiscard]] RETICOLO_HD T force() const { return -beta_ * fsum_; }
     [[nodiscard]] RETICOLO_HD double energy() const { return static_cast<double>(-beta_ * esum_); }
 
@@ -95,14 +95,14 @@ struct device_functors<action::Xy<T>> {
                               T* force,
                               DeviceTopology const& topo,
                               cudaStream_t s) {
-        detail::site_force(XyForceFunctor<T>{a.beta}, field, force, topo, s);
+        impl::site_force(XyForceFunctor<T>{a.beta}, field, force, topo, s);
     }
     [[nodiscard]] static double s_full(action::Xy<T> const& a,
                                        T const* field,
                                        double* scratch,
                                        DeviceTopology const& topo,
                                        cudaStream_t s) {
-        return detail::site_s_full(XyEnergyFunctor<T>{a.beta}, field, scratch, topo, s);
+        return impl::site_s_full(XyEnergyFunctor<T>{a.beta}, field, scratch, topo, s);
     }
     static void s_full_into(double* out,
                             action::Xy<T> const& a,
@@ -111,8 +111,7 @@ struct device_functors<action::Xy<T>> {
                             double* partials,
                             DeviceTopology const& topo,
                             cudaStream_t s) {
-        detail::site_s_full_into(
-            out, XyEnergyFunctor<T>{a.beta}, field, scratch, partials, topo, s);
+        impl::site_s_full_into(out, XyEnergyFunctor<T>{a.beta}, field, scratch, partials, topo, s);
     }
     static void sample_momenta(T* mom,
                                long n,
@@ -120,7 +119,7 @@ struct device_functors<action::Xy<T>> {
                                std::uint64_t seed,
                                std::uint64_t const* traj,
                                cudaStream_t s) {
-        detail::site_sample_momenta(mom, n, topo, seed, traj, s);
+        impl::site_sample_momenta(mom, n, topo, seed, traj, s);
     }
     static void s_full_and_force(double* out,
                                  action::Xy<T> const& a,
@@ -130,7 +129,7 @@ struct device_functors<action::Xy<T>> {
                                  double* partials,
                                  DeviceTopology const& topo,
                                  cudaStream_t s) {
-        detail::site_s_full_and_force(
+        impl::site_s_full_and_force(
             out, XyForceEnergyFunctor<T>{a.beta}, field, force, scratch, partials, topo, s);
     }
 };

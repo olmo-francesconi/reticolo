@@ -11,7 +11,7 @@
 // match to ~1 ULP — the same cross-evaluator transcendental caveat the Philox
 // normals already carry.
 
-namespace reticolo::action::detail {
+namespace reticolo::action::formula {
 
 // F(x) = 2k·nbrs - 2phi - alpha·sin(phi), given the sum over ALL 2*ndims
 // neighbours and the precomputed sin(phi).
@@ -29,4 +29,4 @@ sine_gordon_action_site(T phi, T fwd, T cos_phi, T kappa, T alpha) {
     return (T{-2} * kappa * phi * fwd) + (phi * phi) - (alpha * cos_phi);
 }
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::formula

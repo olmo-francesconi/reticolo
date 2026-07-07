@@ -212,7 +212,7 @@ private:
 
     // Flat elementwise copy (rollback snapshot / restore) — a write-disjoint map.
     static void copy_flat_(Scalar* dst, Scalar const* src, std::size_t n) noexcept {
-        reticolo::detail::parallel_map_ranges(
+        reticolo::exec::parallel_map_ranges(
             n, sizeof(Scalar), 1, [dst, src](std::size_t base, std::size_t cnt) {
                 std::size_t const end = base + cnt;
                 for (std::size_t i = base; i < end; ++i) {
@@ -229,19 +229,19 @@ private:
     // resumed run, so checkpoint/resume stays bit-exact.
     static void philox_normal_fill_(double* out, std::size_t n, std::uint64_t key) noexcept {
         std::size_t const npair = n / 2;
-        reticolo::detail::parallel_map_ranges(npair,
-                                              2 * sizeof(double),  // one pair = 16 bytes
-                                              1,
-                                              [out, key](std::size_t base, std::size_t cnt) {
-                                                  std::size_t const end = base + cnt;
-                                                  for (std::size_t p = base; p < end; ++p) {
-                                                      double n0 = 0.0;
-                                                      double n1 = 0.0;
-                                                      philox_normal2(key, 0, p, n0, n1);
-                                                      out[2 * p]       = n0;
-                                                      out[(2 * p) + 1] = n1;
-                                                  }
-                                              });
+        reticolo::exec::parallel_map_ranges(npair,
+                                            2 * sizeof(double),  // one pair = 16 bytes
+                                            1,
+                                            [out, key](std::size_t base, std::size_t cnt) {
+                                                std::size_t const end = base + cnt;
+                                                for (std::size_t p = base; p < end; ++p) {
+                                                    double n0 = 0.0;
+                                                    double n1 = 0.0;
+                                                    philox_normal2(key, 0, p, n0, n1);
+                                                    out[2 * p]       = n0;
+                                                    out[(2 * p) + 1] = n1;
+                                                }
+                                            });
         if ((n & 1U) != 0U) {  // odd tail
             double a = 0.0;
             double b = 0.0;
@@ -271,7 +271,7 @@ private:
                 std::uint64_t const key = rng_.uniform_u64();
                 for (std::size_t mu = 0; mu < d; ++mu) {
                     Scalar* const pblk = mom_.mu_block_data(mu);
-                    reticolo::detail::field_visit(
+                    reticolo::exec::field_visit(
                         mom_, 1, [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
                             Group::sample_algebra_philox_range(pblk, key, mu, ns, base, cnt);
                         });
@@ -333,7 +333,7 @@ private:
                 double raw = 0.0;
                 for (std::size_t mu = 0; mu < d; ++mu) {
                     Scalar const* const pblk = mom_.mu_block_data(mu);
-                    raw += reticolo::detail::field_reduce(
+                    raw += reticolo::exec::field_reduce(
                         mom_, 8, [pblk, ns](std::size_t base, std::size_t cnt) {
                             return Group::kinetic_range(pblk, ns, base, cnt);
                         });
@@ -347,7 +347,7 @@ private:
         } else {
             Scalar const* const p = mom_.data();
             std::size_t const n   = flat_size(mom_);
-            double const sum      = reticolo::detail::parallel_reduce_ranges(
+            double const sum      = reticolo::exec::parallel_reduce_ranges(
                 n, sizeof(Scalar), 1, [p](std::size_t base, std::size_t cnt) {
                     double s              = 0.0;
                     std::size_t const end = base + cnt;

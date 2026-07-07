@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/action/gauge/detail/wilson_kernels.hpp>
+#include <reticolo/action/gauge/formula/wilson_kernels.hpp>
 #include <reticolo/action/gauge/formula/wilson_u1_formula.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
@@ -37,9 +37,9 @@
 // regardless of the field's T (cast in on read, cast out on write) — one
 // path for every T, no separate scalar fallback.
 
-namespace reticolo::action::detail {
+namespace reticolo::action::formula {
 
-namespace detail {
+namespace impl {
 
 // Thread-local scratch shared by every U(1) Wilson kernel entry point below.
 // Each entry point calls this exactly once per invocation, with the total
@@ -66,7 +66,7 @@ plane_idx(std::size_t d, std::size_t a, std::size_t b) noexcept {
     return idx + (b - a - 1);
 }
 
-}  // namespace detail
+}  // namespace impl
 
 template <>
 struct wilson_kernels<math::group::U1> {
@@ -95,7 +95,7 @@ struct wilson_kernels<math::group::U1> {
             for (std::size_t b = a + 1; b < d; ++b) {
                 T const* const u_b = u.mu_block_data(b);
                 double* const sp   = sinP + (pidx * ns);
-                reticolo::detail::parallel_map_ranges(
+                reticolo::exec::parallel_map_ranges(
                     ns, bps, k_simd_gran, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
                         std::size_t const end = base + cnt;
                         for (std::size_t s = base; s < end; ++s) {
@@ -143,7 +143,7 @@ struct wilson_kernels<math::group::U1> {
                 }
                 std::size_t const a = mu < nu ? mu : nu;
                 std::size_t const b = mu < nu ? nu : mu;
-                sp_nu[n_nu]         = sinP + (detail::plane_idx(d, a, b) * ns);
+                sp_nu[n_nu]         = sinP + (impl::plane_idx(d, a, b) * ns);
                 sgn_nu[n_nu]        = (mu < nu) ? 1.0 : -1.0;
                 dir_nu[n_nu]        = nu;
                 ++n_nu;
@@ -173,9 +173,9 @@ struct wilson_kernels<math::group::U1> {
         std::size_t const d       = u.ndims();
         std::size_t const ns      = u.nsites();
         std::size_t const nplanes = (d * (d - 1)) / 2;
-        double* const sinP        = detail::plane_scratch(nplanes * ns);
+        double* const sinP        = impl::plane_scratch(nplanes * ns);
         fill_sin_planes_(u, sinP, d, ns);
-        reticolo::detail::parallel_map_ranges(
+        reticolo::exec::parallel_map_ranges(
             ns, u.bytes_per_site(), 1, [&](std::size_t base, std::size_t cnt) {
                 force_from_sinp_range_<false>(sinP, u, force, -beta_over_n, base, cnt);
             });
@@ -191,10 +191,10 @@ struct wilson_kernels<math::group::U1> {
         std::size_t const d       = u.ndims();
         std::size_t const ns      = u.nsites();
         std::size_t const nplanes = (d * (d - 1)) / 2;
-        double* const sinP        = detail::plane_scratch(nplanes * ns);
+        double* const sinP        = impl::plane_scratch(nplanes * ns);
         fill_sin_planes_(u, sinP, d, ns);
         double const scale = -k_dt * beta_over_n;
-        reticolo::detail::parallel_map_ranges(
+        reticolo::exec::parallel_map_ranges(
             ns, u.bytes_per_site(), 1, [&](std::size_t base, std::size_t cnt) {
                 force_from_sinp_range_<true>(sinP, u, mom, scale, base, cnt);
             });
@@ -213,7 +213,7 @@ struct wilson_kernels<math::group::U1> {
         Indexing const& idx     = u.indexing_ref();
         T const* const u_mu_blk = u.mu_block_data(mu);
         T const* const u_nu_blk = u.mu_block_data(nu);
-        double* const buf       = detail::plane_scratch(cnt);
+        double* const buf       = impl::plane_scratch(cnt);
         std::size_t const end   = base + cnt;
         for (std::size_t s = base; s < end; ++s) {
             std::size_t const s_pmu = idx.next(Site{s}, mu).value();
@@ -256,7 +256,7 @@ struct wilson_kernels<math::group::U1> {
         std::size_t const d       = u.ndims();
         std::size_t const ns      = u.nsites();
         std::size_t const nplanes = (d * (d - 1)) / 2;
-        double* const scratch     = detail::plane_scratch((nplanes + 1) * ns);
+        double* const scratch     = impl::plane_scratch((nplanes + 1) * ns);
         double* const sinP        = scratch;
         double* const cbuf        = scratch + (nplanes * ns);
         Indexing const& idx       = u.indexing_ref();
@@ -268,7 +268,7 @@ struct wilson_kernels<math::group::U1> {
             for (std::size_t b = a + 1; b < d; ++b) {
                 T const* const u_b = u.mu_block_data(b);
                 double* const sp   = sinP + (pidx * ns);
-                accum += reticolo::detail::parallel_reduce_ranges(
+                accum += reticolo::exec::parallel_reduce_ranges(
                     ns, bps, k_simd_gran, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
                         std::size_t const end = base + cnt;
                         for (std::size_t s = base; s < end; ++s) {
@@ -292,11 +292,11 @@ struct wilson_kernels<math::group::U1> {
                 ++pidx;
             }
         }
-        reticolo::detail::parallel_map_ranges(ns, bps, 1, [&](std::size_t base, std::size_t cnt) {
+        reticolo::exec::parallel_map_ranges(ns, bps, 1, [&](std::size_t base, std::size_t cnt) {
             force_from_sinp_range_<false>(sinP, u, force_of, -beta_over_n, base, cnt);
         });
         return accum;
     }
 };
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::formula

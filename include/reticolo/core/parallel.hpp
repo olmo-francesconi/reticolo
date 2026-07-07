@@ -25,7 +25,7 @@
 //
 // Without `-fopenmp` every pragma vanishes and this all degrades to serial.
 
-namespace reticolo::detail {
+namespace reticolo::exec {
 
 // Per-core working-set target for cache tiling. Fixed on purpose: for the
 // bandwidth-bound stencil the block sweet spot is ~L2-size-independent (filling a
@@ -199,4 +199,4 @@ template <class Acc = double, class Field, class Worker>
     return parallel_reduce_ranges<Acc>(field.nsites(), field.bytes_per_site(), gran, worker);
 }
 
-}  // namespace reticolo::detail
+}  // namespace reticolo::exec

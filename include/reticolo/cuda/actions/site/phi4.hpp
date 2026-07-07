@@ -12,7 +12,7 @@
 //
 // The functors follow the scalar device protocol: init(self) /
 // accumulate(int mu, T nbr) / finalize(). Their per-site math is the SHARED HD
-// formula in action::detail (phi4_formula.hpp) — one source of truth with the
+// formula in action::formula (phi4_formula.hpp) — one source of truth with the
 // CPU action::Phi4. They are trivially copyable PODs passed by value into the
 // kernels (each thread gets its own accumulator in registers).
 
@@ -30,7 +30,7 @@ public:
     }
     RETICOLO_HD void accumulate(int /*mu*/, T nbr) { nbrs_ += nbr; }
     [[nodiscard]] RETICOLO_HD T finalize() const {
-        return action::detail::phi4_force_site<T>(phi_, nbrs_, kappa_, lambda_);
+        return action::formula::phi4_force_site<T>(phi_, nbrs_, kappa_, lambda_);
     }
 
 private:
@@ -53,7 +53,7 @@ public:
     RETICOLO_HD void accumulate(int /*mu*/, T nbr) { fwd_ += nbr; }
     [[nodiscard]] RETICOLO_HD double finalize() const {
         return static_cast<double>(
-            action::detail::phi4_action_site<T>(phi_, fwd_, kappa_, lambda_));
+            action::formula::phi4_action_site<T>(phi_, fwd_, kappa_, lambda_));
     }
 
 private:
@@ -84,11 +84,11 @@ public:
     }
     RETICOLO_HD void bwd(T nbr) { full_ += nbr; }
     [[nodiscard]] RETICOLO_HD T force() const {
-        return action::detail::phi4_force_site<T>(phi_, full_, kappa_, lambda_);
+        return action::formula::phi4_force_site<T>(phi_, full_, kappa_, lambda_);
     }
     [[nodiscard]] RETICOLO_HD double energy() const {
         return static_cast<double>(
-            action::detail::phi4_action_site<T>(phi_, fwd_, kappa_, lambda_));
+            action::formula::phi4_action_site<T>(phi_, fwd_, kappa_, lambda_));
     }
 
 private:
@@ -111,15 +111,14 @@ struct device_functors<action::Phi4<T>> {
                               T* force,
                               DeviceTopology const& topo,
                               cudaStream_t s) {
-        detail::site_force(Phi4ForceFunctor<T>{a.kappa, a.lambda}, field, force, topo, s);
+        impl::site_force(Phi4ForceFunctor<T>{a.kappa, a.lambda}, field, force, topo, s);
     }
     [[nodiscard]] static double s_full(action::Phi4<T> const& a,
                                        T const* field,
                                        double* scratch,
                                        DeviceTopology const& topo,
                                        cudaStream_t s) {
-        return detail::site_s_full(
-            Phi4EnergyFunctor<T>{a.kappa, a.lambda}, field, scratch, topo, s);
+        return impl::site_s_full(Phi4EnergyFunctor<T>{a.kappa, a.lambda}, field, scratch, topo, s);
     }
     static void s_full_into(double* out,
                             action::Phi4<T> const& a,
@@ -128,7 +127,7 @@ struct device_functors<action::Phi4<T>> {
                             double* partials,
                             DeviceTopology const& topo,
                             cudaStream_t s) {
-        detail::site_s_full_into(
+        impl::site_s_full_into(
             out, Phi4EnergyFunctor<T>{a.kappa, a.lambda}, field, scratch, partials, topo, s);
     }
     static void sample_momenta(T* mom,
@@ -137,7 +136,7 @@ struct device_functors<action::Phi4<T>> {
                                std::uint64_t seed,
                                std::uint64_t const* traj,
                                cudaStream_t s) {
-        detail::site_sample_momenta(mom, n, topo, seed, traj, s);
+        impl::site_sample_momenta(mom, n, topo, seed, traj, s);
     }
     // Opt-in fused path (dual-output stencil) — detected by cuda::DeviceAction and
     // used by the LLR WindowedAction to skip the redundant base-S reduction.
@@ -149,14 +148,14 @@ struct device_functors<action::Phi4<T>> {
                                  double* partials,
                                  DeviceTopology const& topo,
                                  cudaStream_t s) {
-        detail::site_s_full_and_force(out,
-                                      Phi4ForceEnergyFunctor<T>{a.kappa, a.lambda},
-                                      field,
-                                      force,
-                                      scratch,
-                                      partials,
-                                      topo,
-                                      s);
+        impl::site_s_full_and_force(out,
+                                    Phi4ForceEnergyFunctor<T>{a.kappa, a.lambda},
+                                    field,
+                                    force,
+                                    scratch,
+                                    partials,
+                                    topo,
+                                    s);
     }
 };
 

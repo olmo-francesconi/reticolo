@@ -201,10 +201,10 @@ Pick the family base by the shape of the interaction:
 
 | family | base / handle | field | when |
 | ------ | ------------- | ----- | ---- |
-| site   | `detail::SiteAction<D,T>`    | `Lattice<T>`          | self + nearest-neighbour sum (Phi4/Phi6/SineGordon) |
-| bond   | `detail::BondAction<D,T>`    | `Lattice<T>`          | transcendental of the endpoint *difference* (XY) |
-| complex| `detail::ComplexAction<D,T>` | `Lattice<complex<T>>` | S = S_R + i·S_I sign problem (BoseGas) |
-| gauge  | `detail::GaugeAction<D>`     | link field            | plaquette gauge theory — usually just write a group model (see below) |
+| site   | `SiteAction<D,T>`    | `Lattice<T>`          | self + nearest-neighbour sum (Phi4/Phi6/SineGordon) |
+| bond   | `BondAction<D,T>`    | `Lattice<T>`          | transcendental of the endpoint *difference* (XY) |
+| complex| `ComplexAction<D,T>` | `Lattice<complex<T>>` | S = S_R + i·S_I sign problem (BoseGas) |
+| gauge  | `GaugeAction<D>`     | link field            | plaquette gauge theory — usually just write a group model (see below) |
 
 ## A new site action
 
@@ -212,7 +212,7 @@ Copy `site/phi4.hpp` + `site/formula/phi4_formula.hpp` and swap the formula body
 the couplings, and `describe`.
 
 1. **Formula** — `include/reticolo/action/<family>/formula/<name>_formula.hpp`. Two
-   `RETICOLO_HD inline` free templates in `namespace reticolo::action::detail`,
+   `RETICOLO_HD inline` free templates in `namespace reticolo::action::formula`,
    taking pre-gathered neighbour sums. **This is all the physics**, and the
    single source of truth — the CUDA functors call the *same* functions:
 
@@ -231,15 +231,15 @@ the couplings, and `describe`.
 
    ```cpp
    template <class T = double>
-   struct MyAction : detail::SiteAction<MyAction<T>, T> {
+   struct MyAction : SiteAction<MyAction<T>, T> {
        using value_type = T;
        T c1 = T{0};                       // couplings
        void describe(log::Entry& e) const { e.line("MyAction<{}>", scalar_name<T>()); e.param("c1={:.3f}", c1); }
 
        auto force_kernel()  const { return [c = c1](std::size_t /*i*/, T phi, T nbrs)
-                                           { return detail::myaction_force_site<T>(phi, nbrs, c); }; }
+                                           { return formula::myaction_force_site<T>(phi, nbrs, c); }; }
        auto action_kernel() const { return [c = c1](T phi, T fwd)
-                                           { return detail::myaction_action_site<T>(phi, fwd, c); }; }
+                                           { return formula::myaction_action_site<T>(phi, fwd, c); }; }
    };
    ```
 
@@ -251,9 +251,9 @@ the couplings, and `describe`.
    and an LLR fast-path `s_full_and_force` built from `this->staged_force_energy`
    (see `phi4.hpp`).
 
-   Other shapes: for a bond action derive `detail::BondAction` and provide
+   Other shapes: for a bond action derive `BondAction` and provide
    `action_bond_kernel` / `force_bond_kernel` / `bond_scale` (copy `site/xy.hpp`);
-   for a complex sign-problem action derive `detail::ComplexAction` and add the
+   for a complex sign-problem action derive `ComplexAction` and add the
    `imag_*` kernels (copy `site/bose_gas.hpp`).
 
 3. **Register** — add `#include <reticolo/action/site/<name>.hpp>` to
@@ -269,26 +269,26 @@ A gauge group `G` is the template parameter to the generic `Wilson<G>` plaquette
 action over `MatrixLinkLattice<G, T>`. The work splits in two, along the
 core-math / action-physics line:
 
-- **the group model** — `include/reticolo/math/gauge_group/<g>.hpp`: the *core
+- **the group model** — `include/reticolo/math/group/<g>.hpp`: the *core
   group operations only* — the constants (`n_color`, `n_real_components`, `name`)
   and the HMC algebra hooks (`sample_algebra_slab` / `kinetic_slab` /
   `expi_lmul_slab`) the integrator calls. This is pure group math; it lives under
   `math/` and knows nothing about the Wilson action.
 - **the Wilson kernels** — `include/reticolo/action/gauge/formula/wilson_<g>.hpp`:
-  a `detail::wilson_kernels<G>` specialization holding the plaquette *physics*
+  a `formula::wilson_kernels<G>` specialization holding the plaquette *physics*
   (`plaq_re_tr`, the `s_full_plane_re_tr_sum` fast-path, `compute_force`,
   `compute_force_and_kick`). This is action-specific and lives in the action layer.
 
 `Wilson<G>` derives from the
-`detail::GaugeAction<D>` base, which owns the `last_s_full` cache and the concept
+`GaugeAction<D>` base, which owns the `last_s_full` cache and the concept
 surface; `Wilson<G>` dispatches its plaquette work to `wilson_kernels<G>`. (A
 genuinely new gauge *action* — improved, rectangle — derives from
-`detail::GaugeAction` and writes its own `s_full_uncached` / `force_into`.)
-**Copy `SU2`** (`math/gauge_group/su2.hpp` + `action/gauge/formula/wilson_su2.hpp`
+`GaugeAction` and writes its own `s_full_uncached` / `force_into`.)
+**Copy `SU2`** (`math/group/su2.hpp` + `action/gauge/formula/wilson_su2.hpp`
 + `math/su2_ops.hpp`) — the simplest matrix group.
 
 1. **Group model: concept members** (the `GaugeGroup` concept lives in
-   `math/gauge_group/base.hpp`):
+   `math/group/base.hpp`):
 
    ```cpp
    struct MyGroup {
@@ -314,7 +314,7 @@ genuinely new gauge *action* — improved, rectangle — derives from
    piece — the SU(N) analogue of the scalar `phi += dt·mom`, and the one device
    exception to the shared-formula rule.
 
-3. **Wilson kernels** — a `template <> struct detail::wilson_kernels<MyGroup>`
+3. **Wilson kernels** — a `template <> struct formula::wilson_kernels<MyGroup>`
    in `action/gauge/formula/wilson_<g>.hpp` with the statics `Wilson<G>`
    dispatches to:
 

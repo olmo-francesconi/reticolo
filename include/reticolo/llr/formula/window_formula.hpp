@@ -10,7 +10,7 @@
 // (complex actions, e.g. BoseGas) samples the real part S_R and constrains the
 // imaginary observable q = S_I.
 
-namespace reticolo::llr::detail {
+namespace reticolo::llr::formula {
 
 // --- mode A (real LLR): the window constrains the base action S ---------------
 
@@ -42,4 +42,4 @@ template <class R>
     return a + ((q - e_n) / (delta * delta));
 }
 
-}  // namespace reticolo::llr::detail
+}  // namespace reticolo::llr::formula

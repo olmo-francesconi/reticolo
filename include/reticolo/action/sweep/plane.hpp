@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <utility>
 
-namespace reticolo::action::detail {
+namespace reticolo::action::sweep {
 
 // Plaquette-plane bulk-vs-slab hot-loop helper for direction-major
 // link-style fields (LinkLattice<T>, MatrixLinkLattice<G,T> — anything
@@ -239,4 +239,4 @@ inline void visit_plane(Field const& l, std::size_t mu, std::size_t nu, Body con
     }
 }
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::sweep

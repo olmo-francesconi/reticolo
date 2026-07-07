@@ -23,11 +23,10 @@ namespace reticolo::cuda {
 // Σ_x site_out[x] is the full action S_W (so the volume sum needs no constant).
 // Angles accumulate in double — the float-sum-corrupts-ΔH rule.
 template <class T>
-__global__ void
-plaq_energy_site_kernel(T const* __restrict__ field,
-                        double* __restrict__ site_out,
-                        DeviceTopology topo,
-                        double beta) {
+__global__ void plaq_energy_site_kernel(T const* __restrict__ field,
+                                        double* __restrict__ site_out,
+                                        DeviceTopology topo,
+                                        double beta) {
     long const x = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     if (x >= topo.nsites) {
         return;
@@ -39,7 +38,7 @@ plaq_energy_site_kernel(T const* __restrict__ field,
         long const x_pmu = topo.next(x, mu);
         for (int nu = mu + 1; nu < d; ++nu) {
             long const x_pnu  = topo.next(x, nu);
-            double const plaq = action::detail::u1_plaq<double>(
+            double const plaq = action::formula::u1_plaq<double>(
                 static_cast<double>(field[(static_cast<long>(mu) * ns) + x]),
                 static_cast<double>(field[(static_cast<long>(nu) * ns) + x_pmu]),
                 static_cast<double>(field[(static_cast<long>(mu) * ns) + x_pnu]),
@@ -57,11 +56,10 @@ plaq_energy_site_kernel(T const* __restrict__ field,
 // One thread per link (ndim·nsites threads). Reads neighbours, writes only its
 // own link — race-free, unlike the CPU scatter.
 template <class T>
-__global__ void
-plaq_force_gather_kernel(T const* __restrict__ field,
-                         T* __restrict__ force,
-                         DeviceTopology topo,
-                         double beta) {
+__global__ void plaq_force_gather_kernel(T const* __restrict__ field,
+                                         T* __restrict__ force,
+                                         DeviceTopology topo,
+                                         double beta) {
     long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const ns    = topo.nsites;
     int const d      = topo.ndim;
@@ -80,12 +78,12 @@ plaq_force_gather_kernel(T const* __restrict__ field,
         long const x_pnu     = topo.next(x, nu);
         long const x_mnu     = topo.prev(x, nu);
         long const x_mnu_pmu = topo.next(x_mnu, mu);
-        double const fwd     = action::detail::u1_plaq<double>(
+        double const fwd     = action::formula::u1_plaq<double>(
             static_cast<double>(field[(static_cast<long>(mu) * ns) + x]),
             static_cast<double>(field[(static_cast<long>(nu) * ns) + x_pmu]),
             static_cast<double>(field[(static_cast<long>(mu) * ns) + x_pnu]),
             static_cast<double>(field[(static_cast<long>(nu) * ns) + x]));
-        double const bwd = action::detail::u1_plaq<double>(
+        double const bwd = action::formula::u1_plaq<double>(
             static_cast<double>(field[(static_cast<long>(mu) * ns) + x_mnu]),
             static_cast<double>(field[(static_cast<long>(nu) * ns) + x_mnu_pmu]),
             static_cast<double>(field[(static_cast<long>(mu) * ns) + x]),
@@ -125,12 +123,12 @@ __global__ void plaq_fused_force_energy_kernel(T const* __restrict__ field,
         long const x_pnu     = topo.next(x, nu);
         long const x_mnu     = topo.prev(x, nu);
         long const x_mnu_pmu = topo.next(x_mnu, mu);
-        double const fwd     = action::detail::u1_plaq<double>(
+        double const fwd     = action::formula::u1_plaq<double>(
             static_cast<double>(field[(static_cast<long>(mu) * ns) + x]),
             static_cast<double>(field[(static_cast<long>(nu) * ns) + x_pmu]),
             static_cast<double>(field[(static_cast<long>(mu) * ns) + x_pnu]),
             static_cast<double>(field[(static_cast<long>(nu) * ns) + x]));
-        double const bwd = action::detail::u1_plaq<double>(
+        double const bwd = action::formula::u1_plaq<double>(
             static_cast<double>(field[(static_cast<long>(mu) * ns) + x_mnu]),
             static_cast<double>(field[(static_cast<long>(nu) * ns) + x_mnu_pmu]),
             static_cast<double>(field[(static_cast<long>(mu) * ns) + x]),

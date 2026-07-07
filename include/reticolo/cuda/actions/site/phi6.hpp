@@ -10,7 +10,7 @@
 
 // Device per-site functors for Phi6 + the host-action → device-functor trait.
 // Same scalar device protocol as Phi4 (init / accumulate(mu, nbr) / finalize);
-// the per-site math is the shared HD formula in action::detail (phi6_formula.hpp),
+// the per-site math is the shared HD formula in action::formula (phi6_formula.hpp),
 // one source of truth with the CPU action::Phi6.
 
 namespace reticolo::cuda {
@@ -28,7 +28,7 @@ public:
     }
     RETICOLO_HD void accumulate(int /*mu*/, T nbr) { nbrs_ += nbr; }
     [[nodiscard]] RETICOLO_HD T finalize() const {
-        return action::detail::phi6_force_site<T>(phi_, nbrs_, kappa_, lambda_, g6_);
+        return action::formula::phi6_force_site<T>(phi_, nbrs_, kappa_, lambda_, g6_);
     }
 
 private:
@@ -53,7 +53,7 @@ public:
     RETICOLO_HD void accumulate(int /*mu*/, T nbr) { fwd_ += nbr; }
     [[nodiscard]] RETICOLO_HD double finalize() const {
         return static_cast<double>(
-            action::detail::phi6_action_site<T>(phi_, fwd_, kappa_, lambda_, g6_));
+            action::formula::phi6_action_site<T>(phi_, fwd_, kappa_, lambda_, g6_));
     }
 
 private:
@@ -85,11 +85,11 @@ public:
     }
     RETICOLO_HD void bwd(T nbr) { full_ += nbr; }
     [[nodiscard]] RETICOLO_HD T force() const {
-        return action::detail::phi6_force_site<T>(phi_, full_, kappa_, lambda_, g6_);
+        return action::formula::phi6_force_site<T>(phi_, full_, kappa_, lambda_, g6_);
     }
     [[nodiscard]] RETICOLO_HD double energy() const {
         return static_cast<double>(
-            action::detail::phi6_action_site<T>(phi_, fwd_, kappa_, lambda_, g6_));
+            action::formula::phi6_action_site<T>(phi_, fwd_, kappa_, lambda_, g6_));
     }
 
 private:
@@ -108,14 +108,14 @@ struct device_functors<action::Phi6<T>> {
                               T* force,
                               DeviceTopology const& topo,
                               cudaStream_t s) {
-        detail::site_force(Phi6ForceFunctor<T>{a.kappa, a.lambda, a.g6}, field, force, topo, s);
+        impl::site_force(Phi6ForceFunctor<T>{a.kappa, a.lambda, a.g6}, field, force, topo, s);
     }
     [[nodiscard]] static double s_full(action::Phi6<T> const& a,
                                        T const* field,
                                        double* scratch,
                                        DeviceTopology const& topo,
                                        cudaStream_t s) {
-        return detail::site_s_full(
+        return impl::site_s_full(
             Phi6EnergyFunctor<T>{a.kappa, a.lambda, a.g6}, field, scratch, topo, s);
     }
     static void s_full_into(double* out,
@@ -125,7 +125,7 @@ struct device_functors<action::Phi6<T>> {
                             double* partials,
                             DeviceTopology const& topo,
                             cudaStream_t s) {
-        detail::site_s_full_into(
+        impl::site_s_full_into(
             out, Phi6EnergyFunctor<T>{a.kappa, a.lambda, a.g6}, field, scratch, partials, topo, s);
     }
     static void sample_momenta(T* mom,
@@ -134,7 +134,7 @@ struct device_functors<action::Phi6<T>> {
                                std::uint64_t seed,
                                std::uint64_t const* traj,
                                cudaStream_t s) {
-        detail::site_sample_momenta(mom, n, topo, seed, traj, s);
+        impl::site_sample_momenta(mom, n, topo, seed, traj, s);
     }
     static void s_full_and_force(double* out,
                                  action::Phi6<T> const& a,
@@ -144,14 +144,14 @@ struct device_functors<action::Phi6<T>> {
                                  double* partials,
                                  DeviceTopology const& topo,
                                  cudaStream_t s) {
-        detail::site_s_full_and_force(out,
-                                      Phi6ForceEnergyFunctor<T>{a.kappa, a.lambda, a.g6},
-                                      field,
-                                      force,
-                                      scratch,
-                                      partials,
-                                      topo,
-                                      s);
+        impl::site_s_full_and_force(out,
+                                    Phi6ForceEnergyFunctor<T>{a.kappa, a.lambda, a.g6},
+                                    field,
+                                    force,
+                                    scratch,
+                                    partials,
+                                    topo,
+                                    s);
     }
 };
 

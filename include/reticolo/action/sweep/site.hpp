@@ -1,13 +1,13 @@
 #pragma once
 
-#include <reticolo/action/detail/stencil.hpp>
+#include <reticolo/action/sweep/stencil.hpp>
 #include <reticolo/core/lattice.hpp>
 
 #include <cstddef>
 #include <utility>
 
 // Site nearest-neighbour drivers — the identity-combine specialisation of the
-// shared dimension-generic engine in <reticolo/action/detail/stencil.hpp>. A
+// shared dimension-generic engine in <reticolo/action/sweep/stencil.hpp>. A
 // site action consumes the raw neighbour sum (self + Σ neighbours), so the
 // per-neighbour combine is the identity; the shared engine supplies the tiling,
 // the per-dim vectorised stencil, threading, and the D>4 gather fallback
@@ -16,7 +16,7 @@
 //  visit_nn(l, body):    body(i, phi, nbrs_sum) -> void   (Σ all 2·ndims nbrs)
 //  reduce_fwd(l, body):  body(phi, fwd_sum) -> T           (Σ ndims fwd nbrs)
 
-namespace reticolo::action::detail {
+namespace reticolo::action::sweep {
 
 template <class T, class Body>
 inline void visit_nn(Lattice<T> const& l, Body&& body) noexcept {
@@ -28,4 +28,4 @@ template <class T, class Acc = T, class Body>
     return reduce_stencil<T, Acc>(l, IdentityCombine{}, std::forward<Body>(body));
 }
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::sweep

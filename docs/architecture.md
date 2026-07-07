@@ -103,8 +103,9 @@ Actions split into four families by interaction shape, one folder each:
 (`Lattice<complex<T>>` sign problem: BoseGas), and `action/gauge/`
 (`MatrixLinkLattice<G,T>`: Wilson). All satisfy the
 **same** field-agnostic concepts; only the `Field` they name differs. Each family
-folder holds its leaf structs at the top, its per-action physics in `formula/`,
-and its shared machinery (the family base + traversal drivers) in `detail/`.
+folder holds its leaf structs and its family base (`<family>_action.hpp`) at the
+top and its per-action physics in `formula/`; the shared dimension-generic
+traversal engine lives once in `action/sweep/`.
 
 ### The concepts
 
@@ -133,40 +134,40 @@ covers site and gauge alike.
 
 The concepts say *what members* an action needs; the **family bases** supply
 them so a leaf action carries only physics. Each base is a stateless CRTP mixin
-in its family's `detail/` (`action/<family>/detail/<family>_action.hpp`) that
+at its family's top (`action/<family>/<family>_action.hpp`) that
 owns the loop shells, the fused kick, and the `last_s_full` cache, and calls back
 into the leaf's coupling-hoisting kernels:
 
 | base | field | leaf kernels (bind the shared `<family>/formula/*`) |
 | ---- | ----- | ---------------------------------------------------- |
-| `detail::SiteAction<D,T>`    | `Lattice<T>`              | `action_kernel()`, `force_kernel()` (NN-local: Phi4/Phi6/SineGordon) |
-| `detail::BondAction<D,T>`    | `Lattice<T>`              | `action_bond_kernel()`, `force_bond_kernel()`, `bond_scale()` (XY)   |
-| `detail::ComplexAction<D,T>` | `Lattice<complex<T>>`     | real + `imag_*` kernels (`HasImagPart`: BoseGas) |
-| `detail::GaugeAction<D>`     | link field               | `s_full_uncached()`, `force_into()` (Wilson`<G>`) |
+| `SiteAction<D,T>`    | `Lattice<T>`              | `action_kernel()`, `force_kernel()` (NN-local: Phi4/Phi6/SineGordon) |
+| `BondAction<D,T>`    | `Lattice<T>`              | `action_bond_kernel()`, `force_bond_kernel()`, `bond_scale()` (XY)   |
+| `ComplexAction<D,T>` | `Lattice<complex<T>>`     | real + `imag_*` kernels (`HasImagPart`: BoseGas) |
+| `GaugeAction<D>`     | link field               | `s_full_uncached()`, `force_into()` (Wilson`<G>`) |
 
 The scalar kernels return a lambda that captures the couplings by value, so the
 base hoists them into the hot loop exactly as a hand-written action would — the
 vectorised inner loop is unchanged. The gauge family is the odd one out: the
 plaquette *traversal* can't be shared (U(1) batches four signed angles through a
 Sleef cos/sin scratch on a `MatrixLinkLattice<U1,T>`; SU(N) batches complex matrix
-products on a `MatrixLinkLattice<G,T>`), so `detail::GaugeAction` only owns the
+products on a `MatrixLinkLattice<G,T>`), so `GaugeAction` only owns the
 cache + the concept surface and the leaf provides `s_full_uncached`/`force_into`
-(delegating the per-plaquette physics to `detail::wilson_kernels<G>` in the action layer; the group model `G` under `math/gauge_group/` holds only the core group ops).
+(delegating the per-plaquette physics to `formula::wilson_kernels<G>` in the action layer; the group model `G` under `math/group/` holds only the core group ops).
 
 ### Example: `act::Phi4`
 
 ```cpp
 template <class T = double>
-struct Phi4 : detail::SiteAction<Phi4<T>, T> {   // base supplies s_full / compute_force /
+struct Phi4 : SiteAction<Phi4<T>, T> {   // base supplies s_full / compute_force /
     using value_type = T;                        //   compute_force_and_kick / caches
     T kappa  = 0;
     T lambda = 0;
     void describe(log::Entry&) const;
 
     auto force_kernel()  const { return [k=kappa,lam=lambda](std::size_t, T phi, T nbrs)
-                                        { return detail::phi4_force_site<T>(phi,nbrs,k,lam); }; }
+                                        { return formula::phi4_force_site<T>(phi,nbrs,k,lam); }; }
     auto action_kernel() const { return [k=kappa,lam=lambda](T phi, T fwd)
-                                        { return detail::phi4_action_site<T>(phi,fwd,k,lam); }; }
+                                        { return formula::phi4_action_site<T>(phi,fwd,k,lam); }; }
     // optional LLR fast-path: double s_full_and_force(...) via this->staged_force_energy(...)
 };
 ```

@@ -26,7 +26,7 @@ namespace reticolo::alg::integ {
 // dt = tau / n_md. `force` is scratch storage owned by the HMC driver; the
 // integrator writes through it and leaves it in an unspecified state on exit.
 
-namespace detail {
+namespace impl {
 
 template <class A, class Field, class F = typename Field::value_type>
 inline void kick_(A const& action, Field& field, Field& mom, Field& force, double k_dt) noexcept {
@@ -52,7 +52,7 @@ inline void drift_(Field& field, Field const& mom, double c_dt) noexcept {
     drift_field(field, mom, c_dt);
 }
 
-}  // namespace detail
+}  // namespace impl
 
 // Position-Verlet leapfrog. 2nd-order, 1 force evaluation per MD step
 // (amortised: n_md + 1 force evals per trajectory once the half-kicks at the
@@ -72,10 +72,10 @@ struct Leapfrog {
         double const dt      = tau / static_cast<double>(n_md);
         double const half_dt = dt * 0.5;
 
-        detail::kick_(action, field, mom, force, half_dt);
+        impl::kick_(action, field, mom, force, half_dt);
         for (int step = 0; step < n_md; ++step) {
-            detail::drift_(field, mom, dt);
-            detail::kick_(action, field, mom, force, step + 1 < n_md ? dt : half_dt);
+            impl::drift_(field, mom, dt);
+            impl::kick_(action, field, mom, force, step + 1 < n_md ? dt : half_dt);
         }
     }
 };
@@ -111,12 +111,12 @@ struct Omelyan2 {
         double const dt_2lam = 2.0 * dt_lam;
         double const dt_mid  = (1.0 - 2.0 * k_lambda) * dt;
 
-        detail::kick_(action, field, mom, force, dt_lam);
+        impl::kick_(action, field, mom, force, dt_lam);
         for (int step = 0; step < n_md; ++step) {
-            detail::drift_(field, mom, dt_h);
-            detail::kick_(action, field, mom, force, dt_mid);
-            detail::drift_(field, mom, dt_h);
-            detail::kick_(action, field, mom, force, step + 1 < n_md ? dt_2lam : dt_lam);
+            impl::drift_(field, mom, dt_h);
+            impl::kick_(action, field, mom, force, dt_mid);
+            impl::drift_(field, mom, dt_h);
+            impl::kick_(action, field, mom, force, step + 1 < n_md ? dt_2lam : dt_lam);
         }
     }
 };
@@ -161,16 +161,16 @@ struct Omelyan4 {
         double const dt_mu    = k_mu * dt;
         double const dt_mid   = k_mid * dt;
 
-        detail::kick_(action, field, mom, force, dt_rho);
+        impl::kick_(action, field, mom, force, dt_rho);
         for (int step = 0; step < n_md; ++step) {
-            detail::drift_(field, mom, dt_theta);
-            detail::kick_(action, field, mom, force, dt_lam);
-            detail::drift_(field, mom, dt_mu);
-            detail::kick_(action, field, mom, force, dt_mid);
-            detail::drift_(field, mom, dt_mu);
-            detail::kick_(action, field, mom, force, dt_lam);
-            detail::drift_(field, mom, dt_theta);
-            detail::kick_(action, field, mom, force, step + 1 < n_md ? dt_2rho : dt_rho);
+            impl::drift_(field, mom, dt_theta);
+            impl::kick_(action, field, mom, force, dt_lam);
+            impl::drift_(field, mom, dt_mu);
+            impl::kick_(action, field, mom, force, dt_mid);
+            impl::drift_(field, mom, dt_mu);
+            impl::kick_(action, field, mom, force, dt_lam);
+            impl::drift_(field, mom, dt_theta);
+            impl::kick_(action, field, mom, force, step + 1 < n_md ? dt_2rho : dt_rho);
         }
     }
 };

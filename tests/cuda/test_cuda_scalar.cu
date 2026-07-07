@@ -1,12 +1,12 @@
+#include <reticolo/action/bond/xy.hpp>
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/action/site/phi6.hpp>
 #include <reticolo/action/site/sine_gordon.hpp>
-#include <reticolo/action/bond/xy.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/cuda/actions/bond/xy.hpp>
 #include <reticolo/cuda/actions/site/phi4.hpp>
 #include <reticolo/cuda/actions/site/phi6.hpp>
 #include <reticolo/cuda/actions/site/sine_gordon.hpp>
-#include <reticolo/cuda/actions/bond/xy.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_buffer.hpp>
@@ -21,7 +21,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Scalar-action coverage. Each action's CPU s_full + force and the generic device
-// path call the SAME shared HD formula (action::detail::*), so they must agree —
+// path call the SAME shared HD formula (action::formula::*), so they must agree —
 // to roundoff for the polynomial Phi6, to a bounded tolerance for the
 // transcendental SineGordon / XY (device sin/cos vs Sleef/libm). This TU runs
 // both sides and compares, mirroring phi4_probe.cu.

@@ -14,7 +14,7 @@ namespace reticolo::math::group {
 // field-agnostic: it loops directions and calls `G::sample_algebra_slab` /
 // `kinetic_slab` / `expi_lmul_slab` per direction. The Wilson plaquette physics
 // (Re Tr U_p, the staple force) is action-specific — see
-// action/gauge/detail/wilson_su2.hpp (`wilson_kernels<SU2>`).
+// action/gauge/formula/wilson_su2.hpp (`wilson_kernels<SU2>`).
 //
 // Storage: full 2×2 complex matrix, 8 reals per link (see math::su2 for the
 // component layout). N = 2. Matrix-link SU(2) is a `double`-only field type.

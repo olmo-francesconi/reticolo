@@ -18,7 +18,7 @@
 // use their own (gauge_u1.cuh) launchers instead — DeviceAction delegates to the
 // trait, so the two access patterns never meet.
 
-namespace reticolo::cuda::detail {
+namespace reticolo::cuda::impl {
 
 template <class ForceF, class T>
 inline void
@@ -72,4 +72,4 @@ inline void site_sample_momenta(T* mom,
     fill_normals(mom, n, seed, traj, s);
 }
 
-}  // namespace reticolo::cuda::detail
+}  // namespace reticolo::cuda::impl

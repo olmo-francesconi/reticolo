@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/gauge/detail/plane.hpp>
-#include <reticolo/action/gauge/detail/wilson_kernels.hpp>
+#include <reticolo/action/gauge/formula/wilson_kernels.hpp>
+#include <reticolo/action/sweep/plane.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/parallel.hpp>
@@ -16,7 +16,7 @@
 // the Wilson action on a MatrixLinkLattice<math::group::SU2, T>. Kept out of the SU2 group
 // model, which holds only the core group operations.
 
-namespace reticolo::action::detail {
+namespace reticolo::action::formula {
 
 template <>
 struct wilson_kernels<math::group::SU2> {
@@ -384,7 +384,7 @@ public:
     static void compute_force(MatrixLinkLattice<math::group::SU2, T> const& u,
                               MatrixLinkLattice<math::group::SU2, T>& force,
                               double beta_over_n) noexcept {
-        reticolo::detail::field_visit(
+        reticolo::exec::field_visit(
             u, math::group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
                 compute_force_range<false>(u, force, -beta_over_n, base, cnt);
             });
@@ -395,11 +395,11 @@ public:
                                        MatrixLinkLattice<math::group::SU2, T>& mom,
                                        double beta_over_n,
                                        double k_dt) noexcept {
-        reticolo::detail::field_visit(
+        reticolo::exec::field_visit(
             u, math::group::k_gauge_batch<T>, [&](std::size_t base, std::size_t cnt) {
                 compute_force_range<true>(u, mom, -k_dt * beta_over_n, base, cnt);
             });
     }
 };
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::formula

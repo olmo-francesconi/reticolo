@@ -67,10 +67,10 @@ struct WindowedAction {
     [[nodiscard]] scalar_t s_full(Field const& l) const noexcept {
         scalar_t const q = constraint_value(l);
         if constexpr (k_complex) {
-            return detail::windowed_value_complex(
+            return formula::windowed_value_complex(
                 static_cast<scalar_t>(base.s_full(l)), q, a, E_n, delta);
         } else {
-            return detail::windowed_value(q, a, E_n, delta);
+            return formula::windowed_value(q, a, E_n, delta);
         }
     }
 
@@ -97,7 +97,7 @@ struct WindowedAction {
             // Combined: F_R + (a + (S_I - E_n)/delta^2) * F_I.
             base.compute_force(l, force);
             scalar_t const s     = base.s_imag(l);
-            scalar_t const scale = detail::force_scale_imag(s, a, E_n, delta);
+            scalar_t const scale = formula::force_scale_imag(s, a, E_n, delta);
             Field& imag_force    = scratch_(force.indexing());
             base.compute_force_imag(l, imag_force);
             alg::integ::kick_add(force, imag_force, scale);  // force += scale·F_I
@@ -112,7 +112,7 @@ struct WindowedAction {
                 base.compute_force(l, force);
                 s = static_cast<scalar_t>(base.s_full(l));
             }
-            scalar_t const scale = detail::force_scale(s, a, E_n, delta);
+            scalar_t const scale = formula::force_scale(s, a, E_n, delta);
             T* const fp          = force.data();
             std::size_t const n  = flat_size(force);
             for (std::size_t i = 0; i < n; ++i) {
@@ -126,7 +126,7 @@ struct WindowedAction {
     {
         if constexpr (k_complex) {
             scalar_t const s     = base.s_imag(l);
-            scalar_t const scale = detail::force_scale_imag(s, a, E_n, delta);
+            scalar_t const scale = formula::force_scale_imag(s, a, E_n, delta);
             // If the base action exposes a fused combined-force kernel
             // (F_R + scale·F_I in one pass directly into mom), use it —
             // skips the imag_force scratch buffer and the merge pass.
@@ -150,11 +150,11 @@ struct WindowedAction {
                 // fallback pays on every MD step.
                 Field& f             = scratch_(mom.indexing());
                 auto const s         = static_cast<scalar_t>(base.s_full_and_force(l, f));
-                scalar_t const scale = detail::force_scale(s, a, E_n, delta);
+                scalar_t const scale = formula::force_scale(s, a, E_n, delta);
                 alg::integ::kick_add(mom, f, k_dt * scale);
             } else {
                 scalar_t const s     = base.s_full(l);
-                scalar_t const scale = detail::force_scale(s, a, E_n, delta);
+                scalar_t const scale = formula::force_scale(s, a, E_n, delta);
                 base.compute_force_and_kick(l, mom, k_dt * scale);
             }
         }

@@ -73,7 +73,7 @@ std::vector<std::string> lines_of(std::string const& s) {
 // init opens a main log file, which the format-only tests don't want.
 // White-box by design: this is the logger's own test.
 void serial_mode() {
-    rl::detail::cfg().replicas = false;
+    rl::impl::cfg().replicas = false;
 }
 
 }  // namespace

@@ -1,4 +1,4 @@
-#include <reticolo/action/site/detail/traversal.hpp>
+#include <reticolo/action/sweep/site.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng/rng.hpp>
 #include <reticolo/core/site.hpp>
@@ -11,10 +11,10 @@
 
 using reticolo::FastRng;
 using reticolo::Lattice;
-using reticolo::action::detail::reduce_fwd;
-using reticolo::action::detail::reduce_fwd_fallback_;
-using reticolo::action::detail::visit_nn;
-using reticolo::action::detail::visit_nn_fallback_;
+using reticolo::action::sweep::reduce_fwd;
+using reticolo::action::sweep::reduce_fwd_fallback_;
+using reticolo::action::sweep::visit_nn;
+using reticolo::action::sweep::visit_nn_fallback_;
 
 namespace {
 

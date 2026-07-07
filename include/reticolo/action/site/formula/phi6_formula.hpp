@@ -7,7 +7,7 @@
 // phi4_formula.hpp plus the on-site g6·phi^6 term; at g6 = 0 it reduces exactly
 // to the Phi4 formula. RETICOLO_HD so the identical arithmetic runs host+device.
 
-namespace reticolo::action::detail {
+namespace reticolo::action::formula {
 
 // F(x) = -dS/dphi(x), given phi and the sum over ALL 2*ndims neighbours.
 template <class T>
@@ -28,4 +28,4 @@ template <class T>
     return (T{-2} * kappa * phi * fwd) + phi2 + (lambda * dev * dev) + (g6 * phi6);
 }
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::formula
