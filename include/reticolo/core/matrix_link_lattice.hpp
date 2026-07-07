@@ -87,6 +87,13 @@ public:
     [[nodiscard]] std::size_t ndims() const noexcept { return idx_->ndims(); }
     [[nodiscard]] std::size_t nsites() const noexcept { return idx_->nsites(); }
 
+    // Per-site storage footprint (bytes) = ndims · components · sizeof(T). Drives
+    // the threading threshold / chunk size so they reflect the real (large) gauge
+    // footprint rather than a bare site count.
+    [[nodiscard]] std::size_t bytes_per_site() const noexcept {
+        return idx_->ndims() * n_real_components * sizeof(T);
+    }
+
     // Number of group elements (one per (site, mu)). Distinct from the raw
     // component count returned by flat_size() / data range.
     [[nodiscard]] std::size_t nlinks() const noexcept { return idx_->ndims() * idx_->nsites(); }

@@ -22,10 +22,6 @@
 
 namespace reticolo::action::detail {
 
-// Chunk for the flat-iteration paths (1D and the D>4 fallback), in sites. The
-// row/plane/tile paths use their own natural work items instead.
-inline constexpr std::size_t k_site_chunk = 1UL << 13;  // 8192 sites
-
 // Hot-loop helpers for scalar nearest-neighbour kernels on periodic hypercubic
 // lattices. Two patterns:
 //
@@ -393,20 +389,19 @@ inline void visit_nn_tiled_4d_(Lattice<T> const& l, bool want, Body const& body)
 // cache tiles. The per-dim inner kernel stays the hand-written vectorised loop.
 template <class T, class Body>
 inline void visit_nn(Lattice<T> const& l, Body&& body) noexcept {
-    std::size_t const n = l.nsites();
-    bool const want     = reticolo::detail::traverse_want(n);
-    Body const& b       = body;
+    std::size_t const n   = l.nsites();
+    std::size_t const bps = l.bytes_per_site();
+    bool const want       = reticolo::detail::want_threads(n, bps);
+    Body const& b         = body;
 #if RETICOLO_HOT_LOOP_FORCE_FALLBACK
     reticolo::detail::parallel_map_ranges(
-        want, n, k_site_chunk, [&](std::size_t s0, std::size_t cnt) {
-            visit_nn_fallback_(l, s0, cnt, b);
-        });
+        n, bps, 1, [&](std::size_t s0, std::size_t cnt) { visit_nn_fallback_(l, s0, cnt, b); });
 #else
     auto const& sh = l.shape();
     switch (l.ndims()) {
         case 1:
             reticolo::detail::parallel_map_ranges(
-                want, sh[0], k_site_chunk, [&](std::size_t x0, std::size_t cnt) {
+                sh[0], bps, 1, [&](std::size_t x0, std::size_t cnt) {
                     visit_nn_1d_(l, x0, x0 + cnt, b);
                 });
             return;
@@ -422,10 +417,9 @@ inline void visit_nn(Lattice<T> const& l, Body&& body) noexcept {
             visit_nn_tiled_4d_(l, want, b);
             return;
         default:
-            reticolo::detail::parallel_map_ranges(
-                want, n, k_site_chunk, [&](std::size_t s0, std::size_t cnt) {
-                    visit_nn_fallback_(l, s0, cnt, b);
-                });
+            reticolo::detail::parallel_map_ranges(n, bps, 1, [&](std::size_t s0, std::size_t cnt) {
+                visit_nn_fallback_(l, s0, cnt, b);
+            });
             return;
     }
 #endif
@@ -660,12 +654,13 @@ template <class T, class Acc = T, class Body>
 
 template <class T, class Acc = T, class Body>
 [[nodiscard]] inline Acc reduce_fwd(Lattice<T> const& l, Body&& body) noexcept {
-    std::size_t const n = l.nsites();
-    bool const want     = reticolo::detail::traverse_want(n);
-    Body const& b       = body;
+    std::size_t const n   = l.nsites();
+    std::size_t const bps = l.bytes_per_site();
+    bool const want       = reticolo::detail::want_threads(n, bps);
+    Body const& b         = body;
 #if RETICOLO_HOT_LOOP_FORCE_FALLBACK
     return reticolo::detail::parallel_reduce_ranges<Acc>(
-        want, n, k_site_chunk, [&](std::size_t s0, std::size_t cnt) {
+        n, bps, 1, [&](std::size_t s0, std::size_t cnt) {
             return reduce_fwd_fallback_<T, Acc>(l, s0, cnt, b);
         });
 #else
@@ -673,7 +668,7 @@ template <class T, class Acc = T, class Body>
     switch (l.ndims()) {
         case 1:
             return reticolo::detail::parallel_reduce_ranges<Acc>(
-                want, sh[0], k_site_chunk, [&](std::size_t x0, std::size_t cnt) {
+                sh[0], bps, 1, [&](std::size_t x0, std::size_t cnt) {
                     return reduce_fwd_1d_<T, Acc>(l, x0, x0 + cnt, b);
                 });
         case 2:
@@ -686,7 +681,7 @@ template <class T, class Acc = T, class Body>
             return reduce_fwd_4d_<T, Acc>(l, want, b);
         default:
             return reticolo::detail::parallel_reduce_ranges<Acc>(
-                want, n, k_site_chunk, [&](std::size_t s0, std::size_t cnt) {
+                n, bps, 1, [&](std::size_t s0, std::size_t cnt) {
                     return reduce_fwd_fallback_<T, Acc>(l, s0, cnt, b);
                 });
     }

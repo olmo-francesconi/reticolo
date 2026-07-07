@@ -27,11 +27,6 @@ namespace reticolo::alg::integ {
 // complex×complex, which also unblocks vectorisation. `__restrict` on the
 // output tells the vectoriser the store buffer can't alias the input (field,
 // mom, and force are always distinct sibling lattices).
-// Chunk for the flat elementwise axpy ops (drift/kick). These are bandwidth-bound,
-// so granularity barely matters — a moderate chunk balances the team with little
-// fork overhead. Each element is independent → bit-identical for any partition.
-inline constexpr std::size_t k_axpy_chunk = 1UL << 14;  // 16384 elements
-
 template <class Field, class Mom>
 inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
     using F                  = typename Field::value_type;
@@ -39,19 +34,18 @@ inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
     real_scalar_t<F> const c = static_cast<real_scalar_t<F>>(cdt);
     F* const fd              = field.data();
     auto const* const pd     = mom.data();
-    // __restrict is re-applied inside the worker so the vectoriser still sees the
-    // no-alias guarantee (field/mom are distinct sibling lattices).
-    reticolo::detail::parallel_map_ranges(reticolo::detail::traverse_want(n),
-                                          n,
-                                          k_axpy_chunk,
-                                          [fd, pd, c](std::size_t base, std::size_t cnt) {
-                                              F* __restrict const f          = fd;
-                                              auto const* __restrict const p = pd;
-                                              std::size_t const end          = base + cnt;
-                                              for (std::size_t i = base; i < end; ++i) {
-                                                  f[i] += c * p[i];
-                                              }
-                                          });
+    // Elementwise axpy: threshold/chunk from the element size; each element is
+    // independent → bit-identical for any partition. __restrict is re-applied
+    // inside the worker so the vectoriser keeps the no-alias guarantee.
+    reticolo::detail::parallel_map_ranges(
+        n, sizeof(F), 1, [fd, pd, c](std::size_t base, std::size_t cnt) {
+            F* __restrict const f          = fd;
+            auto const* __restrict const p = pd;
+            std::size_t const end          = base + cnt;
+            for (std::size_t i = base; i < end; ++i) {
+                f[i] += c * p[i];
+            }
+        });
 }
 
 template <class Mom, class Force>
@@ -61,17 +55,15 @@ inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
     real_scalar_t<F> const c = static_cast<real_scalar_t<F>>(kdt);
     F* const md              = mom.data();
     auto const* const fd     = force.data();
-    reticolo::detail::parallel_map_ranges(reticolo::detail::traverse_want(n),
-                                          n,
-                                          k_axpy_chunk,
-                                          [md, fd, c](std::size_t base, std::size_t cnt) {
-                                              F* __restrict const m           = md;
-                                              auto const* __restrict const fp = fd;
-                                              std::size_t const end           = base + cnt;
-                                              for (std::size_t i = base; i < end; ++i) {
-                                                  m[i] += c * fp[i];
-                                              }
-                                          });
+    reticolo::detail::parallel_map_ranges(
+        n, sizeof(F), 1, [md, fd, c](std::size_t base, std::size_t cnt) {
+            F* __restrict const m           = md;
+            auto const* __restrict const fp = fd;
+            std::size_t const end           = base + cnt;
+            for (std::size_t i = base; i < end; ++i) {
+                m[i] += c * fp[i];
+            }
+        });
 }
 
 // Matrix-link drift overload: U ← exp(dt·P)·U per direction, dispatched
@@ -92,15 +84,11 @@ inline void drift_field(MatrixLinkLattice<G, T>& field,
                       G::expi_lmul_range(
                           uu, pp, double{}, std::size_t{}, std::size_t{}, std::size_t{});
                   }) {
-        // Coarse chunk (multiple of the pass-5 k_b=8 batch) so each thread runs
-        // the multi-pass matrix-exponential pipeline over a large contiguous span,
-        // amortising its scratch; bit-identical to the serial slab per chunk.
-        constexpr std::size_t k_gauge_chunk = 512;
+        // gran = pass-5 k_b=8 batch so chunks stay batch-aligned; threshold/chunk
+        // from the (large) gauge footprint, bit-identical to the serial slab per
+        // chunk.
         reticolo::detail::parallel_map_ranges(
-            reticolo::detail::traverse_want(ns),
-            ns,
-            k_gauge_chunk,
-            [&](std::size_t base, std::size_t cnt) {
+            ns, field.bytes_per_site(), 8, [&](std::size_t base, std::size_t cnt) {
                 for (std::size_t mu = 0; mu < d; ++mu) {
                     G::expi_lmul_range(
                         field.mu_block_data(mu), mom.mu_block_data(mu), cdt, ns, base, cnt);

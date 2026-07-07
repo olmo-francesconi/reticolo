@@ -34,11 +34,12 @@ struct SineGordon : detail::SiteAction<SineGordon<T>, T> {
     T kappa = T{0};
     T alpha = T{0};
 
-    // Chunk for the parallel sin/cos transcendental passes. A power-of-two ≥ any
-    // SIMD width, so every non-final chunk is a whole number of vectors — the
+    // Chunk-alignment granularity for the parallel sin/cos transcendental passes.
+    // ≥ any SIMD width, so every non-final chunk is a whole number of vectors — the
     // Sleef batch takes the identical vector path it would in a single full sweep,
-    // keeping the result bit-identical for any thread count.
-    static constexpr std::size_t k_batch_chunk = 1UL << 13;  // 8192
+    // keeping the result bit-identical for any thread count. (The chunk *size* is
+    // derived from bytes_per_site by the primitive; this just aligns it.)
+    static constexpr std::size_t k_simd_gran = 16;
 
     void describe(log::Entry& e) const {
         e.line("SineGordon<{}>", scalar_name<T>());
@@ -56,19 +57,17 @@ struct SineGordon : detail::SiteAction<SineGordon<T>, T> {
         this->ensure_scratch(n);
         T* const sp       = this->scratch_.data();
         T const* const in = l.data();
-        reticolo::detail::parallel_map_ranges(reticolo::detail::traverse_want(n),
-                                              n,
-                                              k_batch_chunk,
-                                              [sp, in](std::size_t base, std::size_t cnt) {
-                                                  if constexpr (std::is_same_v<T, double>) {
-                                                      math::sin_batch(sp + base, in + base, cnt);
-                                                  } else {
-                                                      std::size_t const end = base + cnt;
-                                                      for (std::size_t i = base; i < end; ++i) {
-                                                          sp[i] = std::sin(in[i]);
-                                                      }
-                                                  }
-                                              });
+        reticolo::detail::parallel_map_ranges(
+            n, l.bytes_per_site(), k_simd_gran, [sp, in](std::size_t base, std::size_t cnt) {
+                if constexpr (std::is_same_v<T, double>) {
+                    math::sin_batch(sp + base, in + base, cnt);
+                } else {
+                    std::size_t const end = base + cnt;
+                    for (std::size_t i = base; i < end; ++i) {
+                        sp[i] = std::sin(in[i]);
+                    }
+                }
+            });
     }
 
     // force(x) = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x) - alpha sin(phi(x)).
@@ -91,12 +90,11 @@ struct SineGordon : detail::SiteAction<SineGordon<T>, T> {
             this->ensure_scratch(n);
             T* const cs       = this->scratch_.data();
             T const* const in = l.data();
-            bool const want   = reticolo::detail::traverse_want(n);
             // Fused cos + Σcos in one deterministic reduce: each chunk cos-batches
             // its sub-range into scratch and folds it (fixed partition → thread-
             // invariant; one-time bit re-baseline vs the old single running sum).
             double const cos_sum = reticolo::detail::parallel_reduce_ranges(
-                want, n, k_batch_chunk, [cs, in](std::size_t base, std::size_t cnt) {
+                n, l.bytes_per_site(), k_simd_gran, [cs, in](std::size_t base, std::size_t cnt) {
                     math::cos_batch(cs + base, in + base, cnt);
                     double sm             = 0.0;
                     std::size_t const end = base + cnt;

@@ -218,16 +218,13 @@ private:
 
     // Flat elementwise copy (rollback snapshot / restore) — a write-disjoint map.
     static void copy_flat_(Scalar* dst, Scalar const* src, std::size_t n) noexcept {
-        constexpr std::size_t k_chunk = 1UL << 14;
-        reticolo::detail::parallel_map_ranges(reticolo::detail::traverse_want(n),
-                                              n,
-                                              k_chunk,
-                                              [dst, src](std::size_t base, std::size_t cnt) {
-                                                  std::size_t const end = base + cnt;
-                                                  for (std::size_t i = base; i < end; ++i) {
-                                                      dst[i] = src[i];
-                                                  }
-                                              });
+        reticolo::detail::parallel_map_ranges(
+            n, sizeof(Scalar), 1, [dst, src](std::size_t base, std::size_t cnt) {
+                std::size_t const end = base + cnt;
+                for (std::size_t i = base; i < end; ++i) {
+                    dst[i] = src[i];
+                }
+            });
     }
 
     // Parallel counter-based standard-normal fill: out[2p], out[2p+1] come from
@@ -237,11 +234,10 @@ private:
     // sample_momenta_): one serial draw that advances the RNG identically on a
     // resumed run, so checkpoint/resume stays bit-exact.
     static void philox_normal_fill_(double* out, std::size_t n, std::uint64_t key) noexcept {
-        std::size_t const npair       = n / 2;
-        constexpr std::size_t k_chunk = 1UL << 13;
-        reticolo::detail::parallel_map_ranges(reticolo::detail::traverse_want(n),
-                                              npair,
-                                              k_chunk,
+        std::size_t const npair = n / 2;
+        reticolo::detail::parallel_map_ranges(npair,
+                                              2 * sizeof(double),  // one pair = 16 bytes
+                                              1,
                                               [out, key](std::size_t base, std::size_t cnt) {
                                                   std::size_t const end = base + cnt;
                                                   for (std::size_t p = base; p < end; ++p) {
@@ -278,16 +274,12 @@ private:
                           }) {
                 // Parallel counter-based sampler: one RNG draw per trajectory keys
                 // Philox, then each direction slab worksplits (site-indexed draws).
-                std::uint64_t const key             = rng_.uniform_u64();
-                constexpr std::size_t k_gauge_chunk = 512;
-                bool const want                     = reticolo::detail::traverse_want(ns);
+                std::uint64_t const key = rng_.uniform_u64();
+                std::size_t const bps   = mom_.bytes_per_site();
                 for (std::size_t mu = 0; mu < d; ++mu) {
                     Scalar* const pblk = mom_.mu_block_data(mu);
                     reticolo::detail::parallel_map_ranges(
-                        want,
-                        ns,
-                        k_gauge_chunk,
-                        [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
+                        ns, bps, 1, [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
                             Group::sample_algebra_philox_range(pblk, key, mu, ns, base, cnt);
                         });
                 }
@@ -344,13 +336,13 @@ private:
                               Group::kinetic_range(p, std::size_t{}, std::size_t{}, std::size_t{});
                           }) {
                 // Parallel deterministic reduce per direction; ½ applied once.
-                double raw                          = 0.0;
-                constexpr std::size_t k_gauge_chunk = 512;
-                bool const want                     = reticolo::detail::traverse_want(ns);
+                // gran = 8 (kinetic_range's internal batch).
+                double raw            = 0.0;
+                std::size_t const bps = mom_.bytes_per_site();
                 for (std::size_t mu = 0; mu < d; ++mu) {
                     Scalar const* const pblk = mom_.mu_block_data(mu);
                     raw += reticolo::detail::parallel_reduce_ranges(
-                        want, ns, k_gauge_chunk, [pblk, ns](std::size_t base, std::size_t cnt) {
+                        ns, bps, 8, [pblk, ns](std::size_t base, std::size_t cnt) {
                             return Group::kinetic_range(pblk, ns, base, cnt);
                         });
                 }
@@ -361,14 +353,10 @@ private:
                 }
             }
         } else {
-            Scalar const* const p         = mom_.data();
-            std::size_t const n           = flat_size(mom_);
-            constexpr std::size_t k_chunk = 1U << 13;
-            double const sum              = reticolo::detail::parallel_reduce_ranges(
-                reticolo::detail::traverse_want(n),
-                n,
-                k_chunk,
-                [p](std::size_t base, std::size_t cnt) {
+            Scalar const* const p = mom_.data();
+            std::size_t const n   = flat_size(mom_);
+            double const sum      = reticolo::detail::parallel_reduce_ranges(
+                n, sizeof(Scalar), 1, [p](std::size_t base, std::size_t cnt) {
                     double s              = 0.0;
                     std::size_t const end = base + cnt;
                     if constexpr (is_complex_v_) {

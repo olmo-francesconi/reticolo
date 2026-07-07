@@ -81,6 +81,10 @@ public:
     [[nodiscard]] std::size_t ndims() const noexcept { return idx_->ndims(); }
     [[nodiscard]] std::size_t nsites() const noexcept { return idx_->nsites(); }
 
+    // Per-site storage footprint (bytes) — the threading threshold / chunk size are
+    // derived from this, so a memory-bound decision reflects the real footprint.
+    [[nodiscard]] static constexpr std::size_t bytes_per_site() noexcept { return sizeof(T); }
+
     [[nodiscard]] auto sites() const noexcept {
         return std::views::iota(std::size_t{0}, nsites()) |
                std::views::transform([](std::size_t i) { return Site{i}; });

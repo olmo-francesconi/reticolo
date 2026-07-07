@@ -90,19 +90,16 @@ struct SiteAction {
         });
         // Reduce the staged action in a fixed-block partition (thread-count
         // invariant), matching s_full's parallel reduce.
-        return reticolo::detail::parallel_reduce_ranges(reticolo::detail::traverse_want(n),
-                                                        n,
-                                                        k_site_chunk,
-                                                        [sb](std::size_t base, std::size_t cnt) {
-                                                            RETICOLO_FP_REASSOCIATE
-                                                            double s              = 0.0;
-                                                            std::size_t const end = base + cnt;
-                                                            for (std::size_t i = base; i < end;
-                                                                 ++i) {
-                                                                s += static_cast<double>(sb[i]);
-                                                            }
-                                                            return s;
-                                                        });
+        return reticolo::detail::parallel_reduce_ranges(
+            n, l.bytes_per_site(), 1, [sb](std::size_t base, std::size_t cnt) {
+                RETICOLO_FP_REASSOCIATE
+                double s              = 0.0;
+                std::size_t const end = base + cnt;
+                for (std::size_t i = base; i < end; ++i) {
+                    s += static_cast<double>(sb[i]);
+                }
+                return s;
+            });
     }
 
     [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }

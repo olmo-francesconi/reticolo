@@ -72,11 +72,11 @@ template <>
 struct wilson_kernels<gauge_group::U1> {
     using G = gauge_group::U1;
 
-    // Chunk for the parallel sin/cos transcendental + gather passes. Matches
-    // the gauge-wide convention (wilson.hpp / integ_ops.hpp): a multiple of
-    // every SIMD width, so a non-final chunk always takes the same batched
-    // path as a serial full sweep.
-    static constexpr std::size_t k_gauge_chunk = 512;
+    // Chunk-alignment granularity for the parallel sin/cos transcendental passes:
+    // ≥ any SIMD width, so a non-final chunk always takes the same batched Sleef
+    // path as a serial full sweep (bit-identical). The link-gather (Phase 2) is
+    // per-site and uses gran = 1. The chunk *size* is derived from bytes_per_site.
+    static constexpr std::size_t k_simd_gran = 16;
 
     // Fill the persistent nplanes*ns sinP scratch: one Sleef-batched sin pass
     // per (mu, nu) plane (mu < nu), chunked so the fill itself worksplits.
@@ -87,16 +87,16 @@ struct wilson_kernels<gauge_group::U1> {
                                  double* sinP,
                                  std::size_t d,
                                  std::size_t ns) noexcept {
-        Indexing const& idx = u.indexing_ref();
-        bool const want     = reticolo::detail::traverse_want(ns);
-        std::size_t pidx    = 0;
+        Indexing const& idx   = u.indexing_ref();
+        std::size_t const bps = u.bytes_per_site();
+        std::size_t pidx      = 0;
         for (std::size_t a = 0; a < d; ++a) {
             T const* const u_a = u.mu_block_data(a);
             for (std::size_t b = a + 1; b < d; ++b) {
                 T const* const u_b = u.mu_block_data(b);
                 double* const sp   = sinP + (pidx * ns);
                 reticolo::detail::parallel_map_ranges(
-                    want, ns, k_gauge_chunk, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
+                    ns, bps, k_simd_gran, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
                         std::size_t const end = base + cnt;
                         for (std::size_t s = base; s < end; ++s) {
                             std::size_t const s_pa = idx.next(Site{s}, a).value();
@@ -175,9 +175,8 @@ struct wilson_kernels<gauge_group::U1> {
         std::size_t const nplanes = (d * (d - 1)) / 2;
         double* const sinP        = u1_detail::plane_scratch(nplanes * ns);
         fill_sin_planes_(u, sinP, d, ns);
-        bool const want = reticolo::detail::traverse_want(ns);
         reticolo::detail::parallel_map_ranges(
-            want, ns, k_gauge_chunk, [&](std::size_t base, std::size_t cnt) {
+            ns, u.bytes_per_site(), 1, [&](std::size_t base, std::size_t cnt) {
                 force_from_sinp_range_<false>(sinP, u, force, -beta_over_n, base, cnt);
             });
     }
@@ -194,10 +193,9 @@ struct wilson_kernels<gauge_group::U1> {
         std::size_t const nplanes = (d * (d - 1)) / 2;
         double* const sinP        = u1_detail::plane_scratch(nplanes * ns);
         fill_sin_planes_(u, sinP, d, ns);
-        bool const want    = reticolo::detail::traverse_want(ns);
         double const scale = -k_dt * beta_over_n;
         reticolo::detail::parallel_map_ranges(
-            want, ns, k_gauge_chunk, [&](std::size_t base, std::size_t cnt) {
+            ns, u.bytes_per_site(), 1, [&](std::size_t base, std::size_t cnt) {
                 force_from_sinp_range_<true>(sinP, u, mom, scale, base, cnt);
             });
     }
@@ -262,7 +260,7 @@ struct wilson_kernels<gauge_group::U1> {
         double* const sinP        = scratch;
         double* const cbuf        = scratch + (nplanes * ns);
         Indexing const& idx       = u.indexing_ref();
-        bool const want           = reticolo::detail::traverse_want(ns);
+        std::size_t const bps     = u.bytes_per_site();
         double accum              = 0.0;
         std::size_t pidx          = 0;
         for (std::size_t a = 0; a < d; ++a) {
@@ -271,7 +269,7 @@ struct wilson_kernels<gauge_group::U1> {
                 T const* const u_b = u.mu_block_data(b);
                 double* const sp   = sinP + (pidx * ns);
                 accum += reticolo::detail::parallel_reduce_ranges(
-                    want, ns, k_gauge_chunk, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
+                    ns, bps, k_simd_gran, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
                         std::size_t const end = base + cnt;
                         for (std::size_t s = base; s < end; ++s) {
                             std::size_t const s_pa = idx.next(Site{s}, a).value();
@@ -294,10 +292,9 @@ struct wilson_kernels<gauge_group::U1> {
                 ++pidx;
             }
         }
-        reticolo::detail::parallel_map_ranges(
-            want, ns, k_gauge_chunk, [&](std::size_t base, std::size_t cnt) {
-                force_from_sinp_range_<false>(sinP, u, force_of, -beta_over_n, base, cnt);
-            });
+        reticolo::detail::parallel_map_ranges(ns, bps, 1, [&](std::size_t base, std::size_t cnt) {
+            force_from_sinp_range_<false>(sinP, u, force_of, -beta_over_n, base, cnt);
+        });
         return accum;
     }
 };

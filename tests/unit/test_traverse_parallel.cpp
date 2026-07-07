@@ -23,7 +23,7 @@ using reticolo::action::detail::visit_nn_fallback_;
 
 namespace {
 
-// A lattice above k_traverse_min_sites, so compute_force / s_full take the
+// A lattice above the byte threshold, so compute_force / s_full take the
 // threaded traversal path rather than the small-lattice serial one. One shape per
 // dimensionality (2D/3D/4D) so all the per-dim parallel paths are exercised.
 Lattice<double> hot_lattice(Lattice<double>::SizeVec const& shape) {
@@ -42,9 +42,9 @@ std::vector<double> force_vec(Phi4<double> const& action, Lattice<double> const&
     return {f.data(), f.data() + f.nsites()};
 }
 
-// {2D 160², 3D 26³, 4D 16⁴} — each above 16384 sites.
+// {2D 256², 3D 42³, 4D 16⁴} — each above the 512 KB threshold (65536 sites @ 8B).
 std::vector<Lattice<double>::SizeVec> hot_shapes() {
-    return {{160, 160}, {26, 26, 26}, {16, 16, 16, 16}};
+    return {{256, 256}, {42, 42, 42}, {16, 16, 16, 16}};
 }
 
 }  // namespace
@@ -58,7 +58,7 @@ TEST_CASE("threaded compute_force equals the gather fallback, every dimension",
     Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
     for (auto const& shape : hot_shapes()) {
         auto const phi = hot_lattice(shape);
-        REQUIRE(phi.nsites() > reticolo::detail::k_traverse_min_sites);
+        REQUIRE(reticolo::detail::want_threads(phi.nsites(), phi.bytes_per_site()));
 
         auto kern = action.force_kernel();
         std::vector<double> ref(phi.nsites(), 0.0);
@@ -84,7 +84,7 @@ TEST_CASE("threaded force + s_full are thread-count invariant, every dimension",
     Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
     for (auto const& shape : hot_shapes()) {
         auto const phi = hot_lattice(shape);
-        REQUIRE(phi.nsites() > reticolo::detail::k_traverse_min_sites);
+        REQUIRE(reticolo::detail::want_threads(phi.nsites(), phi.bytes_per_site()));
 
         auto at = [&](int nthr) {
 #ifdef _OPENMP
@@ -113,7 +113,7 @@ TEST_CASE("threaded force + s_full are thread-count invariant, every dimension",
 // width multiple, so the Sleef batch takes the same vector path regardless).
 TEST_CASE("SineGordon force + s_full are thread-count invariant", "[hot_loop][parallel]") {
     auto const phi = hot_lattice({16, 16, 16, 16});
-    REQUIRE(phi.nsites() > reticolo::detail::k_traverse_min_sites);
+    REQUIRE(reticolo::detail::want_threads(phi.nsites(), phi.bytes_per_site()));
     SineGordon<double> const action{.kappa = 0.18, .alpha = 0.7};
 
     auto at = [&](int nthr) {

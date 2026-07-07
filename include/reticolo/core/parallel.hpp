@@ -32,20 +32,39 @@ namespace reticolo::detail {
 // detected L2 overshoots and regresses moderate volumes). ~½ of a common 1 MB L2.
 inline constexpr std::size_t k_traverse_l2_bytes = 512UL * 1024;
 
-// Below this site count a pass stays single-threaded (fork/join not amortised).
-inline constexpr std::size_t k_traverse_min_sites = 1UL << 14;  // 16384
+// A pass is worth threading only when it moves at least this many bytes — below it,
+// fork/join dominates. Calibrated on the Linux/libgomp 32-core SPR node: the
+// threaded-beats-serial break-even for the force is ~400-500 KB for BOTH the
+// memory-bound Phi4 (8 B/site) and the compute-bound SU(3) (576 B/site), because a
+// heavy action has proportionally more bytes/site — so one byte threshold tracks
+// both regimes. This replaces the old fixed 16384-site gate, which was wrong both
+// ways: too eager for scalars (net loss under ~512 KB), far too lazy for gauge
+// (9 MB before SU(3) threaded).
+inline constexpr std::size_t k_thread_min_bytes = 512UL * 1024;
+
+// Target working-set per flat-range work item. Small enough that a big lattice
+// yields many chunks (load balance across the team), large enough to amortise the
+// per-chunk dispatch and keep the inner loop vectorising.
+inline constexpr std::size_t k_chunk_bytes = 64UL * 1024;
+
+// Should a pass over `nsites` items of `bytes_per_site` each be threaded?
+[[nodiscard]] inline bool want_threads(std::size_t nsites, std::size_t bytes_per_site) noexcept {
+    return nsites * bytes_per_site >= k_thread_min_bytes;
+}
+
+// Sites per flat-range chunk for a field of `bytes_per_site`, aligned to `gran`
+// (the kernel's batch width) and at least one gran-block.
+[[nodiscard]] inline std::size_t chunk_for(std::size_t bytes_per_site, std::size_t gran) noexcept {
+    std::size_t const per = bytes_per_site != 0 ? bytes_per_site : 1;
+    std::size_t const c   = (k_chunk_bytes / per / gran) * gran;  // gran-aligned, ≤ target
+    return c != 0 ? c : gran;
+}
 
 // Set true (per thread) only inside a reticolo-owned parallel region; the traverse
 // leaves worksplit via `omp for` when it holds and run serial otherwise. A mutable
 // thread-local by design — it is the region marker the composability rests on.
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 inline thread_local bool g_in_traverse_region = false;
-
-// A pass this size wants threads (the caller still opens the region only when not
-// already nested — see in_traverse_region).
-[[nodiscard]] inline bool traverse_want(std::size_t nsites) noexcept {
-    return nsites >= k_traverse_min_sites;
-}
 
 // body is run by every thread in the team (SPMD), so it is invoked as a const
 // lvalue, never forwarded/moved.
@@ -121,27 +140,35 @@ template <class Acc = double, class Worker>
     return total;
 }
 
-// Range-convenience: map `worker(base, cnt)` over `chunk`-sized, chunk-aligned
-// pieces of [0, n). The caller picks the granularity — coarse for a heavy per-site
-// pipeline (the SU(N) drift amortises its multi-pass scratch), fine for cheap
-// elementwise ops. Chunk alignment keeps batched kernels bit-identical to a serial
-// full-range sweep. (Only the final chunk carries the [0, chunk) remainder.)
+// Range-convenience: map `worker(base, cnt)` over gran-aligned chunks of [0, n).
+// Threshold (want) and chunk size are both derived from `bytes_per_site` — the
+// field's per-site footprint — so a heavy field (gauge) threads early and chunks
+// small while a light one (scalar) threads later and chunks large. `gran` is the
+// kernel's batch width; chunk alignment keeps batched kernels bit-identical to a
+// serial full-range sweep. (Only the final chunk carries the remainder.)
 template <class Worker>
-inline void parallel_map_ranges(bool want, std::size_t n, std::size_t chunk, Worker const& worker) {
+inline void parallel_map_ranges(std::size_t n,
+                                std::size_t bytes_per_site,
+                                std::size_t gran,
+                                Worker const& worker) {
+    std::size_t const chunk   = chunk_for(bytes_per_site, gran);
     std::size_t const n_items = (n + chunk - 1) / chunk;
-    parallel_map(want, n_items, [&](std::size_t i) {
+    parallel_map(want_threads(n, bytes_per_site), n_items, [&](std::size_t i) {
         std::size_t const base = i * chunk;
         worker(base, std::min(chunk, n - base));
     });
 }
 
-// Range-convenience: reduce `worker(base, cnt) -> Acc` over chunk-aligned pieces of
+// Range-convenience: reduce `worker(base, cnt) -> Acc` over gran-aligned chunks of
 // [0, n), folded in canonical chunk order → thread-count invariant.
 template <class Acc = double, class Worker>
-[[nodiscard]] inline Acc
-parallel_reduce_ranges(bool want, std::size_t n, std::size_t chunk, Worker const& worker) {
+[[nodiscard]] inline Acc parallel_reduce_ranges(std::size_t n,
+                                                std::size_t bytes_per_site,
+                                                std::size_t gran,
+                                                Worker const& worker) {
+    std::size_t const chunk   = chunk_for(bytes_per_site, gran);
     std::size_t const n_items = (n + chunk - 1) / chunk;
-    return parallel_reduce<Acc>(want, n_items, [&](std::size_t i) {
+    return parallel_reduce<Acc>(want_threads(n, bytes_per_site), n_items, [&](std::size_t i) {
         std::size_t const base = i * chunk;
         return worker(base, std::min(chunk, n - base));
     });
