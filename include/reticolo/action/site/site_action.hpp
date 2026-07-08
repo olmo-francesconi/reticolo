@@ -92,13 +92,8 @@ struct SiteAction : SFullCache {
         // Reduce the staged action in a fixed-block partition (thread-count
         // invariant), matching s_full's parallel reduce.
         return reticolo::exec::field_reduce(l, 1, [sb](std::size_t base, std::size_t cnt) {
-            RETICOLO_FP_REASSOCIATE
-            double s              = 0.0;
-            std::size_t const end = base + cnt;
-            for (std::size_t i = base; i < end; ++i) {
-                s += static_cast<double>(sb[i]);
-            }
-            return s;
+            return reticolo::exec::lane_sum8(
+                base, cnt, [sb](std::size_t i) { return static_cast<double>(sb[i]); });
         });
     }
 

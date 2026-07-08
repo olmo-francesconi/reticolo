@@ -212,6 +212,33 @@ template <class Field>
     return {items, n / items, n, k};
 }
 
+// Fixed 8-lane accumulation for reduce workers: `term(i)` summed over
+// [base, base+cnt) into 8 independent lanes + a scalar tail, combined in a
+// fixed pairwise order. Breaks the serial FP dependency chain (a plain
+// `s += term(i)` runs at ~1 add/cycle latency, ~10× under memory speed) and
+// vectorizes on gcc AND clang without pragmas; unlike pragma reassociation the
+// summation order is written in code, so the bits are identical on every
+// compiler and ISA width. 8 = one AVX-512 register / a whole multiple of
+// NEON/AVX2 — the natural lane count for doubles.
+template <class Term>
+[[nodiscard]] inline double lane_sum8(std::size_t base, std::size_t cnt, Term const& term) {
+    double lane[8]        = {};
+    std::size_t const end = base + cnt;
+    std::size_t i         = base;
+    for (; i + 8 <= end; i += 8) {
+        for (std::size_t w = 0; w < 8; ++w) {
+            lane[w] += term(i + w);
+        }
+    }
+    double tail = 0.0;
+    for (; i < end; ++i) {
+        tail += term(i);
+    }
+    return (((lane[0] + lane[1]) + (lane[2] + lane[3])) +
+            ((lane[4] + lane[5]) + (lane[6] + lane[7]))) +
+           tail;
+}
+
 // Field-convenience: the ONLY way any code sweeps a field's sites. Threshold
 // (want_threads), the canonical partition, and determinism live here; the
 // caller supplies just the per-site-range work. `worker(base, cnt)` must be

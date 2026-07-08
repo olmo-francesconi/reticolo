@@ -392,19 +392,14 @@ private:
             Scalar const* const p = mom_.data();
             double const sum =
                 reticolo::exec::field_reduce(mom_, 1, [p](std::size_t base, std::size_t cnt) {
-                    double s              = 0.0;
-                    std::size_t const end = base + cnt;
-                    if constexpr (is_complex_v_) {
-                        for (std::size_t i = base; i < end; ++i) {
-                            s += std::norm(p[i]);
+                    return reticolo::exec::lane_sum8(base, cnt, [p](std::size_t i) {
+                        if constexpr (is_complex_v_) {
+                            return std::norm(p[i]);
+                        } else {
+                            double const pi = static_cast<double>(p[i]);
+                            return pi * pi;
                         }
-                    } else {
-                        for (std::size_t i = base; i < end; ++i) {
-                            auto const pi = static_cast<double>(p[i]);
-                            s += pi * pi;
-                        }
-                    }
-                    return s;
+                    });
                 });
             kin += 0.5 * sum;
         }

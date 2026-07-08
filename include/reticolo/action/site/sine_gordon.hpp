@@ -95,12 +95,8 @@ struct SineGordon : SiteAction<SineGordon<T>, T> {
             double const cos_sum = reticolo::exec::field_reduce(
                 l, k_simd_gran, [cs, in](std::size_t base, std::size_t cnt) {
                     math::cos_batch(cs + base, in + base, cnt);
-                    double sm             = 0.0;
-                    std::size_t const end = base + cnt;
-                    for (std::size_t i = base; i < end; ++i) {
-                        sm += static_cast<double>(cs[i]);
-                    }
-                    return sm;
+                    return reticolo::exec::lane_sum8(
+                        base, cnt, [cs](std::size_t i) { return static_cast<double>(cs[i]); });
                 });
             double const hopping = sweep::reduce_fwd<T, double>(l, [k, alp](T phi, T fwd_sum) {
                 return static_cast<double>(
