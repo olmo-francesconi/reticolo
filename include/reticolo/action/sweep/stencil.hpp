@@ -604,11 +604,13 @@ inline Acc run_partition_items_(Lattice<T> const& l, bool want, Item const& item
 // each returning void (map) or Acc (reduce). The tile grid, item→(lo,hi) decode and
 // the row/plane ranges live here once instead of in four near-identical switches.
 template <class Acc, class T, class Item, class OneD, class Flat>
-inline Acc
-traverse_dispatch_(Lattice<T> const& l, Item const& item, OneD const& one_d, Flat const& flat) {
-    std::size_t const n   = l.nsites();
-    std::size_t const bps = l.bytes_per_site();
-    bool const want       = reticolo::exec::want_threads(n, bps);
+inline Acc traverse_dispatch_(Lattice<T> const& l,
+                              [[maybe_unused]] Item const& item,
+                              [[maybe_unused]] OneD const& one_d,
+                              Flat const& flat) {
+    std::size_t const n              = l.nsites();
+    std::size_t const bps            = l.bytes_per_site();
+    [[maybe_unused]] bool const want = reticolo::exec::want_threads(n, bps);
 #if RETICOLO_HOT_LOOP_FORCE_FALLBACK
     return run_ranges_<Acc>(n, bps, 1, flat);
 #else
