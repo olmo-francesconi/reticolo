@@ -353,13 +353,15 @@ template <class Policy, class Acc, class T, class Comb, class Body, class... Row
 template <std::size_t D, class Policy, class T, class Comb, class Body>
 inline void map_row_(T const* data,
                      std::size_t own,
-                     std::array<std::size_t, D> const& fwd,
-                     std::array<std::size_t, D> const& bwd,
+                     std::array<std::size_t, D> const& df,
+                     std::array<std::size_t, D> const& db,
                      std::size_t x0,
                      std::size_t x1,
                      std::size_t L0,
                      Comb const& comb,
                      Body const& body) noexcept {
+    // Neighbour-row base = own + delta, folded into the pointer pack directly —
+    // no fwd[]/bwd[] base arrays materialised (they spilled every row).
     if constexpr (Policy::all) {
         [&]<std::size_t... K>(std::index_sequence<K...>) {
             map_row_p_<Policy>(data,
@@ -369,11 +371,11 @@ inline void map_row_(T const* data,
                                L0,
                                comb,
                                body,
-                               (data + (K % 2 == 0 ? fwd[(K / 2) + 1] : bwd[(K / 2) + 1]))...);
+                               (data + own + (K % 2 == 0 ? df[(K / 2) + 1] : db[(K / 2) + 1]))...);
         }(std::make_index_sequence<2 * (D - 1)>{});
     } else {
         [&]<std::size_t... Nu>(std::index_sequence<Nu...>) {
-            map_row_p_<Policy>(data, own, x0, x1, L0, comb, body, (data + fwd[Nu + 1])...);
+            map_row_p_<Policy>(data, own, x0, x1, L0, comb, body, (data + own + df[Nu + 1])...);
         }(std::make_index_sequence<D - 1>{});
     }
 }
@@ -381,8 +383,8 @@ inline void map_row_(T const* data,
 template <std::size_t D, class Policy, class Acc, class T, class Comb, class Body>
 [[nodiscard]] inline Acc reduce_row_(T const* data,
                                      std::size_t own,
-                                     std::array<std::size_t, D> const& fwd,
-                                     std::array<std::size_t, D> const& bwd,
+                                     std::array<std::size_t, D> const& df,
+                                     std::array<std::size_t, D> const& db,
                                      std::size_t x0,
                                      std::size_t x1,
                                      std::size_t L0,
@@ -398,12 +400,12 @@ template <std::size_t D, class Policy, class Acc, class T, class Comb, class Bod
                 L0,
                 comb,
                 body,
-                (data + (K % 2 == 0 ? fwd[(K / 2) + 1] : bwd[(K / 2) + 1]))...);
+                (data + own + (K % 2 == 0 ? df[(K / 2) + 1] : db[(K / 2) + 1]))...);
         }(std::make_index_sequence<2 * (D - 1)>{});
     } else {
         return [&]<std::size_t... Nu>(std::index_sequence<Nu...>) {
             return reduce_row_p_<Policy, Acc>(
-                data, own, x0, x1, L0, comb, body, (data + fwd[Nu + 1])...);
+                data, own, x0, x1, L0, comb, body, (data + own + df[Nu + 1])...);
         }(std::make_index_sequence<D - 1>{});
     }
 }
@@ -422,14 +424,19 @@ template <std::size_t D, class Policy, class Acc, class T, class Comb, class Bod
 // nest's hoisted row_yp/row_ym — not once per row. (The per-row recompute it
 // replaces cost ~100 integer instrs/row of madd/csel + spill traffic; measured
 // ~1.4× on the whole force pass.)
+// d_fwd/d_bwd are passed BY VALUE (not by mutable reference): a reference forces
+// the arrays onto the stack across the recursion — the per-row spill traffic the
+// profiler flagged. By value, each level owns a copy the compiler can keep in
+// registers / SROA away; only the current level's [Mu] slot is written, the rest
+// carried down unchanged, so the emitted deltas are bit-identical.
 template <std::size_t D, std::size_t Mu, class T, class Emit>
 inline void walk_outer_(std::array<std::size_t, D> const& L,
                         std::array<std::size_t, D> const& stride,
                         std::array<std::size_t, D> const& lo,
                         std::array<std::size_t, D> const& hi,
                         std::size_t own,
-                        std::array<std::size_t, D>& d_fwd,
-                        std::array<std::size_t, D>& d_bwd,
+                        std::array<std::size_t, D> d_fwd,
+                        std::array<std::size_t, D> d_bwd,
                         Emit const& emit) noexcept {
     if constexpr (Mu == 0) {
         emit(own, d_fwd, d_bwd);
@@ -484,11 +491,8 @@ inline void map_item_(Lattice<T> const& l,
                              d_fwd,
                              d_bwd,
                              [&](std::size_t own, auto const& df, auto const& db) {
-                                 std::array<std::size_t, D> fwd{};
-                                 std::array<std::size_t, D> bwd{};
-                                 item_bases_<D>(own, df, db, fwd, bwd);
                                  map_row_<D, Policy>(
-                                     data, own, fwd, bwd, std::size_t{0}, L0, L0, comb, body);
+                                     data, own, df, db, std::size_t{0}, L0, L0, comb, body);
                              });
 }
 
@@ -516,11 +520,8 @@ template <std::size_t D, class Policy, class Acc, class T, class Comb, class Bod
                              d_fwd,
                              d_bwd,
                              [&](std::size_t own, auto const& df, auto const& db) {
-                                 std::array<std::size_t, D> fwd{};
-                                 std::array<std::size_t, D> bwd{};
-                                 item_bases_<D>(own, df, db, fwd, bwd);
                                  total += reduce_row_<D, Policy, Acc>(
-                                     data, own, fwd, bwd, std::size_t{0}, L0, L0, comb, body);
+                                     data, own, df, db, std::size_t{0}, L0, L0, comb, body);
                              });
     return total;
 }
