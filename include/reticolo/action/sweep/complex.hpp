@@ -12,13 +12,11 @@
 // Split-last nearest-neighbour drivers for anisotropic complex-field actions
 // (BoseGas): the last direction ("time") carries a different weight, so these
 // hand the body the full 2·ndims neighbour sum AND the last-direction sum
-// separately. They reuse the shared dimension-generic engine
-// (<reticolo/action/sweep/stencil.hpp>) — its tiling, per-dim vectorised
-// neighbour-base geometry (`walk_outer_`, `agg_*`), and threading — adding only
-// the second (last-direction) aggregate. The last direction is dim D-1, which is
-// the OUTERMOST axis of the walk, so its pre-wrapped row bases fwd[D-1]/bwd[D-1]
-// are already produced by the engine; the last-dim pair is one extra read per
-// site with no inner-x wrap of its own.
+// separately. They mirror the site engine's explicit per-dimension nests
+// (<reticolo/action/sweep/stencil.hpp>) — same hoisted row bases, tiling and
+// threading — but emit a second aggregate. The last direction is dim D-1, the
+// OUTERMOST walk axis, so its row bases are the z/w ones already hoisted; the
+// last-dim pair is one extra read per site with no inner-x wrap of its own.
 //
 //  visit_nn_split_last(l, body):    body(i, phi, nbrs_total, nbrs_last) -> void
 //  reduce_fwd_split_last(l, body):  body(phi, fwd_total, fwd_last) -> T
@@ -82,117 +80,247 @@ template <class T, class Acc, class Body>
     return total;
 }
 
-// ---------- split-last row + item (reuse shared agg_*/walk_outer_) ------------
+// ---------- per-dimension split-last item nests -------------------------------
+//
+// Same explicit hoisted nests as the site engine, but each site emits TWO sums:
+// the full 2·ndims neighbour total AND the last-direction (dim D-1) pair on its
+// own. The last direction is the outermost walk axis, so its row bases are the
+// z/w ones already hoisted. Identity combine (raw reads). Total order and the +x
+// peel match the gather fallback → bit-identical for any thread count.
 
-// One innermost row [0, L0): the TOTAL reuses the shared identity-combine
-// aggregate (inner-x wrap peeled); the last-direction pair is a plain read at the
-// dim-(D-1) row bases (uniform in x, no inner wrap of its own).
-template <std::size_t D, class T, class Body>
-inline void map_row_split_(T const* data,
-                           std::size_t own,
-                           std::array<std::size_t, D> const& fwd,
-                           std::array<std::size_t, D> const& bwd,
-                           std::size_t L0,
-                           Body const& body) noexcept {
-    constexpr std::size_t last = D - 1;
-    IdentityCombine const id{};
-    {
-        T const self  = data[own];
-        T const total = agg_lo_<D, AllDirs>(data, self, own, L0, fwd, bwd, id);
-        body(own, self, total, data[fwd[last]] + data[bwd[last]]);
-    }
-    for (std::size_t x = 1; x + 1 < L0; ++x) {
-        std::size_t const i = own + x;
-        T const self        = data[i];
-        T const total       = agg_bulk_<D, AllDirs>(data, self, i, x, fwd, bwd, id);
-        body(i, self, total, data[fwd[last] + x] + data[bwd[last] + x]);
-    }
-    {
-        std::size_t const i = own + (L0 - 1);
-        T const self        = data[i];
-        T const total       = agg_hi_<D, AllDirs>(data, self, own, L0, fwd, bwd, id);
-        body(i, self, total, data[fwd[last] + (L0 - 1)] + data[bwd[last] + (L0 - 1)]);
+template <class T, class Body>
+inline void map_split_2d_(T const* data,
+                               std::array<std::size_t, 2> const& L,
+                               std::array<std::size_t, 2> const& stride,
+                               std::array<std::size_t, 2> const& lo,
+                               std::array<std::size_t, 2> const& hi,
+                               Body const& body) noexcept {
+    std::size_t const L0 = L[0];
+    std::size_t const L1 = L[1];
+    std::size_t const s1 = stride[1];
+    for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+        std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+        std::size_t const ym     = (y == 0) ? (L1 - 1) : (y - 1);
+        std::size_t const row    = y * s1;
+        std::size_t const row_yp = yp * s1;
+        std::size_t const row_ym = ym * s1;
+        auto const emit = [&](std::size_t i, std::size_t xm, std::size_t xp, std::size_t off) {
+            T const self = data[i];
+            T const last = data[row_yp + off] + data[row_ym + off];
+            body(i, self, data[xp] + data[xm] + last, last);
+        };
+        emit(row, row + (L0 - 1), row + 1, 0);
+        for (std::size_t x = 1; x + 1 < L0; ++x) {
+            emit(row + x, row + x - 1, row + x + 1, x);
+        }
+        emit(row + (L0 - 1), row + (L0 - 2), row, L0 - 1);
     }
 }
 
-template <std::size_t D, class Acc, class T, class Body>
-[[nodiscard]] inline Acc reduce_row_split_(T const* data,
-                                           std::size_t own,
-                                           std::array<std::size_t, D> const& fwd,
-                                           std::array<std::size_t, D> const& bwd,
-                                           std::size_t L0,
-                                           Body const& body) noexcept {
-    RETICOLO_FP_REASSOCIATE
-    constexpr std::size_t last = D - 1;
-    IdentityCombine const id{};
+template <class Acc, class T, class Body>
+[[nodiscard]] inline Acc reduce_split_2d_(T const* data,
+                                               std::array<std::size_t, 2> const& L,
+                                               std::array<std::size_t, 2> const& stride,
+                                               std::array<std::size_t, 2> const& lo,
+                                               std::array<std::size_t, 2> const& hi,
+                                               Body const& body) noexcept {
+    std::size_t const L0 = L[0];
+    std::size_t const L1 = L[1];
+    std::size_t const s1 = stride[1];
     Acc total{};
-    for (std::size_t x = 0; x + 1 < L0; ++x) {
-        std::size_t const i = own + x;
-        T const self        = data[i];
-        T const fwd_total   = agg_bulk_<D, FwdOnly>(data, self, i, x, fwd, bwd, id);
-        total += body(self, fwd_total, data[fwd[last] + x]);
-    }
-    {
-        std::size_t const i = own + (L0 - 1);
-        T const self        = data[i];
-        T const fwd_total   = agg_hi_<D, FwdOnly>(data, self, own, L0, fwd, bwd, id);
-        total += body(self, fwd_total, data[fwd[last] + (L0 - 1)]);
+    for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+        std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+        std::size_t const row    = y * s1;
+        std::size_t const row_yp = yp * s1;
+        for (std::size_t x = 0; x + 1 < L0; ++x) {
+            std::size_t const i = row + x;
+            T const last        = data[row_yp + x];
+            total += body(data[i], data[i + 1] + last, last);
+        }
+        std::size_t const i = row + (L0 - 1);
+        T const last        = data[row_yp + (L0 - 1)];
+        total += body(data[i], data[row] + last, last);
     }
     return total;
 }
 
-template <std::size_t D, class T, class Body>
-inline void map_item_split_(Lattice<T> const& l,
-                            std::array<std::size_t, D> const& L,
-                            std::array<std::size_t, D> const& stride,
-                            std::array<std::size_t, D> const& lo,
-                            std::array<std::size_t, D> const& hi,
-                            Body const& body) noexcept {
-    T const* const data  = l.data();
+template <class T, class Body>
+inline void map_split_3d_(T const* data,
+                               std::array<std::size_t, 3> const& L,
+                               std::array<std::size_t, 3> const& stride,
+                               std::array<std::size_t, 3> const& lo,
+                               std::array<std::size_t, 3> const& hi,
+                               Body const& body) noexcept {
     std::size_t const L0 = L[0];
-    std::array<std::size_t, D> d_fwd{};
-    std::array<std::size_t, D> d_bwd{};
-    walk_outer_<D, D - 1, T>(L,
-                             stride,
-                             lo,
-                             hi,
-                             std::size_t{0},
-                             d_fwd,
-                             d_bwd,
-                             [&](std::size_t own, auto const& df, auto const& db) {
-                                 std::array<std::size_t, D> fwd{};
-                                 std::array<std::size_t, D> bwd{};
-                                 item_bases_<D>(own, df, db, fwd, bwd);
-                                 map_row_split_<D>(data, own, fwd, bwd, L0, body);
-                             });
+    std::size_t const L1 = L[1];
+    std::size_t const L2 = L[2];
+    std::size_t const s1 = stride[1];
+    std::size_t const s2 = stride[2];
+    for (std::size_t z = lo[2]; z < hi[2]; ++z) {
+        std::size_t const zp       = (z + 1 == L2) ? 0 : (z + 1);
+        std::size_t const zm       = (z == 0) ? (L2 - 1) : (z - 1);
+        std::size_t const plane    = z * s2;
+        std::size_t const plane_zp = zp * s2;
+        std::size_t const plane_zm = zm * s2;
+        for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+            std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+            std::size_t const ym     = (y == 0) ? (L1 - 1) : (y - 1);
+            std::size_t const row    = plane + (y * s1);
+            std::size_t const row_yp = plane + (yp * s1);
+            std::size_t const row_ym = plane + (ym * s1);
+            std::size_t const row_zp = plane_zp + (y * s1);
+            std::size_t const row_zm = plane_zm + (y * s1);
+            auto const emit = [&](std::size_t i, std::size_t xm, std::size_t xp, std::size_t off) {
+                T const self = data[i];
+                T const last = data[row_zp + off] + data[row_zm + off];
+                body(i, self,
+                     data[xp] + data[xm] + data[row_yp + off] + data[row_ym + off] + last, last);
+            };
+            emit(row, row + (L0 - 1), row + 1, 0);
+            for (std::size_t x = 1; x + 1 < L0; ++x) {
+                emit(row + x, row + x - 1, row + x + 1, x);
+            }
+            emit(row + (L0 - 1), row + (L0 - 2), row, L0 - 1);
+        }
+    }
 }
 
-template <std::size_t D, class Acc, class T, class Body>
-[[nodiscard]] inline Acc reduce_item_split_(Lattice<T> const& l,
-                                            std::array<std::size_t, D> const& L,
-                                            std::array<std::size_t, D> const& stride,
-                                            std::array<std::size_t, D> const& lo,
-                                            std::array<std::size_t, D> const& hi,
-                                            Body const& body) noexcept {
-    RETICOLO_FP_REASSOCIATE
-    T const* const data  = l.data();
+template <class Acc, class T, class Body>
+[[nodiscard]] inline Acc reduce_split_3d_(T const* data,
+                                               std::array<std::size_t, 3> const& L,
+                                               std::array<std::size_t, 3> const& stride,
+                                               std::array<std::size_t, 3> const& lo,
+                                               std::array<std::size_t, 3> const& hi,
+                                               Body const& body) noexcept {
     std::size_t const L0 = L[0];
+    std::size_t const L1 = L[1];
+    std::size_t const L2 = L[2];
+    std::size_t const s1 = stride[1];
+    std::size_t const s2 = stride[2];
     Acc total{};
-    std::array<std::size_t, D> d_fwd{};
-    std::array<std::size_t, D> d_bwd{};
-    walk_outer_<D, D - 1, T>(L,
-                             stride,
-                             lo,
-                             hi,
-                             std::size_t{0},
-                             d_fwd,
-                             d_bwd,
-                             [&](std::size_t own, auto const& df, auto const& db) {
-                                 std::array<std::size_t, D> fwd{};
-                                 std::array<std::size_t, D> bwd{};
-                                 item_bases_<D>(own, df, db, fwd, bwd);
-                                 total += reduce_row_split_<D, Acc>(data, own, fwd, bwd, L0, body);
-                             });
+    for (std::size_t z = lo[2]; z < hi[2]; ++z) {
+        std::size_t const zp       = (z + 1 == L2) ? 0 : (z + 1);
+        std::size_t const plane    = z * s2;
+        std::size_t const plane_zp = zp * s2;
+        for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+            std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+            std::size_t const row    = plane + (y * s1);
+            std::size_t const row_yp = plane + (yp * s1);
+            std::size_t const row_zp = plane_zp + (y * s1);
+            for (std::size_t x = 0; x + 1 < L0; ++x) {
+                std::size_t const i = row + x;
+                T const last        = data[row_zp + x];
+                total += body(data[i], data[i + 1] + data[row_yp + x] + last, last);
+            }
+            std::size_t const i = row + (L0 - 1);
+            T const last        = data[row_zp + (L0 - 1)];
+            total += body(data[i], data[row] + data[row_yp + (L0 - 1)] + last, last);
+        }
+    }
+    return total;
+}
+
+template <class T, class Body>
+inline void map_split_4d_(T const* data,
+                               std::array<std::size_t, 4> const& L,
+                               std::array<std::size_t, 4> const& stride,
+                               std::array<std::size_t, 4> const& lo,
+                               std::array<std::size_t, 4> const& hi,
+                               Body const& body) noexcept {
+    std::size_t const L0 = L[0];
+    std::size_t const L1 = L[1];
+    std::size_t const L2 = L[2];
+    std::size_t const L3 = L[3];
+    std::size_t const s1 = stride[1];
+    std::size_t const s2 = stride[2];
+    std::size_t const s3 = stride[3];
+    for (std::size_t w = lo[3]; w < hi[3]; ++w) {
+        std::size_t const wp     = (w + 1 == L3) ? 0 : (w + 1);
+        std::size_t const wm     = (w == 0) ? (L3 - 1) : (w - 1);
+        std::size_t const hyp    = w * s3;
+        std::size_t const hyp_wp = wp * s3;
+        std::size_t const hyp_wm = wm * s3;
+        for (std::size_t z = lo[2]; z < hi[2]; ++z) {
+            std::size_t const zp       = (z + 1 == L2) ? 0 : (z + 1);
+            std::size_t const zm       = (z == 0) ? (L2 - 1) : (z - 1);
+            std::size_t const plane    = hyp + (z * s2);
+            std::size_t const plane_zp = hyp + (zp * s2);
+            std::size_t const plane_zm = hyp + (zm * s2);
+            std::size_t const plane_wp = hyp_wp + (z * s2);
+            std::size_t const plane_wm = hyp_wm + (z * s2);
+            for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+                std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+                std::size_t const ym     = (y == 0) ? (L1 - 1) : (y - 1);
+                std::size_t const row    = plane + (y * s1);
+                std::size_t const row_yp = plane + (yp * s1);
+                std::size_t const row_ym = plane + (ym * s1);
+                std::size_t const row_zp = plane_zp + (y * s1);
+                std::size_t const row_zm = plane_zm + (y * s1);
+                std::size_t const row_wp = plane_wp + (y * s1);
+                std::size_t const row_wm = plane_wm + (y * s1);
+                auto const emit = [&](std::size_t i, std::size_t xm, std::size_t xp,
+                                      std::size_t off) {
+                    T const self = data[i];
+                    T const last = data[row_wp + off] + data[row_wm + off];
+                    body(i, self,
+                         data[xp] + data[xm] + data[row_yp + off] + data[row_ym + off] +
+                             data[row_zp + off] + data[row_zm + off] + last,
+                         last);
+                };
+                emit(row, row + (L0 - 1), row + 1, 0);
+                for (std::size_t x = 1; x + 1 < L0; ++x) {
+                    emit(row + x, row + x - 1, row + x + 1, x);
+                }
+                emit(row + (L0 - 1), row + (L0 - 2), row, L0 - 1);
+            }
+        }
+    }
+}
+
+template <class Acc, class T, class Body>
+[[nodiscard]] inline Acc reduce_split_4d_(T const* data,
+                                               std::array<std::size_t, 4> const& L,
+                                               std::array<std::size_t, 4> const& stride,
+                                               std::array<std::size_t, 4> const& lo,
+                                               std::array<std::size_t, 4> const& hi,
+                                               Body const& body) noexcept {
+    std::size_t const L0 = L[0];
+    std::size_t const L1 = L[1];
+    std::size_t const L2 = L[2];
+    std::size_t const L3 = L[3];
+    std::size_t const s1 = stride[1];
+    std::size_t const s2 = stride[2];
+    std::size_t const s3 = stride[3];
+    Acc total{};
+    for (std::size_t w = lo[3]; w < hi[3]; ++w) {
+        std::size_t const wp     = (w + 1 == L3) ? 0 : (w + 1);
+        std::size_t const hyp    = w * s3;
+        std::size_t const hyp_wp = wp * s3;
+        for (std::size_t z = lo[2]; z < hi[2]; ++z) {
+            std::size_t const zp       = (z + 1 == L2) ? 0 : (z + 1);
+            std::size_t const plane    = hyp + (z * s2);
+            std::size_t const plane_zp = hyp + (zp * s2);
+            std::size_t const plane_wp = hyp_wp + (z * s2);
+            for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+                std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+                std::size_t const row    = plane + (y * s1);
+                std::size_t const row_yp = plane + (yp * s1);
+                std::size_t const row_zp = plane_zp + (y * s1);
+                std::size_t const row_wp = plane_wp + (y * s1);
+                for (std::size_t x = 0; x + 1 < L0; ++x) {
+                    std::size_t const i = row + x;
+                    T const last        = data[row_wp + x];
+                    total += body(data[i],
+                                  data[i + 1] + data[row_yp + x] + data[row_zp + x] + last, last);
+                }
+                std::size_t const i = row + (L0 - 1);
+                T const last        = data[row_wp + (L0 - 1)];
+                total += body(data[i],
+                              data[row] + data[row_yp + (L0 - 1)] + data[row_zp + (L0 - 1)] + last,
+                              last);
+            }
+        }
+    }
     return total;
 }
 
@@ -211,7 +339,13 @@ inline void visit_nn_split_last(Lattice<T> const& l, Body&& body) noexcept {
     traverse_dispatch_<void>(
         l,
         [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
-            map_item_split_<D>(l, L, stride, lo, hi, b);
+            if constexpr (D == 2) {
+                map_split_2d_(l.data(), L, stride, lo, hi, b);
+            } else if constexpr (D == 3) {
+                map_split_3d_(l.data(), L, stride, lo, hi, b);
+            } else {
+                map_split_4d_(l.data(), L, stride, lo, hi, b);
+            }
         },
         flat,
         flat);
@@ -227,7 +361,13 @@ template <class T, class Body>
     return traverse_dispatch_<T>(
         l,
         [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
-            return reduce_item_split_<D, T>(l, L, stride, lo, hi, b);
+            if constexpr (D == 2) {
+                return reduce_split_2d_<T>(l.data(), L, stride, lo, hi, b);
+            } else if constexpr (D == 3) {
+                return reduce_split_3d_<T>(l.data(), L, stride, lo, hi, b);
+            } else {
+                return reduce_split_4d_<T>(l.data(), L, stride, lo, hi, b);
+            }
         },
         flat,
         flat);

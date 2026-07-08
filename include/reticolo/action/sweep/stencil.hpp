@@ -21,14 +21,14 @@
     #define RETICOLO_FP_REASSOCIATE
 #endif
 
-// Dimension-generic nearest-neighbour traversal engine, shared by every NN scalar
-// family (site, bond, complex). One engine sweeps the lattice as a stack of
-// innermost-axis rows: dim 0 (x) is kept FULL and contiguous so the inner loop
-// vectorises on every architecture (NEON / SSE / AVX2 / AVX-512 / SVE) with no
-// intrinsics; the outer axes (dims 1..D-1) are enumerated by `walk_outer_<D>`, a
-// compile-time recursive loop nest that the compiler expands — for a fixed D —
-// into the identical hand-written D-deep nest. So the per-dim stencil is written
-// once, not once per dimension.
+// Nearest-neighbour traversal engine, shared by every NN scalar family (site,
+// bond, complex). It sweeps the lattice as a stack of innermost-axis rows: dim 0
+// (x) is kept FULL and contiguous so the inner loop vectorises on every
+// architecture (NEON / SSE / AVX2 / AVX-512 / SVE) with no intrinsics; the outer
+// axes (dims 1..D-1) are an explicit hoisted loop nest, one per dimension
+// (`stencil_map_{1,2,3,4}d_`, `stencil_reduce_*`). Each row hoists its neighbour
+// bases as scalars and sums the per-site neighbours INLINE in the dim-0 loop, so
+// the compiler collapses the whole kernel.
 //
 // The two entry points:
 //
@@ -160,372 +160,6 @@ template <class T, class Acc = T, class Body>
     return stencil_reduce_flat_<T, Acc>(l, s0, cnt, IdentityCombine{}, body);
 }
 
-// ---------- generic stencil body ---------------------------------------------
-
-// Per-site neighbour aggregate, in the fallback-matching order
-// (inner-fwd, inner-bwd, then for each outer dim fwd, bwd). `fwd`/`bwd` hold the
-// pre-wrapped neighbour ROW bases for the outer dims (index 0 unused); the inner
-// (dim-0) neighbour is the contiguous data[i±1]. `comb(self, ·)` is applied per
-// neighbour. Three variants: the contiguous interior (no wrap) and the two peeled
-// global-x edges. All `always_inline` so the compile-time-bounded `for mu`
-// unrolls and the interior vectorises.
-
-template <std::size_t D, class Policy, class T, class Comb>
-[[gnu::always_inline]] inline T agg_bulk_(T const* data,
-                                          T self,
-                                          std::size_t i,
-                                          std::size_t x,
-                                          std::array<std::size_t, D> const& fwd,
-                                          std::array<std::size_t, D> const& bwd,
-                                          Comb const& comb) noexcept {
-    T a = comb(self, data[i + 1]);
-    if constexpr (Policy::all) {
-        a += comb(self, data[i - 1]);
-    }
-    for (std::size_t mu = 1; mu < D; ++mu) {
-        a += comb(self, data[fwd[mu] + x]);
-        if constexpr (Policy::all) {
-            a += comb(self, data[bwd[mu] + x]);
-        }
-    }
-    return a;
-}
-
-// Global -x edge (x == 0, i == own): inner +x is data[own+1], inner -x wraps to
-// data[own+L0-1]. Outer neighbours read at x = 0.
-template <std::size_t D, class Policy, class T, class Comb>
-[[gnu::always_inline]] inline T agg_lo_(T const* data,
-                                        T self,
-                                        std::size_t own,
-                                        std::size_t L0,
-                                        std::array<std::size_t, D> const& fwd,
-                                        std::array<std::size_t, D> const& bwd,
-                                        Comb const& comb) noexcept {
-    T a = comb(self, data[own + 1]);
-    if constexpr (Policy::all) {
-        a += comb(self, data[own + (L0 - 1)]);
-    }
-    for (std::size_t mu = 1; mu < D; ++mu) {
-        a += comb(self, data[fwd[mu]]);
-        if constexpr (Policy::all) {
-            a += comb(self, data[bwd[mu]]);
-        }
-    }
-    return a;
-}
-
-// Global +x edge (x == L0-1, i == own+L0-1): inner +x wraps to data[own], inner
-// -x is data[i-1]. Outer neighbours read at x = L0-1.
-template <std::size_t D, class Policy, class T, class Comb>
-[[gnu::always_inline]] inline T agg_hi_(T const* data,
-                                        T self,
-                                        std::size_t own,
-                                        std::size_t L0,
-                                        std::array<std::size_t, D> const& fwd,
-                                        std::array<std::size_t, D> const& bwd,
-                                        Comb const& comb) noexcept {
-    std::size_t const i = own + (L0 - 1);
-    T a                 = comb(self, data[own]);
-    if constexpr (Policy::all) {
-        a += comb(self, data[i - 1]);
-    }
-    for (std::size_t mu = 1; mu < D; ++mu) {
-        a += comb(self, data[fwd[mu] + (L0 - 1)]);
-        if constexpr (Policy::all) {
-            a += comb(self, data[bwd[mu] + (L0 - 1)]);
-        }
-    }
-    return a;
-}
-
-// Row kernels over a neighbour-row pointer PACK. Each outer-dim base arrives as
-// an independent T const* argument (an SSA value → a register), not an element of
-// a stack array — the exact shape of the hand-written per-dim nest, so the
-// interior loop carries no per-site array reloads or spill traffic. (Measured on
-// the array-of-bases form: ~2 extra spill-pair reloads per site inside the hot
-// loop, ~1.4× on the whole force pass.)
-//
-// Pack order is the canonical neighbour order: AllDirs → interleaved
-// (fwd1, bwd1, fwd2, bwd2, …); FwdOnly → (fwd1, fwd2, …). The comma-fold applies
-// `comb` left-to-right in exactly that order, so the sums are bit-identical to
-// the gather fallback. The two global-x wraps are peeled; the interior [xb, xe)
-// is the contiguous vectorised run, and any chunk partition of a full row
-// reproduces the whole-row sweep bit-for-bit.
-
-template <class Policy, class T, class Comb, class Body, class... Rows>
-inline void map_row_p_(T const* data,
-                       std::size_t own,
-                       std::size_t x0,
-                       std::size_t x1,
-                       std::size_t L0,
-                       Comb const& comb,
-                       Body const& body,
-                       Rows const... rows) noexcept {
-    std::size_t xb = x0;
-    std::size_t xe = x1;
-    if (x0 == 0) {
-        T const self = data[own];
-        T a          = comb(self, data[own + 1]);
-        if constexpr (Policy::all) {
-            a += comb(self, data[own + (L0 - 1)]);
-        }
-        ((a += comb(self, rows[0])), ...);
-        body(own, self, a);
-        xb = 1;
-    }
-    if (x1 == L0) {
-        xe = L0 - 1;
-    }
-    for (std::size_t x = xb; x < xe; ++x) {
-        std::size_t const i = own + x;
-        T const self        = data[i];
-        T a                 = comb(self, data[i + 1]);
-        if constexpr (Policy::all) {
-            a += comb(self, data[i - 1]);
-        }
-        ((a += comb(self, rows[x])), ...);
-        body(i, self, a);
-    }
-    if (x1 == L0) {
-        std::size_t const i = own + (L0 - 1);
-        T const self        = data[i];
-        T a                 = comb(self, data[own]);
-        if constexpr (Policy::all) {
-            a += comb(self, data[i - 1]);
-        }
-        ((a += comb(self, rows[L0 - 1])), ...);
-        body(i, self, a);
-    }
-}
-
-template <class Policy, class Acc, class T, class Comb, class Body, class... Rows>
-[[nodiscard]] inline Acc reduce_row_p_(T const* data,
-                                       std::size_t own,
-                                       std::size_t x0,
-                                       std::size_t x1,
-                                       std::size_t L0,
-                                       Comb const& comb,
-                                       Body const& body,
-                                       Rows const... rows) noexcept {
-    RETICOLO_FP_REASSOCIATE
-    Acc total{};
-    std::size_t xb = x0;
-    std::size_t xe = x1;
-    if (x0 == 0) {
-        T const self = data[own];
-        T a          = comb(self, data[own + 1]);
-        if constexpr (Policy::all) {
-            a += comb(self, data[own + (L0 - 1)]);
-        }
-        ((a += comb(self, rows[0])), ...);
-        total += body(self, a);
-        xb = 1;
-    }
-    if (x1 == L0) {
-        xe = L0 - 1;
-    }
-    for (std::size_t x = xb; x < xe; ++x) {
-        std::size_t const i = own + x;
-        T const self        = data[i];
-        T a                 = comb(self, data[i + 1]);
-        if constexpr (Policy::all) {
-            a += comb(self, data[i - 1]);
-        }
-        ((a += comb(self, rows[x])), ...);
-        total += body(self, a);
-    }
-    if (x1 == L0) {
-        std::size_t const i = own + (L0 - 1);
-        T const self        = data[i];
-        T a                 = comb(self, data[own]);
-        if constexpr (Policy::all) {
-            a += comb(self, data[i - 1]);
-        }
-        ((a += comb(self, rows[L0 - 1])), ...);
-        total += body(self, a);
-    }
-    return total;
-}
-
-// Row-base arrays → pointer pack: build the canonical-order pack from fwd/bwd
-// and dispatch to the pack kernels. AllDirs interleaves (fwd, bwd) per outer dim;
-// FwdOnly passes the forward rows only.
-template <std::size_t D, class Policy, class T, class Comb, class Body>
-inline void map_row_(T const* data,
-                     std::size_t own,
-                     std::array<std::size_t, D> const& df,
-                     std::array<std::size_t, D> const& db,
-                     std::size_t x0,
-                     std::size_t x1,
-                     std::size_t L0,
-                     Comb const& comb,
-                     Body const& body) noexcept {
-    // Neighbour-row base = own + delta, folded into the pointer pack directly —
-    // no fwd[]/bwd[] base arrays materialised (they spilled every row).
-    if constexpr (Policy::all) {
-        [&]<std::size_t... K>(std::index_sequence<K...>) {
-            map_row_p_<Policy>(data,
-                               own,
-                               x0,
-                               x1,
-                               L0,
-                               comb,
-                               body,
-                               (data + own + (K % 2 == 0 ? df[(K / 2) + 1] : db[(K / 2) + 1]))...);
-        }(std::make_index_sequence<2 * (D - 1)>{});
-    } else {
-        [&]<std::size_t... Nu>(std::index_sequence<Nu...>) {
-            map_row_p_<Policy>(data, own, x0, x1, L0, comb, body, (data + own + df[Nu + 1])...);
-        }(std::make_index_sequence<D - 1>{});
-    }
-}
-
-template <std::size_t D, class Policy, class Acc, class T, class Comb, class Body>
-[[nodiscard]] inline Acc reduce_row_(T const* data,
-                                     std::size_t own,
-                                     std::array<std::size_t, D> const& df,
-                                     std::array<std::size_t, D> const& db,
-                                     std::size_t x0,
-                                     std::size_t x1,
-                                     std::size_t L0,
-                                     Comb const& comb,
-                                     Body const& body) noexcept {
-    if constexpr (Policy::all) {
-        return [&]<std::size_t... K>(std::index_sequence<K...>) {
-            return reduce_row_p_<Policy, Acc>(
-                data,
-                own,
-                x0,
-                x1,
-                L0,
-                comb,
-                body,
-                (data + own + (K % 2 == 0 ? df[(K / 2) + 1] : db[(K / 2) + 1]))...);
-        }(std::make_index_sequence<2 * (D - 1)>{});
-    } else {
-        return [&]<std::size_t... Nu>(std::index_sequence<Nu...>) {
-            return reduce_row_p_<Policy, Acc>(
-                data, own, x0, x1, L0, comb, body, (data + own + df[Nu + 1])...);
-        }(std::make_index_sequence<D - 1>{});
-    }
-}
-
-// Compile-time recursive loop nest over the outer dims [1, D). `Mu` counts down
-// from D-1 (outermost) to 0; at Mu==0 all outer coords are fixed and
-// `emit(own, d_fwd, d_bwd)` is called for one innermost row. For a fixed D this
-// expands into the identical `for w { for z { for y { ... } } }` nest written by
-// hand before — but as ONE definition covering every dimension. `own` accumulates
-// the row base during descent.
-//
-// Each level ALSO computes its periodic neighbour DELTAS when its coordinate
-// advances: d_fwd[Mu] = (wrap(c+1) − c)·stride[Mu] (as size_t, exact mod 2⁶⁴), so
-// the row's pre-wrapped neighbour bases are just `own + d`. This is where the
-// wrap arithmetic lives — once per LEVEL STEP, exactly like the hand-written
-// nest's hoisted row_yp/row_ym — not once per row. (The per-row recompute it
-// replaces cost ~100 integer instrs/row of madd/csel + spill traffic; measured
-// ~1.4× on the whole force pass.)
-// d_fwd/d_bwd are passed BY VALUE (not by mutable reference): a reference forces
-// the arrays onto the stack across the recursion — the per-row spill traffic the
-// profiler flagged. By value, each level owns a copy the compiler can keep in
-// registers / SROA away; only the current level's [Mu] slot is written, the rest
-// carried down unchanged, so the emitted deltas are bit-identical.
-template <std::size_t D, std::size_t Mu, class T, class Emit>
-inline void walk_outer_(std::array<std::size_t, D> const& L,
-                        std::array<std::size_t, D> const& stride,
-                        std::array<std::size_t, D> const& lo,
-                        std::array<std::size_t, D> const& hi,
-                        std::size_t own,
-                        std::array<std::size_t, D> d_fwd,
-                        std::array<std::size_t, D> d_bwd,
-                        Emit const& emit) noexcept {
-    if constexpr (Mu == 0) {
-        emit(own, d_fwd, d_bwd);
-    } else {
-        std::size_t const s  = stride[Mu];
-        std::size_t const Lm = L[Mu];
-        for (std::size_t c = lo[Mu]; c < hi[Mu]; ++c) {
-            std::size_t const cf = (c + 1 == Lm) ? std::size_t{0} : (c + 1);
-            std::size_t const cb = (c == 0) ? (Lm - 1) : (c - 1);
-            d_fwd[Mu]            = (cf - c) * s;  // size_t wrap-around is exact
-            d_bwd[Mu]            = (cb - c) * s;
-            walk_outer_<D, Mu - 1, T>(L, stride, lo, hi, own + (c * s), d_fwd, d_bwd, emit);
-        }
-    }
-}
-
-// Row neighbour bases from the walk's per-level deltas: fwd[nu] = own + d_fwd[nu]
-// — D−1 adds per row, no wrap arithmetic. Shared by the map and reduce item
-// drivers (site and complex split-last).
-template <std::size_t D>
-[[gnu::always_inline]] inline void item_bases_(std::size_t own,
-                                               std::array<std::size_t, D> const& d_fwd,
-                                               std::array<std::size_t, D> const& d_bwd,
-                                               std::array<std::size_t, D>& fwd,
-                                               std::array<std::size_t, D>& bwd) noexcept {
-    for (std::size_t nu = 1; nu < D; ++nu) {
-        fwd[nu] = own + d_fwd[nu];
-        bwd[nu] = own + d_bwd[nu];
-    }
-}
-
-// Run one work item (a rectangular sub-lattice [lo, hi), inner dim full) as a map.
-// The emit lambda derives each row's pre-wrapped outer neighbour bases from `own`
-// and the walk's per-level deltas, then maps the row.
-template <std::size_t D, class Policy, class T, class Comb, class Body>
-inline void map_item_(Lattice<T> const& l,
-                      std::array<std::size_t, D> const& L,
-                      std::array<std::size_t, D> const& stride,
-                      std::array<std::size_t, D> const& lo,
-                      std::array<std::size_t, D> const& hi,
-                      Comb const& comb,
-                      Body const& body) noexcept {
-    T const* const data  = l.data();
-    std::size_t const L0 = L[0];
-    std::array<std::size_t, D> d_fwd{};
-    std::array<std::size_t, D> d_bwd{};
-    walk_outer_<D, D - 1, T>(L,
-                             stride,
-                             lo,
-                             hi,
-                             std::size_t{0},
-                             d_fwd,
-                             d_bwd,
-                             [&](std::size_t own, auto const& df, auto const& db) {
-                                 map_row_<D, Policy>(
-                                     data, own, df, db, std::size_t{0}, L0, L0, comb, body);
-                             });
-}
-
-// Run one work item as a reduce; per-row partials fold in odometer (walk_outer_)
-// order → the item partial is thread-count-independent.
-template <std::size_t D, class Policy, class Acc, class T, class Comb, class Body>
-[[nodiscard]] inline Acc reduce_item_(Lattice<T> const& l,
-                                      std::array<std::size_t, D> const& L,
-                                      std::array<std::size_t, D> const& stride,
-                                      std::array<std::size_t, D> const& lo,
-                                      std::array<std::size_t, D> const& hi,
-                                      Comb const& comb,
-                                      Body const& body) noexcept {
-    RETICOLO_FP_REASSOCIATE
-    T const* const data  = l.data();
-    std::size_t const L0 = L[0];
-    Acc total{};
-    std::array<std::size_t, D> d_fwd{};
-    std::array<std::size_t, D> d_bwd{};
-    walk_outer_<D, D - 1, T>(L,
-                             stride,
-                             lo,
-                             hi,
-                             std::size_t{0},
-                             d_fwd,
-                             d_bwd,
-                             [&](std::size_t own, auto const& df, auto const& db) {
-                                 total += reduce_row_<D, Policy, Acc>(
-                                     data, own, df, db, std::size_t{0}, L0, L0, comb, body);
-                             });
-    return total;
-}
-
 // Build (L, stride) geometry arrays for a D-dim lattice. stride[0]=1,
 // stride[mu]=∏_{k<mu} L[k].
 template <std::size_t D, class T>
@@ -642,8 +276,54 @@ inline Acc traverse_dispatch_(Lattice<T> const& l,
 // thread count. Wraps use the full L[mu]. Writing the sum inline (not via a shared
 // row helper) is what lets the compiler collapse the whole per-site kernel.
 
+// 1D: a chunk [x0, xe) of the single axis. Only the two global x-wraps are peeled
+// (a chunk that doesn't touch them runs branch-free). Map sums x⁺,x⁻; reduce sums
+// x⁺ only. Order matches the gather fallback.
 template <class T, class Comb, class Body>
-inline void map_hand_2d_(T const* data,
+inline void
+stencil_map_1d_(T const* data, std::size_t x0, std::size_t xe, std::size_t L0, Comb const& comb,
+             Body const& body) noexcept {
+    std::size_t xb   = x0;
+    std::size_t xend = xe;
+    if (x0 == 0) {
+        T const self = data[0];
+        body(std::size_t{0}, self, comb(self, data[1]) + comb(self, data[L0 - 1]));
+        xb = 1;
+    }
+    if (xe == L0) {
+        xend = L0 - 1;
+    }
+    for (std::size_t x = xb; x < xend; ++x) {
+        T const self = data[x];
+        body(x, self, comb(self, data[x + 1]) + comb(self, data[x - 1]));
+    }
+    if (xe == L0) {
+        std::size_t const i = L0 - 1;
+        T const self        = data[i];
+        body(i, self, comb(self, data[0]) + comb(self, data[i - 1]));
+    }
+}
+
+template <class Acc, class T, class Comb, class Body>
+[[nodiscard]] inline Acc
+stencil_reduce_1d_(T const* data, std::size_t x0, std::size_t xe, std::size_t L0, Comb const& comb,
+                Body const& body) noexcept {
+    Acc total{};
+    std::size_t const xend = (xe == L0) ? (L0 - 1) : xe;
+    for (std::size_t x = x0; x < xend; ++x) {
+        T const self = data[x];
+        total += body(self, comb(self, data[x + 1]));
+    }
+    if (xe == L0) {
+        std::size_t const i = L0 - 1;
+        T const self        = data[i];
+        total += body(self, comb(self, data[0]));
+    }
+    return total;
+}
+
+template <class T, class Comb, class Body>
+inline void stencil_map_2d_(T const* data,
                          std::array<std::size_t, 2> const& L,
                          std::array<std::size_t, 2> const& stride,
                          std::array<std::size_t, 2> const& lo,
@@ -674,7 +354,7 @@ inline void map_hand_2d_(T const* data,
 }
 
 template <class Acc, class T, class Comb, class Body>
-[[nodiscard]] inline Acc reduce_hand_2d_(T const* data,
+[[nodiscard]] inline Acc stencil_reduce_2d_(T const* data,
                                          std::array<std::size_t, 2> const& L,
                                          std::array<std::size_t, 2> const& stride,
                                          std::array<std::size_t, 2> const& lo,
@@ -702,7 +382,7 @@ template <class Acc, class T, class Comb, class Body>
 }
 
 template <class T, class Comb, class Body>
-inline void map_hand_3d_(T const* data,
+inline void stencil_map_3d_(T const* data,
                          std::array<std::size_t, 3> const& L,
                          std::array<std::size_t, 3> const& stride,
                          std::array<std::size_t, 3> const& lo,
@@ -745,7 +425,7 @@ inline void map_hand_3d_(T const* data,
 }
 
 template <class Acc, class T, class Comb, class Body>
-[[nodiscard]] inline Acc reduce_hand_3d_(T const* data,
+[[nodiscard]] inline Acc stencil_reduce_3d_(T const* data,
                                          std::array<std::size_t, 3> const& L,
                                          std::array<std::size_t, 3> const& stride,
                                          std::array<std::size_t, 3> const& lo,
@@ -783,7 +463,7 @@ template <class Acc, class T, class Comb, class Body>
 }
 
 template <class T, class Comb, class Body>
-inline void map_hand_4d_(T const* data,
+inline void stencil_map_4d_(T const* data,
                          std::array<std::size_t, 4> const& L,
                          std::array<std::size_t, 4> const& stride,
                          std::array<std::size_t, 4> const& lo,
@@ -841,7 +521,7 @@ inline void map_hand_4d_(T const* data,
 }
 
 template <class Acc, class T, class Comb, class Body>
-[[nodiscard]] inline Acc reduce_hand_4d_(T const* data,
+[[nodiscard]] inline Acc stencil_reduce_4d_(T const* data,
                                          std::array<std::size_t, 4> const& L,
                                          std::array<std::size_t, 4> const& stride,
                                          std::array<std::size_t, 4> const& lo,
@@ -897,15 +577,15 @@ inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) no
         l,
         [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
             if constexpr (D == 2) {
-                map_hand_2d_(l.data(), L, stride, lo, hi, comb, b);
+                stencil_map_2d_(l.data(), L, stride, lo, hi, comb, b);
             } else if constexpr (D == 3) {
-                map_hand_3d_(l.data(), L, stride, lo, hi, comb, b);
+                stencil_map_3d_(l.data(), L, stride, lo, hi, comb, b);
             } else {
-                map_hand_4d_(l.data(), L, stride, lo, hi, comb, b);
+                stencil_map_4d_(l.data(), L, stride, lo, hi, comb, b);
             }
         },
         [&](std::size_t x0, std::size_t cnt) {
-            map_row_p_<AllDirs>(l.data(), 0, x0, x0 + cnt, l.shape()[0], comb, b);
+            stencil_map_1d_(l.data(), x0, x0 + cnt, l.shape()[0], comb, b);
         },
         [&](std::size_t s0, std::size_t cnt) { stencil_map_flat_<T>(l, s0, cnt, comb, b); });
 }
@@ -921,15 +601,15 @@ reduce_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
         l,
         [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
             if constexpr (D == 2) {
-                return reduce_hand_2d_<Acc>(l.data(), L, stride, lo, hi, comb, b);
+                return stencil_reduce_2d_<Acc>(l.data(), L, stride, lo, hi, comb, b);
             } else if constexpr (D == 3) {
-                return reduce_hand_3d_<Acc>(l.data(), L, stride, lo, hi, comb, b);
+                return stencil_reduce_3d_<Acc>(l.data(), L, stride, lo, hi, comb, b);
             } else {
-                return reduce_hand_4d_<Acc>(l.data(), L, stride, lo, hi, comb, b);
+                return stencil_reduce_4d_<Acc>(l.data(), L, stride, lo, hi, comb, b);
             }
         },
         [&](std::size_t x0, std::size_t cnt) {
-            return reduce_row_p_<FwdOnly, Acc>(l.data(), 0, x0, x0 + cnt, l.shape()[0], comb, b);
+            return stencil_reduce_1d_<Acc>(l.data(), x0, x0 + cnt, l.shape()[0], comb, b);
         },
         [&](std::size_t s0, std::size_t cnt) {
             return stencil_reduce_flat_<T, Acc>(l, s0, cnt, comb, b);
