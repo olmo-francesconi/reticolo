@@ -169,25 +169,79 @@ template <class Acc = double, class Worker>
     });
 }
 
-// Field-convenience: the single call-site shell for a per-site-range pass over a
-// whole field. `field` supplies its own site count and per-site footprint, so the
-// threshold/chunk plumbing (want_threads / chunk_for) is derived, not repeated at
-// every call. `worker(base, cnt)` owns whatever inner structure the pass needs —
-// e.g. a gauge kernel's direction (μ) loop — and must be write-disjoint over the
-// site range for the map form. `gran` is the kernel's site-batch width, kept so
-// batched kernels stay bit-identical to a serial full-field sweep.
+// ---------- canonical field partition -----------------------------------------
 //
-// These name the gauge force / fused-kick / drift / kinetic / s_full-plane call
-// shape that was otherwise copied verbatim across the action + HMC + integrator
-// layers; any field exposing `nsites()` + `bytes_per_site()` qualifies.
+// THE decomposition of a field's site range. Every per-site pass — elementwise
+// map, reduce, stencil sweep, gauge plane kernel — splits into these items, so
+// `schedule(static)`'s contiguous block assignment hands each thread the SAME
+// contiguous memory span in every operation of a trajectory: producer→consumer
+// locality holds by construction, not by per-call-site convention.
+//
+// Items are contiguous flat spans made by splitting the OUTERMOST dims (never
+// dim 0 — x carries the vectorised streams) until at least
+// k_min_partition_items exist: enough items for any thread count and for load
+// balance, while a thread's static block stays one contiguous slab. The rule is
+// a pure function of the shape — no cache constant, no thread count — so the
+// reduce fold order (per-item partials in canonical item order) is
+// thread-count- AND machine-independent. 1D lattices fall back to fixed
+// 8192-site chunks (only there the final item is ragged).
+inline constexpr std::size_t k_min_partition_items = 64;
+
+struct Partition {
+    std::size_t n_items;
+    std::size_t item_sites;
+    std::size_t n_sites;
+    std::size_t split_dim;  // items enumerate dims [split_dim, ndims); 0 for 1D
+};
+
+template <class Field>
+[[nodiscard]] inline Partition partition(Field const& f) noexcept {
+    std::size_t const n = f.nsites();
+    std::size_t const d = f.ndims();
+    if (d <= 1) {
+        constexpr std::size_t k_item = 8192;
+        return {(n + k_item - 1) / k_item, k_item, n, 0};
+    }
+    auto const& sh    = f.shape();
+    std::size_t items = 1;
+    std::size_t k     = d;
+    while (k > 1 && items < k_min_partition_items) {
+        --k;
+        items *= sh[k];
+    }
+    return {items, n / items, n, k};
+}
+
+// Field-convenience: the ONLY way any code sweeps a field's sites. Threshold
+// (want_threads), the canonical partition, and determinism live here; the
+// caller supplies just the per-site-range work. `worker(base, cnt)` must be
+// write-disjoint over the site range for the map form; the reduce folds
+// per-item partials in canonical item order (thread-count invariant).
+//
+// `gran` is the kernel's SIMD batch width, kept for documentation and the
+// batched kernels' tail handling: the partition itself ignores it (there is ONE
+// partition per field, shared by every op), but item sizes are whole products
+// of inner dims, so for even lattice extents every item is a whole number of
+// any power-of-two batch — batched kernels split vector/scalar tails per item,
+// deterministically.
 template <class Field, class Worker>
-inline void field_visit(Field const& field, std::size_t gran, Worker const& worker) {
-    parallel_map_ranges(field.nsites(), field.bytes_per_site(), gran, worker);
+inline void field_visit(Field const& field, std::size_t /*gran*/, Worker const& worker) {
+    Partition const p = partition(field);
+    parallel_map(want_threads(p.n_sites, field.bytes_per_site()), p.n_items, [&](std::size_t i) {
+        std::size_t const base = i * p.item_sites;
+        worker(base, std::min(p.item_sites, p.n_sites - base));
+    });
 }
 
 template <class Acc = double, class Field, class Worker>
-[[nodiscard]] inline Acc field_reduce(Field const& field, std::size_t gran, Worker const& worker) {
-    return parallel_reduce_ranges<Acc>(field.nsites(), field.bytes_per_site(), gran, worker);
+[[nodiscard]] inline Acc
+field_reduce(Field const& field, std::size_t /*gran*/, Worker const& worker) {
+    Partition const p = partition(field);
+    return parallel_reduce<Acc>(
+        want_threads(p.n_sites, field.bytes_per_site()), p.n_items, [&](std::size_t i) {
+            std::size_t const base = i * p.item_sites;
+            return worker(base, std::min(p.item_sites, p.n_sites - base));
+        });
 }
 
 }  // namespace reticolo::exec

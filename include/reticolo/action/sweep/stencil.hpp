@@ -47,14 +47,15 @@
 //   * bond  → the leaf's bond kernel (agg = Σ f(self, nbr), an endpoint-difference
 //             energy that cannot be pre-summed).
 //
-// Partition (work-item granularity) is chosen per dimension: 1D chunks the inner
-// axis; 2D takes one row per item; 3D one plane; 4D one w-hyperplane. Every item
-// is a contiguous memory span, so the sweep keeps the hardware prefetch streams
-// intact — measured (Apple M and 32-core Linux x86, every thread count) this
-// beats 512 KB cache tiling, which was dropped. The map output is write-disjoint
-// (bit-identical to the gather fallback, any thread count); the reduce folds the
-// fixed machine-independent partition in canonical item order (thread-count
-// invariant AND identical across platforms).
+// Work items come from the field's canonical partition (exec::partition):
+// contiguous outer-dim slabs shared by EVERY per-site op, so thread↔memory
+// ownership is identical across all passes of a trajectory. Every item is a
+// contiguous span, keeping the hardware prefetch streams intact — measured
+// (Apple M and 32-core Linux x86, every thread count) this beats 512 KB cache
+// tiling, which was dropped. The map output is write-disjoint (bit-identical to
+// the gather fallback, any thread count); the reduce folds the fixed
+// machine-independent partition in canonical item order (thread-count invariant
+// AND identical across platforms).
 //
 // D in {1, 2, 3, 4} take the vectorised generic path; D > 4 falls back to a flat
 // gather through the neighbour table (exact, just slower). Raising the vectorised
@@ -565,11 +566,39 @@ inline Acc run_ranges_(std::size_t n, std::size_t bps, std::size_t gran, Range c
     }
 }
 
+// Run every item of the field's canonical partition (exec::partition) through the
+// D-templated item driver. Item index → the [lo, hi) sub-lattice bounds of the
+// dims the partition splits (dims [split_dim, D), innermost of them fastest —
+// matching the flat span order, so a reduce folds partials in memory order).
+// Using the SAME partition as every elementwise op is the alignment guarantee:
+// thread k's static block is the same contiguous slab in every pass.
+template <class Acc, std::size_t D, class T, class Item>
+inline Acc run_partition_items_(Lattice<T> const& l, bool want, Item const& item) {
+    auto const [L, stride]  = geometry_<D>(l);
+    exec::Partition const p = reticolo::exec::partition(l);
+    return run_items_<Acc>(want, p.n_items, [&](std::size_t it) {
+        std::array<std::size_t, D> lo{};
+        std::array<std::size_t, D> hi{};
+        for (std::size_t mu = 0; mu < D; ++mu) {
+            hi[mu] = L[mu];
+        }
+        std::size_t rem = it;
+        for (std::size_t mu = p.split_dim; mu < D; ++mu) {
+            std::size_t const c = rem % L[mu];
+            rem /= L[mu];
+            lo[mu] = c;
+            hi[mu] = c + 1;
+        }
+        return item.template operator()<D>(L, stride, lo, hi);
+    });
+}
+
 // The single ndims → work-item dispatch, shared by the site stencil AND the complex
-// split-last drivers, for both map (Acc = void) and reduce. It owns the whole per-
-// dimension partition (1D inner chunks, 2D rows, 3D planes, 4D hyperplanes) and the
-// D>4 gather fallback; the caller supplies only the per-item behaviour:
-//   item.template operator()<D>(L, stride, lo, hi) — a tiled sub-lattice, D∈{2,3,4}
+// split-last drivers, for both map (Acc = void) and reduce. It routes D∈{2,3,4}
+// through the field's canonical partition (exec::partition — the same items every
+// elementwise op uses), 1D through inner chunks, and D>4 through the flat gather
+// fallback; the caller supplies only the per-item behaviour:
+//   item.template operator()<D>(L, stride, lo, hi) — one partition item, D∈{2,3,4}
 //   one_d(x0, cnt)  — one inner-axis chunk of a 1D lattice
 //   flat(s0, cnt)   — a flat neighbour-table gather (D>4 / forced fallback)
 // each returning void (map) or Acc (reduce). The tile grid, item→(lo,hi) decode and
@@ -586,34 +615,12 @@ traverse_dispatch_(Lattice<T> const& l, Item const& item, OneD const& one_d, Fla
     switch (l.ndims()) {
         case 1:
             return run_ranges_<Acc>(l.shape()[0], bps, 1, one_d);
-        case 2: {
-            auto const [L, stride] = geometry_<2>(l);
-            return run_items_<Acc>(want, L[1], [&](std::size_t y) {
-                return item.template operator()<2>(L,
-                                                   stride,
-                                                   std::array<std::size_t, 2>{0, y},
-                                                   std::array<std::size_t, 2>{L[0], y + 1});
-            });
-        }
-        case 3: {
-            auto const [L, stride] = geometry_<3>(l);
-            return run_items_<Acc>(want, L[2], [&](std::size_t z) {
-                return item.template operator()<3>(L,
-                                                   stride,
-                                                   std::array<std::size_t, 3>{0, 0, z},
-                                                   std::array<std::size_t, 3>{L[0], L[1], z + 1});
-            });
-        }
-        case 4: {
-            auto const [L, stride] = geometry_<4>(l);
-            return run_items_<Acc>(want, L[3], [&](std::size_t w) {
-                return item.template operator()<4>(
-                    L,
-                    stride,
-                    std::array<std::size_t, 4>{0, 0, 0, w},
-                    std::array<std::size_t, 4>{L[0], L[1], L[2], w + 1});
-            });
-        }
+        case 2:
+            return run_partition_items_<Acc, 2>(l, want, item);
+        case 3:
+            return run_partition_items_<Acc, 3>(l, want, item);
+        case 4:
+            return run_partition_items_<Acc, 4>(l, want, item);
         default:
             return run_ranges_<Acc>(n, bps, 1, flat);
     }
