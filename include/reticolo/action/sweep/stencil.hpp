@@ -630,6 +630,264 @@ inline Acc traverse_dispatch_(Lattice<T> const& l,
 #endif
 }
 
+// ---------- hand-written per-dimension item nests ----------------------------
+//
+// One explicit hoisted loop nest per D over a partition item [lo,hi) (inner dim 0
+// kept full). Each outer level hoists its neighbour row/plane/hypercube bases as
+// scalars; the innermost dim-0 loop sums the neighbours INLINE (self at data[i],
+// the ±x contiguous, the outer bases at `base + x`) and calls `body`. Map sums
+// both ±mu (order x⁺,x⁻,y⁺,y⁻,…) and peels the two x-wrap ends; reduce sums the
+// forward mu only (x⁺,y⁺,…) into `total` and peels just the +x wrap. Left-to-right
+// association is the exact gather-fallback fold order → bit-identical for any
+// thread count. Wraps use the full L[mu]. Writing the sum inline (not via a shared
+// row helper) is what lets the compiler collapse the whole per-site kernel.
+
+template <class T, class Comb, class Body>
+inline void map_hand_2d_(T const* data,
+                         std::array<std::size_t, 2> const& L,
+                         std::array<std::size_t, 2> const& stride,
+                         std::array<std::size_t, 2> const& lo,
+                         std::array<std::size_t, 2> const& hi,
+                         Comb const& comb,
+                         Body const& body) noexcept {
+    std::size_t const L0 = L[0];
+    std::size_t const L1 = L[1];
+    std::size_t const s1 = stride[1];
+    for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+        std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+        std::size_t const ym     = (y == 0) ? (L1 - 1) : (y - 1);
+        std::size_t const row    = y * s1;
+        std::size_t const row_yp = yp * s1;
+        std::size_t const row_ym = ym * s1;
+        auto const sum = [&](std::size_t i, std::size_t xm, std::size_t xp, std::size_t off) {
+            T const self = data[i];
+            T const agg  = comb(self, data[xp]) + comb(self, data[xm]) +
+                          comb(self, data[row_yp + off]) + comb(self, data[row_ym + off]);
+            body(i, self, agg);
+        };
+        sum(row, row + (L0 - 1), row + 1, 0);
+        for (std::size_t x = 1; x + 1 < L0; ++x) {
+            sum(row + x, row + x - 1, row + x + 1, x);
+        }
+        sum(row + (L0 - 1), row + (L0 - 2), row, L0 - 1);
+    }
+}
+
+template <class Acc, class T, class Comb, class Body>
+[[nodiscard]] inline Acc reduce_hand_2d_(T const* data,
+                                         std::array<std::size_t, 2> const& L,
+                                         std::array<std::size_t, 2> const& stride,
+                                         std::array<std::size_t, 2> const& lo,
+                                         std::array<std::size_t, 2> const& hi,
+                                         Comb const& comb,
+                                         Body const& body) noexcept {
+    std::size_t const L0 = L[0];
+    std::size_t const L1 = L[1];
+    std::size_t const s1 = stride[1];
+    Acc total{};
+    for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+        std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+        std::size_t const row    = y * s1;
+        std::size_t const row_yp = yp * s1;
+        for (std::size_t x = 0; x + 1 < L0; ++x) {
+            std::size_t const i = row + x;
+            T const self        = data[i];
+            total += body(self, comb(self, data[i + 1]) + comb(self, data[row_yp + x]));
+        }
+        std::size_t const i = row + (L0 - 1);
+        T const self        = data[i];
+        total += body(self, comb(self, data[row]) + comb(self, data[row_yp + (L0 - 1)]));
+    }
+    return total;
+}
+
+template <class T, class Comb, class Body>
+inline void map_hand_3d_(T const* data,
+                         std::array<std::size_t, 3> const& L,
+                         std::array<std::size_t, 3> const& stride,
+                         std::array<std::size_t, 3> const& lo,
+                         std::array<std::size_t, 3> const& hi,
+                         Comb const& comb,
+                         Body const& body) noexcept {
+    std::size_t const L0 = L[0];
+    std::size_t const L1 = L[1];
+    std::size_t const L2 = L[2];
+    std::size_t const s1 = stride[1];
+    std::size_t const s2 = stride[2];
+    for (std::size_t z = lo[2]; z < hi[2]; ++z) {
+        std::size_t const zp       = (z + 1 == L2) ? 0 : (z + 1);
+        std::size_t const zm       = (z == 0) ? (L2 - 1) : (z - 1);
+        std::size_t const plane    = z * s2;
+        std::size_t const plane_zp = zp * s2;
+        std::size_t const plane_zm = zm * s2;
+        for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+            std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+            std::size_t const ym     = (y == 0) ? (L1 - 1) : (y - 1);
+            std::size_t const row    = plane + (y * s1);
+            std::size_t const row_yp = plane + (yp * s1);
+            std::size_t const row_ym = plane + (ym * s1);
+            std::size_t const row_zp = plane_zp + (y * s1);
+            std::size_t const row_zm = plane_zm + (y * s1);
+            auto const sum = [&](std::size_t i, std::size_t xm, std::size_t xp, std::size_t off) {
+                T const self = data[i];
+                T const agg  = comb(self, data[xp]) + comb(self, data[xm]) +
+                              comb(self, data[row_yp + off]) + comb(self, data[row_ym + off]) +
+                              comb(self, data[row_zp + off]) + comb(self, data[row_zm + off]);
+                body(i, self, agg);
+            };
+            sum(row, row + (L0 - 1), row + 1, 0);
+            for (std::size_t x = 1; x + 1 < L0; ++x) {
+                sum(row + x, row + x - 1, row + x + 1, x);
+            }
+            sum(row + (L0 - 1), row + (L0 - 2), row, L0 - 1);
+        }
+    }
+}
+
+template <class Acc, class T, class Comb, class Body>
+[[nodiscard]] inline Acc reduce_hand_3d_(T const* data,
+                                         std::array<std::size_t, 3> const& L,
+                                         std::array<std::size_t, 3> const& stride,
+                                         std::array<std::size_t, 3> const& lo,
+                                         std::array<std::size_t, 3> const& hi,
+                                         Comb const& comb,
+                                         Body const& body) noexcept {
+    std::size_t const L0 = L[0];
+    std::size_t const L1 = L[1];
+    std::size_t const L2 = L[2];
+    std::size_t const s1 = stride[1];
+    std::size_t const s2 = stride[2];
+    Acc total{};
+    for (std::size_t z = lo[2]; z < hi[2]; ++z) {
+        std::size_t const zp       = (z + 1 == L2) ? 0 : (z + 1);
+        std::size_t const plane    = z * s2;
+        std::size_t const plane_zp = zp * s2;
+        for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+            std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+            std::size_t const row    = plane + (y * s1);
+            std::size_t const row_yp = plane + (yp * s1);
+            std::size_t const row_zp = plane_zp + (y * s1);
+            for (std::size_t x = 0; x + 1 < L0; ++x) {
+                std::size_t const i = row + x;
+                T const self        = data[i];
+                total += body(self, comb(self, data[i + 1]) + comb(self, data[row_yp + x]) +
+                                        comb(self, data[row_zp + x]));
+            }
+            std::size_t const i = row + (L0 - 1);
+            T const self        = data[i];
+            total += body(self, comb(self, data[row]) + comb(self, data[row_yp + (L0 - 1)]) +
+                                    comb(self, data[row_zp + (L0 - 1)]));
+        }
+    }
+    return total;
+}
+
+template <class T, class Comb, class Body>
+inline void map_hand_4d_(T const* data,
+                         std::array<std::size_t, 4> const& L,
+                         std::array<std::size_t, 4> const& stride,
+                         std::array<std::size_t, 4> const& lo,
+                         std::array<std::size_t, 4> const& hi,
+                         Comb const& comb,
+                         Body const& body) noexcept {
+    std::size_t const L0 = L[0];
+    std::size_t const L1 = L[1];
+    std::size_t const L2 = L[2];
+    std::size_t const L3 = L[3];
+    std::size_t const s1 = stride[1];
+    std::size_t const s2 = stride[2];
+    std::size_t const s3 = stride[3];
+    for (std::size_t w = lo[3]; w < hi[3]; ++w) {
+        std::size_t const wp     = (w + 1 == L3) ? 0 : (w + 1);
+        std::size_t const wm     = (w == 0) ? (L3 - 1) : (w - 1);
+        std::size_t const hyp    = w * s3;
+        std::size_t const hyp_wp = wp * s3;
+        std::size_t const hyp_wm = wm * s3;
+        for (std::size_t z = lo[2]; z < hi[2]; ++z) {
+            std::size_t const zp       = (z + 1 == L2) ? 0 : (z + 1);
+            std::size_t const zm       = (z == 0) ? (L2 - 1) : (z - 1);
+            std::size_t const plane    = hyp + (z * s2);
+            std::size_t const plane_zp = hyp + (zp * s2);
+            std::size_t const plane_zm = hyp + (zm * s2);
+            std::size_t const plane_wp = hyp_wp + (z * s2);
+            std::size_t const plane_wm = hyp_wm + (z * s2);
+            for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+                std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+                std::size_t const ym     = (y == 0) ? (L1 - 1) : (y - 1);
+                std::size_t const row    = plane + (y * s1);
+                std::size_t const row_yp = plane + (yp * s1);
+                std::size_t const row_ym = plane + (ym * s1);
+                std::size_t const row_zp = plane_zp + (y * s1);
+                std::size_t const row_zm = plane_zm + (y * s1);
+                std::size_t const row_wp = plane_wp + (y * s1);
+                std::size_t const row_wm = plane_wm + (y * s1);
+                auto const sum = [&](std::size_t i, std::size_t xm, std::size_t xp,
+                                     std::size_t off) {
+                    T const self = data[i];
+                    T const agg  = comb(self, data[xp]) + comb(self, data[xm]) +
+                                  comb(self, data[row_yp + off]) + comb(self, data[row_ym + off]) +
+                                  comb(self, data[row_zp + off]) + comb(self, data[row_zm + off]) +
+                                  comb(self, data[row_wp + off]) + comb(self, data[row_wm + off]);
+                    body(i, self, agg);
+                };
+                sum(row, row + (L0 - 1), row + 1, 0);
+                for (std::size_t x = 1; x + 1 < L0; ++x) {
+                    sum(row + x, row + x - 1, row + x + 1, x);
+                }
+                sum(row + (L0 - 1), row + (L0 - 2), row, L0 - 1);
+            }
+        }
+    }
+}
+
+template <class Acc, class T, class Comb, class Body>
+[[nodiscard]] inline Acc reduce_hand_4d_(T const* data,
+                                         std::array<std::size_t, 4> const& L,
+                                         std::array<std::size_t, 4> const& stride,
+                                         std::array<std::size_t, 4> const& lo,
+                                         std::array<std::size_t, 4> const& hi,
+                                         Comb const& comb,
+                                         Body const& body) noexcept {
+    std::size_t const L0 = L[0];
+    std::size_t const L1 = L[1];
+    std::size_t const L2 = L[2];
+    std::size_t const L3 = L[3];
+    std::size_t const s1 = stride[1];
+    std::size_t const s2 = stride[2];
+    std::size_t const s3 = stride[3];
+    Acc total{};
+    for (std::size_t w = lo[3]; w < hi[3]; ++w) {
+        std::size_t const wp     = (w + 1 == L3) ? 0 : (w + 1);
+        std::size_t const hyp    = w * s3;
+        std::size_t const hyp_wp = wp * s3;
+        for (std::size_t z = lo[2]; z < hi[2]; ++z) {
+            std::size_t const zp       = (z + 1 == L2) ? 0 : (z + 1);
+            std::size_t const plane    = hyp + (z * s2);
+            std::size_t const plane_zp = hyp + (zp * s2);
+            std::size_t const plane_wp = hyp_wp + (z * s2);
+            for (std::size_t y = lo[1]; y < hi[1]; ++y) {
+                std::size_t const yp     = (y + 1 == L1) ? 0 : (y + 1);
+                std::size_t const row    = plane + (y * s1);
+                std::size_t const row_yp = plane + (yp * s1);
+                std::size_t const row_zp = plane_zp + (y * s1);
+                std::size_t const row_wp = plane_wp + (y * s1);
+                for (std::size_t x = 0; x + 1 < L0; ++x) {
+                    std::size_t const i = row + x;
+                    T const self        = data[i];
+                    total += body(self, comb(self, data[i + 1]) + comb(self, data[row_yp + x]) +
+                                            comb(self, data[row_zp + x]) + comb(self, data[row_wp + x]));
+                }
+                std::size_t const i = row + (L0 - 1);
+                T const self        = data[i];
+                total += body(self, comb(self, data[row]) + comb(self, data[row_yp + (L0 - 1)]) +
+                                        comb(self, data[row_zp + (L0 - 1)]) +
+                                        comb(self, data[row_wp + (L0 - 1)]));
+            }
+        }
+    }
+    return total;
+}
+
 // Map body(i, self, agg) over every site (agg folds all 2·ndims neighbours via
 // `comb`). Write-disjoint → bit-identical for any partition / thread count.
 template <class T, class Comb, class Body>
@@ -638,11 +896,16 @@ inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) no
     traverse_dispatch_<void>(
         l,
         [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
-            map_item_<D, AllDirs>(l, L, stride, lo, hi, comb, b);
+            if constexpr (D == 2) {
+                map_hand_2d_(l.data(), L, stride, lo, hi, comb, b);
+            } else if constexpr (D == 3) {
+                map_hand_3d_(l.data(), L, stride, lo, hi, comb, b);
+            } else {
+                map_hand_4d_(l.data(), L, stride, lo, hi, comb, b);
+            }
         },
         [&](std::size_t x0, std::size_t cnt) {
-            std::array<std::size_t, 1> const nb{};
-            map_row_<1, AllDirs>(l.data(), 0, nb, nb, x0, x0 + cnt, l.shape()[0], comb, b);
+            map_row_p_<AllDirs>(l.data(), 0, x0, x0 + cnt, l.shape()[0], comb, b);
         },
         [&](std::size_t s0, std::size_t cnt) { stencil_map_flat_<T>(l, s0, cnt, comb, b); });
 }
@@ -657,12 +920,16 @@ reduce_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
     return traverse_dispatch_<Acc>(
         l,
         [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
-            return reduce_item_<D, FwdOnly, Acc>(l, L, stride, lo, hi, comb, b);
+            if constexpr (D == 2) {
+                return reduce_hand_2d_<Acc>(l.data(), L, stride, lo, hi, comb, b);
+            } else if constexpr (D == 3) {
+                return reduce_hand_3d_<Acc>(l.data(), L, stride, lo, hi, comb, b);
+            } else {
+                return reduce_hand_4d_<Acc>(l.data(), L, stride, lo, hi, comb, b);
+            }
         },
         [&](std::size_t x0, std::size_t cnt) {
-            std::array<std::size_t, 1> const nb{};
-            return reduce_row_<1, FwdOnly, Acc>(
-                l.data(), 0, nb, nb, x0, x0 + cnt, l.shape()[0], comb, b);
+            return reduce_row_p_<FwdOnly, Acc>(l.data(), 0, x0, x0 + cnt, l.shape()[0], comb, b);
         },
         [&](std::size_t s0, std::size_t cnt) {
             return stencil_reduce_flat_<T, Acc>(l, s0, cnt, comb, b);
