@@ -27,24 +27,48 @@
 
 namespace reticolo::exec {
 
-// A pass is worth threading only when it moves at least this many bytes — below it,
-// fork/join dominates. Calibrated on the Linux/libgomp 32-core SPR node: the
-// threaded-beats-serial break-even for the force is ~400-500 KB for BOTH the
-// memory-bound Phi4 (8 B/site) and the compute-bound SU(3) (576 B/site), because a
-// heavy action has proportionally more bytes/site — so one byte threshold tracks
-// both regimes. This replaces the old fixed 16384-site gate, which was wrong both
-// ways: too eager for scalars (net loss under ~512 KB), far too lazy for gauge
-// (9 MB before SU(3) threaded).
-inline constexpr std::size_t k_thread_min_bytes = 512UL * 1024;
+// Minimum bytes of work handed to EACH thread. The thread count for a pass is
+// ⌊bytes / this⌋ (capped by the hardware), so it RAMPS with the problem — 1 thread
+// until there's work for 2, then one more per additional slice — instead of the
+// old binary gate that jumped straight to all cores the instant a single 512 KB
+// threshold was crossed (which left every thread with a sliver just past it, so
+// fork/join dominated). Calibrated so the 1→2 crossover lands near the measured
+// ~400-500 KB threaded-beats-serial break-even (libgomp 32-core SPR); each spawned
+// thread is then guaranteed ≥ this much work at every size. TODO: re-bench the
+// constant on the scaling sweep — it wants tuning per the ramp, not the old gate.
+inline constexpr std::size_t k_min_bytes_per_thread = 256UL * 1024;
 
 // Target working-set per flat-range work item. Small enough that a big lattice
 // yields many chunks (load balance across the team), large enough to amortise the
 // per-chunk dispatch and keep the inner loop vectorising.
 inline constexpr std::size_t k_chunk_bytes = 64UL * 1024;
 
-// Should a pass over `nsites` items of `bytes_per_site` each be threaded?
+// How many threads to split a pass of `nsites × bytes_per_site` across: 1 until
+// there's ≥ 2·k_min_bytes_per_thread of work, then one more thread per extra slice,
+// capped at the OpenMP maximum. No OpenMP → always 1.
+[[nodiscard]] inline int traverse_threads(std::size_t nsites, std::size_t bytes_per_site) noexcept {
+#ifdef _OPENMP
+    int const maxt = omp_get_max_threads();
+    if (maxt <= 1) {
+        return 1;
+    }
+    std::size_t const want = (nsites * bytes_per_site) / k_min_bytes_per_thread;
+    if (want <= 1) {
+        return 1;
+    }
+    return want < static_cast<std::size_t>(maxt) ? static_cast<int>(want) : maxt;
+#else
+    (void)nsites;
+    (void)bytes_per_site;
+    return 1;
+#endif
+}
+
+// Is a pass big enough to thread at all? Pure size predicate (worth ≥ 2 threads'
+// minimum work) — independent of the ambient core count, so it's a stable gate for
+// tests and callers that only need the yes/no, not the count.
 [[nodiscard]] inline bool want_threads(std::size_t nsites, std::size_t bytes_per_site) noexcept {
-    return nsites * bytes_per_site >= k_thread_min_bytes;
+    return nsites * bytes_per_site >= 2 * k_min_bytes_per_thread;
 }
 
 // Sites per flat-range chunk for a field of `bytes_per_site`, aligned to `gran`
@@ -79,10 +103,10 @@ inline thread_local bool g_in_traverse_region = false;
 // body is run by every thread in the team (SPMD), so it is invoked as a const
 // lvalue, never forwarded/moved.
 template <class Body>
-inline void in_traverse_region([[maybe_unused]] bool want, Body const& body) {
+inline void in_traverse_region([[maybe_unused]] int nthreads, Body const& body) {
 #ifdef _OPENMP
-    if (want && omp_get_max_threads() > 1 && omp_in_parallel() == 0) {
-    #pragma omp parallel
+    if (nthreads > 1 && omp_in_parallel() == 0) {
+    #pragma omp parallel num_threads(nthreads)
         {
             bool const prev      = g_in_traverse_region;
             g_in_traverse_region = true;
@@ -108,13 +132,16 @@ inline void in_traverse_region([[maybe_unused]] bool want, Body const& body) {
 //                      item order is identical for any thread count. (s_full,
 //                      kinetic.)
 //
-// `want` gates threading — the caller knows the problem size (traverse_want).
-// Standalone opens its own region; nested in a reticolo region worksplits the
-// current team; a foreign region or !want runs the serial branch.
+// `nthreads` is the team size (from traverse_threads); 1 runs serial. Standalone
+// opens its own region; nested in a reticolo region worksplits the current team.
+// Never more threads than items — a bigger team would leave workers idle.
 
 template <class Worker>
-inline void parallel_map(bool want, std::size_t n_items, Worker const& worker) {
-    in_traverse_region(want, [&] {
+inline void parallel_map(int nthreads, std::size_t n_items, Worker const& worker) {
+    if (static_cast<std::size_t>(nthreads) > n_items) {
+        nthreads = n_items > 0 ? static_cast<int>(n_items) : 1;
+    }
+    in_traverse_region(nthreads, [&] {
         if (g_in_traverse_region) {
 #pragma omp for schedule(static)
             for (std::ptrdiff_t i = 0; i < static_cast<std::ptrdiff_t>(n_items); ++i) {
@@ -129,9 +156,12 @@ inline void parallel_map(bool want, std::size_t n_items, Worker const& worker) {
 }
 
 template <class Acc = double, class Worker>
-[[nodiscard]] inline Acc parallel_reduce(bool want, std::size_t n_items, Worker const& worker) {
+[[nodiscard]] inline Acc parallel_reduce(int nthreads, std::size_t n_items, Worker const& worker) {
+    if (static_cast<std::size_t>(nthreads) > n_items) {
+        nthreads = n_items > 0 ? static_cast<int>(n_items) : 1;
+    }
     std::vector<Acc> partials(n_items, Acc{});
-    in_traverse_region(want, [&] {
+    in_traverse_region(nthreads, [&] {
         if (g_in_traverse_region) {
 #pragma omp for schedule(static)
             for (std::ptrdiff_t i = 0; i < static_cast<std::ptrdiff_t>(n_items); ++i) {
@@ -163,7 +193,7 @@ inline void parallel_map_ranges(std::size_t n,
                                 Worker const& worker) {
     std::size_t const chunk   = chunk_for(bytes_per_site, gran);
     std::size_t const n_items = (n + chunk - 1) / chunk;
-    parallel_map(want_threads(n, bytes_per_site), n_items, [&](std::size_t i) {
+    parallel_map(traverse_threads(n, bytes_per_site), n_items, [&](std::size_t i) {
         std::size_t const base = i * chunk;
         worker(base, std::min(chunk, n - base));
     });
@@ -178,7 +208,7 @@ template <class Acc = double, class Worker>
                                                 Worker const& worker) {
     std::size_t const chunk   = chunk_for(bytes_per_site, gran);
     std::size_t const n_items = (n + chunk - 1) / chunk;
-    return parallel_reduce<Acc>(want_threads(n, bytes_per_site), n_items, [&](std::size_t i) {
+    return parallel_reduce<Acc>(traverse_threads(n, bytes_per_site), n_items, [&](std::size_t i) {
         std::size_t const base = i * chunk;
         return worker(base, std::min(chunk, n - base));
     });
@@ -269,7 +299,7 @@ template <class Term>
 template <class Field, class Worker>
 inline void field_visit(Field const& field, std::size_t /*gran*/, Worker const& worker) {
     Partition const p = partition(field);
-    parallel_map(want_threads(p.n_sites, field.bytes_per_site()), p.n_items, [&](std::size_t i) {
+    parallel_map(traverse_threads(p.n_sites, field.bytes_per_site()), p.n_items, [&](std::size_t i) {
         std::size_t const base = i * p.item_sites;
         worker(base, std::min(p.item_sites, p.n_sites - base));
     });
@@ -280,7 +310,7 @@ template <class Acc = double, class Field, class Worker>
 field_reduce(Field const& field, std::size_t /*gran*/, Worker const& worker) {
     Partition const p = partition(field);
     return parallel_reduce<Acc>(
-        want_threads(p.n_sites, field.bytes_per_site()), p.n_items, [&](std::size_t i) {
+        traverse_threads(p.n_sites, field.bytes_per_site()), p.n_items, [&](std::size_t i) {
             std::size_t const base = i * p.item_sites;
             return worker(base, std::min(p.item_sites, p.n_sites - base));
         });

@@ -184,11 +184,11 @@ geometry_(Lattice<T> const& l) noexcept {
 // both. `run_items_` splits an abstract work-item count; `run_ranges_` splits a
 // flat [0,n) into gran-aligned chunks.
 template <class Acc, class Work>
-inline Acc run_items_(bool want, std::size_t n_items, Work const& work) {
+inline Acc run_items_(int nthreads, std::size_t n_items, Work const& work) {
     if constexpr (std::is_void_v<Acc>) {
-        reticolo::exec::parallel_map(want, n_items, work);
+        reticolo::exec::parallel_map(nthreads, n_items, work);
     } else {
-        return reticolo::exec::parallel_reduce<Acc>(want, n_items, work);
+        return reticolo::exec::parallel_reduce<Acc>(nthreads, n_items, work);
     }
 }
 
@@ -208,10 +208,10 @@ inline Acc run_ranges_(std::size_t n, std::size_t bps, std::size_t gran, Range c
 // Using the SAME partition as every elementwise op is the alignment guarantee:
 // thread k's static block is the same contiguous slab in every pass.
 template <class Acc, std::size_t D, class T, class Item>
-inline Acc run_partition_items_(Lattice<T> const& l, bool want, Item const& item) {
+inline Acc run_partition_items_(Lattice<T> const& l, int nthreads, Item const& item) {
     auto const [L, stride]  = geometry_<D>(l);
     exec::Partition const p = reticolo::exec::partition(l);
-    return run_items_<Acc>(want, p.n_items, [&](std::size_t it) {
+    return run_items_<Acc>(nthreads, p.n_items, [&](std::size_t it) {
         std::array<std::size_t, D> lo{};
         std::array<std::size_t, D> hi{};
         for (std::size_t mu = 0; mu < D; ++mu) {
@@ -243,9 +243,9 @@ inline Acc traverse_dispatch_(Lattice<T> const& l,
                               [[maybe_unused]] Item const& item,
                               [[maybe_unused]] OneD const& one_d,
                               Flat const& flat) {
-    std::size_t const n              = l.nsites();
-    std::size_t const bps            = l.bytes_per_site();
-    [[maybe_unused]] bool const want = reticolo::exec::want_threads(n, bps);
+    std::size_t const n                  = l.nsites();
+    std::size_t const bps                = l.bytes_per_site();
+    [[maybe_unused]] int const nthreads  = reticolo::exec::traverse_threads(n, bps);
 #if RETICOLO_HOT_LOOP_FORCE_FALLBACK
     return run_ranges_<Acc>(n, bps, 1, flat);
 #else
@@ -253,11 +253,11 @@ inline Acc traverse_dispatch_(Lattice<T> const& l,
         case 1:
             return run_ranges_<Acc>(l.shape()[0], bps, 1, one_d);
         case 2:
-            return run_partition_items_<Acc, 2>(l, want, item);
+            return run_partition_items_<Acc, 2>(l, nthreads, item);
         case 3:
-            return run_partition_items_<Acc, 3>(l, want, item);
+            return run_partition_items_<Acc, 3>(l, nthreads, item);
         case 4:
-            return run_partition_items_<Acc, 4>(l, want, item);
+            return run_partition_items_<Acc, 4>(l, nthreads, item);
         default:
             return run_ranges_<Acc>(n, bps, 1, flat);
     }
