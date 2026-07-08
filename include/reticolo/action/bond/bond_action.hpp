@@ -33,7 +33,7 @@ struct BondAction : SFullCache {
     // bond family previously lacked entirely.
     [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
         auto bond        = derived_().action_bond_kernel();
-        double const raw = sweep::reduce_stencil<T, double>(
+        double const raw = sweep::reduce_stencil<sweep::FwdOnly, T, double>(
             l, bond, [](T /*self*/, T agg) { return static_cast<double>(agg); });
         double const s = static_cast<double>(derived_().bond_scale()) * raw;
         last_s_full_   = s;
@@ -44,7 +44,7 @@ struct BondAction : SFullCache {
         auto bond    = derived_().force_bond_kernel();
         T const sc   = derived_().bond_scale();
         T* const out = force.data();
-        sweep::visit_stencil<T>(
+        sweep::visit_stencil<sweep::AllDirs, T>(
             l, bond, [sc, out](std::size_t i, T /*self*/, T agg) { out[i] = sc * agg; });
     }
 
@@ -52,9 +52,10 @@ struct BondAction : SFullCache {
         auto bond  = derived_().force_bond_kernel();
         T const sc = derived_().bond_scale();
         T* const m = mom.data();
-        sweep::visit_stencil<T>(l, bond, [sc, m, k_dt](std::size_t i, T /*self*/, T agg) {
-            m[i] += k_dt * (sc * agg);
-        });
+        sweep::visit_stencil<sweep::AllDirs, T>(
+            l, bond, [sc, m, k_dt](std::size_t i, T /*self*/, T agg) {
+                m[i] += k_dt * (sc * agg);
+            });
     }
 
 private:

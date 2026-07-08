@@ -20,12 +20,12 @@ namespace reticolo::action::sweep {
 
 template <class T, class Body>
 inline void visit_nn(Lattice<T> const& l, Body&& body) noexcept {
-    visit_stencil<T>(l, IdentityCombine{}, std::forward<Body>(body));
+    visit_stencil<AllDirs, T>(l, IdentityCombine{}, std::forward<Body>(body));
 }
 
 template <class T, class Acc = T, class Body>
 [[nodiscard]] inline Acc reduce_fwd(Lattice<T> const& l, Body&& body) noexcept {
-    return reduce_stencil<T, Acc>(l, IdentityCombine{}, std::forward<Body>(body));
+    return reduce_stencil<FwdOnly, T, Acc>(l, IdentityCombine{}, std::forward<Body>(body));
 }
 
 }  // namespace reticolo::action::sweep
