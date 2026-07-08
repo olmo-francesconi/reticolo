@@ -10,6 +10,7 @@
 #include <reticolo/core/rng/philox.hpp>
 #include <reticolo/core/rng/rng.hpp>
 #include <reticolo/core/site.hpp>
+#include <reticolo/math/vec_libm.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -18,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <numbers>
 #include <optional>
 #include <type_traits>
 #include <utility>
@@ -221,27 +223,51 @@ private:
             });
     }
 
-    // Parallel counter-based standard-normal fill: out[2p], out[2p+1] come from
-    // philox_normal2(key, 0, p) — each pair an independent function of the site
-    // index, so the fill worksplits and is bit-identical for any thread count.
-    // `key` is drawn fresh from the driver RNG each trajectory (see
-    // sample_momenta_): one serial draw that advances the RNG identically on a
-    // resumed run, so checkpoint/resume stays bit-exact.
+    // Parallel counter-based standard-normal fill: out[2p], out[2p+1] are the
+    // Box-Muller pair of philox_uniform2(key, 0, p) — each pair an independent
+    // function of the site index, so the fill worksplits and is bit-identical for
+    // any thread count. `key` is drawn fresh from the driver RNG each trajectory
+    // (see sample_momenta_): one serial draw that advances the RNG identically on
+    // a resumed run, so checkpoint/resume stays bit-exact.
+    //
+    // The transcendentals are STAGED per chunk (uniforms → one log_batch +
+    // sincos_batch) instead of scalar libm per pair (philox_normal2) — the same
+    // Box-Muller values up to Sleef-vs-libm ULPs at ~3× the fill rate. gran = 16
+    // (≥ any SIMD width) keeps every non-final chunk a whole number of vector
+    // batches; the partition is fixed by chunk_for regardless of thread count, so
+    // the vector/scalar-tail split — and therefore every bit — matches between
+    // serial and any-thread runs.
     static void philox_normal_fill_(double* out, std::size_t n, std::uint64_t key) noexcept {
         std::size_t const npair = n / 2;
-        reticolo::exec::parallel_map_ranges(npair,
-                                            2 * sizeof(double),  // one pair = 16 bytes
-                                            1,
-                                            [out, key](std::size_t base, std::size_t cnt) {
-                                                std::size_t const end = base + cnt;
-                                                for (std::size_t p = base; p < end; ++p) {
-                                                    double n0 = 0.0;
-                                                    double n1 = 0.0;
-                                                    philox_normal2(key, 0, p, n0, n1);
-                                                    out[2 * p]       = n0;
-                                                    out[(2 * p) + 1] = n1;
-                                                }
-                                            });
+        reticolo::exec::parallel_map_ranges(
+            npair,
+            2 * sizeof(double),  // one pair = 16 bytes
+            16,
+            [out, key](std::size_t base, std::size_t cnt) {
+                // Thread-local staging: lg | th | sn (3·cnt doubles).
+                thread_local std::vector<double> stage;
+                if (stage.size() < 3 * cnt) {
+                    stage.resize(3 * cnt);
+                }
+                double* const lg          = stage.data();
+                double* const th          = lg + cnt;
+                double* const sn          = th + cnt;
+                constexpr double k_two_pi = 2.0 * std::numbers::pi;
+                for (std::size_t k = 0; k < cnt; ++k) {
+                    double u0 = 0.0;
+                    double u1 = 0.0;
+                    philox_uniform2(key, 0, base + k, u0, u1);
+                    lg[k] = u0 > 1.0e-300 ? u0 : 1.0e-300;
+                    th[k] = k_two_pi * u1;
+                }
+                math::log_batch(lg, lg, cnt);
+                math::sincos_batch(sn, th, th, cnt);  // sn = sin, th = cos (in place)
+                for (std::size_t k = 0; k < cnt; ++k) {
+                    double const r            = std::sqrt(-2.0 * lg[k]);
+                    out[2 * (base + k)]       = r * th[k];
+                    out[(2 * (base + k)) + 1] = r * sn[k];
+                }
+            });
         if ((n & 1U) != 0U) {  // odd tail
             double a = 0.0;
             double b = 0.0;
