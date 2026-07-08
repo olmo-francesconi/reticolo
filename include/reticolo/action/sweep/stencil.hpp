@@ -235,10 +235,118 @@ template <std::size_t D, class Policy, class T, class Comb>
     return a;
 }
 
-// Map one innermost row: sites [x0, x1) at row base `own`. The two global-x wraps
-// are peeled off; the interior [xb, xe) is the contiguous vectorised run. Any
-// chunk partition of a full row reproduces the whole-row sweep bit-for-bit (only
-// the global edges wrap; internal block faces read the contiguous parent).
+// Row kernels over a neighbour-row pointer PACK. Each outer-dim base arrives as
+// an independent T const* argument (an SSA value → a register), not an element of
+// a stack array — the exact shape of the hand-written per-dim nest, so the
+// interior loop carries no per-site array reloads or spill traffic. (Measured on
+// the array-of-bases form: ~2 extra spill-pair reloads per site inside the hot
+// loop, ~1.4× on the whole force pass.)
+//
+// Pack order is the canonical neighbour order: AllDirs → interleaved
+// (fwd1, bwd1, fwd2, bwd2, …); FwdOnly → (fwd1, fwd2, …). The comma-fold applies
+// `comb` left-to-right in exactly that order, so the sums are bit-identical to
+// the gather fallback. The two global-x wraps are peeled; the interior [xb, xe)
+// is the contiguous vectorised run, and any chunk partition of a full row
+// reproduces the whole-row sweep bit-for-bit.
+
+template <class Policy, class T, class Comb, class Body, class... Rows>
+inline void map_row_p_(T const* data,
+                       std::size_t own,
+                       std::size_t x0,
+                       std::size_t x1,
+                       std::size_t L0,
+                       Comb const& comb,
+                       Body const& body,
+                       Rows const... rows) noexcept {
+    std::size_t xb = x0;
+    std::size_t xe = x1;
+    if (x0 == 0) {
+        T const self = data[own];
+        T a          = comb(self, data[own + 1]);
+        if constexpr (Policy::all) {
+            a += comb(self, data[own + (L0 - 1)]);
+        }
+        ((a += comb(self, rows[0])), ...);
+        body(own, self, a);
+        xb = 1;
+    }
+    if (x1 == L0) {
+        xe = L0 - 1;
+    }
+    for (std::size_t x = xb; x < xe; ++x) {
+        std::size_t const i = own + x;
+        T const self        = data[i];
+        T a                 = comb(self, data[i + 1]);
+        if constexpr (Policy::all) {
+            a += comb(self, data[i - 1]);
+        }
+        ((a += comb(self, rows[x])), ...);
+        body(i, self, a);
+    }
+    if (x1 == L0) {
+        std::size_t const i = own + (L0 - 1);
+        T const self        = data[i];
+        T a                 = comb(self, data[own]);
+        if constexpr (Policy::all) {
+            a += comb(self, data[i - 1]);
+        }
+        ((a += comb(self, rows[L0 - 1])), ...);
+        body(i, self, a);
+    }
+}
+
+template <class Policy, class Acc, class T, class Comb, class Body, class... Rows>
+[[nodiscard]] inline Acc reduce_row_p_(T const* data,
+                                       std::size_t own,
+                                       std::size_t x0,
+                                       std::size_t x1,
+                                       std::size_t L0,
+                                       Comb const& comb,
+                                       Body const& body,
+                                       Rows const... rows) noexcept {
+    RETICOLO_FP_REASSOCIATE
+    Acc total{};
+    std::size_t xb = x0;
+    std::size_t xe = x1;
+    if (x0 == 0) {
+        T const self = data[own];
+        T a          = comb(self, data[own + 1]);
+        if constexpr (Policy::all) {
+            a += comb(self, data[own + (L0 - 1)]);
+        }
+        ((a += comb(self, rows[0])), ...);
+        total += body(self, a);
+        xb = 1;
+    }
+    if (x1 == L0) {
+        xe = L0 - 1;
+    }
+    for (std::size_t x = xb; x < xe; ++x) {
+        std::size_t const i = own + x;
+        T const self        = data[i];
+        T a                 = comb(self, data[i + 1]);
+        if constexpr (Policy::all) {
+            a += comb(self, data[i - 1]);
+        }
+        ((a += comb(self, rows[x])), ...);
+        total += body(self, a);
+    }
+    if (x1 == L0) {
+        std::size_t const i = own + (L0 - 1);
+        T const self        = data[i];
+        T a                 = comb(self, data[own]);
+        if constexpr (Policy::all) {
+            a += comb(self, data[i - 1]);
+        }
+        ((a += comb(self, rows[L0 - 1])), ...);
+        total += body(self, a);
+    }
+    return total;
+}
+
+// Row-base arrays → pointer pack: build the canonical-order pack from fwd/bwd
+// and dispatch to the pack kernels. AllDirs interleaves (fwd, bwd) per outer dim;
+// FwdOnly passes the forward rows only.
 template <std::size_t D, class Policy, class T, class Comb, class Body>
 inline void map_row_(T const* data,
                      std::size_t own,
@@ -249,28 +357,24 @@ inline void map_row_(T const* data,
                      std::size_t L0,
                      Comb const& comb,
                      Body const& body) noexcept {
-    std::size_t xb = x0;
-    std::size_t xe = x1;
-    if (x0 == 0) {
-        body(own, data[own], agg_lo_<D, Policy>(data, data[own], own, L0, fwd, bwd, comb));
-        xb = 1;
-    }
-    if (x1 == L0) {
-        xe = L0 - 1;
-    }
-    for (std::size_t x = xb; x < xe; ++x) {
-        std::size_t const i = own + x;
-        body(i, data[i], agg_bulk_<D, Policy>(data, data[i], i, x, fwd, bwd, comb));
-    }
-    if (x1 == L0) {
-        std::size_t const i = own + (L0 - 1);
-        body(i, data[i], agg_hi_<D, Policy>(data, data[i], own, L0, fwd, bwd, comb));
+    if constexpr (Policy::all) {
+        [&]<std::size_t... K>(std::index_sequence<K...>) {
+            map_row_p_<Policy>(data,
+                               own,
+                               x0,
+                               x1,
+                               L0,
+                               comb,
+                               body,
+                               (data + (K % 2 == 0 ? fwd[(K / 2) + 1] : bwd[(K / 2) + 1]))...);
+        }(std::make_index_sequence<2 * (D - 1)>{});
+    } else {
+        [&]<std::size_t... Nu>(std::index_sequence<Nu...>) {
+            map_row_p_<Policy>(data, own, x0, x1, L0, comb, body, (data + fwd[Nu + 1])...);
+        }(std::make_index_sequence<D - 1>{});
     }
 }
 
-// Reduce one innermost row: same peeled structure, folding body(self, agg) into a
-// per-row partial. FwdOnly only, so the x==0 peel produces the identical value as
-// the interior (no -x term) — kept uniform for one code path.
 template <std::size_t D, class Policy, class Acc, class T, class Comb, class Body>
 [[nodiscard]] inline Acc reduce_row_(T const* data,
                                      std::size_t own,
@@ -281,76 +385,82 @@ template <std::size_t D, class Policy, class Acc, class T, class Comb, class Bod
                                      std::size_t L0,
                                      Comb const& comb,
                                      Body const& body) noexcept {
-    RETICOLO_FP_REASSOCIATE
-    Acc total{};
-    std::size_t xb = x0;
-    std::size_t xe = x1;
-    if (x0 == 0) {
-        total += body(data[own], agg_lo_<D, Policy>(data, data[own], own, L0, fwd, bwd, comb));
-        xb = 1;
+    if constexpr (Policy::all) {
+        return [&]<std::size_t... K>(std::index_sequence<K...>) {
+            return reduce_row_p_<Policy, Acc>(
+                data,
+                own,
+                x0,
+                x1,
+                L0,
+                comb,
+                body,
+                (data + (K % 2 == 0 ? fwd[(K / 2) + 1] : bwd[(K / 2) + 1]))...);
+        }(std::make_index_sequence<2 * (D - 1)>{});
+    } else {
+        return [&]<std::size_t... Nu>(std::index_sequence<Nu...>) {
+            return reduce_row_p_<Policy, Acc>(
+                data, own, x0, x1, L0, comb, body, (data + fwd[Nu + 1])...);
+        }(std::make_index_sequence<D - 1>{});
     }
-    if (x1 == L0) {
-        xe = L0 - 1;
-    }
-    for (std::size_t x = xb; x < xe; ++x) {
-        std::size_t const i = own + x;
-        total += body(data[i], agg_bulk_<D, Policy>(data, data[i], i, x, fwd, bwd, comb));
-    }
-    if (x1 == L0) {
-        std::size_t const i = own + (L0 - 1);
-        total += body(data[i], agg_hi_<D, Policy>(data, data[i], own, L0, fwd, bwd, comb));
-    }
-    return total;
 }
 
 // Compile-time recursive loop nest over the outer dims [1, D). `Mu` counts down
-// from D-1 (outermost) to 0; at Mu==0 all outer coords are fixed and `emit(own,
-// coord)` is called for one innermost row. For a fixed D this expands into the
-// identical `for w { for z { for y { ... } } }` nest written by hand before — but
-// as ONE definition covering every dimension. `own` accumulates the row base
-// during descent; `coord` records the outer coordinates for the neighbour-base
-// computation at the bottom.
+// from D-1 (outermost) to 0; at Mu==0 all outer coords are fixed and
+// `emit(own, d_fwd, d_bwd)` is called for one innermost row. For a fixed D this
+// expands into the identical `for w { for z { for y { ... } } }` nest written by
+// hand before — but as ONE definition covering every dimension. `own` accumulates
+// the row base during descent.
+//
+// Each level ALSO computes its periodic neighbour DELTAS when its coordinate
+// advances: d_fwd[Mu] = (wrap(c+1) − c)·stride[Mu] (as size_t, exact mod 2⁶⁴), so
+// the row's pre-wrapped neighbour bases are just `own + d`. This is where the
+// wrap arithmetic lives — once per LEVEL STEP, exactly like the hand-written
+// nest's hoisted row_yp/row_ym — not once per row. (The per-row recompute it
+// replaces cost ~100 integer instrs/row of madd/csel + spill traffic; measured
+// ~1.4× on the whole force pass.)
 template <std::size_t D, std::size_t Mu, class T, class Emit>
-inline void walk_outer_(std::array<std::size_t, D> const& stride,
+inline void walk_outer_(std::array<std::size_t, D> const& L,
+                        std::array<std::size_t, D> const& stride,
                         std::array<std::size_t, D> const& lo,
                         std::array<std::size_t, D> const& hi,
                         std::size_t own,
-                        std::array<std::size_t, D>& coord,
+                        std::array<std::size_t, D>& d_fwd,
+                        std::array<std::size_t, D>& d_bwd,
                         Emit const& emit) noexcept {
     if constexpr (Mu == 0) {
-        emit(own, coord);
+        emit(own, d_fwd, d_bwd);
     } else {
+        std::size_t const s  = stride[Mu];
+        std::size_t const Lm = L[Mu];
         for (std::size_t c = lo[Mu]; c < hi[Mu]; ++c) {
-            coord[Mu] = c;
-            walk_outer_<D, Mu - 1, T>(stride, lo, hi, own + (c * stride[Mu]), coord, emit);
+            std::size_t const cf = (c + 1 == Lm) ? std::size_t{0} : (c + 1);
+            std::size_t const cb = (c == 0) ? (Lm - 1) : (c - 1);
+            d_fwd[Mu]            = (cf - c) * s;  // size_t wrap-around is exact
+            d_bwd[Mu]            = (cb - c) * s;
+            walk_outer_<D, Mu - 1, T>(L, stride, lo, hi, own + (c * s), d_fwd, d_bwd, emit);
         }
     }
 }
 
-// Pre-wrapped outer-dim neighbour ROW bases for one row: for each outer dim
-// nu∈[1,D), fwd[nu]/bwd[nu] are the row-base offsets of the +nu / -nu neighbour
-// (periodic). The one place this odometer arithmetic lives — shared by the map and
-// reduce item drivers (site and complex split-last).
+// Row neighbour bases from the walk's per-level deltas: fwd[nu] = own + d_fwd[nu]
+// — D−1 adds per row, no wrap arithmetic. Shared by the map and reduce item
+// drivers (site and complex split-last).
 template <std::size_t D>
 [[gnu::always_inline]] inline void item_bases_(std::size_t own,
-                                               std::array<std::size_t, D> const& coord,
-                                               std::array<std::size_t, D> const& L,
-                                               std::array<std::size_t, D> const& stride,
+                                               std::array<std::size_t, D> const& d_fwd,
+                                               std::array<std::size_t, D> const& d_bwd,
                                                std::array<std::size_t, D>& fwd,
                                                std::array<std::size_t, D>& bwd) noexcept {
     for (std::size_t nu = 1; nu < D; ++nu) {
-        std::size_t const c   = coord[nu];
-        std::size_t const bnu = own - (c * stride[nu]);
-        std::size_t const cf  = (c + 1 == L[nu]) ? std::size_t{0} : (c + 1);
-        std::size_t const cb  = (c == 0) ? (L[nu] - 1) : (c - 1);
-        fwd[nu]               = bnu + (cf * stride[nu]);
-        bwd[nu]               = bnu + (cb * stride[nu]);
+        fwd[nu] = own + d_fwd[nu];
+        bwd[nu] = own + d_bwd[nu];
     }
 }
 
 // Run one work item (a rectangular sub-lattice [lo, hi), inner dim full) as a map.
 // The emit lambda derives each row's pre-wrapped outer neighbour bases from `own`
-// and `coord`, then maps the row.
+// and the walk's per-level deltas, then maps the row.
 template <std::size_t D, class Policy, class T, class Comb, class Body>
 inline void map_item_(Lattice<T> const& l,
                       std::array<std::size_t, D> const& L,
@@ -361,14 +471,22 @@ inline void map_item_(Lattice<T> const& l,
                       Body const& body) noexcept {
     T const* const data  = l.data();
     std::size_t const L0 = L[0];
-    std::array<std::size_t, D> coord{};
-    walk_outer_<D, D - 1, T>(
-        stride, lo, hi, std::size_t{0}, coord, [&](std::size_t own, auto const& cc) {
-            std::array<std::size_t, D> fwd{};
-            std::array<std::size_t, D> bwd{};
-            item_bases_<D>(own, cc, L, stride, fwd, bwd);
-            map_row_<D, Policy>(data, own, fwd, bwd, std::size_t{0}, L0, L0, comb, body);
-        });
+    std::array<std::size_t, D> d_fwd{};
+    std::array<std::size_t, D> d_bwd{};
+    walk_outer_<D, D - 1, T>(L,
+                             stride,
+                             lo,
+                             hi,
+                             std::size_t{0},
+                             d_fwd,
+                             d_bwd,
+                             [&](std::size_t own, auto const& df, auto const& db) {
+                                 std::array<std::size_t, D> fwd{};
+                                 std::array<std::size_t, D> bwd{};
+                                 item_bases_<D>(own, df, db, fwd, bwd);
+                                 map_row_<D, Policy>(
+                                     data, own, fwd, bwd, std::size_t{0}, L0, L0, comb, body);
+                             });
 }
 
 // Run one work item as a reduce; per-row partials fold in odometer (walk_outer_)
@@ -385,15 +503,22 @@ template <std::size_t D, class Policy, class Acc, class T, class Comb, class Bod
     T const* const data  = l.data();
     std::size_t const L0 = L[0];
     Acc total{};
-    std::array<std::size_t, D> coord{};
-    walk_outer_<D, D - 1, T>(
-        stride, lo, hi, std::size_t{0}, coord, [&](std::size_t own, auto const& cc) {
-            std::array<std::size_t, D> fwd{};
-            std::array<std::size_t, D> bwd{};
-            item_bases_<D>(own, cc, L, stride, fwd, bwd);
-            total += reduce_row_<D, Policy, Acc>(
-                data, own, fwd, bwd, std::size_t{0}, L0, L0, comb, body);
-        });
+    std::array<std::size_t, D> d_fwd{};
+    std::array<std::size_t, D> d_bwd{};
+    walk_outer_<D, D - 1, T>(L,
+                             stride,
+                             lo,
+                             hi,
+                             std::size_t{0},
+                             d_fwd,
+                             d_bwd,
+                             [&](std::size_t own, auto const& df, auto const& db) {
+                                 std::array<std::size_t, D> fwd{};
+                                 std::array<std::size_t, D> bwd{};
+                                 item_bases_<D>(own, df, db, fwd, bwd);
+                                 total += reduce_row_<D, Policy, Acc>(
+                                     data, own, fwd, bwd, std::size_t{0}, L0, L0, comb, body);
+                             });
     return total;
 }
 

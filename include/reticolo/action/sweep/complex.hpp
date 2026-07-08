@@ -150,14 +150,21 @@ inline void map_item_split_(Lattice<T> const& l,
                             Body const& body) noexcept {
     T const* const data  = l.data();
     std::size_t const L0 = L[0];
-    std::array<std::size_t, D> coord{};
-    walk_outer_<D, D - 1, T>(
-        stride, lo, hi, std::size_t{0}, coord, [&](std::size_t own, auto const& cc) {
-            std::array<std::size_t, D> fwd{};
-            std::array<std::size_t, D> bwd{};
-            item_bases_<D>(own, cc, L, stride, fwd, bwd);
-            map_row_split_<D>(data, own, fwd, bwd, L0, body);
-        });
+    std::array<std::size_t, D> d_fwd{};
+    std::array<std::size_t, D> d_bwd{};
+    walk_outer_<D, D - 1, T>(L,
+                             stride,
+                             lo,
+                             hi,
+                             std::size_t{0},
+                             d_fwd,
+                             d_bwd,
+                             [&](std::size_t own, auto const& df, auto const& db) {
+                                 std::array<std::size_t, D> fwd{};
+                                 std::array<std::size_t, D> bwd{};
+                                 item_bases_<D>(own, df, db, fwd, bwd);
+                                 map_row_split_<D>(data, own, fwd, bwd, L0, body);
+                             });
 }
 
 template <std::size_t D, class Acc, class T, class Body>
@@ -171,14 +178,21 @@ template <std::size_t D, class Acc, class T, class Body>
     T const* const data  = l.data();
     std::size_t const L0 = L[0];
     Acc total{};
-    std::array<std::size_t, D> coord{};
-    walk_outer_<D, D - 1, T>(
-        stride, lo, hi, std::size_t{0}, coord, [&](std::size_t own, auto const& cc) {
-            std::array<std::size_t, D> fwd{};
-            std::array<std::size_t, D> bwd{};
-            item_bases_<D>(own, cc, L, stride, fwd, bwd);
-            total += reduce_row_split_<D, Acc>(data, own, fwd, bwd, L0, body);
-        });
+    std::array<std::size_t, D> d_fwd{};
+    std::array<std::size_t, D> d_bwd{};
+    walk_outer_<D, D - 1, T>(L,
+                             stride,
+                             lo,
+                             hi,
+                             std::size_t{0},
+                             d_fwd,
+                             d_bwd,
+                             [&](std::size_t own, auto const& df, auto const& db) {
+                                 std::array<std::size_t, D> fwd{};
+                                 std::array<std::size_t, D> bwd{};
+                                 item_bases_<D>(own, df, db, fwd, bwd);
+                                 total += reduce_row_split_<D, Acc>(data, own, fwd, bwd, L0, body);
+                             });
     return total;
 }
 
