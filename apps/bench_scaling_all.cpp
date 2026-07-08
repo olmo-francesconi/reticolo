@@ -47,7 +47,15 @@ void bench_one(char const* name, A const& a, Field& fld, FastRng& rng, char cons
         alg::Hmc hmc{a, fld, rng, {.tau = 1.0, .n_md = 8}, alg::integ::leapfrog, log::Mode::silent};
         trms = time_ms([&] { (void)hmc.step(log::Mode::silent); }, g_rt);
     }
-    std::printf("%-11s %-13s %-3s %10.4f %10.4f %10.4f\n", name, shape, th, fms, sms, trms);
+    // Working-set MB of one field pass and the thread count the policy actually
+    // picks for it at the ambient OMP ceiling (traverse_threads) — the spawn
+    // decision, so the sweep shows where threading kicks in per family.
+    std::size_t const bps = fld.bytes_per_site();
+    std::size_t const n   = fld.nsites();
+    double const mb       = static_cast<double>(n * bps) / (1024.0 * 1024.0);
+    int const nthr        = reticolo::exec::traverse_threads(n, bps);
+    std::printf("%-11s %-13s %-3s %10.4f %10.4f %10.4f %9.2f %5d\n",
+                name, shape, th, fms, sms, trms, mb, nthr);
     (void)sink;
 }
 

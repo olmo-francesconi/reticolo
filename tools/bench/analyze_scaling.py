@@ -92,7 +92,9 @@ def plot_mode(name, rows, out):
                 pmax = max(pmax, max(xs))
                 lbl = f"L={base}" if name == "strong" else f"base={base}⁴"
                 ax.plot(xs, ys, "o-", ms=4, label=lbl)
-            ideal_x = sorted({p for (_, _, b) in rows for p in rows[(action, key, b)]}) or [1, pmax]
+            ideal_x = sorted(
+                {p for (a, k, b) in rows if a == action and k == key for p in rows[(a, k, b)]}
+            ) or [1, pmax]
             if name == "strong":
                 ax.plot(ideal_x, ideal_x, "k--", lw=1, label="ideal")
                 ax.set_ylim(bottom=0)
@@ -113,12 +115,35 @@ def plot_mode(name, rows, out):
     print(f"wrote {out}")
 
 
+def schedule(path):
+    """Print the thread count the policy actually picks per (action, size) as the
+    OMP ceiling rises — i.e. where threading kicks in and how it ramps. Reads the
+    optional mb/nthr columns; silently skips a CSV written before they existed."""
+    if not path.exists():
+        return
+    info = {}  # (action, base) -> {"mb": float, "nthr": {p: n}}
+    with open(path) as f:
+        for r in csv.DictReader(f):
+            if not r.get("nthr"):
+                return
+            d = info.setdefault((r["action"], r["base"]), {"mb": float(r["mb"]), "nthr": {}})
+            d["nthr"][int(r["threads"])] = int(r["nthr"])
+    if not info:
+        return
+    print("\n== thread-spawn schedule (nthr the policy picks at each OMP ceiling) ==")
+    for action, base in sorted(info, key=lambda k: (k[0], int(k[1]))):
+        d = info[(action, base)]
+        cells = "  ".join(f"p{p}:{d['nthr'][p]}" for p in sorted(d["nthr"]))
+        print(f"  {action:12s} L={base:<3s} {d['mb']:8.2f} MB   {cells}")
+
+
 def main():
     d = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
     for name, fname in (("strong", "scaling_strong.csv"), ("weak", "scaling_weak.csv")):
         rows = load(d / fname)
         table(name, rows)
         plot_mode(name, rows, d / f"{name}_scaling.png")
+    schedule(d / "scaling_strong.csv")
 
 
 if __name__ == "__main__":

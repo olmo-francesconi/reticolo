@@ -46,7 +46,7 @@ results="$here/results"
 mkdir -p "$results"
 strong_csv="$results/scaling_strong.csv"
 weak_csv="$results/scaling_weak.csv"
-hdr="mode,base,threads,shape,action,force_ms,sfull_ms,traj_ms"
+hdr="mode,base,threads,shape,action,force_ms,sfull_ms,traj_ms,mb,nthr"
 echo "$hdr" > "$strong_csv"
 echo "$hdr" > "$weak_csv"
 
@@ -56,8 +56,8 @@ run() {
     local mode="$1" base="$2" shape="$3" p="$4" csv="$5"
     printf '[%s] %-6s base=%-3s p=%-3s shape=%s\n' "$(date +%H:%M:%S)" "$mode" "$base" "$p" "$shape"
     OMP_NUM_THREADS="$p" "$bin" "$shape" "$family" "$force_reps" "$traj_reps" \
-        | while read -r action sh th f s t; do
-            echo "$mode,$base,$th,$sh,$action,$f,$s,$t" >> "$csv"
+        | while read -r action sh th f s t mb nthr; do
+            echo "$mode,$base,$th,$sh,$action,$f,$s,$t,$mb,$nthr" >> "$csv"
         done
 }
 
