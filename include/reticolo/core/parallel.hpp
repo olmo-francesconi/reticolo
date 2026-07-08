@@ -81,7 +81,7 @@ inline thread_local bool g_in_traverse_region = false;
 template <class Body>
 inline void in_traverse_region([[maybe_unused]] bool want, Body const& body) {
 #ifdef _OPENMP
-    if (want && omp_in_parallel() == 0) {
+    if (want && omp_get_max_threads() > 1 && omp_in_parallel() == 0) {
     #pragma omp parallel
         {
             bool const prev      = g_in_traverse_region;
