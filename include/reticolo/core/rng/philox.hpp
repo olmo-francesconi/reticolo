@@ -81,6 +81,69 @@ RETICOLO_HD inline void philox_uniform2(
     u1                        = static_cast<double>(b1 >> 11U) * k_u53_scale;
 }
 
+// Batch of consecutive-index uniform pairs: u0[k], u1[k] = philox_uniform2(seed,
+// traj, base + k) for k in [0, cnt). The SAME integer bijection element-wise —
+// bit-identical to the scalar call for every k (integer ops don't reassociate) —
+// written as one straight-line loop over independent counters so the compiler
+// can vectorise the 10-round schedule across k. Host-side batching convenience;
+// device code keeps the scalar form.
+inline void philox_uniform2_batch(std::uint64_t seed,
+                                  std::uint64_t traj,
+                                  std::uint64_t base,
+                                  std::size_t cnt,
+                                  double* u0,
+                                  double* u1) {
+    constexpr std::size_t W  = 8;  // fixed lane count: vector-friendly on any ISA
+    std::uint32_t const key0 = static_cast<std::uint32_t>(seed);
+    std::uint32_t const key1 = static_cast<std::uint32_t>(seed >> 32U);
+    std::uint32_t const c0   = static_cast<std::uint32_t>(traj);
+    std::uint32_t const c1   = static_cast<std::uint32_t>(traj >> 32U);
+
+    std::size_t k = 0;
+    for (; k + W <= cnt; k += W) {
+        std::uint32_t x0[W];
+        std::uint32_t x1[W];
+        std::uint32_t x2[W];
+        std::uint32_t x3[W];
+        for (std::size_t w = 0; w < W; ++w) {
+            std::uint64_t const idx = base + k + w;
+            x0[w]                   = c0;
+            x1[w]                   = c1;
+            x2[w]                   = static_cast<std::uint32_t>(idx);
+            x3[w]                   = static_cast<std::uint32_t>(idx >> 32U);
+        }
+        std::uint32_t rk0 = key0;
+        std::uint32_t rk1 = key1;
+        for (int r = 0; r < 10; ++r) {
+            if (r != 0) {
+                rk0 += Philox4x32::kWeyl0;
+                rk1 += Philox4x32::kWeyl1;
+            }
+            for (std::size_t w = 0; w < W; ++w) {
+                std::uint64_t const p0 = static_cast<std::uint64_t>(Philox4x32::kMul0) * x0[w];
+                std::uint64_t const p1 = static_cast<std::uint64_t>(Philox4x32::kMul1) * x2[w];
+                std::uint32_t const n0 = static_cast<std::uint32_t>(p1 >> 32U) ^ x1[w] ^ rk0;
+                std::uint32_t const n1 = static_cast<std::uint32_t>(p1);
+                std::uint32_t const n2 = static_cast<std::uint32_t>(p0 >> 32U) ^ x3[w] ^ rk1;
+                std::uint32_t const n3 = static_cast<std::uint32_t>(p0);
+                x0[w]                  = n0;
+                x1[w]                  = n1;
+                x2[w]                  = n2;
+                x3[w]                  = n3;
+            }
+        }
+        for (std::size_t w = 0; w < W; ++w) {
+            std::uint64_t const b0 = (static_cast<std::uint64_t>(x1[w]) << 32U) | x0[w];
+            std::uint64_t const b1 = (static_cast<std::uint64_t>(x3[w]) << 32U) | x2[w];
+            u0[k + w]              = static_cast<double>(b0 >> 11U) * k_u53_scale;
+            u1[k + w]              = static_cast<double>(b1 >> 11U) * k_u53_scale;
+        }
+    }
+    for (; k < cnt; ++k) {  // scalar tail — same bijection, same bits
+        philox_uniform2(seed, traj, base + k, u0[k], u1[k]);
+    }
+}
+
 // Two standard normals via Box-Muller. ~1 ULP across devices (transcendental).
 RETICOLO_HD inline void philox_normal2(
     std::uint64_t seed, std::uint64_t traj, std::uint64_t index, double& n0, double& n1) {
