@@ -24,8 +24,9 @@
 //
 // where plane(mu,nu) = (min(mu,nu), max(mu,nu)) and sgn(mu,nu) = +1 if
 // mu < nu else -1 (P is antisymmetric under mu<->nu: sin P_{mu,nu} =
-// -sin P_{nu,mu}). Two-phase, both chunked via `parallel_map_ranges` /
-// `parallel_reduce_ranges` so the whole pass worksplits:
+// -sin P_{nu,mu}). Two-phase, both on the canonical field partition
+// (`exec::field_visit` / `field_reduce`) so the whole pass worksplits with the
+// same thread↔slab ownership as every other op:
 //
 //   Phase 1 (fill) — one Sleef-batched sin(angle) pass per (mu, nu) plane
 //     (mu < nu), stored into a persistent `nplanes*ns` scratch.
@@ -87,16 +88,15 @@ struct wilson_kernels<math::group::U1> {
                                  double* sinP,
                                  std::size_t d,
                                  std::size_t ns) noexcept {
-        Indexing const& idx   = u.indexing_ref();
-        std::size_t const bps = u.bytes_per_site();
-        std::size_t pidx      = 0;
+        Indexing const& idx = u.indexing_ref();
+        std::size_t pidx    = 0;
         for (std::size_t a = 0; a < d; ++a) {
             T const* const u_a = u.mu_block_data(a);
             for (std::size_t b = a + 1; b < d; ++b) {
                 T const* const u_b = u.mu_block_data(b);
                 double* const sp   = sinP + (pidx * ns);
-                reticolo::exec::parallel_map_ranges(
-                    ns, bps, k_simd_gran, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
+                reticolo::exec::field_visit(
+                    u, k_simd_gran, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
                         std::size_t const end = base + cnt;
                         for (std::size_t s = base; s < end; ++s) {
                             std::size_t const s_pa = idx.next(Site{s}, a).value();
@@ -175,10 +175,9 @@ struct wilson_kernels<math::group::U1> {
         std::size_t const nplanes = (d * (d - 1)) / 2;
         double* const sinP        = impl::plane_scratch(nplanes * ns);
         fill_sin_planes_(u, sinP, d, ns);
-        reticolo::exec::parallel_map_ranges(
-            ns, u.bytes_per_site(), 1, [&](std::size_t base, std::size_t cnt) {
-                force_from_sinp_range_<false>(sinP, u, force, -beta_over_n, base, cnt);
-            });
+        reticolo::exec::field_visit(u, 1, [&](std::size_t base, std::size_t cnt) {
+            force_from_sinp_range_<false>(sinP, u, force, -beta_over_n, base, cnt);
+        });
     }
 
     // Fused force-and-kick: same link-centric gather, accumulated straight
@@ -194,16 +193,15 @@ struct wilson_kernels<math::group::U1> {
         double* const sinP        = impl::plane_scratch(nplanes * ns);
         fill_sin_planes_(u, sinP, d, ns);
         double const scale = -k_dt * beta_over_n;
-        reticolo::exec::parallel_map_ranges(
-            ns, u.bytes_per_site(), 1, [&](std::size_t base, std::size_t cnt) {
-                force_from_sinp_range_<true>(sinP, u, mom, scale, base, cnt);
-            });
+        reticolo::exec::field_visit(u, 1, [&](std::size_t base, std::size_t cnt) {
+            force_from_sinp_range_<true>(sinP, u, mom, scale, base, cnt);
+        });
     }
 
     // Sigma Re Tr U_p over sites [base, base+cnt) of one (mu, nu) plane — the
     // Wilson `s_full` fast path. Pure per-range worker (no threading here);
     // `Wilson<G>::s_full_uncached` worksplits by calling this over a fixed
-    // block partition via `parallel_reduce_ranges`.
+    // block partition via `field_reduce`.
     template <class T>
     static double s_full_plane_range(MatrixLinkLattice<G, T> const& u,
                                      std::size_t mu,
@@ -260,7 +258,6 @@ struct wilson_kernels<math::group::U1> {
         double* const sinP        = scratch;
         double* const cbuf        = scratch + (nplanes * ns);
         Indexing const& idx       = u.indexing_ref();
-        std::size_t const bps     = u.bytes_per_site();
         double accum              = 0.0;
         std::size_t pidx          = 0;
         for (std::size_t a = 0; a < d; ++a) {
@@ -268,8 +265,8 @@ struct wilson_kernels<math::group::U1> {
             for (std::size_t b = a + 1; b < d; ++b) {
                 T const* const u_b = u.mu_block_data(b);
                 double* const sp   = sinP + (pidx * ns);
-                accum += reticolo::exec::parallel_reduce_ranges(
-                    ns, bps, k_simd_gran, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
+                accum += reticolo::exec::field_reduce(
+                    u, k_simd_gran, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
                         std::size_t const end = base + cnt;
                         for (std::size_t s = base; s < end; ++s) {
                             std::size_t const s_pa = idx.next(Site{s}, a).value();
@@ -292,7 +289,7 @@ struct wilson_kernels<math::group::U1> {
                 ++pidx;
             }
         }
-        reticolo::exec::parallel_map_ranges(ns, bps, 1, [&](std::size_t base, std::size_t cnt) {
+        reticolo::exec::field_visit(u, 1, [&](std::size_t base, std::size_t cnt) {
             force_from_sinp_range_<false>(sinP, u, force_of, -beta_over_n, base, cnt);
         });
         return accum;

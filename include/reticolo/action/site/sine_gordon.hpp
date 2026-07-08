@@ -57,17 +57,16 @@ struct SineGordon : SiteAction<SineGordon<T>, T> {
         this->ensure_scratch(n);
         T* const sp       = this->scratch_.data();
         T const* const in = l.data();
-        reticolo::exec::parallel_map_ranges(
-            n, l.bytes_per_site(), k_simd_gran, [sp, in](std::size_t base, std::size_t cnt) {
-                if constexpr (std::is_same_v<T, double>) {
-                    math::sin_batch(sp + base, in + base, cnt);
-                } else {
-                    std::size_t const end = base + cnt;
-                    for (std::size_t i = base; i < end; ++i) {
-                        sp[i] = std::sin(in[i]);
-                    }
+        reticolo::exec::field_visit(l, k_simd_gran, [sp, in](std::size_t base, std::size_t cnt) {
+            if constexpr (std::is_same_v<T, double>) {
+                math::sin_batch(sp + base, in + base, cnt);
+            } else {
+                std::size_t const end = base + cnt;
+                for (std::size_t i = base; i < end; ++i) {
+                    sp[i] = std::sin(in[i]);
                 }
-            });
+            }
+        });
     }
 
     // force(x) = 2 kappa sum_{mu, +-} phi(x+mu) - 2 phi(x) - alpha sin(phi(x)).
@@ -93,8 +92,8 @@ struct SineGordon : SiteAction<SineGordon<T>, T> {
             // Fused cos + Σcos in one deterministic reduce: each chunk cos-batches
             // its sub-range into scratch and folds it (fixed partition → thread-
             // invariant; one-time bit re-baseline vs the old single running sum).
-            double const cos_sum = reticolo::exec::parallel_reduce_ranges(
-                n, l.bytes_per_site(), k_simd_gran, [cs, in](std::size_t base, std::size_t cnt) {
+            double const cos_sum = reticolo::exec::field_reduce(
+                l, k_simd_gran, [cs, in](std::size_t base, std::size_t cnt) {
                     math::cos_batch(cs + base, in + base, cnt);
                     double sm             = 0.0;
                     std::size_t const end = base + cnt;

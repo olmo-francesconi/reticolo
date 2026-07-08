@@ -213,14 +213,20 @@ private:
     }
 
     // Flat elementwise copy (rollback snapshot / restore) — a write-disjoint map.
-    static void copy_flat_(Scalar* dst, Scalar const* src, std::size_t n) noexcept {
-        reticolo::exec::parallel_map_ranges(
-            n, sizeof(Scalar), 1, [dst, src](std::size_t base, std::size_t cnt) {
-                std::size_t const end = base + cnt;
-                for (std::size_t i = base; i < end; ++i) {
-                    dst[i] = src[i];
-                }
-            });
+    // Site fields ride the canonical partition (slab ownership shared with every
+    // other pass); multi-component link buffers keep plain flat chunks.
+    void copy_flat_(Scalar* dst, Scalar const* src, std::size_t n) const noexcept {
+        auto const cp = [dst, src](std::size_t base, std::size_t cnt) {
+            std::size_t const end = base + cnt;
+            for (std::size_t i = base; i < end; ++i) {
+                dst[i] = src[i];
+            }
+        };
+        if (n == field_.nsites()) {
+            reticolo::exec::field_visit(field_, 1, cp);
+        } else {
+            reticolo::exec::parallel_map_ranges(n, sizeof(Scalar), 1, cp);
+        }
     }
 
     // Parallel counter-based standard-normal fill: out[2p], out[2p+1] are the
@@ -372,9 +378,8 @@ private:
             }
         } else {
             Scalar const* const p = mom_.data();
-            std::size_t const n   = flat_size(mom_);
-            double const sum      = reticolo::exec::parallel_reduce_ranges(
-                n, sizeof(Scalar), 1, [p](std::size_t base, std::size_t cnt) {
+            double const sum =
+                reticolo::exec::field_reduce(mom_, 1, [p](std::size_t base, std::size_t cnt) {
                     double s              = 0.0;
                     std::size_t const end = base + cnt;
                     if constexpr (is_complex_v_) {

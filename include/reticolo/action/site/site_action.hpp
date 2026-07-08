@@ -91,16 +91,15 @@ struct SiteAction : SFullCache {
         });
         // Reduce the staged action in a fixed-block partition (thread-count
         // invariant), matching s_full's parallel reduce.
-        return reticolo::exec::parallel_reduce_ranges(
-            n, l.bytes_per_site(), 1, [sb](std::size_t base, std::size_t cnt) {
-                RETICOLO_FP_REASSOCIATE
-                double s              = 0.0;
-                std::size_t const end = base + cnt;
-                for (std::size_t i = base; i < end; ++i) {
-                    s += static_cast<double>(sb[i]);
-                }
-                return s;
-            });
+        return reticolo::exec::field_reduce(l, 1, [sb](std::size_t base, std::size_t cnt) {
+            RETICOLO_FP_REASSOCIATE
+            double s              = 0.0;
+            std::size_t const end = base + cnt;
+            for (std::size_t i = base; i < end; ++i) {
+                s += static_cast<double>(sb[i]);
+            }
+            return s;
+        });
     }
 
     // Lazy per-site scratch, sized to nsites — shared by the LLR fast-path and by

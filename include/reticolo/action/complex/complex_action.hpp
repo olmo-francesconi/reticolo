@@ -123,43 +123,44 @@ private:
     // per-slab partials in canonical w order, so both are thread-count invariant.
 
     // Forward-τ reduction: body(self, phi_{x+τ}) -> Acc, summed over all sites.
+    // Runs on the canonical field partition; every item lies inside ONE τ-slab
+    // (the partition splits outer dims, τ outermost), so the ±τ shift is a
+    // constant offset per item.
     template <class Acc, class Body>
     [[nodiscard]] Acc slab_reduce_tau_(Lattice<complex_t> const& l,
                                        Body const& body) const noexcept {
         std::size_t const d         = l.ndims();
         std::size_t const L_tau     = l.shape()[d - 1];
-        std::size_t const n         = l.nsites();
-        std::size_t const s_tau     = n / L_tau;
+        std::size_t const s_tau     = l.nsites() / L_tau;
         complex_t const* const data = l.data();
-        bool const want             = reticolo::exec::want_threads(n, l.bytes_per_site());
-        return reticolo::exec::parallel_reduce<Acc>(want, L_tau, [&](std::size_t w) {
-            std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
-            std::size_t const base   = w * s_tau;
-            std::size_t const base_p = wp * s_tau;
-            Acc partial{};
-            for (std::size_t k = 0; k < s_tau; ++k) {
-                partial += body(data[base + k], data[base_p + k]);
-            }
-            return partial;
-        });
+        return reticolo::exec::field_reduce<Acc>(
+            l, 1, [&, data](std::size_t base, std::size_t cnt) {
+                std::size_t const w      = base / s_tau;
+                std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
+                std::size_t const base_p = (wp * s_tau) + (base - (w * s_tau));
+                Acc partial{};
+                for (std::size_t k = 0; k < cnt; ++k) {
+                    partial += body(data[base + k], data[base_p + k]);
+                }
+                return partial;
+            });
     }
 
-    // Both-τ visit: body(i, phi_{x+τ}, phi_{x-τ}).
+    // Both-τ visit: body(i, phi_{x+τ}, phi_{x-τ}). Same canonical partition.
     template <class Body>
     void slab_visit_tau_(Lattice<complex_t> const& l, Body const& body) const noexcept {
         std::size_t const d         = l.ndims();
         std::size_t const L_tau     = l.shape()[d - 1];
-        std::size_t const n         = l.nsites();
-        std::size_t const s_tau     = n / L_tau;
+        std::size_t const s_tau     = l.nsites() / L_tau;
         complex_t const* const data = l.data();
-        bool const want             = reticolo::exec::want_threads(n, l.bytes_per_site());
-        reticolo::exec::parallel_map(want, L_tau, [&](std::size_t w) {
+        reticolo::exec::field_visit(l, 1, [&, data](std::size_t base, std::size_t cnt) {
+            std::size_t const w      = base / s_tau;
             std::size_t const wm     = (w == 0) ? (L_tau - 1) : (w - 1);
             std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
-            std::size_t const base   = w * s_tau;
-            std::size_t const base_m = wm * s_tau;
-            std::size_t const base_p = wp * s_tau;
-            for (std::size_t k = 0; k < s_tau; ++k) {
+            std::size_t const off    = base - (w * s_tau);
+            std::size_t const base_m = (wm * s_tau) + off;
+            std::size_t const base_p = (wp * s_tau) + off;
+            for (std::size_t k = 0; k < cnt; ++k) {
                 body(base + k, data[base_p + k], data[base_m + k]);
             }
         });

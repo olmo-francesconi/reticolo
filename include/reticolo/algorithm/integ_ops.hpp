@@ -37,15 +37,22 @@ inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
     // Elementwise axpy: threshold/chunk from the element size; each element is
     // independent → bit-identical for any partition. __restrict is re-applied
     // inside the worker so the vectoriser keeps the no-alias guarantee.
-    reticolo::exec::parallel_map_ranges(
-        n, sizeof(F), 1, [fd, pd, c](std::size_t base, std::size_t cnt) {
-            F* __restrict const f          = fd;
-            auto const* __restrict const p = pd;
-            std::size_t const end          = base + cnt;
-            for (std::size_t i = base; i < end; ++i) {
-                f[i] += c * p[i];
-            }
-        });
+    auto const axpy = [fd, pd, c](std::size_t base, std::size_t cnt) {
+        F* __restrict const f          = fd;
+        auto const* __restrict const p = pd;
+        std::size_t const end          = base + cnt;
+        for (std::size_t i = base; i < end; ++i) {
+            f[i] += c * p[i];
+        }
+    };
+    // Site fields ride the canonical partition (thread↔slab ownership shared
+    // with every other pass); flat multi-component buffers (gauge momenta on
+    // the unfused path) keep plain chunks — their flat index isn't site-major.
+    if (n == field.nsites()) {
+        reticolo::exec::field_visit(field, 1, axpy);
+    } else {
+        reticolo::exec::parallel_map_ranges(n, sizeof(F), 1, axpy);
+    }
 }
 
 template <class Mom, class Force>
@@ -55,15 +62,19 @@ inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
     real_scalar_t<F> const c = static_cast<real_scalar_t<F>>(kdt);
     F* const md              = mom.data();
     auto const* const fd     = force.data();
-    reticolo::exec::parallel_map_ranges(
-        n, sizeof(F), 1, [md, fd, c](std::size_t base, std::size_t cnt) {
-            F* __restrict const m           = md;
-            auto const* __restrict const fp = fd;
-            std::size_t const end           = base + cnt;
-            for (std::size_t i = base; i < end; ++i) {
-                m[i] += c * fp[i];
-            }
-        });
+    auto const axpy          = [md, fd, c](std::size_t base, std::size_t cnt) {
+        F* __restrict const m           = md;
+        auto const* __restrict const fp = fd;
+        std::size_t const end           = base + cnt;
+        for (std::size_t i = base; i < end; ++i) {
+            m[i] += c * fp[i];
+        }
+    };
+    if (n == mom.nsites()) {
+        reticolo::exec::field_visit(mom, 1, axpy);
+    } else {
+        reticolo::exec::parallel_map_ranges(n, sizeof(F), 1, axpy);
+    }
 }
 
 // Matrix-link drift overload: U ← exp(dt·P)·U per direction, dispatched
