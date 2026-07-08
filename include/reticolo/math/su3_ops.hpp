@@ -1,5 +1,6 @@
 #pragma once
 
+#include <reticolo/core/parallel.hpp>
 #include <reticolo/core/rng/philox.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
@@ -748,9 +749,7 @@ inline void expi_lmul_range(
     T* u, T const* p, double dt, std::size_t stride, std::size_t base, std::size_t cnt) noexcept {
     thread_local std::vector<double> scratch;
     constexpr std::size_t k_slabs = 14;
-    if (scratch.size() < k_slabs * cnt) {
-        scratch.resize(k_slabs * cnt);
-    }
+    reticolo::exec::thread_scratch(scratch, k_slabs * cnt);
     double* const ratio_buf = scratch.data() + (0 * cnt);  // pass1→pass2
     double* const theta_buf = scratch.data() + (1 * cnt);  // pass2→pass3 prep
     double* const t3_buf    = scratch.data() + (2 * cnt);  // pass3 input
@@ -1009,18 +1008,16 @@ template <class T, class Rng>
     // Pre-fill 8n independent N(0, 1/√2) draws into a thread-local buffer
     // then scatter — same shape as SU(2)::sample_algebra_slab.
     thread_local std::vector<double> h_buf;
-    if (h_buf.size() < 8 * n) {
-        h_buf.resize(8 * n);
-    }
-    rng.normal_fill(h_buf.data(), 8 * n);
-    double const* const h1_arr = h_buf.data() + (0 * n);
-    double const* const h2_arr = h_buf.data() + (1 * n);
-    double const* const h3_arr = h_buf.data() + (2 * n);
-    double const* const h4_arr = h_buf.data() + (3 * n);
-    double const* const h5_arr = h_buf.data() + (4 * n);
-    double const* const h6_arr = h_buf.data() + (5 * n);
-    double const* const h7_arr = h_buf.data() + (6 * n);
-    double const* const h8_arr = h_buf.data() + (7 * n);
+    double* const h = reticolo::exec::thread_scratch(h_buf, 8 * n);
+    rng.normal_fill(h, 8 * n);
+    double const* const h1_arr = h + (0 * n);
+    double const* const h2_arr = h + (1 * n);
+    double const* const h3_arr = h + (2 * n);
+    double const* const h4_arr = h + (3 * n);
+    double const* const h5_arr = h + (4 * n);
+    double const* const h6_arr = h + (5 * n);
+    double const* const h7_arr = h + (6 * n);
+    double const* const h8_arr = h + (7 * n);
     for (std::size_t s = 0; s < n; ++s) {
         T const h1            = static_cast<T>(h1_arr[s] * k_inv_sqrt2);
         T const h2            = static_cast<T>(h2_arr[s] * k_inv_sqrt2);

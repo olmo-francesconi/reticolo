@@ -1,5 +1,6 @@
 #pragma once
 
+#include <reticolo/core/parallel.hpp>
 #include <reticolo/core/rng/philox.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
@@ -462,9 +463,7 @@ template <class T>
     // and double) — runs at the lattice precision and lane count. β, ‖h‖, the
     // V matrix and the U ← V·U product are all T; for float that is 4-wide.
     thread_local std::vector<T> scratch;
-    if (scratch.size() < 7 * cnt) {
-        scratch.resize(7 * cnt);
-    }
+    reticolo::exec::thread_scratch(scratch, 7 * cnt);
     T* const beta_buf = scratch.data();
     T* const h_buf    = scratch.data() + cnt;
     T* const h1_buf   = scratch.data() + (2 * cnt);
@@ -561,13 +560,11 @@ template <class T, class Rng>
     // auto-vectorisable) — both phases run cleanly without interleaving.
     // Draws are double (the RNG stream is double); the scatter narrows to T.
     thread_local std::vector<double> h_buf;
-    if (h_buf.size() < 3 * n) {
-        h_buf.resize(3 * n);
-    }
-    rng.normal_fill(h_buf.data(), 3 * n);
-    double const* const h1_arr = h_buf.data();
-    double const* const h2_arr = h_buf.data() + n;
-    double const* const h3_arr = h_buf.data() + (2 * n);
+    double* const h = reticolo::exec::thread_scratch(h_buf, 3 * n);
+    rng.normal_fill(h, 3 * n);
+    double const* const h1_arr = h;
+    double const* const h2_arr = h + n;
+    double const* const h3_arr = h + (2 * n);
     for (std::size_t s = 0; s < n; ++s) {
         T const h1     = static_cast<T>(h1_arr[s] * k_inv_sqrt2);
         T const h2     = static_cast<T>(h2_arr[s] * k_inv_sqrt2);

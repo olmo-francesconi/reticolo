@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/core/log.hpp>
+#include <reticolo/core/parallel.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
 #include <algorithm>
@@ -139,16 +140,11 @@ public:
         std::size_t const n_pairs   = remaining / 2;
 
         if (n_pairs > 0) {
-            thread_local std::vector<double> r_buf;
-            thread_local std::vector<double> theta_buf;
-            thread_local std::vector<double> sin_buf;
-            thread_local std::vector<double> cos_buf;
-            if (r_buf.size() < n_pairs) {
-                r_buf.resize(n_pairs);
-                theta_buf.resize(n_pairs);
-                sin_buf.resize(n_pairs);
-                cos_buf.resize(n_pairs);
-            }
+            thread_local std::vector<double> buf;
+            double* const r_buf     = exec::thread_scratch(buf, 4 * n_pairs);
+            double* const theta_buf = r_buf + n_pairs;
+            double* const sin_buf   = r_buf + (2 * n_pairs);
+            double* const cos_buf   = r_buf + (3 * n_pairs);
             constexpr double k_two_pi = 2.0 * std::numbers::pi;
             for (std::size_t p = 0; p < n_pairs; ++p) {
                 double const u1 = std::max(uniform(), 1.0e-300);
@@ -156,7 +152,7 @@ public:
                 r_buf[p]        = std::sqrt(-2.0 * std::log(u1));
                 theta_buf[p]    = k_two_pi * u2;
             }
-            math::sincos_batch(sin_buf.data(), cos_buf.data(), theta_buf.data(), n_pairs);
+            math::sincos_batch(sin_buf, cos_buf, theta_buf, n_pairs);
             for (std::size_t p = 0; p < n_pairs; ++p) {
                 out[i + (2 * p)]     = r_buf[p] * cos_buf[p];
                 out[i + (2 * p) + 1] = r_buf[p] * sin_buf[p];

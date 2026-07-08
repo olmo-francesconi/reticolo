@@ -13,13 +13,13 @@ namespace reticolo::alg::integ {
 // bodies so they can be overloaded on the field type without touching
 // Leapfrog/Omelyan2/Omelyan4 themselves.
 //
-// Defaults below cover any field that exposes `data()` + a `value_type` +
-// a free `flat_size()` overload — i.e. `Lattice<T>` and `LinkLattice<T>`.
-// Matrix-group link fields (`MatrixLinkLattice<G, T>`) override
-// `drift_field` with the group-exponential update `U ← exp(i·dt·P)·U`,
-// while `kick_add` stays generic because the algebra is a vector space and
-// the additive update is correct for the momentum buffer regardless of
-// whether the *field* lives on a group.
+// The generic templates cover the scalar/complex site field `Lattice<T>`,
+// which is always site-major (`flat_size == nsites`) and so rides the
+// canonical field partition directly. Matrix-group link fields
+// (`MatrixLinkLattice<G, T>`) take the overloads below: `drift_field` does the
+// group-exponential update `U ← exp(i·dt·P)·U`, and `kick_add` walks the
+// per-direction component slabs on the SAME site partition so the momentum
+// buffer keeps the thread↔slab ownership every other pass uses.
 
 // The MD time step is always a real scalar even when the field is complex —
 // using `real_scalar_t<F>` for the coefficient turns `c * p[i]` into a
@@ -30,85 +30,87 @@ namespace reticolo::alg::integ {
 template <class Field, class Mom>
 inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
     using F                  = typename Field::value_type;
-    std::size_t const n      = flat_size(field);
     real_scalar_t<F> const c = static_cast<real_scalar_t<F>>(cdt);
     F* const fd              = field.data();
     auto const* const pd     = mom.data();
-    // Elementwise axpy: threshold/chunk from the element size; each element is
-    // independent → bit-identical for any partition. __restrict is re-applied
-    // inside the worker so the vectoriser keeps the no-alias guarantee.
-    auto const axpy = [fd, pd, c](std::size_t base, std::size_t cnt) {
+    // Elementwise axpy on the canonical field partition — each element is
+    // independent → bit-identical for any partition / thread count. __restrict
+    // is re-applied inside the worker so the vectoriser keeps the no-alias
+    // guarantee (field, mom are distinct sibling lattices).
+    reticolo::exec::field_visit(field, 1, [fd, pd, c](std::size_t base, std::size_t cnt) {
         F* __restrict const f          = fd;
         auto const* __restrict const p = pd;
         std::size_t const end          = base + cnt;
         for (std::size_t i = base; i < end; ++i) {
             f[i] += c * p[i];
         }
-    };
-    // Site fields ride the canonical partition (thread↔slab ownership shared
-    // with every other pass); flat multi-component buffers (gauge momenta on
-    // the unfused path) keep plain chunks — their flat index isn't site-major.
-    if (n == field.nsites()) {
-        reticolo::exec::field_visit(field, 1, axpy);
-    } else {
-        reticolo::exec::parallel_map_ranges(n, sizeof(F), 1, axpy);
-    }
+    });
 }
 
 template <class Mom, class Force>
 inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
     using F                  = typename Mom::value_type;
-    std::size_t const n      = flat_size(mom);
     real_scalar_t<F> const c = static_cast<real_scalar_t<F>>(kdt);
     F* const md              = mom.data();
     auto const* const fd     = force.data();
-    auto const axpy          = [md, fd, c](std::size_t base, std::size_t cnt) {
+    reticolo::exec::field_visit(mom, 1, [md, fd, c](std::size_t base, std::size_t cnt) {
         F* __restrict const m           = md;
         auto const* __restrict const fp = fd;
         std::size_t const end           = base + cnt;
         for (std::size_t i = base; i < end; ++i) {
             m[i] += c * fp[i];
         }
-    };
-    if (n == mom.nsites()) {
-        reticolo::exec::field_visit(mom, 1, axpy);
-    } else {
-        reticolo::exec::parallel_map_ranges(n, sizeof(F), 1, axpy);
-    }
+    });
 }
 
-// Matrix-link drift overload: U ← exp(dt·P)·U per direction, dispatched
-// through the group model's `expi_lmul_slab` so SU(2)/SU(3)/U(1) all reuse
-// the same per-direction loop.
+// Matrix-link drift overload: U ← exp(dt·P)·U per direction, dispatched through
+// the group model's `expi_lmul_range` so SU(2)/SU(3)/U(1) all reuse the same
+// per-direction worker. Compute-bound matrix-exponential drift → worksplit like
+// the staple force: each thread applies it to an 8-aligned site chunk (matching
+// the group's pass-5 batch), so the result is bit-identical to a serial sweep
+// for any thread count. Own fork/join, per-op model.
 template <class G, class T>
 inline void drift_field(MatrixLinkLattice<G, T>& field,
                         MatrixLinkLattice<G, T> const& mom,
                         double cdt) noexcept {
     std::size_t const d  = field.ndims();
     std::size_t const ns = field.nsites();
-    // Compute-bound matrix-exponential drift → worksplit like the staple force,
-    // when the group exposes a pure per-range worker (SU(3)). Each thread applies
-    // it to an 8-aligned site chunk (matching the group's pass-5 batch), so the
-    // result is bit-identical to the serial slab for any thread count. Own
-    // fork/join, per-op model. Groups without a range worker stay serial.
-    if constexpr (requires(T* uu, T const* pp) {
-                      G::expi_lmul_range(
-                          uu, pp, double{}, std::size_t{}, std::size_t{}, std::size_t{});
-                  }) {
-        // gran = pass-5 k_b=8 batch so chunks stay batch-aligned; threshold/chunk
-        // from the (large) gauge footprint, bit-identical to the serial slab per
-        // chunk.
-        reticolo::exec::field_visit(field, 8, [&](std::size_t base, std::size_t cnt) {
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                G::expi_lmul_range(
-                    field.mu_block_data(mu), mom.mu_block_data(mu), cdt, ns, base, cnt);
-            }
-        });
-    } else {
+    // gran = pass-5 k_b=8 batch so chunks stay batch-aligned; threshold/chunk
+    // from the (large) gauge footprint.
+    reticolo::exec::field_visit(field, 8, [&](std::size_t base, std::size_t cnt) {
         for (std::size_t mu = 0; mu < d; ++mu) {
-            G::expi_lmul_slab(field.mu_block_data(mu), mom.mu_block_data(mu), cdt, ns);
+            G::expi_lmul_range(
+                field.mu_block_data(mu), mom.mu_block_data(mu), cdt, ns, base, cnt);
         }
-    }
+    });
+}
+
+// Matrix-link kick overload: the algebra is a vector space, so the momentum
+// update is a plain additive axpy over the real component storage. It walks the
+// SAME canonical site partition as the drift (each of the d·nc component slabs
+// is a stride-1 nsites array, so the site range [base, cnt) maps to a contiguous
+// span in every slab), keeping the momentum buffer's thread↔slab ownership
+// aligned with every other pass. Elementwise-independent → bit-identical for any
+// thread count.
+template <class G, class T>
+inline void kick_add(MatrixLinkLattice<G, T>& mom,
+                     MatrixLinkLattice<G, T> const& force,
+                     double kdt) noexcept {
+    constexpr std::size_t nc = MatrixLinkLattice<G, T>::n_real_components;
+    std::size_t const nblk   = mom.ndims() * nc;
+    std::size_t const ns     = mom.nsites();
+    T const c                = static_cast<T>(kdt);
+    T* const md              = mom.data();
+    T const* const fd        = force.data();
+    reticolo::exec::field_visit(mom, 1, [md, fd, c, nblk, ns](std::size_t base, std::size_t cnt) {
+        for (std::size_t blk = 0; blk < nblk; ++blk) {
+            T* __restrict const m           = md + (blk * ns) + base;
+            T const* __restrict const fp    = fd + (blk * ns) + base;
+            for (std::size_t i = 0; i < cnt; ++i) {
+                m[i] += c * fp[i];
+            }
+        }
+    });
 }
 
 }  // namespace reticolo::alg::integ

@@ -49,10 +49,7 @@ namespace impl {
 // of the same call.
 [[gnu::always_inline]] inline double* plane_scratch(std::size_t n) noexcept {
     thread_local std::vector<double> buf;
-    if (buf.size() < n) {
-        buf.resize(n);
-    }
-    return buf.data();
+    return reticolo::exec::thread_scratch(buf, n);
 }
 
 // Canonical running index of plane (a, b), a < b, in the a-major

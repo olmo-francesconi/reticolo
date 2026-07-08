@@ -212,21 +212,19 @@ private:
         Integrator::run(action_, field_, mom_, force_, tau, n_md);
     }
 
-    // Flat elementwise copy (rollback snapshot / restore) — a write-disjoint map.
-    // Site fields ride the canonical partition (slab ownership shared with every
-    // other pass); multi-component link buffers keep plain flat chunks.
+    // Flat elementwise copy (rollback snapshot / restore) — a write-disjoint map
+    // over the raw buffer. Unlike the leapfrog ops this is not a producer/consumer
+    // in the trajectory chain, so it needs no slab-ownership alignment: a plain
+    // chunked flat copy serves both site fields (Scalar per site) and the
+    // multi-component link buffer (whose flat index isn't site-major).
     void copy_flat_(Scalar* dst, Scalar const* src, std::size_t n) const noexcept {
-        auto const cp = [dst, src](std::size_t base, std::size_t cnt) {
+        reticolo::exec::parallel_map_ranges(n, sizeof(Scalar), 1, [dst, src](std::size_t base,
+                                                                             std::size_t cnt) {
             std::size_t const end = base + cnt;
             for (std::size_t i = base; i < end; ++i) {
                 dst[i] = src[i];
             }
-        };
-        if (n == field_.nsites()) {
-            reticolo::exec::field_visit(field_, 1, cp);
-        } else {
-            reticolo::exec::parallel_map_ranges(n, sizeof(Scalar), 1, cp);
-        }
+        });
     }
 
     // Parallel counter-based standard-normal fill: out[2p], out[2p+1] are the
@@ -263,10 +261,7 @@ private:
                 }
                 // Thread-local staging: lg | th | sn (3·cnt doubles).
                 thread_local std::vector<double> stage;
-                if (stage.size() < 3 * cnt) {
-                    stage.resize(3 * cnt);
-                }
-                double* const lg          = stage.data();
+                double* const lg          = reticolo::exec::thread_scratch(stage, 3 * cnt);
                 double* const th          = lg + cnt;
                 double* const sn          = th + cnt;
                 constexpr double k_two_pi = 2.0 * std::numbers::pi;
@@ -301,28 +296,17 @@ private:
             using Group          = typename Field::group_type;
             std::size_t const d  = mom_.ndims();
             std::size_t const ns = mom_.nsites();
-            if constexpr (requires(Scalar* p) {
-                              Group::sample_algebra_philox_range(p,
-                                                                 std::uint64_t{},
-                                                                 std::uint64_t{},
-                                                                 std::size_t{},
-                                                                 std::size_t{},
-                                                                 std::size_t{});
-                          }) {
-                // Parallel counter-based sampler: one RNG draw per trajectory keys
-                // Philox, then each direction slab worksplits (site-indexed draws).
-                std::uint64_t const key = rng_.uniform_u64();
-                for (std::size_t mu = 0; mu < d; ++mu) {
-                    Scalar* const pblk = mom_.mu_block_data(mu);
-                    reticolo::exec::field_visit(
-                        mom_, 1, [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
-                            Group::sample_algebra_philox_range(pblk, key, mu, ns, base, cnt);
-                        });
-                }
-            } else {
-                for (std::size_t mu = 0; mu < d; ++mu) {
-                    Group::sample_algebra_slab(mom_.mu_block_data(mu), rng_, ns);
-                }
+            // Parallel counter-based sampler: one RNG draw per trajectory keys
+            // Philox, then each direction slab worksplits (site-indexed draws).
+            // The one serial draw advances the driver RNG identically on a resumed
+            // run, so checkpoint/resume stays bit-exact.
+            std::uint64_t const key = rng_.uniform_u64();
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                Scalar* const pblk = mom_.mu_block_data(mu);
+                reticolo::exec::field_visit(
+                    mom_, 1, [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
+                        Group::sample_algebra_philox_range(pblk, key, mu, ns, base, cnt);
+                    });
             }
         } else if constexpr (std::is_same_v<Scalar, double>) {
             philox_normal_fill_(mom_.data(), flat_size(mom_), rng_.uniform_u64(), mom_);
@@ -350,12 +334,10 @@ private:
     // energy is summed in double regardless of the field's scalar type.
     void fill_normals_narrowed_(float* out, std::size_t n) {
         thread_local std::vector<double> scratch;
-        if (scratch.size() < n) {
-            scratch.resize(n);
-        }
-        rng_.normal_fill(scratch.data(), n);
+        double* const s = reticolo::exec::thread_scratch(scratch, n);
+        rng_.normal_fill(s, n);
         for (std::size_t i = 0; i < n; ++i) {
-            out[i] = static_cast<float>(scratch[i]);
+            out[i] = static_cast<float>(s[i]);
         }
     }
 
@@ -369,25 +351,17 @@ private:
             using Group          = typename Field::group_type;
             std::size_t const d  = mom_.ndims();
             std::size_t const ns = mom_.nsites();
-            if constexpr (requires(Scalar const* p) {
-                              Group::kinetic_range(p, std::size_t{}, std::size_t{}, std::size_t{});
-                          }) {
-                // Parallel deterministic reduce per direction; ½ applied once.
-                // gran = 8 (kinetic_range's internal batch).
-                double raw = 0.0;
-                for (std::size_t mu = 0; mu < d; ++mu) {
-                    Scalar const* const pblk = mom_.mu_block_data(mu);
-                    raw += reticolo::exec::field_reduce(
-                        mom_, 8, [pblk, ns](std::size_t base, std::size_t cnt) {
-                            return Group::kinetic_range(pblk, ns, base, cnt);
-                        });
-                }
-                kin += 0.5 * raw;
-            } else {
-                for (std::size_t mu = 0; mu < d; ++mu) {
-                    kin += Group::kinetic_slab(mom_.mu_block_data(mu), ns);
-                }
+            // Parallel deterministic reduce per direction; ½ applied once.
+            // gran = 8 (kinetic_range's internal batch).
+            double raw = 0.0;
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                Scalar const* const pblk = mom_.mu_block_data(mu);
+                raw += reticolo::exec::field_reduce(
+                    mom_, 8, [pblk, ns](std::size_t base, std::size_t cnt) {
+                        return Group::kinetic_range(pblk, ns, base, cnt);
+                    });
             }
+            kin += 0.5 * raw;
         } else {
             Scalar const* const p = mom_.data();
             double const sum =

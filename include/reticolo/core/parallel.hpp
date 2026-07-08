@@ -55,6 +55,21 @@ inline constexpr std::size_t k_chunk_bytes = 64UL * 1024;
     return c != 0 ? c : gran;
 }
 
+// Grow a caller-owned reusable staging buffer to at least `n` and return its
+// data pointer. The batched kernels stage transcendental/scatter lanes in a
+// per-thread scratch to split the RNG/compute-bound and memory-bound phases;
+// this factors the grow-on-demand idiom they all share. The buffer stays a
+// NAMED `thread_local` at each call site (not a single shared slab keyed by
+// type) so two same-typed scratches that are live at once — e.g. a sampler's
+// draw buffer and the `normal_fill` it calls — can never alias.
+template <class T>
+inline T* thread_scratch(std::vector<T>& buf, std::size_t n) {
+    if (buf.size() < n) {
+        buf.resize(n);
+    }
+    return buf.data();
+}
+
 // Set true (per thread) only inside a reticolo-owned parallel region; the traverse
 // leaves worksplit via `omp for` when it holds and run serial otherwise. A mutable
 // thread-local by design — it is the region marker the composability rests on.

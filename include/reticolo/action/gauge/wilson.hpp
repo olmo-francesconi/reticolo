@@ -65,40 +65,17 @@ struct Wilson : GaugeAction<Wilson<G, T>> {
         std::size_t const ns     = U.nsites();
         std::size_t const n_plaq = (d * (d - 1) / 2) * ns;
         double accum_re_tr       = 0.0;
-        // Prefer the parallel range worker (gauge base worksplits + deterministic
-        // partials) when the group's kernels expose it; else the serial whole-plane
-        // batched Σ Re Tr U_p; else per-plaquette plaq_re_tr.
-        if constexpr (requires {
-                          kernels::template s_full_plane_range<T>(
-                              U, 0, 1, std::size_t{}, std::size_t{});
-                      }) {
-            // field_reduce derives the threshold/chunk from the gauge footprint;
-            // gran = k_gauge_batch keeps the batched plane sum on batch boundaries.
-            constexpr std::size_t gran = math::group::k_gauge_batch<T>;
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                    accum_re_tr += reticolo::exec::field_reduce(
-                        U, gran, [&](std::size_t base, std::size_t cnt) {
-                            return kernels::template s_full_plane_range<T>(U, mu, nu, base, cnt);
-                        });
-                }
-            }
-        } else if constexpr (requires { kernels::template s_full_plane_re_tr_sum<T>(U, 0, 1); }) {
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                    accum_re_tr += kernels::template s_full_plane_re_tr_sum<T>(U, mu, nu);
-                }
-            }
-        } else {
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                T const* mb = U.mu_block_data(mu);
-                for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                    T const* nb = U.mu_block_data(nu);
-                    sweep::visit_plane(
-                        U, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                            accum_re_tr += kernels::plaq_re_tr(mb, nb, s, s_pmu, s_pnu, ns);
-                        });
-                }
+        // The parallel range worker: the gauge base worksplits each (μ,ν) plane
+        // over the canonical field partition with deterministic per-item partials.
+        // field_reduce derives the threshold/chunk from the gauge footprint;
+        // gran = k_gauge_batch keeps the batched plane sum on batch boundaries.
+        constexpr std::size_t gran = math::group::k_gauge_batch<T>;
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                accum_re_tr += reticolo::exec::field_reduce(
+                    U, gran, [&](std::size_t base, std::size_t cnt) {
+                        return kernels::template s_full_plane_range<T>(U, mu, nu, base, cnt);
+                    });
             }
         }
         double const beta_d      = static_cast<double>(beta);
