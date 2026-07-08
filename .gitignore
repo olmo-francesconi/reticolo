@@ -36,5 +36,8 @@ tools/kaggle/output/
 # modal runner: pulled benchmark/run artifacts
 tools/modal/output/
 
+# cpu scaling sweep artifacts
+tools/bench/results/
+
 # Local Claude Code project instructions — never tracked
 CLAUDE.md
