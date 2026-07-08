@@ -1,7 +1,9 @@
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/action/site/sine_gordon.hpp>
 #include <reticolo/action/sweep/site.hpp>
+#include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/core/log.hpp>
 #include <reticolo/core/parallel.hpp>
 #include <reticolo/core/rng/rng.hpp>
 
@@ -132,6 +134,47 @@ TEST_CASE("SineGordon force + s_full are thread-count invariant", "[hot_loop][pa
         auto const [f, s] = at(nthr);
         INFO("threads=" << nthr);
         REQUIRE(s == s_ref);
+        for (std::size_t i = 0; i < f.size(); ++i) {
+            REQUIRE(f[i] == f_ref[i]);
+        }
+    }
+}
+
+// The FULL trajectory — momentum fill, snapshot copy, kinetic, s_full, MD drifts
+// and fused kicks — must be one deterministic function of (field, seed) at any
+// team size: every per-site op runs on the canonical field partition and every
+// reduce folds fixed per-item partials. Two steps (a determinism check, not a
+// simulation) on a >threshold lattice; ΔH and the evolved field are compared
+// bit-for-bit across thread counts.
+TEST_CASE("full hmc.step is thread-count invariant", "[hot_loop][parallel]") {
+    auto run = [&](int nthr) {
+#ifdef _OPENMP
+        omp_set_num_threads(nthr);
+#else
+        (void)nthr;
+#endif
+        auto phi = hot_lattice({20, 20, 20, 20});
+        REQUIRE(reticolo::exec::want_threads(phi.nsites(), phi.bytes_per_site()));
+        Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
+        FastRng rng{2026};
+        reticolo::alg::Hmc hmc{action,
+                               phi,
+                               rng,
+                               {.tau = 0.5, .n_md = 6},
+                               reticolo::alg::integ::leapfrog,
+                               reticolo::log::Mode::silent};
+        double dh_sum = 0.0;
+        for (int t = 0; t < 2; ++t) {
+            dh_sum += hmc.step(reticolo::log::Mode::silent).dH;
+        }
+        return std::pair{dh_sum, std::vector<double>{phi.data(), phi.data() + phi.nsites()}};
+    };
+
+    auto const [dh_ref, f_ref] = run(1);
+    for (int nthr : {1, 2, 4, 8}) {
+        auto const [dh, f] = run(nthr);
+        INFO("threads=" << nthr);
+        REQUIRE(dh == dh_ref);  // ΔH bit-identical → every op thread-invariant
         for (std::size_t i = 0; i < f.size(); ++i) {
             REQUIRE(f[i] == f_ref[i]);
         }
