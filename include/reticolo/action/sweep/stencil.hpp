@@ -48,15 +48,17 @@
 //             energy that cannot be pre-summed).
 //
 // Partition (work-item granularity) is chosen per dimension: 1D chunks the inner
-// axis; 2D takes one row per item; 3D one plane; 4D one cache tile. The map output
-// is write-disjoint (bit-identical to the gather fallback, any thread count); the
-// reduce folds a deterministic fixed partition in canonical item order (thread-
-// count invariant).
+// axis; 2D takes one row per item; 3D one plane; 4D one w-hyperplane. Every item
+// is a contiguous memory span, so the sweep keeps the hardware prefetch streams
+// intact — measured (Apple M and 32-core Linux x86, every thread count) this
+// beats 512 KB cache tiling, which was dropped. The map output is write-disjoint
+// (bit-identical to the gather fallback, any thread count); the reduce folds the
+// fixed machine-independent partition in canonical item order (thread-count
+// invariant AND identical across platforms).
 //
 // D in {1, 2, 3, 4} take the vectorised generic path; D > 4 falls back to a flat
 // gather through the neighbour table (exact, just slower). Raising the vectorised
-// ceiling is a one-line switch case plus a `plan_block` root — the stencil body
-// already handles any D.
+// ceiling is a one-line switch case — the stencil body already handles any D.
 //
 // Compile with -DRETICOLO_HOT_LOOP_FORCE_FALLBACK=1 to force every call onto the
 // gather fallback regardless of ndims (the "old hot loop" bench path).
@@ -540,37 +542,6 @@ geometry_(Lattice<T> const& l) noexcept {
     return {L, stride};
 }
 
-// ---------- cache-tile plan (4D) ---------------------------------------------
-
-// The sub-lattice is a slab: FULL in the innermost dimension (x), blocked in
-// y,z,w. This is deliberate — a stencil's x-neighbour has reuse distance 1 (the
-// adjacent element, always cached), so tiling x cannot cut DRAM traffic and only
-// shortens the vectorised inner run. The dims that overflow cache are y,z,w
-// (reuse distances L0, L0·L1, L0·L1·L2), so those are the ones blocked, with side
-// b from the halo working set L0·(b+2)³·sizeof(T) ≤ target. Each block is a
-// self-contained parallel work unit. (Measured: tiling x is 1.5–5× slower, purely
-// from SIMD starvation, even single-threaded with cache to spare.)
-struct Block4d {
-    std::size_t bx, by, bz, bw;
-};
-
-template <class T>
-[[nodiscard]] inline Block4d
-plan_block_4d_(std::size_t L0, std::size_t L1, std::size_t L2, std::size_t L3) noexcept {
-    // x stays FULL — the innermost axis carries the contiguous memory streams the
-    // hardware prefetcher relies on, so tiling it breaks those streams and costs
-    // far more than the halo it saves. Block y,z,w so the halo working set
-    // L0·(b+2)³·sizeof(T) fits the fixed per-core target (see k_traverse_l2_bytes).
-    double const cap = static_cast<double>(reticolo::exec::k_traverse_l2_bytes) /
-                       (static_cast<double>(L0) * static_cast<double>(sizeof(T)));
-    long b = static_cast<long>(std::cbrt(cap)) - 2;  // L0·(b+2)³ fits the budget
-    if (b < 4) {
-        b = 4;
-    }
-    auto const ub = static_cast<std::size_t>(b);
-    return {L0, std::min(ub, L1), std::min(ub, L2), std::min(ub, L3)};
-}
-
 // ---------- dispatch ---------------------------------------------------------
 
 // Map (Acc = void) or reduce (Acc = fold type) selector, so one dispatcher serves
@@ -596,7 +567,7 @@ inline Acc run_ranges_(std::size_t n, std::size_t bps, std::size_t gran, Range c
 
 // The single ndims → work-item dispatch, shared by the site stencil AND the complex
 // split-last drivers, for both map (Acc = void) and reduce. It owns the whole per-
-// dimension partition (1D inner chunks, 2D rows, 3D planes, 4D cache tiles) and the
+// dimension partition (1D inner chunks, 2D rows, 3D planes, 4D hyperplanes) and the
 // D>4 gather fallback; the caller supplies only the per-item behaviour:
 //   item.template operator()<D>(L, stride, lo, hi) — a tiled sub-lattice, D∈{2,3,4}
 //   one_d(x0, cnt)  — one inner-axis chunk of a 1D lattice
@@ -635,21 +606,12 @@ traverse_dispatch_(Lattice<T> const& l, Item const& item, OneD const& one_d, Fla
         }
         case 4: {
             auto const [L, stride] = geometry_<4>(l);
-            Block4d const bl       = plan_block_4d_<T>(L[0], L[1], L[2], L[3]);
-            std::size_t const nty  = (L[1] + bl.by - 1) / bl.by;
-            std::size_t const ntz  = (L[2] + bl.bz - 1) / bl.bz;
-            std::size_t const ntw  = (L[3] + bl.bw - 1) / bl.bw;
-            return run_items_<Acc>(want, nty * ntz * ntw, [&](std::size_t it) {
-                std::size_t const ty = it % nty;
-                std::size_t const r  = it / nty;
-                std::size_t const tz = r % ntz;
-                std::size_t const tw = r / ntz;
-                std::array<std::size_t, 4> const lo{0, ty * bl.by, tz * bl.bz, tw * bl.bw};
-                std::array<std::size_t, 4> const hi{L[0],
-                                                    std::min(lo[1] + bl.by, L[1]),
-                                                    std::min(lo[2] + bl.bz, L[2]),
-                                                    std::min(lo[3] + bl.bw, L[3])};
-                return item.template operator()<4>(L, stride, lo, hi);
+            return run_items_<Acc>(want, L[3], [&](std::size_t w) {
+                return item.template operator()<4>(
+                    L,
+                    stride,
+                    std::array<std::size_t, 4>{0, 0, 0, w},
+                    std::array<std::size_t, 4>{L[0], L[1], L[2], w + 1});
             });
         }
         default:
