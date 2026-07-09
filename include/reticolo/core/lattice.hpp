@@ -75,7 +75,6 @@ public:
 
     [[nodiscard]] Site next(Site s, std::size_t mu) const noexcept { return idx_->next(s, mu); }
     [[nodiscard]] Site prev(Site s, std::size_t mu) const noexcept { return idx_->prev(s, mu); }
-    [[nodiscard]] Parity parity_of(Site s) const noexcept { return idx_->parity_of(s); }
 
     [[nodiscard]] SizeVec const& shape() const noexcept { return idx_->shape(); }
     [[nodiscard]] std::size_t ndims() const noexcept { return idx_->ndims(); }
@@ -102,8 +101,6 @@ public:
             body(d[i], Site{i});
         }
     }
-    [[nodiscard]] std::span<Site const> even_sites() const noexcept { return idx_->even_sites(); }
-    [[nodiscard]] std::span<Site const> odd_sites() const noexcept { return idx_->odd_sites(); }
 
     [[nodiscard]] T* data() noexcept { return data_.data(); }
     [[nodiscard]] T const* data() const noexcept { return data_.data(); }

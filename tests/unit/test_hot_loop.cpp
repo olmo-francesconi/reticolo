@@ -1,3 +1,5 @@
+#include "nn_reference.hpp"
+
 #include <reticolo/action/sweep/site.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng/rng.hpp>
@@ -12,9 +14,7 @@
 using reticolo::FastRng;
 using reticolo::Lattice;
 using reticolo::action::sweep::reduce_fwd;
-using reticolo::action::sweep::reduce_fwd_fallback_;
 using reticolo::action::sweep::visit_nn;
-using reticolo::action::sweep::visit_nn_fallback_;
 
 namespace {
 
@@ -48,9 +48,9 @@ TEST_CASE("visit_nn dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_loop
         visit_nn<double>(l, [&out_dispatch](std::size_t i, double phi, double nbrs) {
             out_dispatch[i] = phi * 7.0 + nbrs;  // arbitrary linear body
         });
-        // Fallback (gather through Indexing).
-        visit_nn_fallback_<double>(
-            l, std::size_t{0}, l.nsites(), [&out_fallback](std::size_t i, double phi, double nbrs) {
+        // Reference (gather through the computed Indexing::next/prev).
+        reticolo::test::visit_nn_ref<double>(
+            l, [&out_fallback](std::size_t i, double phi, double nbrs) {
                 out_fallback[i] = phi * 7.0 + nbrs;
             });
 
@@ -75,7 +75,7 @@ TEST_CASE("reduce_fwd dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_lo
         auto body = [](double phi, double fwd) { return (phi * phi) - phi * fwd; };
 
         double const a = reduce_fwd<double>(l, body);
-        double const b = reduce_fwd_fallback_<double>(l, std::size_t{0}, l.nsites(), body);
+        double const b = reticolo::test::reduce_fwd_ref<double>(l, body);
 
         // Both paths visit every (site, mu) pair with the same body; the
         // dispatch path accumulates in vector lanes and the fallback in a

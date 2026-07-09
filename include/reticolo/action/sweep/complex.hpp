@@ -27,66 +27,38 @@
 
 namespace reticolo::action::sweep {
 
-// ---------- flat gather fallback (D==1, D>4) ---------------------------------
-
-template <class T, class Body>
-inline void visit_nn_split_last_fallback_(Lattice<T> const& l,
-                                          std::size_t s0,
-                                          std::size_t cnt,
-                                          Body const& body) noexcept {
-    auto const& idx              = l.indexing_ref();
-    T const* data                = l.data();
-    Site::value_type const* next = idx.next_data();
-    Site::value_type const* prev = idx.prev_data();
-    std::size_t const d          = idx.ndims();
-    std::size_t const last       = d - 1;
-    std::size_t const end        = s0 + cnt;
-
-    for (std::size_t i = s0; i < end; ++i) {
-        T nbrs                 = T{0};
-        std::size_t const base = i * d;
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            nbrs += data[next[base + mu]];
-            nbrs += data[prev[base + mu]];
-        }
-        T const nbrs_last = data[next[base + last]] + data[prev[base + last]];
-        body(i, data[i], nbrs, nbrs_last);
-    }
-}
-
-template <class T, class Acc, class Body>
-[[nodiscard]] inline Acc reduce_fwd_split_last_fallback_(Lattice<T> const& l,
-                                                         std::size_t s0,
-                                                         std::size_t cnt,
-                                                         Body const& body) noexcept {
-    RETICOLO_FP_REASSOCIATE
-    auto const& idx              = l.indexing_ref();
-    T const* data                = l.data();
-    Site::value_type const* next = idx.next_data();
-    std::size_t const d          = idx.ndims();
-    std::size_t const last       = d - 1;
-    std::size_t const end        = s0 + cnt;
-
-    Acc total{};
-    for (std::size_t i = s0; i < end; ++i) {
-        T fwd_sum              = T{0};
-        std::size_t const base = i * d;
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            fwd_sum += data[next[base + mu]];
-        }
-        T const fwd_last = data[next[base + last]];
-        total += body(data[i], fwd_sum, fwd_last);
-    }
-    return total;
-}
-
 // ---------- per-dimension split-last item nests -------------------------------
 //
 // Same explicit hoisted nests as the site engine, but each site emits TWO sums:
 // the full 2·ndims neighbour total AND the last-direction (dim D-1) pair on its
 // own. The last direction is the outermost walk axis, so its row bases are the
 // z/w ones already hoisted. Identity combine (raw reads). Total order and the +x
-// peel match the gather fallback → bit-identical for any thread count.
+// peel are the canonical fold → bit-identical for any thread count.
+
+// 1D: the single dimension IS the last direction, so total == last (the ±τ pair).
+template <class T, class Body>
+inline void
+map_split_1d_(T const* data, std::size_t x0, std::size_t x1, std::size_t l0, Body const& body) noexcept {
+    for (std::size_t x = x0; x < x1; ++x) {
+        std::size_t const xp = (x + 1 == l0) ? 0 : (x + 1);
+        std::size_t const xm = (x == 0) ? (l0 - 1) : (x - 1);
+        T const last         = data[xp] + data[xm];
+        body(x, data[x], last, last);
+    }
+}
+
+template <class Acc, class T, class Body>
+[[nodiscard]] inline Acc
+reduce_split_1d_(T const* data, std::size_t x0, std::size_t x1, std::size_t l0, Body const& body) noexcept {
+    RETICOLO_FP_REASSOCIATE
+    Acc total{};
+    for (std::size_t x = x0; x < x1; ++x) {
+        std::size_t const xp = (x + 1 == l0) ? 0 : (x + 1);
+        T const fwd          = data[xp];
+        total += body(data[x], fwd, fwd);
+    }
+    return total;
+}
 
 template <class T, class Body>
 inline void map_split_2d_(T const* data,
@@ -333,9 +305,6 @@ template <class Acc, class T, class Body>
 template <class T, class Body>
 inline void visit_nn_split_last(Lattice<T> const& l, Body&& body) noexcept {
     Body const& b = body;
-    auto flat     = [&](std::size_t s0, std::size_t cnt) {
-        visit_nn_split_last_fallback_(l, s0, cnt, b);
-    };
     traverse_dispatch_<void>(
         l,
         [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
@@ -347,17 +316,15 @@ inline void visit_nn_split_last(Lattice<T> const& l, Body&& body) noexcept {
                 map_split_4d_(l.data(), L, stride, lo, hi, b);
             }
         },
-        flat,
-        flat);
+        [&](std::size_t x0, std::size_t cnt) {
+            map_split_1d_(l.data(), x0, x0 + cnt, l.shape()[0], b);
+        });
 }
 
 //  reduce_fwd_split_last(l, body): body(phi, fwd_total, fwd_last) -> T.
 template <class T, class Body>
 [[nodiscard]] inline T reduce_fwd_split_last(Lattice<T> const& l, Body&& body) noexcept {
     Body const& b = body;
-    auto flat     = [&](std::size_t s0, std::size_t cnt) {
-        return reduce_fwd_split_last_fallback_<T, T>(l, s0, cnt, b);
-    };
     return traverse_dispatch_<T>(
         l,
         [&]<std::size_t D>(auto const& L, auto const& stride, auto const& lo, auto const& hi) {
@@ -369,8 +336,9 @@ template <class T, class Body>
                 return reduce_split_4d_<T>(l.data(), L, stride, lo, hi, b);
             }
         },
-        flat,
-        flat);
+        [&](std::size_t x0, std::size_t cnt) {
+            return reduce_split_1d_<T, T>(l.data(), x0, x0 + cnt, l.shape()[0], b);
+        });
 }
 
 }  // namespace reticolo::action::sweep

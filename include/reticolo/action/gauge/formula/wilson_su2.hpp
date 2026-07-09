@@ -1,7 +1,6 @@
 #pragma once
 
 #include <reticolo/action/gauge/formula/wilson_kernels.hpp>
-#include <reticolo/action/sweep/plane.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/parallel.hpp>
@@ -49,18 +48,6 @@ struct wilson_kernels<math::group::SU2> {
         return re_tr;
     }
 
-    // Σ Re Tr U_p over the sites [base, base+cnt) of one (μ, ν) plane. Pure per-
-    // range worker — no threading. The gauge base parallelises by calling this
-    // over a fixed block partition (field_reduce); `base` is k_batch-
-    // aligned so the batched groupings match the whole-plane sweep exactly.
-    // Same shape as SU3::s_full_plane_range, [4][B] slabs.
-    //
-    // When L0 isn't a multiple of the batch, every row-crossing batch loses
-    // load contiguity and the 2×2 math (~50 FLOPs/site) is too light to
-    // amortise the gathers — measured ~25% slower than the plane-walking
-    // scalar path on 3D L=12. Misaligned shapes take the per-site route
-    // instead; SU(3)'s heavier math wins batched either way, so only SU(2)
-    // guards.
     // Table-free row-nested plane sum: the two forward neighbours (s+μ̂, s+ν̂) are
     // computed from the lattice strides, so the k_batch index arrays stay
     // contiguous (stride-1 vector loads) and no Indexing table is read. Unifies

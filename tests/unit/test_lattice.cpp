@@ -7,7 +7,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 using reticolo::Lattice;
-using reticolo::Parity;
 using reticolo::Site;
 
 TEST_CASE("Lattice default-constructs to T{} on every site", "[lattice]") {
@@ -63,8 +62,9 @@ TEST_CASE("Topology queries delegate to Indexing", "[lattice]") {
     Lattice<int> const phi{{4, 4}};
     REQUIRE(phi.next(Site{0}, 0) == Site{1});
     REQUIRE(phi.prev(Site{0}, 0) == Site{3});
-    REQUIRE(phi.parity_of(Site{0}) == Parity::Even);
-    REQUIRE(phi.parity_of(Site{1}) == Parity::Odd);
+    REQUIRE(phi.next(Site{3}, 0) == Site{0});   // +x wraps
+    REQUIRE(phi.next(Site{0}, 1) == Site{4});   // +y = +stride
+    REQUIRE(phi.prev(Site{0}, 1) == Site{12});  // -y wraps
 }
 
 TEST_CASE("sites() iota-view yields every Site exactly once in order", "[lattice]") {
@@ -75,18 +75,6 @@ TEST_CASE("sites() iota-view yields every Site exactly once in order", "[lattice
         ++expected;
     }
     REQUIRE(expected == phi.nsites());
-}
-
-TEST_CASE("even/odd site spans partition the lattice", "[lattice]") {
-    Lattice<int> const phi{{4, 4, 4}};
-    REQUIRE(phi.even_sites().size() + phi.odd_sites().size() == phi.nsites());
-
-    for (Site s : phi.even_sites()) {
-        REQUIRE(phi.parity_of(s) == Parity::Even);
-    }
-    for (Site s : phi.odd_sites()) {
-        REQUIRE(phi.parity_of(s) == Parity::Odd);
-    }
 }
 
 TEST_CASE("data() exposes a contiguous flat buffer", "[lattice]") {

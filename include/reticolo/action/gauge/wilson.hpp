@@ -2,7 +2,6 @@
 
 #include <reticolo/action/gauge/formula/wilson_kernels.hpp>
 #include <reticolo/action/gauge/gauge_action.hpp>
-#include <reticolo/action/sweep/plane.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/parallel.hpp>
@@ -26,9 +25,9 @@ namespace reticolo::action {
 //     S_W = (β/N) · Σ_x Σ_{μ<ν} ( N − Re Tr U_{μν}(x) )
 //         = β · n_plaq − (β/N) · Σ_p Re Tr U_p
 //
-// The hot loops walk one plaquette plane (μ, ν) at a time via `sweep::visit_plane`
-// (bulk-vs-slab, stride-1 inner site loop, peeled wrap boundaries). The
-// per-plaquette physics — Re Tr U_p and the staple force scatter — is the
+// The hot loops walk each plaquette plane (μ, ν) with a table-free row-nested
+// strided sweep (neighbours from the lattice strides, dim-0 inner, wrap peeled).
+// The per-plaquette physics — Re Tr U_p and the staple force scatter — is the
 // action-specific `formula::wilson_kernels<G>` (in action/gauge/formula/wilson_<g>.hpp),
 // which is built on the group model `G`'s core operations. `G` itself carries
 // only the group constants (`n_color`, `name`) and the HMC algebra hooks; the

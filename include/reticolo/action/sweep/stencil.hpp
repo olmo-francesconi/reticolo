@@ -54,17 +54,13 @@
 // ownership is identical across all passes of a trajectory. Every item is a
 // contiguous span, keeping the hardware prefetch streams intact — measured
 // (Apple M and 32-core Linux x86, every thread count) this beats 512 KB cache
-// tiling, which was dropped. The map output is write-disjoint (bit-identical to
-// the gather fallback, any thread or slab count); the reduce folds the partition
-// in canonical item order — deterministic for a fixed (team, slabs-per-thread),
-// but the partition now tracks the team size, so a different team re-folds.
+// tiling, which was dropped. The map output is write-disjoint (bit-identical for
+// any thread or slab count); the reduce folds the partition in canonical item
+// order — deterministic for a fixed (team, slabs-per-thread), but the partition
+// now tracks the team size, so a different team re-folds.
 //
-// D in {1, 2, 3, 4} take the vectorised generic path; D > 4 falls back to a flat
-// gather through the neighbour table (exact, just slower). Raising the vectorised
-// ceiling is a one-line switch case — the stencil body already handles any D.
-//
-// Compile with -DRETICOLO_HOT_LOOP_FORCE_FALLBACK=1 to force every call onto the
-// gather fallback regardless of ndims (the "old hot loop" bench path).
+// D in {1, 2, 3, 4} each have a hand-written vectorised nest; Indexing caps ndims
+// at 4, so there is no D>4 path — the neighbours are always computed from strides.
 
 namespace reticolo::action::sweep {
 
@@ -134,93 +130,6 @@ template <class Policy, class At>
             at(x, x - 1, x);
         }
     }
-}
-
-// ---------- gather fallback (any dimension) ----------------------------------
-
-// Flat neighbour-table sweep over sites [s0, s0+cnt). Per axis mu (ascending) it
-// reads next[mu] iff Policy::fwd and prev[mu] iff Policy::bwd, in that order — the
-// canonical order the vectorised nests reproduce. (This runtime-length loop must
-// accumulate from T{0}; the nests fold from the first term. For real field data
-// the two agree bit-for-bit — signed-zero neighbour values never arise.)
-template <class Policy, class T, class Comb, class Body>
-inline void stencil_map_flat_(Lattice<T> const& l,
-                              std::size_t s0,
-                              std::size_t cnt,
-                              Comb const& comb,
-                              Body const& body) noexcept {
-    auto const& idx                               = l.indexing_ref();
-    T const* data                                 = l.data();
-    [[maybe_unused]] Site::value_type const* next = idx.next_data();
-    [[maybe_unused]] Site::value_type const* prev = idx.prev_data();
-    std::size_t const d                           = idx.ndims();
-    std::size_t const end                         = s0 + cnt;
-
-    for (std::size_t i = s0; i < end; ++i) {
-        T const self           = data[i];
-        T agg                  = T{0};
-        std::size_t const base = i * d;
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            if constexpr (Policy::fwd) {
-                agg += comb(self, data[next[base + mu]]);
-            }
-            if constexpr (Policy::bwd) {
-                agg += comb(self, data[prev[base + mu]]);
-            }
-        }
-        body(i, self, agg);
-    }
-}
-
-template <class Policy, class Acc, class T, class Comb, class Body>
-[[nodiscard]] inline Acc stencil_reduce_flat_(Lattice<T> const& l,
-                                              std::size_t s0,
-                                              std::size_t cnt,
-                                              Comb const& comb,
-                                              Body const& body) noexcept {
-    RETICOLO_FP_REASSOCIATE
-    auto const& idx                               = l.indexing_ref();
-    T const* data                                 = l.data();
-    [[maybe_unused]] Site::value_type const* next = idx.next_data();
-    [[maybe_unused]] Site::value_type const* prev = idx.prev_data();
-    std::size_t const d                           = idx.ndims();
-    std::size_t const end                         = s0 + cnt;
-
-    Acc total{};
-    for (std::size_t i = s0; i < end; ++i) {
-        T const self           = data[i];
-        T agg                  = T{0};
-        std::size_t const base = i * d;
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            if constexpr (Policy::fwd) {
-                agg += comb(self, data[next[base + mu]]);
-            }
-            if constexpr (Policy::bwd) {
-                agg += comb(self, data[prev[base + mu]]);
-            }
-        }
-        total += body(self, agg);
-    }
-    return total;
-}
-
-// Identity-combine fallbacks, kept under their historical names for the site unit
-// tests (which use them as the bit-exact reference) and the site D>4 path: force
-// reads all neighbours, s_full the forward ones.
-template <class T, class Body>
-inline void visit_nn_fallback_(Lattice<T> const& l,
-                               std::size_t s0,
-                               std::size_t cnt,
-                               Body const& body) noexcept {
-    stencil_map_flat_<AllDirs, T>(l, s0, cnt, IdentityCombine{}, body);
-}
-
-template <class T, class Acc = T, class Body>
-[[nodiscard]] inline Acc reduce_fwd_fallback_(Lattice<T> const& l,
-                                              std::size_t s0,
-                                              std::size_t cnt,
-                                              Body const& body) noexcept {
-    return stencil_reduce_flat_<FwdOnly, Acc, T>(l, s0, cnt, IdentityCombine{}, body);
 }
 
 // Build (L, stride) geometry arrays for a D-dim lattice. stride[0]=1,
@@ -302,24 +211,19 @@ inline Acc run_partition_items_(Lattice<T> const& l, int nthreads, Item const& i
 // The single ndims → work-item dispatch, shared by the site stencil AND the complex
 // split-last drivers, for both map (Acc = void) and reduce. It routes D∈{2,3,4}
 // through the field's canonical partition (exec::partition — the same items every
-// elementwise op uses), 1D through inner chunks, and D>4 through the flat gather
-// fallback; the caller supplies only the per-item behaviour:
+// elementwise op uses) and 1D through inner chunks; the caller supplies only the
+// per-item behaviour:
 //   item.template operator()<D>(L, stride, lo, hi) — one partition item, D∈{2,3,4}
 //   one_d(x0, cnt)  — one inner-axis chunk of a 1D lattice
-//   flat(s0, cnt)   — a flat neighbour-table gather (D>4 / forced fallback)
-// each returning void (map) or Acc (reduce). The tile grid, item→(lo,hi) decode and
-// the row/plane ranges live here once instead of in four near-identical switches.
-template <class Acc, class T, class Item, class OneD, class Flat>
+// each returning void (map) or Acc (reduce). `ndims` is 1..4 (Indexing enforces the
+// cap), so there is no D>4 gather path — the geometry is always a hand-written nest.
+template <class Acc, class T, class Item, class OneD>
 inline Acc traverse_dispatch_(Lattice<T> const& l,
                               [[maybe_unused]] Item const& item,
-                              [[maybe_unused]] OneD const& one_d,
-                              Flat const& flat) {
+                              [[maybe_unused]] OneD const& one_d) {
     std::size_t const n                 = l.nsites();
     std::size_t const bps               = l.bytes_per_site();
     [[maybe_unused]] int const nthreads = reticolo::exec::traverse_threads(n, bps);
-#if RETICOLO_HOT_LOOP_FORCE_FALLBACK
-    return run_ranges_<Acc>(n, bps, 1, flat);
-#else
     switch (l.ndims()) {
         case 1:
             return run_ranges_<Acc>(l.shape()[0], bps, 1, one_d);
@@ -327,12 +231,9 @@ inline Acc traverse_dispatch_(Lattice<T> const& l,
             return run_partition_items_<Acc, 2>(l, nthreads, item);
         case 3:
             return run_partition_items_<Acc, 3>(l, nthreads, item);
-        case 4:
+        default:  // 4 — Indexing caps ndims at 4
             return run_partition_items_<Acc, 4>(l, nthreads, item);
-        default:
-            return run_ranges_<Acc>(n, bps, 1, flat);
     }
-#endif
 }
 
 // ---------- hand-written per-dimension item nests ----------------------------
@@ -772,9 +673,6 @@ inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) no
         },
         [&](std::size_t x0, std::size_t cnt) {
             stencil_map_1d_<Policy>(l.data(), x0, x0 + cnt, l.shape()[0], comb, b);
-        },
-        [&](std::size_t s0, std::size_t cnt) {
-            stencil_map_flat_<Policy, T>(l, s0, cnt, comb, b);
         });
 }
 
@@ -798,9 +696,6 @@ reduce_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
         },
         [&](std::size_t x0, std::size_t cnt) {
             return stencil_reduce_1d_<Policy, Acc>(l.data(), x0, x0 + cnt, l.shape()[0], comb, b);
-        },
-        [&](std::size_t s0, std::size_t cnt) {
-            return stencil_reduce_flat_<Policy, Acc, T>(l, s0, cnt, comb, b);
         });
 }
 

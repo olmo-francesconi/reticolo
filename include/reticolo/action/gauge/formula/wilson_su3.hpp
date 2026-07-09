@@ -1,7 +1,6 @@
 #pragma once
 
 #include <reticolo/action/gauge/formula/wilson_kernels.hpp>
-#include <reticolo/action/sweep/plane.hpp>
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/parallel.hpp>
