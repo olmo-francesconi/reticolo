@@ -133,10 +133,11 @@ jobs:
       - name: install clang-format (pinned)
         # Ubuntu's apt clang-format trails the LLVM release by 1-2 years; pin
         # via pip so the CI version matches what developers run locally
-        # (homebrew `llvm` = 22.1.8). Local install: `pipx install clang-format==22.1.8`.
+        # (22.1.5 is the latest clang-format on PyPI). Local install:
+        # `pipx install clang-format==22.1.5`, or `brew install llvm` + tools/check.sh.
         run: |
           python3 -m venv /tmp/cf-venv
-          /tmp/cf-venv/bin/pip install clang-format==22.1.8
+          /tmp/cf-venv/bin/pip install clang-format==22.1.5
           echo "/tmp/cf-venv/bin" >> "$GITHUB_PATH"
       - name: check formatting
         run: |
@@ -158,7 +159,7 @@ jobs:
       # silently change what the gate enforces. The compile DB is built with the
       # same clang major so clang-tidy parses it without frontend errors. 22 isn't
       # in Ubuntu's default repos, so pull it from apt.llvm.org via llvm.sh.
-      # Reproduce locally with `brew install llvm` (22.1.8) + tools/check.sh.
+      # Reproduce locally with `brew install llvm` (22.x) + tools/check.sh.
       - name: install
         run: |
           wget -q https://apt.llvm.org/llvm.sh
