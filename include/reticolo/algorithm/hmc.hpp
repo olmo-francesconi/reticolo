@@ -36,6 +36,12 @@ struct HmcSpec {
     // to N threads regardless of the global — the basis for later mixing replica-
     // and site-level parallelism (m threads/replica × max/m replicas).
     int n_threads = 0;
+    // Slabs handed to each thread — the partition granularity. 0 = the default 1
+    // (one slab per thread). Higher = finer slabs (smaller cache footprint). Since
+    // the slab count tracks the team, reproducing a chain means holding both
+    // n_threads AND slabs_per_thread fixed (the s_full/kinetic reduces re-fold
+    // otherwise); the maps stay bit-identical regardless.
+    int slabs_per_thread = 0;
 };
 
 struct HmcResult {
@@ -117,7 +123,7 @@ public:
         log::Mode announce = log::Mode::normal)
         : action_{action}, field_{field}, rng_{rng}, mom_{field.indexing()},
           force_{field.indexing()}, old_field_{field.indexing()}, tau_{spec.tau}, n_md_{spec.n_md},
-          n_threads_{spec.n_threads} {
+          n_threads_{spec.n_threads}, n_slabs_{spec.slabs_per_thread} {
         if (announce == log::Mode::normal) {
             log::algo(*this);
         }
@@ -142,13 +148,18 @@ public:
         if (n_threads_ > 0) {
             e.param("threads={}", n_threads_);
         }
+        if (n_slabs_ > 0) {
+            e.param("slabs/thr={}", n_slabs_);
+        }
     }
 
     HmcResult step(log::Mode log_mode = log::Mode::normal) {
-        // Bind this HMC's team size for the whole trajectory: every per-site pass
-        // below (sample, copy, kinetic, s_full, MD force/drift/kick) slices across
-        // n_threads_ (0 = ambient). Restored on return.
+        // Bind this HMC's team size + slab granularity for the whole trajectory:
+        // every per-site pass below (sample, copy, kinetic, s_full, MD force/drift/
+        // kick) slices across n_threads_ (0 = ambient) into n_slabs_ per thread
+        // (0 = 1). Restored on return.
         exec::team_scope const team{n_threads_};
+        exec::slab_scope const slabs{n_slabs_};
         sample_momenta_();
 
         // Snapshot for rejection rollback — flat-buffer copy.
@@ -203,12 +214,13 @@ public:
     [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
 
     [[nodiscard]] HmcSpec spec() const noexcept {
-        return {.tau = tau_, .n_md = n_md_, .n_threads = n_threads_};
+        return {.tau = tau_, .n_md = n_md_, .n_threads = n_threads_, .slabs_per_thread = n_slabs_};
     }
     void set_spec(HmcSpec const& s) noexcept {
         tau_       = s.tau;
         n_md_      = s.n_md;
         n_threads_ = s.n_threads;
+        n_slabs_   = s.slabs_per_thread;
     }
 
     // Exposed so reversibility tests can run a bare integrator without
@@ -219,6 +231,7 @@ public:
 
     void integrate_only(double tau, int n_md) noexcept {
         exec::team_scope const team{n_threads_};
+        exec::slab_scope const slabs{n_slabs_};
         run_md_(tau, n_md);
     }
 
@@ -238,13 +251,13 @@ private:
     // chunked flat copy serves both site fields (Scalar per site) and the
     // multi-component link buffer (whose flat index isn't site-major).
     void copy_flat_(Scalar* dst, Scalar const* src, std::size_t n) const noexcept {
-        reticolo::exec::parallel_map_ranges(n, sizeof(Scalar), 1, [dst, src](std::size_t base,
-                                                                             std::size_t cnt) {
-            std::size_t const end = base + cnt;
-            for (std::size_t i = base; i < end; ++i) {
-                dst[i] = src[i];
-            }
-        });
+        reticolo::exec::parallel_map_ranges(
+            n, sizeof(Scalar), 1, [dst, src](std::size_t base, std::size_t cnt) {
+                std::size_t const end = base + cnt;
+                for (std::size_t i = base; i < end; ++i) {
+                    dst[i] = src[i];
+                }
+            });
     }
 
     void sample_momenta_() {
@@ -376,6 +389,7 @@ private:
     double tau_;
     int n_md_;
     int n_threads_;  // bound via team_scope each trajectory; 0 = ambient
+    int n_slabs_;    // bound via slab_scope each trajectory; 0 = 1 slab/thread
     // last s_full of `field_` after the most recent trajectory. NaN until the
     // first trajectory runs. Used by Replica / Exchange so they can read the
     // current action without re-sweeping.

@@ -477,6 +477,21 @@ private:
     return Scope{std::string{run_id}};
 }
 
+// Format a byte count with a binary unit, e.g. 2048 → "2.0 KiB". A display
+// helper for log lines (slab footprints, buffer sizes, …).
+[[nodiscard]] inline std::string human_bytes(std::size_t n) {
+    double v         = static_cast<double>(n);
+    char const* unit = "B";
+    for (char const* u : std::array<char const*, 3>{"KiB", "MiB", "GiB"}) {
+        if (v < 1024.0) {
+            break;
+        }
+        v /= 1024.0;
+        unit = u;
+    }
+    return std::format("{:.1f} {}", v, unit);
+}
+
 // Init / config -------------------------------------------------------------
 
 inline void set_min_level(Level lv) {

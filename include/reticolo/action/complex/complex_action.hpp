@@ -132,15 +132,18 @@ private:
         std::size_t const d         = l.ndims();
         std::size_t const L_tau     = l.shape()[d - 1];
         std::size_t const s_tau     = l.nsites() / L_tau;
+        std::size_t const wrap      = (L_tau - 1) * s_tau;  // top τ-slice → slice 0
         complex_t const* const data = l.data();
+        // Per-site τ-forward neighbour (i+s_tau, wrapping the top slice to 0), so
+        // the partition item may span any number of τ-slices — the slab shape is
+        // free (a slab can now block the τ dim). No division: the wrap is a compare.
         return reticolo::exec::field_reduce<Acc>(
             l, 1, [&, data](std::size_t base, std::size_t cnt) {
-                std::size_t const w      = base / s_tau;
-                std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
-                std::size_t const base_p = (wp * s_tau) + (base - (w * s_tau));
                 Acc partial{};
                 for (std::size_t k = 0; k < cnt; ++k) {
-                    partial += body(data[base + k], data[base_p + k]);
+                    std::size_t const i  = base + k;
+                    std::size_t const ip = i >= wrap ? i - wrap : i + s_tau;
+                    partial += body(data[i], data[ip]);
                 }
                 return partial;
             });
@@ -152,16 +155,16 @@ private:
         std::size_t const d         = l.ndims();
         std::size_t const L_tau     = l.shape()[d - 1];
         std::size_t const s_tau     = l.nsites() / L_tau;
+        std::size_t const wrap      = (L_tau - 1) * s_tau;
         complex_t const* const data = l.data();
+        // Per-site τ ± neighbours (wrap the top slice forward / slice 0 backward),
+        // so an item may span any number of τ-slices — the slab shape is free.
         reticolo::exec::field_visit(l, 1, [&, data](std::size_t base, std::size_t cnt) {
-            std::size_t const w      = base / s_tau;
-            std::size_t const wm     = (w == 0) ? (L_tau - 1) : (w - 1);
-            std::size_t const wp     = (w + 1 == L_tau) ? 0 : (w + 1);
-            std::size_t const off    = base - (w * s_tau);
-            std::size_t const base_m = (wm * s_tau) + off;
-            std::size_t const base_p = (wp * s_tau) + off;
             for (std::size_t k = 0; k < cnt; ++k) {
-                body(base + k, data[base_p + k], data[base_m + k]);
+                std::size_t const i  = base + k;
+                std::size_t const ip = i >= wrap ? i - wrap : i + s_tau;
+                std::size_t const im = i < s_tau ? i + wrap : i - s_tau;
+                body(i, data[ip], data[im]);
             }
         });
     }

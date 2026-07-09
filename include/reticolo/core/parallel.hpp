@@ -3,7 +3,6 @@
 #include <reticolo/core/log.hpp>
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <format>
 #include <mutex>
@@ -80,6 +79,31 @@ private:
 #endif
 }
 
+// Slabs each thread gets — the partition granularity knob. `partition()` aims for
+// `team × slabs_per_thread` slabs, snapped to the coarsest achievable outer-dim
+// block tiling (see below). 0 = the default 1 (one slab per thread: coarsest split,
+// least dispatch overhead, perfect balance when the team divides the count).
+// Raising it splits finer (smaller slabs, better cache/imbalance tolerance). Since
+// the slab count then depends on the team size, s_full/kinetic reduces are
+// deterministic for a FIXED (team, slabs_per_thread) but NOT across different team
+// sizes — reproducing a chain means holding both. The write-disjoint maps (force,
+// kick, …) stay bit-identical regardless. Bound per-scope like team_scope.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+inline thread_local int g_slabs_per_thread = 0;
+
+class slab_scope {
+public:
+    explicit slab_scope(int n) noexcept : prev_{g_slabs_per_thread} { g_slabs_per_thread = n; }
+    slab_scope(slab_scope const&)            = delete;
+    slab_scope(slab_scope&&)                 = delete;
+    slab_scope& operator=(slab_scope const&) = delete;
+    slab_scope& operator=(slab_scope&&)      = delete;
+    ~slab_scope() noexcept { g_slabs_per_thread = prev_; }
+
+private:
+    int prev_;
+};
+
 // Sites per flat-range chunk for a field of `bytes_per_site`, aligned to `gran`
 // (the kernel's batch width) and at least one gran-block.
 [[nodiscard]] inline std::size_t chunk_for(std::size_t bytes_per_site, std::size_t gran) noexcept {
@@ -135,11 +159,12 @@ inline void in_traverse_region([[maybe_unused]] int nthreads, Body const& body) 
 //
 //  * parallel_map    — write-disjoint. Each item's worker writes its own region,
 //                      so the result is order-independent → bit-identical for any
-//                      thread count. (force, kick, drift, momentum, copy.)
-//  * parallel_reduce — deterministic. The item partition is fixed (independent of
-//                      thread count), so one partial per item folded in canonical
-//                      item order is identical for any thread count. (s_full,
-//                      kinetic.)
+//                      thread count OR slab count. (force, kick, drift, momentum, copy.)
+//  * parallel_reduce — deterministic for a fixed partition. Per-item partials folded
+//                      in canonical item order → identical for a given (team, slabs)
+//                      config; the partition now tracks the team size, so a different
+//                      team or slab count re-folds and can differ in the last ULP.
+//                      (s_full, kinetic.)
 //
 // `nthreads` is the team size (from traverse_threads); 1 runs serial. Standalone
 // opens its own region; nested in a reticolo region worksplits the current team.
@@ -232,52 +257,80 @@ template <class Acc = double, class Worker>
 // locality holds by construction, not by per-call-site convention.
 //
 // Items are contiguous flat spans made by splitting the OUTERMOST dims (never
-// dim 0 — x carries the vectorised streams) until at least
-// k_min_partition_items exist: enough items for any thread count and for load
-// balance, while a thread's static block stays one contiguous slab. The rule is
-// a pure function of the shape — no cache constant, no thread count — so the
-// reduce fold order (per-item partials in canonical item order) is
-// thread-count- AND machine-independent. 1D lattices fall back to fixed
-// 8192-site chunks (only there the final item is ragged).
-inline constexpr std::size_t k_min_partition_items = 64;
-
+// dim 0 — x carries the vectorised streams). Target count = team ×
+// slabs_per_thread; a slab is dims [0, split_dim) FULL × a contiguous `block` of
+// dim split_dim × a single index in each higher dim, so it stays one contiguous
+// span and the tiling is exact (item_sites = n/n_items). Because the count tracks
+// the team size, the reduce fold (per-item partials in canonical item order) is
+// deterministic for a FIXED (team, slabs_per_thread) but not across team sizes.
+// 1D lattices fall back to flat chunks (only there the final item is ragged).
 struct Partition {
     std::size_t n_items;
     std::size_t item_sites;
     std::size_t n_sites;
-    std::size_t split_dim;  // items enumerate dims [split_dim, ndims); 0 for 1D
+    std::size_t split_dim;  // dims [0,split_dim) full; dim split_dim blocked by `block`;
+                            // dims (split_dim,ndims) single-index. 0 for 1D flat chunks.
+    std::size_t block;      // contiguous extent on split_dim (1 = single index)
 };
+
+// Is a candidate slab count `items` a better occupancy fit than `best` for a team
+// of `team`, aiming at `target`? Prefer a multiple of `team` (every thread equally
+// loaded); else the nearest count to `target`, ties rounding UP.
+[[nodiscard]] inline bool
+better_slabs(std::size_t items, std::size_t best, std::size_t target, std::size_t team) noexcept {
+    if (best == 0) {
+        return true;
+    }
+    bool const a = items % team == 0;
+    bool const b = best % team == 0;
+    if (a != b) {
+        return a;
+    }
+    std::size_t const da = items > target ? items - target : target - items;
+    std::size_t const db = best > target ? best - target : target - best;
+    return da < db || (da == db && items > best);
+}
 
 template <class Field>
 [[nodiscard]] inline Partition partition(Field const& f) noexcept {
-    std::size_t const n = f.nsites();
-    std::size_t const d = f.ndims();
-    if (d <= 1) {
-        constexpr std::size_t k_item = 8192;
-        return {(n + k_item - 1) / k_item, k_item, n, 0};
-    }
-    auto const& sh    = f.shape();
-    std::size_t items = 1;
-    std::size_t k     = d;
-    while (k > 1 && items < k_min_partition_items) {
-        --k;
-        items *= sh[k];
-    }
-    return {items, n / items, n, k};
-}
+    std::size_t const n    = f.nsites();
+    std::size_t const d    = f.ndims();
+    std::size_t const team = static_cast<std::size_t>(traverse_threads(0, 0));
+    std::size_t const q =
+        g_slabs_per_thread > 0 ? static_cast<std::size_t>(g_slabs_per_thread) : std::size_t{1};
+    std::size_t const target = team * q;
 
-// Human byte size, e.g. 2048 → "2.0 KiB", for the slab log.
-[[nodiscard]] inline std::string human_bytes(std::size_t n) {
-    double v         = static_cast<double>(n);
-    char const* unit = "B";
-    for (char const* u : std::array<char const*, 3>{"KiB", "MiB", "GiB"}) {
-        if (v < 1024.0) {
-            break;
-        }
-        v /= 1024.0;
-        unit = u;
+    if (d <= 1) {
+        std::size_t const items = std::clamp<std::size_t>(target, 1, n != 0 ? n : 1);
+        std::size_t const chunk = (n + items - 1) / items;
+        return {items, chunk, n, 0, chunk};
     }
-    return std::format("{:.1f} {}", v, unit);
+
+    // Search the outer-dim block family: split dim m (dims [0,m) full, dims (m,d)
+    // single-index), dim m cut into `nb` contiguous blocks (nb | L[m]) → n_items =
+    // nb·∏_{k>m}L[k]. Take the count with the best occupancy fit ≥ team.
+    auto const& sh         = f.shape();
+    std::size_t best_items = 0;
+    std::size_t best_split = 1;
+    std::size_t best_block = 1;
+    std::size_t above      = 1;  // ∏_{k>m} L[k]
+    for (std::size_t m = d - 1; m >= 1; --m) {
+        for (std::size_t nb = 1; nb <= sh[m]; ++nb) {
+            std::size_t const items = nb * above;
+            if (sh[m] % nb == 0 && items >= team && better_slabs(items, best_items, target, team)) {
+                best_items = items;
+                best_split = m;
+                best_block = sh[m] / nb;
+            }
+        }
+        above *= sh[m];
+    }
+    if (best_items == 0) {  // lattice too small for `team` slabs → finest tiling
+        best_items = n / sh[0];
+        best_split = 1;
+        best_block = 1;
+    }
+    return {best_items, n / best_items, n, best_split, best_block};
 }
 
 // Log how a field is sliced across the team — the full lattice and one slab's
@@ -293,8 +346,7 @@ inline void note_slicing([[maybe_unused]] std::size_t const* shape,
                          [[maybe_unused]] Partition const& p,
                          [[maybe_unused]] int request) {
 #ifdef _OPENMP
-    int const nthr = request < static_cast<int>(p.n_items) ? request
-                                                           : static_cast<int>(p.n_items);
+    int const nthr = request < static_cast<int>(p.n_items) ? request : static_cast<int>(p.n_items);
     if (nthr <= 1) {
         return;
     }
@@ -306,14 +358,19 @@ inline void note_slicing([[maybe_unused]] std::size_t const* shape,
             slab += 'x';
         }
         full += std::to_string(shape[mu]);
-        std::size_t const s = p.split_dim == 0 ? (mu == 0 ? p.item_sites : 1)
-                              : mu < p.split_dim ? shape[mu]
-                                                 : std::size_t{1};
+        std::size_t const s = p.split_dim == 0    ? (mu == 0 ? p.item_sites : 1)
+                              : mu < p.split_dim  ? shape[mu]
+                              : mu == p.split_dim ? p.block
+                                                  : std::size_t{1};
         slab += std::to_string(s);
     }
     std::string const line = std::format("{} ({}) → {} ({} sites, {}) slab across {} threads",
-                                          full, p.n_sites, slab, p.item_sites,
-                                          human_bytes(p.item_sites * bytes_per_site), nthr);
+                                         full,
+                                         p.n_sites,
+                                         slab,
+                                         p.item_sites,
+                                         reticolo::log::human_bytes(p.item_sites * bytes_per_site),
+                                         nthr);
     static std::mutex mu_lock;
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
     static std::set<std::string> seen;

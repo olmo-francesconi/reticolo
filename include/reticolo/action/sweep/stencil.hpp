@@ -35,8 +35,8 @@
 //   visit_stencil<Policy>(l, comb, body):    map. body(i, self, agg) -> void; the
 //                                    body owns the write (out[i]=… or m[i]+=…).
 //   reduce_stencil<Policy>(l, comb, body):   reduce. body(self, agg) -> Acc,
-//                                    accumulated into a thread-count-invariant
-//                                    total.
+//                                    accumulated into a total that is deterministic
+//                                    for a fixed (team, slabs) config.
 //
 // Which neighbours fold into `agg` is a compile-time Policy (AllDirs / FwdOnly /
 // BwdOnly, below). Force uses AllDirs (all 2·ndims neighbours); s_full uses
@@ -55,9 +55,9 @@
 // contiguous span, keeping the hardware prefetch streams intact — measured
 // (Apple M and 32-core Linux x86, every thread count) this beats 512 KB cache
 // tiling, which was dropped. The map output is write-disjoint (bit-identical to
-// the gather fallback, any thread count); the reduce folds the fixed
-// machine-independent partition in canonical item order (thread-count invariant
-// AND identical across platforms).
+// the gather fallback, any thread or slab count); the reduce folds the partition
+// in canonical item order — deterministic for a fixed (team, slabs-per-thread),
+// but the partition now tracks the team size, so a different team re-folds.
 //
 // D in {1, 2, 3, 4} take the vectorised generic path; D > 4 falls back to a flat
 // gather through the neighbour table (exact, just slower). Raising the vectorised
@@ -282,7 +282,14 @@ inline Acc run_partition_items_(Lattice<T> const& l, int nthreads, Item const& i
             hi[mu] = L[mu];
         }
         std::size_t rem = it;
-        for (std::size_t mu = p.split_dim; mu < D; ++mu) {
+        // split_dim is cut into blocks of `p.block` (block-index enumerated
+        // fastest → contiguous flat spans); dims above it are single-indexed.
+        std::size_t const nblk = L[p.split_dim] / p.block;
+        std::size_t const cb   = rem % nblk;
+        rem /= nblk;
+        lo[p.split_dim] = cb * p.block;
+        hi[p.split_dim] = (cb + 1) * p.block;
+        for (std::size_t mu = p.split_dim + 1; mu < D; ++mu) {
             std::size_t const c = rem % L[mu];
             rem /= L[mu];
             lo[mu] = c;
@@ -772,8 +779,8 @@ inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) no
 }
 
 // Reduce body(self, agg) over every site (agg folds the Policy-selected neighbours
-// via `comb`). Fixed work-item partition summed in canonical order → identical for
-// any thread count.
+// via `comb`). Partition summed in canonical item order → deterministic for a fixed
+// (team, slabs) config; a different team re-folds.
 template <class Policy, class T, class Acc = T, class Comb, class Body>
 [[nodiscard]] inline Acc
 reduce_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
