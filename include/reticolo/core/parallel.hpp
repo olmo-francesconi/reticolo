@@ -3,6 +3,7 @@
 #include <reticolo/core/log.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <format>
 #include <mutex>
@@ -265,15 +266,30 @@ template <class Field>
     return {items, n / items, n, k};
 }
 
+// Human byte size, e.g. 2048 → "2.0 KiB", for the slab log.
+[[nodiscard]] inline std::string human_bytes(std::size_t n) {
+    double v         = static_cast<double>(n);
+    char const* unit = "B";
+    for (char const* u : std::array<char const*, 3>{"KiB", "MiB", "GiB"}) {
+        if (v < 1024.0) {
+            break;
+        }
+        v /= 1024.0;
+        unit = u;
+    }
+    return std::format("{:.1f} {}", v, unit);
+}
+
 // Log how a field is sliced across the team — the full lattice and one slab's
 // geometry (a slab is dims [0, split_dim) FULL × a single index in each outer dim;
-// 1D = a flat item_sites chunk), e.g. `16x16x16x16 (65536) → 16x16x1x1 (256) slab
-// across 4 threads`. ONE line per distinct description, only when it actually
-// threads. `request` is the team asked for (traverse_threads); the effective count
-// is capped at the slab count. Deduped so the per-op traversal — force, s_full,
-// kick, drift, momentum, copy — logs the slicing once, not on every call.
+// 1D = a flat item_sites chunk) plus its byte footprint, e.g. `16x16x16x16 (65536)
+// → 16x16x1x1 (256 sites, 2.0 KiB) slab across 4 threads`. ONE line per distinct
+// description, only when it actually threads. `request` is the team asked for
+// (traverse_threads); the effective count is capped at the slab count. Deduped so
+// the per-op traversal — force, s_full, kick, drift, momentum, copy — logs once.
 inline void note_slicing([[maybe_unused]] std::size_t const* shape,
                          [[maybe_unused]] std::size_t ndims,
+                         [[maybe_unused]] std::size_t bytes_per_site,
                          [[maybe_unused]] Partition const& p,
                          [[maybe_unused]] int request) {
 #ifdef _OPENMP
@@ -295,8 +311,9 @@ inline void note_slicing([[maybe_unused]] std::size_t const* shape,
                                                  : std::size_t{1};
         slab += std::to_string(s);
     }
-    std::string const line = std::format("{} ({}) → {} ({}) slab across {} threads",
-                                          full, p.n_sites, slab, p.item_sites, nthr);
+    std::string const line = std::format("{} ({}) → {} ({} sites, {}) slab across {} threads",
+                                          full, p.n_sites, slab, p.item_sites,
+                                          human_bytes(p.item_sites * bytes_per_site), nthr);
     static std::mutex mu_lock;
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
     static std::set<std::string> seen;
@@ -353,7 +370,7 @@ template <class Field, class Worker>
 inline void field_visit(Field const& field, std::size_t /*gran*/, Worker const& worker) {
     Partition const p  = partition(field);
     int const nthreads = traverse_threads(p.n_sites, field.bytes_per_site());
-    note_slicing(field.shape().data(), field.ndims(), p, nthreads);
+    note_slicing(field.shape().data(), field.ndims(), field.bytes_per_site(), p, nthreads);
     parallel_map(nthreads, p.n_items, [&](std::size_t i) {
         std::size_t const base = i * p.item_sites;
         worker(base, std::min(p.item_sites, p.n_sites - base));
@@ -365,7 +382,7 @@ template <class Acc = double, class Field, class Worker>
 field_reduce(Field const& field, std::size_t /*gran*/, Worker const& worker) {
     Partition const p  = partition(field);
     int const nthreads = traverse_threads(p.n_sites, field.bytes_per_site());
-    note_slicing(field.shape().data(), field.ndims(), p, nthreads);
+    note_slicing(field.shape().data(), field.ndims(), field.bytes_per_site(), p, nthreads);
     return parallel_reduce<Acc>(nthreads, p.n_items, [&](std::size_t i) {
         std::size_t const base = i * p.item_sites;
         return worker(base, std::min(p.item_sites, p.n_sites - base));
