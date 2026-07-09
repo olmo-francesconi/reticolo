@@ -89,17 +89,20 @@ TEST_CASE("reduce_fwd dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_lo
 
 TEST_CASE("visit_nn nbrs sums all 2*ndims neighbours (3D constant field)", "[hot_loop]") {
     Lattice<double> l{{4, 4, 4}, /*fill=*/3.5};
-    std::size_t visited = 0;
-    double max_err      = 0.0;
+    // Write-disjoint capture (the map now threads): assert after the sweep, not
+    // from inside the body — Catch2 REQUIRE is not thread-safe in a parallel region.
+    std::vector<double> phi_seen(l.nsites(), 0.0);
+    std::vector<double> nbr_seen(l.nsites(), 0.0);
 
-    visit_nn<double>(l, [&](std::size_t /*i*/, double phi, double nbrs) {
-        ++visited;
-        REQUIRE(phi == 3.5);
-        // 2 * 3 neighbours, each equal to 3.5 => sum = 6 * 3.5 = 21.0
-        max_err = std::max(max_err, std::abs(nbrs - 21.0));
+    visit_nn<double>(l, [&](std::size_t i, double phi, double nbrs) {
+        phi_seen[i] = phi;
+        nbr_seen[i] = nbrs;
     });
-    REQUIRE(visited == l.nsites());
-    REQUIRE(max_err == 0.0);
+    for (std::size_t i = 0; i < l.nsites(); ++i) {
+        INFO("site=" << i);
+        REQUIRE(phi_seen[i] == 3.5);
+        REQUIRE(nbr_seen[i] == 21.0);  // 2 * 3 neighbours, each 3.5 => 6 * 3.5
+    }
 }
 
 TEST_CASE("reduce_fwd fwd_sum sums ndims forward neighbours (2D constant field)", "[hot_loop]") {

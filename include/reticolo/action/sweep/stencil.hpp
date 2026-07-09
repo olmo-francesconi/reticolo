@@ -274,6 +274,7 @@ template <class Acc, std::size_t D, class T, class Item>
 inline Acc run_partition_items_(Lattice<T> const& l, int nthreads, Item const& item) {
     auto const [L, stride]  = geometry_<D>(l);
     exec::Partition const p = reticolo::exec::partition(l);
+    reticolo::exec::note_slicing(L.data(), D, p, nthreads);
     return run_items_<Acc>(nthreads, p.n_items, [&](std::size_t it) {
         std::array<std::size_t, D> lo{};
         std::array<std::size_t, D> hi{};

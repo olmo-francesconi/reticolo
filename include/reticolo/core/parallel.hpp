@@ -1,7 +1,13 @@
 #pragma once
 
+#include <reticolo/core/log.hpp>
+
 #include <algorithm>
 #include <cstddef>
+#include <format>
+#include <mutex>
+#include <set>
+#include <string>
 #include <vector>
 
 #ifdef _OPENMP
@@ -27,48 +33,50 @@
 
 namespace reticolo::exec {
 
-// Minimum bytes of work handed to EACH thread. The thread count for a pass is
-// ⌊bytes / this⌋ (capped by the hardware), so it RAMPS with the problem — 1 thread
-// until there's work for 2, then one more per additional slice — instead of the
-// old binary gate that jumped straight to all cores the instant a single 512 KB
-// threshold was crossed (which left every thread with a sliver just past it, so
-// fork/join dominated). Calibrated so the 1→2 crossover lands near the measured
-// ~400-500 KB threaded-beats-serial break-even (libgomp 32-core SPR); each spawned
-// thread is then guaranteed ≥ this much work at every size. TODO: re-bench the
-// constant on the scaling sweep — it wants tuning per the ramp, not the old gate.
-inline constexpr std::size_t k_min_bytes_per_thread = 256UL * 1024;
-
 // Target working-set per flat-range work item. Small enough that a big lattice
 // yields many chunks (load balance across the team), large enough to amortise the
 // per-chunk dispatch and keep the inner loop vectorising.
 inline constexpr std::size_t k_chunk_bytes = 64UL * 1024;
 
-// How many threads to split a pass of `nsites × bytes_per_site` across: 1 until
-// there's ≥ 2·k_min_bytes_per_thread of work, then one more thread per extra slice,
-// capped at the OpenMP maximum. No OpenMP → always 1.
-[[nodiscard]] inline int traverse_threads(std::size_t nsites, std::size_t bytes_per_site) noexcept {
+// The traverse team size for THIS thread: how many threads the next lattice pass
+// opens. 0 = inherit the OpenMP ambient (`omp_get_max_threads()`, i.e. the
+// process-wide OMP_NUM_THREADS). An algorithm binds an explicit size for the span
+// of its work via `team_scope`, so the thread count is a property of the CALLER,
+// not a global gate — which is what lets a future LLR split the budget as
+// `m` threads/replica × `max/m` replicas. Read on the thread that DECIDES the
+// count (the one about to open the region); the spawned workers never read it.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+inline thread_local int g_team_size = 0;
+
+// RAII: bind the traverse team size for the current scope, restoring the previous
+// on exit (nesting-safe). `n <= 0` inherits the ambient. Hmc binds one of these
+// for the span of a trajectory so every per-site pass under it slices the same way.
+class team_scope {
+public:
+    explicit team_scope(int n) noexcept : prev_{g_team_size} { g_team_size = n; }
+    team_scope(team_scope const&)            = delete;
+    team_scope(team_scope&&)                 = delete;
+    team_scope& operator=(team_scope const&) = delete;
+    team_scope& operator=(team_scope&&)      = delete;
+    ~team_scope() noexcept { g_team_size = prev_; }
+
+private:
+    int prev_;
+};
+
+// How many threads the next lattice pass opens: the caller's bound team size if
+// set, else the OpenMP ambient. No byte gate — the user (via team_scope or
+// OMP_NUM_THREADS) decides. The team is then capped at the work-item count in
+// parallel_map/parallel_reduce, so a pass never spawns more threads than it has
+// slabs to hand out. No OpenMP → always 1. Args kept for call-site symmetry.
+[[nodiscard]] inline int traverse_threads(std::size_t /*nsites*/,
+                                          std::size_t /*bytes_per_site*/) noexcept {
 #ifdef _OPENMP
-    int const maxt = omp_get_max_threads();
-    if (maxt <= 1) {
-        return 1;
-    }
-    std::size_t const want = (nsites * bytes_per_site) / k_min_bytes_per_thread;
-    if (want <= 1) {
-        return 1;
-    }
-    return want < static_cast<std::size_t>(maxt) ? static_cast<int>(want) : maxt;
+    int const n = g_team_size > 0 ? g_team_size : omp_get_max_threads();
+    return n > 1 ? n : 1;
 #else
-    (void)nsites;
-    (void)bytes_per_site;
     return 1;
 #endif
-}
-
-// Is a pass big enough to thread at all? Pure size predicate (worth ≥ 2 threads'
-// minimum work) — independent of the ambient core count, so it's a stable gate for
-// tests and callers that only need the yes/no, not the count.
-[[nodiscard]] inline bool want_threads(std::size_t nsites, std::size_t bytes_per_site) noexcept {
-    return nsites * bytes_per_site >= 2 * k_min_bytes_per_thread;
 }
 
 // Sites per flat-range chunk for a field of `bytes_per_site`, aligned to `gran`
@@ -257,6 +265,51 @@ template <class Field>
     return {items, n / items, n, k};
 }
 
+// Log how a field is sliced across the team — the full lattice and one slab's
+// geometry (a slab is dims [0, split_dim) FULL × a single index in each outer dim;
+// 1D = a flat item_sites chunk), e.g. `16x16x16x16 (65536) → 16x16x1x1 (256) slab
+// across 4 threads`. ONE line per distinct description, only when it actually
+// threads. `request` is the team asked for (traverse_threads); the effective count
+// is capped at the slab count. Deduped so the per-op traversal — force, s_full,
+// kick, drift, momentum, copy — logs the slicing once, not on every call.
+inline void note_slicing([[maybe_unused]] std::size_t const* shape,
+                         [[maybe_unused]] std::size_t ndims,
+                         [[maybe_unused]] Partition const& p,
+                         [[maybe_unused]] int request) {
+#ifdef _OPENMP
+    int const nthr = request < static_cast<int>(p.n_items) ? request
+                                                           : static_cast<int>(p.n_items);
+    if (nthr <= 1) {
+        return;
+    }
+    std::string full;
+    std::string slab;
+    for (std::size_t mu = 0; mu < ndims; ++mu) {
+        if (mu != 0) {
+            full += 'x';
+            slab += 'x';
+        }
+        full += std::to_string(shape[mu]);
+        std::size_t const s = p.split_dim == 0 ? (mu == 0 ? p.item_sites : 1)
+                              : mu < p.split_dim ? shape[mu]
+                                                 : std::size_t{1};
+        slab += std::to_string(s);
+    }
+    std::string const line = std::format("{} ({}) → {} ({}) slab across {} threads",
+                                          full, p.n_sites, slab, p.item_sites, nthr);
+    static std::mutex mu_lock;
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+    static std::set<std::string> seen;
+    {
+        std::lock_guard<std::mutex> const lk(mu_lock);
+        if (!seen.insert(line).second) {
+            return;
+        }
+    }
+    reticolo::log::info("slic", "{}", line);
+#endif
+}
+
 // Fixed 8-lane accumulation for reduce workers: `term(i)` summed over
 // [base, base+cnt) into 8 independent lanes + a scalar tail, combined in a
 // fixed pairwise order. Breaks the serial FP dependency chain (a plain
@@ -284,8 +337,8 @@ template <class Term>
            tail;
 }
 
-// Field-convenience: the ONLY way any code sweeps a field's sites. Threshold
-// (want_threads), the canonical partition, and determinism live here; the
+// Field-convenience: the ONLY way any code sweeps a field's sites. The team size
+// (traverse_threads), the canonical partition, and determinism live here; the
 // caller supplies just the per-site-range work. `worker(base, cnt)` must be
 // write-disjoint over the site range for the map form; the reduce folds
 // per-item partials in canonical item order (thread-count invariant).
@@ -298,8 +351,10 @@ template <class Term>
 // deterministically.
 template <class Field, class Worker>
 inline void field_visit(Field const& field, std::size_t /*gran*/, Worker const& worker) {
-    Partition const p = partition(field);
-    parallel_map(traverse_threads(p.n_sites, field.bytes_per_site()), p.n_items, [&](std::size_t i) {
+    Partition const p  = partition(field);
+    int const nthreads = traverse_threads(p.n_sites, field.bytes_per_site());
+    note_slicing(field.shape().data(), field.ndims(), p, nthreads);
+    parallel_map(nthreads, p.n_items, [&](std::size_t i) {
         std::size_t const base = i * p.item_sites;
         worker(base, std::min(p.item_sites, p.n_sites - base));
     });
@@ -308,12 +363,13 @@ inline void field_visit(Field const& field, std::size_t /*gran*/, Worker const& 
 template <class Acc = double, class Field, class Worker>
 [[nodiscard]] inline Acc
 field_reduce(Field const& field, std::size_t /*gran*/, Worker const& worker) {
-    Partition const p = partition(field);
-    return parallel_reduce<Acc>(
-        traverse_threads(p.n_sites, field.bytes_per_site()), p.n_items, [&](std::size_t i) {
-            std::size_t const base = i * p.item_sites;
-            return worker(base, std::min(p.item_sites, p.n_sites - base));
-        });
+    Partition const p  = partition(field);
+    int const nthreads = traverse_threads(p.n_sites, field.bytes_per_site());
+    note_slicing(field.shape().data(), field.ndims(), p, nthreads);
+    return parallel_reduce<Acc>(nthreads, p.n_items, [&](std::size_t i) {
+        std::size_t const base = i * p.item_sites;
+        return worker(base, std::min(p.item_sites, p.n_sites - base));
+    });
 }
 
 }  // namespace reticolo::exec

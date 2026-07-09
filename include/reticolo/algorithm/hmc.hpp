@@ -31,6 +31,11 @@ namespace reticolo::alg {
 struct HmcSpec {
     double tau = 1.0;
     int n_md   = 20;
+    // Team size for this HMC's per-site passes (force, s_full, kick, drift, …).
+    // 0 = inherit the OpenMP ambient (OMP_NUM_THREADS). Set it to pin a trajectory
+    // to N threads regardless of the global — the basis for later mixing replica-
+    // and site-level parallelism (m threads/replica × max/m replicas).
+    int n_threads = 0;
 };
 
 struct HmcResult {
@@ -111,7 +116,8 @@ public:
         Integrator         = {},
         log::Mode announce = log::Mode::normal)
         : action_{action}, field_{field}, rng_{rng}, mom_{field.indexing()},
-          force_{field.indexing()}, old_field_{field.indexing()}, tau_{spec.tau}, n_md_{spec.n_md} {
+          force_{field.indexing()}, old_field_{field.indexing()}, tau_{spec.tau}, n_md_{spec.n_md},
+          n_threads_{spec.n_threads} {
         if (announce == log::Mode::normal) {
             log::algo(*this);
         }
@@ -133,9 +139,16 @@ public:
         e.line("HMC<{}>", Integrator::name);
         e.param("τ={:.3f}", tau_);
         e.param("n_md={}", n_md_);
+        if (n_threads_ > 0) {
+            e.param("threads={}", n_threads_);
+        }
     }
 
     HmcResult step(log::Mode log_mode = log::Mode::normal) {
+        // Bind this HMC's team size for the whole trajectory: every per-site pass
+        // below (sample, copy, kinetic, s_full, MD force/drift/kick) slices across
+        // n_threads_ (0 = ambient). Restored on return.
+        exec::team_scope const team{n_threads_};
         sample_momenta_();
 
         // Snapshot for rejection rollback — flat-buffer copy.
@@ -189,10 +202,13 @@ public:
     // NaN if no trajectory has run yet.
     [[nodiscard]] double last_s_full() const noexcept { return last_s_full_; }
 
-    [[nodiscard]] HmcSpec spec() const noexcept { return {.tau = tau_, .n_md = n_md_}; }
+    [[nodiscard]] HmcSpec spec() const noexcept {
+        return {.tau = tau_, .n_md = n_md_, .n_threads = n_threads_};
+    }
     void set_spec(HmcSpec const& s) noexcept {
-        tau_  = s.tau;
-        n_md_ = s.n_md;
+        tau_       = s.tau;
+        n_md_      = s.n_md;
+        n_threads_ = s.n_threads;
     }
 
     // Exposed so reversibility tests can run a bare integrator without
@@ -201,7 +217,10 @@ public:
     [[nodiscard]] Field const& momentum() const noexcept { return mom_; }
     [[nodiscard]] Field& force_buffer() noexcept { return force_; }
 
-    void integrate_only(double tau, int n_md) noexcept { run_md_(tau, n_md); }
+    void integrate_only(double tau, int n_md) noexcept {
+        exec::team_scope const team{n_threads_};
+        run_md_(tau, n_md);
+    }
 
 private:
     // No persistent region around the MD loop: each force/drift/kick opens its
@@ -356,6 +375,7 @@ private:
     Field old_field_;
     double tau_;
     int n_md_;
+    int n_threads_;  // bound via team_scope each trajectory; 0 = ambient
     // last s_full of `field_` after the most recent trajectory. NaN until the
     // first trajectory runs. Used by Replica / Exchange so they can read the
     // current action without re-sweeping.
