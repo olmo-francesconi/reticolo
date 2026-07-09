@@ -98,6 +98,7 @@ public:
         : idx_{Indexing::acquire(std::move(shape))},
           link_span_{gauge_link_span(idx_->nsites(), sizeof(T))},
           data_(idx_->ndims() * n_real_components * link_span_, T{}) {
+        require_gauge_dims_(idx_->ndims());
         log::info("init",
                   "MatrixLinkLattice<{}, {}>  shape={}  links={}",
                   G::name,
@@ -109,7 +110,9 @@ public:
     explicit MatrixLinkLattice(std::shared_ptr<Indexing const> idx)
         : idx_{std::move(idx)},
           link_span_{gauge_link_span(idx_->nsites(), sizeof(T))},
-          data_(idx_->ndims() * n_real_components * link_span_, T{}) {}
+          data_(idx_->ndims() * n_real_components * link_span_, T{}) {
+        require_gauge_dims_(idx_->ndims());
+    }
 
     MatrixLinkLattice(MatrixLinkLattice const&)                = default;
     MatrixLinkLattice(MatrixLinkLattice&&) noexcept            = default;
@@ -178,6 +181,15 @@ public:
     [[nodiscard]] Indexing const& indexing_ref() const noexcept { return *idx_; }
 
 private:
+    // A gauge link field lives in 2 ≤ d ≤ 4 dimensions: at least one μ<ν plaquette
+    // plane, and the strided Wilson kernels are sized for up to four directions.
+    static void require_gauge_dims_(std::size_t ndims) {
+        if (ndims < 2 || ndims > 4) {
+            throw std::invalid_argument{
+                "MatrixLinkLattice: gauge link field requires 2 <= ndims <= 4"};
+        }
+    }
+
     std::shared_ptr<Indexing const> idx_;
     std::size_t link_span_;
     std::vector<T> data_;
