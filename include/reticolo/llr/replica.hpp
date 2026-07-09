@@ -40,14 +40,14 @@ struct ReplicaStats {
 template <class Base,
           class Rng,
           class Integrator = alg::integ::Leapfrog,
-          class T          = typename Base::value_type,
+          class T          = Base::value_type,
           class Field      = Lattice<T>>
 class Replica {
 public:
     using value_type           = T;
     using field_type           = Field;
     using scalar_t             = scalar_of_t<T>;
-    using SizeVec              = typename Field::SizeVec;
+    using SizeVec              = Field::SizeVec;
     using windowed_action_type = WindowedAction<Base, T, Field>;
 
     static constexpr std::string_view log_tag = "repl";
@@ -191,7 +191,7 @@ public:
         std::size_t const n = phi_.nsites();
         if constexpr (std::is_same_v<T, std::complex<double>> ||
                       std::is_same_v<T, std::complex<float>>) {
-            using R = typename T::value_type;
+            using R = T::value_type;
             for (std::size_t i = 0; i < n; ++i) {
                 data[i] = T{static_cast<R>(static_cast<scalar_t>(rng_.normal()) * sigma),
                             static_cast<R>(static_cast<scalar_t>(rng_.normal()) * sigma)};

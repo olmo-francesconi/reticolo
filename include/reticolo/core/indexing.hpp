@@ -135,7 +135,7 @@ inline std::shared_ptr<Indexing const> Indexing::acquire(SizeVec shape) {
 
     impl::IndexingPoolKey key{std::move(shape)};
 
-    std::lock_guard const lock{pool_mutex};
+    std::scoped_lock const lock{pool_mutex};
     if (auto it = pool.find(key); it != pool.end()) {
         if (auto sp = it->second.lock()) {
             return sp;

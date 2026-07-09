@@ -2,10 +2,10 @@
 # Local mirror of CI's gates — format + clang-tidy + build + test — using the
 # EXACT pinned tool versions CI uses, so a green run here means a green CI.
 #
-#   clang-format  20.1.7   (CI pins this; a different major reflows differently)
-#   clang-tidy    18       (CI enforces WarningsAsErrors with this version; a
-#                           newer clang-tidy fires whole-tree noise the project
-#                           disables, and can't parse a newer-clang compile DB)
+#   clang-format  22.1.5   (CI pins the pip build; a different major reflows differently)
+#   clang-tidy    22       (CI enforces WarningsAsErrors with this version; the
+#                           enabled-check set is version-sensitive, and clang-tidy
+#                           must parse a compile DB built by the SAME clang major)
 #
 # Usage:
 #   tools/check.sh                 # check all gates (format, tidy, build+test)
@@ -21,7 +21,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 PRESET="${PRESET:-macos-appleclang}"
-TIDY_DB="build/tidy18"
+TIDY_DB="build/tidy22"
 
 say()  { printf '\033[1m== %s\033[0m\n' "$*"; }
 die()  { printf '\033[31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
@@ -29,19 +29,19 @@ die()  { printf '\033[31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 # --- tool resolution ---------------------------------------------------------
 resolve_clang_format() {
     local c
-    for c in "${CLANG_FORMAT:-}" "$HOME/.local/bin/clang-format" clang-format-20 clang-format; do
+    for c in "${CLANG_FORMAT:-}" "$HOME/.local/bin/clang-format" /opt/homebrew/opt/llvm/bin/clang-format clang-format-22 clang-format; do
         [ -n "$c" ] && command -v "$c" >/dev/null 2>&1 || continue
-        case "$("$c" --version 2>/dev/null)" in *"version 20."*) echo "$c"; return;; esac
+        case "$("$c" --version 2>/dev/null)" in *"version 22."*) echo "$c"; return;; esac
     done
-    die "clang-format 20.x not found (CI pins 20.1.7). Set CLANG_FORMAT=/path."
+    die "clang-format 22.x not found (CI pins 22.1.5). Install: 'pip install --user clang-format==22.1.5'. Set CLANG_FORMAT=/path."
 }
 resolve_clang_tidy() {
     local c
-    for c in "${CLANG_TIDY:-}" /opt/homebrew/opt/llvm@18/bin/clang-tidy clang-tidy-18 clang-tidy; do
+    for c in "${CLANG_TIDY:-}" /opt/homebrew/opt/llvm/bin/clang-tidy clang-tidy-22 clang-tidy; do
         [ -n "$c" ] && command -v "$c" >/dev/null 2>&1 || continue
-        case "$("$c" --version 2>/dev/null)" in *"version 18."*) echo "$c"; return;; esac
+        case "$("$c" --version 2>/dev/null)" in *"version 22."*) echo "$c"; return;; esac
     done
-    die "clang-tidy 18 not found. macOS: 'brew install llvm@18'. Linux: 'apt install clang-tidy-18'."
+    die "clang-tidy 22 not found. macOS: 'brew install llvm'. Linux: 'apt install clang-tidy-22'."
 }
 
 # --- format ------------------------------------------------------------------
@@ -64,15 +64,15 @@ do_format() {
 
 # --- clang-tidy --------------------------------------------------------------
 # CI tidies src/**/*.cpp = the umbrella amalgamation (covers every header via
-# HeaderFilterRegex) + writer.cpp. We build a dedicated clang-18 compile DB so
-# clang-tidy-18 parses it without frontend errors (a newer-clang DB would fail).
+# HeaderFilterRegex) + writer.cpp. We build a dedicated clang-22 compile DB so
+# clang-tidy-22 parses it without frontend errors (a mismatched-clang DB would fail).
 ensure_tidy_db() {
     local ct="$1" cxx
     cxx="$(dirname "$ct")/clang++"
-    [ -x "$cxx" ] || cxx="$(command -v clang++-18 || true)"
-    [ -n "$cxx" ] && [ -x "$(command -v "$cxx" || echo "$cxx")" ] || die "matching clang++ 18 not found next to clang-tidy"
+    [ -x "$cxx" ] || cxx="$(command -v clang++-22 || true)"
+    [ -n "$cxx" ] && [ -x "$(command -v "$cxx" || echo "$cxx")" ] || die "matching clang++ 22 not found next to clang-tidy"
     if [ ! -f "$TIDY_DB/compile_commands.json" ]; then
-        say "configuring clang-18 tidy DB ($TIDY_DB)"
+        say "configuring clang-22 tidy DB ($TIDY_DB)"
         cmake -S . -B "$TIDY_DB" -G Ninja \
             -DCMAKE_CXX_COMPILER="$cxx" -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DRETICOLO_ENABLE_OPENMP=OFF \
@@ -80,8 +80,8 @@ ensure_tidy_db() {
             -DRETICOLO_TUNE_NATIVE=OFF -DRETICOLO_WARNINGS_AS_ERRORS=OFF >/dev/null
     fi
     # Only <sleef.h> is needed for the umbrella to parse; the full sleef lib is
-    # irrelevant to tidy and some scalar variants fail to build on clang-18/arm,
-    # so don't let that abort the run.
+    # irrelevant to tidy and some scalar variants fail to build on arm, so don't
+    # let that abort the run.
     cmake --build "$TIDY_DB" --target sleef >/dev/null 2>&1 || true
     [ -f "$TIDY_DB"/_deps/sleef-build/include/sleef.h ] || die "sleef.h not generated in $TIDY_DB"
 }

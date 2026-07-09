@@ -395,7 +395,7 @@ template <std::size_t B, class T>
                          (q2[idx_re(2, 0)] * q[idx_re(0, 2)] - q2[idx_im(2, 0)] * q[idx_im(0, 2)]) +
                          (q2[idx_re(2, 1)] * q[idx_re(1, 2)] - q2[idx_im(2, 1)] * q[idx_im(1, 2)]) +
                          (q2[idx_re(2, 2)] * q[idx_re(2, 2)] - q2[idx_im(2, 2)] * q[idx_im(2, 2)]);
-    double const c0 = tr_q3 / 3.0;
+    double const c0    = tr_q3 / 3.0;
 
     double const c1_over_3 = c1 / 3.0;
     double const c0_max    = 2.0 * c1_over_3 * std::sqrt(c1_over_3);
@@ -806,9 +806,9 @@ inline void expi_lmul_range(
                              cmul_re(q_re[4], q_im[4], q_re[6], q_im[6]);
         double const m2_im = cmul_im(q_re[3], q_im[3], q_re[7], q_im[7]) -
                              cmul_im(q_re[4], q_im[4], q_re[6], q_im[6]);
-        double const c0 = cmul_re(q_re[0], q_im[0], m0_re, m0_im) -
-                          cmul_re(q_re[1], q_im[1], m1_re, m1_im) +
-                          cmul_re(q_re[2], q_im[2], m2_re, m2_im);
+        double const c0    = cmul_re(q_re[0], q_im[0], m0_re, m0_im) -
+                             cmul_re(q_re[1], q_im[1], m1_re, m1_im) +
+                             cmul_re(q_re[2], q_im[2], m2_re, m2_im);
 
         double const c1_over_3 = c1 * k_inv_3;
         double const sc13      = std::sqrt(c1_over_3);
@@ -908,9 +908,9 @@ inline void expi_lmul_range(
                 double const f2r = f2_re_buf[s0 + b];
                 double const f2i = f2_im_buf[s0 + b];
                 v_re[k][b]       = ((f1r * q_re[k][b]) - (f1i * q_im[k][b])) +
-                             ((f2r * q2_re[k][b]) - (f2i * q2_im[k][b]));
-                v_im[k][b] = ((f1r * q_im[k][b]) + (f1i * q_re[k][b])) +
-                             ((f2r * q2_im[k][b]) + (f2i * q2_re[k][b]));
+                                   ((f2r * q2_re[k][b]) - (f2i * q2_im[k][b]));
+                v_im[k][b]       = ((f1r * q_im[k][b]) + (f1i * q_re[k][b])) +
+                                   ((f2r * q2_im[k][b]) + (f2i * q2_re[k][b]));
             }
         }
         for (std::size_t k = 0; k < 9; k += 4) {  // diagonal entries 0, 4, 8

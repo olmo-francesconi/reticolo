@@ -316,7 +316,7 @@ struct Series<T>::Impl {
     }
 
     void append(T const& v) {
-        std::lock_guard<std::mutex> const lock{*mu_ptr};
+        std::scoped_lock const lock{*mu_ptr};
         buffer.push_back(v);
         if (buffer.size() >= chunk_rows) {
             flush_locked();
@@ -382,7 +382,7 @@ void Series<T>::flush() {
     if (!impl_) {
         return;
     }
-    std::lock_guard<std::mutex> const lock{*impl_->mu_ptr};
+    std::scoped_lock const lock{*impl_->mu_ptr};
     impl_->flush_locked();
 }
 
@@ -391,7 +391,7 @@ std::size_t Series<T>::size() const noexcept {
     if (!impl_) {
         return 0;
     }
-    std::lock_guard<std::mutex> const lock{*impl_->mu_ptr};
+    std::scoped_lock const lock{*impl_->mu_ptr};
     return impl_->total_written + impl_->buffer.size();
 }
 
@@ -421,7 +421,7 @@ std::filesystem::path const& Writer::path() const noexcept {
 }
 
 void Writer::start_phase(std::string_view phase) {
-    std::lock_guard<std::mutex> const lock{impl_->mu};
+    std::scoped_lock const lock{impl_->mu};
     if (std::ranges::find(impl_->phases, phase) != impl_->phases.end()) {
         throw std::runtime_error{"Writer::start_phase: phase '" + std::string(phase) +
                                  "' already started"};
@@ -440,7 +440,7 @@ void Writer::start_phase(std::string_view phase) {
 
 template <class T>
 Series<T> Writer::series(std::string_view path, std::size_t chunk) {
-    std::lock_guard<std::mutex> const lock{impl_->mu};
+    std::scoped_lock const lock{impl_->mu};
 
     auto segments = split_path(path);
     if (segments.empty()) {
@@ -477,7 +477,7 @@ Series<T> Writer::series(std::string_view path, std::size_t chunk) {
 
 template <class T>
 void Writer::attr(std::string_view path, T const& value) {
-    std::lock_guard<std::mutex> const lock{impl_->mu};
+    std::scoped_lock const lock{impl_->mu};
     auto const [obj_path, attr_name] = split_attr(path);
     auto segments                    = split_path(obj_path);
 
@@ -612,7 +612,7 @@ void Writer::write_field_raw_(std::string_view path,
                               std::vector<std::size_t> const& shape,
                               std::size_t n_components,
                               char const* group_name) {
-    std::lock_guard<std::mutex> const lock{impl_->mu};
+    std::scoped_lock const lock{impl_->mu};
 
     auto segments = split_path(path);
     if (segments.empty()) {
@@ -640,7 +640,7 @@ void Writer::write_field_raw_(std::string_view path,
 }
 
 void Writer::rng_state(std::string_view path, FastRng const& rng) {
-    std::lock_guard<std::mutex> const lock{impl_->mu};
+    std::scoped_lock const lock{impl_->mu};
 
     auto segments = split_path(path);
     if (segments.empty()) {

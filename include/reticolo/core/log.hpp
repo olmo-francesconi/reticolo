@@ -382,7 +382,7 @@ inline void Entry::emit() {
     // One lock covers stdout/stderr emission AND the file writes.
     // Line-atomic for the whole multi-line Entry — no other thread can
     // interleave between our lines.
-    std::lock_guard const lk{sink_mutex()};
+    std::scoped_lock const lk{sink_mutex()};
 
 #ifdef _OPENMP
     if (omp_in_parallel() && run.empty()) {
@@ -578,7 +578,7 @@ inline void banner() {
     bottom += tag;
     bottom += "━┛";
 
-    std::lock_guard const lk{impl::sink_mutex()};
+    std::scoped_lock const lk{impl::sink_mutex()};
     auto& mf  = impl::main_file();
     auto emit = [&](std::string const& s) {
         std::cout << s;

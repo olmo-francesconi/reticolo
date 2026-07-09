@@ -155,8 +155,8 @@ public:
                 base_.compute_force_imag(field, fi);                          // F_I
                 base_.s_imag_into(s_i_.data(), field, partials_.data(), st);  // S_I for the scale
             }
-            auto const n_real = static_cast<long>(force.size()) *
-                                static_cast<long>(sizeof(value_type) / sizeof(real_t));
+            auto const n_real    = static_cast<long>(force.size()) *
+                                   static_cast<long>(sizeof(value_type) / sizeof(real_t));
             constexpr int kBlock = 256;
             auto const grid      = static_cast<unsigned>((n_real + kBlock - 1) / kBlock);
             merge_imag_force_kernel<real_t>

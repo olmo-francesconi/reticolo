@@ -34,6 +34,7 @@
 namespace reticolo::action {
 
 template <class Derived, class T>
+// NOLINTNEXTLINE(fuchsia-multiple-inheritance,misc-multiple-inheritance) — two stateless caches
 struct ComplexAction : SFullCache, SImagCache {
     using complex_t = std::complex<T>;
 

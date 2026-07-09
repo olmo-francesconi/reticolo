@@ -134,7 +134,7 @@ public:
     // Register an optional flag with a default. Reference is valid before
     // parse() (holds the default) and may be updated by parse().
     template <SupportedVarType T>
-    T const& opt(std::string name, T default_value, std::string desc = {}) {
+    T const& opt(std::string name, T const& default_value, std::string desc = {}) {
         auto slot           = std::make_unique<impl::VarSlot<T>>();
         slot->name          = std::move(name);
         slot->desc          = std::move(desc);

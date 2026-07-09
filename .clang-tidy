@@ -33,7 +33,12 @@ Checks: >
   -cppcoreguidelines-missing-std-forward,
   -readability-redundant-inline-specifier,
   -misc-include-cleaner,
-  -bugprone-exception-escape
+  -bugprone-exception-escape,
+  -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+  -portability-avoid-pragma-once,
+  -readability-math-missing-parentheses,
+  -readability-use-concise-preprocessor-directives,
+  -modernize-use-integer-sign-comparison
 
 WarningsAsErrors: '*'
 HeaderFilterRegex: 'include/reticolo/.*'

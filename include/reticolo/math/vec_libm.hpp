@@ -57,6 +57,7 @@ namespace impl {
 // unused return values, so we sink them through a `volatile` to keep the
 // calls live. The `inline` variable guarantees a single definition across
 // translation units.
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization) — sleef calls are noexcept in practice
 inline auto const sleef_dispatch_warmup = [] {
     volatile double sink{};
     sink                   = Sleef_sin_u10(0.0);

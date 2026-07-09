@@ -49,7 +49,7 @@ inline CommonFlags common_flags(cli::Parser& p, CommonDefaults const& d) {
     auto const& workspace =
         p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
     auto const& out = p.opt<std::string>("out", d.out, "HDF5 output file name, inside workspace");
-    return CommonFlags{L, seed, workspace, out};
+    return CommonFlags{.L = L, .seed = seed, .workspace = workspace, .out = out};
 }
 
 // The output path an app writes to: `<workspace>/<out>`. Exposed for apps that

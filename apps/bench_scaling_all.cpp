@@ -55,7 +55,7 @@ void bench_one(
     std::size_t const n   = fld.nsites();
     double const mb       = static_cast<double>(n * bps) / (1024.0 * 1024.0);
     int const nthr        = std::min<int>(reticolo::exec::traverse_threads(n, bps),
-                                   static_cast<int>(reticolo::exec::partition(fld).n_items));
+                                          static_cast<int>(reticolo::exec::partition(fld).n_items));
     std::printf("%-11s %-13s %-3s %10.4f %10.4f %10.4f %9.2f %5d\n",
                 name,
                 shape,

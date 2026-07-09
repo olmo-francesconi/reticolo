@@ -103,7 +103,7 @@ template <class A,
           class R,
           class Integrator = integ::Leapfrog,
           class Field      = Lattice<typename A::value_type>,
-          class Scalar     = typename A::value_type>
+          class Scalar     = A::value_type>
     requires HmcAction<A, Field> && Rng<R>
 class Hmc {
 public:
@@ -265,7 +265,7 @@ private:
             // Algebra-aware momentum sampling per direction. The group writes
             // anti-hermitian elements with the right structural zeros;
             // raw normal_fill would put noise on the constrained slots.
-            using Group            = typename Field::group_type;
+            using Group            = Field::group_type;
             std::size_t const d    = mom_.ndims();
             std::size_t const span = mom_.link_span();  // padded component stride
             // Parallel counter-based sampler: one RNG draw per trajectory keys
@@ -324,7 +324,7 @@ private:
             // dU/dt = P·U gives ∂K/∂P = P → K = (1/2)·Tr(P†P) = ‖h‖² (no extra
             // 1/2 here). For exp(-K) detailed balance the algebra coords are
             // sampled with variance 1/2 (see SU2::sample_algebra_slab).
-            using Group            = typename Field::group_type;
+            using Group            = Field::group_type;
             std::size_t const d    = mom_.ndims();
             std::size_t const span = mom_.link_span();  // padded component stride
             // Parallel deterministic reduce per direction; ½ applied once.

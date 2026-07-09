@@ -303,7 +303,8 @@ template <class Field>
     if (d <= 1) {
         std::size_t const items = std::clamp<std::size_t>(target, 1, n != 0 ? n : 1);
         std::size_t const chunk = (n + items - 1) / items;
-        return {items, chunk, n, 0, chunk};
+        return {
+            .n_items = items, .item_sites = chunk, .n_sites = n, .split_dim = 0, .block = chunk};
     }
 
     // Search the outer-dim block family: split dim m (dims [0,m) full, dims (m,d)
@@ -330,7 +331,11 @@ template <class Field>
         best_split = 1;
         best_block = 1;
     }
-    return {best_items, n / best_items, n, best_split, best_block};
+    return {.n_items    = best_items,
+            .item_sites = n / best_items,
+            .n_sites    = n,
+            .split_dim  = best_split,
+            .block      = best_block};
 }
 
 // Log how a field is sliced across the team — the full lattice and one slab's
@@ -358,10 +363,12 @@ inline void note_slicing([[maybe_unused]] std::size_t const* shape,
             slab += 'x';
         }
         full += std::to_string(shape[mu]);
+        // NOLINTBEGIN(readability-avoid-nested-conditional-operator) — aligned slab-size chain
         std::size_t const s = p.split_dim == 0    ? (mu == 0 ? p.item_sites : 1)
                               : mu < p.split_dim  ? shape[mu]
                               : mu == p.split_dim ? p.block
                                                   : std::size_t{1};
+        // NOLINTEND(readability-avoid-nested-conditional-operator)
         slab += std::to_string(s);
     }
     std::string const line = std::format("{} ({}) → {} ({} sites, {}) slab across {} threads",
@@ -375,7 +382,7 @@ inline void note_slicing([[maybe_unused]] std::size_t const* shape,
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
     static std::set<std::string> seen;
     {
-        std::lock_guard<std::mutex> const lk(mu_lock);
+        std::scoped_lock const lk(mu_lock);
         if (!seen.insert(line).second) {
             return;
         }

@@ -39,7 +39,7 @@ using scalar_of_t = real_scalar_t<T>;
 // loop watches <S_I - E_n>; reconstructing ln rho(S_I) recovers the DoS of
 // the imaginary part in the phase-quenched ensemble.
 
-template <class Base, class T = typename Base::value_type, class Field = Lattice<T>>
+template <class Base, class T = Base::value_type, class Field = Lattice<T>>
 struct WindowedAction {
     using value_type = T;
     using field_type = Field;

@@ -278,13 +278,9 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
             dsm_buf[n]       = std::abs(lam * (a_hat[n] - a_rm[n]));
             rm_step_sum += drm_buf[n];
             sm_step_sum += dsm_buf[n];
-            if (drm_buf[n] > rm_step_max) {
-                rm_step_max = drm_buf[n];
-            }
-            if (dsm_buf[n] > sm_step_max) {
-                sm_step_max = dsm_buf[n];
-            }
-            a_buf[n] = ((1.0 - lam) * a_rm[n]) + (lam * a_hat[n]);
+            rm_step_max = std::max(drm_buf[n], rm_step_max);
+            sm_step_max = std::max(dsm_buf[n], sm_step_max);
+            a_buf[n]    = ((1.0 - lam) * a_rm[n]) + (lam * a_hat[n]);
             reps[n]->set_a(a_buf[n]);
             auto _ = log::scope(reps[n]->id());
             iter("sRM",

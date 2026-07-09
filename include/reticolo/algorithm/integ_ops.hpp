@@ -29,7 +29,7 @@ namespace reticolo::alg::integ {
 // mom, and force are always distinct sibling lattices).
 template <class Field, class Mom>
 inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
-    using F              = typename Field::value_type;
+    using F              = Field::value_type;
     auto const c         = static_cast<real_scalar_t<F>>(cdt);
     F* const fd          = field.data();
     auto const* const pd = mom.data();
@@ -49,7 +49,7 @@ inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
 
 template <class Mom, class Force>
 inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
-    using F              = typename Mom::value_type;
+    using F              = Mom::value_type;
     auto const c         = static_cast<real_scalar_t<F>>(kdt);
     F* const md          = mom.data();
     auto const* const fd = force.data();

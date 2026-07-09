@@ -28,7 +28,7 @@ namespace reticolo::alg::integ {
 
 namespace impl {
 
-template <class A, class Field, class F = typename Field::value_type>
+template <class A, class Field, class F = Field::value_type>
 inline void kick_(A const& action, Field& field, Field& mom, Field& force, double k_dt) noexcept {
     // Generic fused-kick dispatch — accepts whatever Field type the action
     // actually operates on (Lattice<F>, LinkLattice<F>, MatrixLinkLattice<G,T>).
