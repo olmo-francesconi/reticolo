@@ -64,6 +64,23 @@ plane_idx(std::size_t d, std::size_t a, std::size_t b) noexcept {
     return idx + (b - a - 1);
 }
 
+// Per-row forward flat offset to the +ĵ neighbour for directions ≥ 1 (dir 0 is
+// per-x). Fills `off[j]` (magnitude) and `wrap[j]` (true → subtract, crossing the
+// seam) from the row index r. Shared by the U(1) strided plane sweeps; the same
+// odometer the SU(N) kernels use. Requires d ≤ 4.
+[[gnu::always_inline]] inline void
+row_fwd_offsets(std::size_t r, Indexing::SizeVec const& sh, std::size_t d,
+                std::size_t const (&stg)[4], std::size_t (&off)[4], bool (&wrap)[4]) noexcept {
+    std::size_t rr = r;
+    for (std::size_t j = 1; j < d; ++j) {
+        std::size_t const lj = sh[j];
+        std::size_t const cj = rr % lj;
+        rr /= lj;
+        off[j]  = (cj + 1 < lj) ? stg[j] : (lj - 1) * stg[j];
+        wrap[j] = (cj + 1 == lj);
+    }
+}
+
 }  // namespace impl
 
 template <>
@@ -76,6 +93,44 @@ struct wilson_kernels<math::group::U1> {
     // per-site and uses gran = 1. The chunk *size* is derived from bytes_per_site.
     static constexpr std::size_t k_simd_gran = 16;
 
+    // Table-free plaquette angle fill over the row-aligned range [base, base+cnt)
+    // of one (a, b) plane: sp[s] = θ_p(s) with the two forward neighbours (s+â,
+    // s+b̂) computed from the lattice strides (row-nested sweep, dir 0 per-x).
+    // Caller applies sin / sincos to the filled contiguous scratch. Requires d≤4.
+    template <class T>
+    static void plaq_fill_range_(T const* u_a,
+                                 T const* u_b,
+                                 double* sp,
+                                 std::size_t a,
+                                 std::size_t b,
+                                 Indexing::SizeVec const& sh,
+                                 std::size_t d,
+                                 std::size_t l0,
+                                 std::size_t const (&stg)[4],
+                                 std::size_t base,
+                                 std::size_t cnt) noexcept {
+        std::size_t const r0    = base / l0;
+        std::size_t const nrows = cnt / l0;
+        for (std::size_t r = r0; r < r0 + nrows; ++r) {
+            std::size_t const row = r * l0;
+            std::size_t off[4]    = {0, 0, 0, 0};
+            bool wr[4]            = {false, false, false, false};
+            impl::row_fwd_offsets(r, sh, d, stg, off, wr);
+            auto nx = [&](std::size_t s, std::size_t x, std::size_t j) -> std::size_t {
+                if (j == 0) {
+                    return (x + 1 == l0) ? s - (l0 - 1) : s + 1;
+                }
+                return wr[j] ? s - off[j] : s + off[j];
+            };
+            for (std::size_t x = 0; x < l0; ++x) {
+                std::size_t const s    = row + x;
+                std::size_t const s_pa = nx(s, x, a);
+                std::size_t const s_pb = nx(s, x, b);
+                sp[s] = static_cast<double>(u1_plaq(u_a[s], u_b[s_pa], u_a[s_pb], u_b[s]));
+            }
+        }
+    }
+
     // Fill the persistent nplanes*ns sinP scratch: one Sleef-batched sin pass
     // per (mu, nu) plane (mu < nu), chunked so the fill itself worksplits.
     // Pure sin-only fill — used by compute_force/compute_force_and_kick; the
@@ -85,8 +140,13 @@ struct wilson_kernels<math::group::U1> {
                                  double* sinP,
                                  std::size_t d,
                                  std::size_t ns) noexcept {
-        Indexing const& idx = u.indexing_ref();
-        std::size_t pidx    = 0;
+        auto const& sh       = u.shape();
+        std::size_t const l0 = sh[0];
+        std::size_t stg[4]   = {1, 0, 0, 0};
+        for (std::size_t j = 1; j < d; ++j) {
+            stg[j] = stg[j - 1] * sh[j - 1];
+        }
+        std::size_t pidx = 0;
         for (std::size_t a = 0; a < d; ++a) {
             T const* const u_a = u.mu_block_data(a);
             for (std::size_t b = a + 1; b < d; ++b) {
@@ -94,13 +154,7 @@ struct wilson_kernels<math::group::U1> {
                 double* const sp   = sinP + (pidx * ns);
                 reticolo::exec::field_visit(
                     u, k_simd_gran, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
-                        std::size_t const end = base + cnt;
-                        for (std::size_t s = base; s < end; ++s) {
-                            std::size_t const s_pa = idx.next(Site{s}, a).value();
-                            std::size_t const s_pb = idx.next(Site{s}, b).value();
-                            sp[s] =
-                                static_cast<double>(u1_plaq(u_a[s], u_b[s_pa], u_a[s_pb], u_b[s]));
-                        }
+                        plaq_fill_range_<T>(u_a, u_b, sp, a, b, sh, d, l0, stg, base, cnt);
                         math::sin_batch(sp + base, sp + base, cnt);
                     });
                 ++pidx;
@@ -121,18 +175,23 @@ struct wilson_kernels<math::group::U1> {
                                        double scale,
                                        std::size_t base,
                                        std::size_t cnt) noexcept {
-        std::size_t const d   = u.ndims();
-        std::size_t const ns  = u.nsites();
-        Indexing const& idx   = u.indexing_ref();
-        std::size_t const end = base + cnt;
+        auto const& sh       = u.shape();
+        std::size_t const d  = u.ndims();
+        std::size_t const ns = u.nsites();
+        std::size_t const l0 = sh[0];
+        std::size_t stg[4]   = {1, 0, 0, 0};
+        for (std::size_t j = 1; j < d; ++j) {
+            stg[j] = stg[j - 1] * sh[j - 1];
+        }
+        std::size_t const r0    = base / l0;
+        std::size_t const nrows = cnt / l0;
         for (std::size_t mu = 0; mu < d; ++mu) {
             T* const out_mu_blk = out.mu_block_data(mu);
             // Precompute, once per mu, each nu's (sinP plane pointer, sign,
-            // direction). 8 is a generous cap — no lattice-QFT theory this
-            // tree targets exceeds 4 dimensions.
-            double const* sp_nu[8];
-            double sgn_nu[8];
-            std::size_t dir_nu[8];
+            // direction). 4 is the cap — d ≤ 4 (enforced on the gauge field).
+            double const* sp_nu[4];
+            double sgn_nu[4];
+            std::size_t dir_nu[4];
             std::size_t n_nu = 0;
             for (std::size_t nu = 0; nu < d; ++nu) {
                 if (nu == mu) {
@@ -145,17 +204,38 @@ struct wilson_kernels<math::group::U1> {
                 dir_nu[n_nu]        = nu;
                 ++n_nu;
             }
-            for (std::size_t s = base; s < end; ++s) {
-                double acc = 0.0;
-                for (std::size_t k = 0; k < n_nu; ++k) {
-                    std::size_t const s_prev = idx.prev(Site{s}, dir_nu[k]).value();
-                    acc += sgn_nu[k] * (sp_nu[k][s] - sp_nu[k][s_prev]);
+            // Row-nested strided gather: prev(s, ν) from the lattice strides.
+            for (std::size_t r = r0; r < r0 + nrows; ++r) {
+                std::size_t const row = r * l0;
+                std::size_t bo[4]     = {0, 0, 0, 0};
+                bool bw[4]            = {false, false, false, false};
+                std::size_t rr        = r;
+                for (std::size_t j = 1; j < d; ++j) {
+                    std::size_t const lj = sh[j];
+                    std::size_t const cj = rr % lj;
+                    rr /= lj;
+                    bo[j] = (cj > 0) ? stg[j] : (lj - 1) * stg[j];
+                    bw[j] = (cj == 0);
                 }
-                double const val = scale * acc;
-                if constexpr (Fused) {
-                    out_mu_blk[s] += static_cast<T>(val);
-                } else {
-                    out_mu_blk[s] = static_cast<T>(val);
+                auto pv = [&](std::size_t s, std::size_t x, std::size_t j) -> std::size_t {
+                    if (j == 0) {
+                        return (x == 0) ? s + (l0 - 1) : s - 1;
+                    }
+                    return bw[j] ? s + bo[j] : s - bo[j];
+                };
+                for (std::size_t x = 0; x < l0; ++x) {
+                    std::size_t const s = row + x;
+                    double acc          = 0.0;
+                    for (std::size_t k = 0; k < n_nu; ++k) {
+                        std::size_t const s_prev = pv(s, x, dir_nu[k]);
+                        acc += sgn_nu[k] * (sp_nu[k][s] - sp_nu[k][s_prev]);
+                    }
+                    double const val = scale * acc;
+                    if constexpr (Fused) {
+                        out_mu_blk[s] += static_cast<T>(val);
+                    } else {
+                        out_mu_blk[s] = static_cast<T>(val);
+                    }
                 }
             }
         }
@@ -205,16 +285,36 @@ struct wilson_kernels<math::group::U1> {
                                      std::size_t nu,
                                      std::size_t base,
                                      std::size_t cnt) noexcept {
-        Indexing const& idx     = u.indexing_ref();
+        auto const& sh          = u.shape();
+        std::size_t const d     = u.ndims();
+        std::size_t const l0    = sh[0];
         T const* const u_mu_blk = u.mu_block_data(mu);
         T const* const u_nu_blk = u.mu_block_data(nu);
         double* const buf       = impl::plane_scratch(cnt);
-        std::size_t const end   = base + cnt;
-        for (std::size_t s = base; s < end; ++s) {
-            std::size_t const s_pmu = idx.next(Site{s}, mu).value();
-            std::size_t const s_pnu = idx.next(Site{s}, nu).value();
-            buf[s - base]           = static_cast<double>(
-                u1_plaq(u_mu_blk[s], u_nu_blk[s_pmu], u_mu_blk[s_pnu], u_nu_blk[s]));
+        std::size_t stg[4]      = {1, 0, 0, 0};
+        for (std::size_t j = 1; j < d; ++j) {
+            stg[j] = stg[j - 1] * sh[j - 1];
+        }
+        std::size_t const r0    = base / l0;
+        std::size_t const nrows = cnt / l0;
+        for (std::size_t r = r0; r < r0 + nrows; ++r) {
+            std::size_t const row = r * l0;
+            std::size_t off[4]    = {0, 0, 0, 0};
+            bool wr[4]            = {false, false, false, false};
+            impl::row_fwd_offsets(r, sh, d, stg, off, wr);
+            auto nx = [&](std::size_t s, std::size_t x, std::size_t j) -> std::size_t {
+                if (j == 0) {
+                    return (x + 1 == l0) ? s - (l0 - 1) : s + 1;
+                }
+                return wr[j] ? s - off[j] : s + off[j];
+            };
+            for (std::size_t x = 0; x < l0; ++x) {
+                std::size_t const s     = row + x;
+                std::size_t const s_pmu = nx(s, x, mu);
+                std::size_t const s_pnu = nx(s, x, nu);
+                buf[s - base]           = static_cast<double>(
+                    u1_plaq(u_mu_blk[s], u_nu_blk[s_pmu], u_mu_blk[s_pnu], u_nu_blk[s]));
+            }
         }
         math::cos_batch(buf, buf, cnt);
         double accum = 0.0;
@@ -254,9 +354,14 @@ struct wilson_kernels<math::group::U1> {
         double* const scratch     = impl::plane_scratch((nplanes + 1) * ns);
         double* const sinP        = scratch;
         double* const cbuf        = scratch + (nplanes * ns);
-        Indexing const& idx       = u.indexing_ref();
-        double accum              = 0.0;
-        std::size_t pidx          = 0;
+        auto const& sh            = u.shape();
+        std::size_t const l0      = sh[0];
+        std::size_t stg[4]        = {1, 0, 0, 0};
+        for (std::size_t j = 1; j < d; ++j) {
+            stg[j] = stg[j - 1] * sh[j - 1];
+        }
+        double accum     = 0.0;
+        std::size_t pidx = 0;
         for (std::size_t a = 0; a < d; ++a) {
             T const* const u_a = u.mu_block_data(a);
             for (std::size_t b = a + 1; b < d; ++b) {
@@ -265,12 +370,7 @@ struct wilson_kernels<math::group::U1> {
                 accum += reticolo::exec::field_reduce(
                     u, k_simd_gran, [&, u_a, u_b, sp](std::size_t base, std::size_t cnt) {
                         std::size_t const end = base + cnt;
-                        for (std::size_t s = base; s < end; ++s) {
-                            std::size_t const s_pa = idx.next(Site{s}, a).value();
-                            std::size_t const s_pb = idx.next(Site{s}, b).value();
-                            cbuf[s] =
-                                static_cast<double>(u1_plaq(u_a[s], u_b[s_pa], u_a[s_pb], u_b[s]));
-                        }
+                        plaq_fill_range_<T>(u_a, u_b, cbuf, a, b, sh, d, l0, stg, base, cnt);
                         math::sincos_batch(sp + base, cbuf + base, cbuf + base, cnt);
                         double sm = 0.0;
                         {
