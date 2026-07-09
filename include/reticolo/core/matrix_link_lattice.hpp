@@ -27,8 +27,7 @@ namespace reticolo {
 // component (~0.01% of the buffer); the holes [nsites, link_span) are never
 // read or written by any kernel — every access is blk[k·link_span + s] with
 // s < nsites — so the field's physics is byte-identical to the packed layout.
-[[nodiscard]] inline std::size_t padded_link_span(std::size_t nsites,
-                                                  std::size_t elem) noexcept {
+[[nodiscard]] inline std::size_t padded_link_span(std::size_t nsites, std::size_t elem) noexcept {
     constexpr std::size_t line_bytes = 128;  // ≥ any current L1 line (M1 = 128)
     std::size_t const line_elems     = elem != 0 ? (line_bytes / elem) : 1;
     if (line_elems <= 1) {
@@ -108,8 +107,7 @@ public:
     }
 
     explicit MatrixLinkLattice(std::shared_ptr<Indexing const> idx)
-        : idx_{std::move(idx)},
-          link_span_{gauge_link_span(idx_->nsites(), sizeof(T))},
+        : idx_{std::move(idx)}, link_span_{gauge_link_span(idx_->nsites(), sizeof(T))},
           data_(idx_->ndims() * n_real_components * link_span_, T{}) {
         require_gauge_dims_(idx_->ndims());
     }

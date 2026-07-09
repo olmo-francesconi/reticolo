@@ -1,6 +1,5 @@
-#include <reticolo/reticolo.hpp>
-
 #include <reticolo/core/rng/normal_fill.hpp>
+#include <reticolo/reticolo.hpp>
 
 #include "_bench/hot_init.hpp"
 #include "_bench/timing.hpp"
@@ -64,9 +63,9 @@ std::vector<std::size_t> parse_shape(char const* s) {
 template <class Field>
 void refresh_mom(Field& mom, FastRng& rng) {
     if constexpr (GaugeField<Field>) {
-        using G              = typename Field::group_type;
-        std::size_t const d  = mom.ndims();
-        std::size_t const ns = mom.nsites();
+        using G                 = typename Field::group_type;
+        std::size_t const d     = mom.ndims();
+        std::size_t const ns    = mom.nsites();
         std::uint64_t const key = rng.uniform_u64();
         for (std::size_t mu = 0; mu < d; ++mu) {
             auto* const pblk = mom.mu_block_data(mu);
@@ -95,7 +94,7 @@ double kinetic_e(Field const& mom) {
         return 0.5 * raw;
     } else {
         auto const* const p = mom.data();
-        double const sum = exec::field_reduce(mom, 1, [p](std::size_t base, std::size_t cnt) {
+        double const sum    = exec::field_reduce(mom, 1, [p](std::size_t base, std::size_t cnt) {
             return exec::lane_sum8(base, cnt, [p](std::size_t i) {
                 double const pi = p[i];
                 return pi * pi;
@@ -113,32 +112,37 @@ double kinetic_e(Field const& mom) {
 // a ceiling. Default 1 GB/array (3 GB set) > any current server L3; shrink via
 // RETICOLO_STREAM_MB on constrained hosts.
 double stream_triad_gbps() {
-    char const* const env    = std::getenv("RETICOLO_STREAM_MB");
-    std::size_t const mb     = env != nullptr ? static_cast<std::size_t>(std::atoi(env)) : 1024;
-    std::size_t const n      = (mb * 1024UL * 1024UL) / sizeof(double);
+    char const* const env = std::getenv("RETICOLO_STREAM_MB");
+    std::size_t const mb  = env != nullptr ? static_cast<std::size_t>(std::atoi(env)) : 1024;
+    std::size_t const n   = (mb * 1024UL * 1024UL) / sizeof(double);
     static std::vector<double> a(n, 1.0);
     static std::vector<double> b(n, 2.0);
     static std::vector<double> c(n, 3.0);
-    double const s   = 0.42;
-    double* const ap = a.data();
+    double const s         = 0.42;
+    double* const ap       = a.data();
     double const* const bp = b.data();
     double const* const cp = c.data();
-    double const t = time_per_call([&] {
-        exec::parallel_map_ranges(n, sizeof(double), 8, [ap, bp, cp, s](std::size_t base,
-                                                                        std::size_t cnt) {
-            std::size_t const end = base + cnt;
-            for (std::size_t i = base; i < end; ++i) {
-                ap[i] = bp[i] + s * cp[i];
-            }
-        });
+    double const t         = time_per_call([&] {
+        exec::parallel_map_ranges(
+            n, sizeof(double), 8, [ap, bp, cp, s](std::size_t base, std::size_t cnt) {
+                std::size_t const end = base + cnt;
+                for (std::size_t i = base; i < end; ++i) {
+                    ap[i] = bp[i] + s * cp[i];
+                }
+            });
         consume(a[0]);
     });
     return 3.0 * static_cast<double>(n) * sizeof(double) / t / 1e9;
 }
 
 template <class Action, class Field>
-void run_action(char const* name, Action const& act, Field& field, FastRng& rng, int n_md,
-                char const* shape, char const* th) {
+void run_action(char const* name,
+                Action const& act,
+                Field& field,
+                FastRng& rng,
+                int n_md,
+                char const* shape,
+                char const* th) {
     using T = typename Field::value_type;
     Field mom{field.indexing()};
     Field snap{field.indexing()};
@@ -168,13 +172,13 @@ void run_action(char const* name, Action const& act, Field& field, FastRng& rng,
         T* const dst         = snap.data();
         T const* const src   = field.data();
         double const t       = time_per_call([&] {
-            exec::parallel_map_ranges(nf, sizeof(T), 1, [dst, src](std::size_t base,
-                                                                         std::size_t cnt) {
-                std::size_t const end = base + cnt;
-                for (std::size_t i = base; i < end; ++i) {
-                    dst[i] = src[i];
-                }
-            });
+            exec::parallel_map_ranges(
+                nf, sizeof(T), 1, [dst, src](std::size_t base, std::size_t cnt) {
+                    std::size_t const end = base + cnt;
+                    for (std::size_t i = base; i < end; ++i) {
+                        dst[i] = src[i];
+                    }
+                });
             consume(dst[0]);
         });
         emit("snapshot", t, 2.0, 1);
@@ -225,15 +229,20 @@ int main(int argc, char** argv) {
     if (phi) {
         Lattice<double> f{shape};
         reticolo::bench::hot_init(f, rng);
-        run_action("Phi4", act::Phi4<double>{.kappa = 0.18, .lambda = 1.0}, f, rng, n_md, shape_arg,
-                   th);
+        run_action(
+            "Phi4", act::Phi4<double>{.kappa = 0.18, .lambda = 1.0}, f, rng, n_md, shape_arg, th);
     }
     if (su3) {
         using F = MatrixLinkLattice<math::group::SU3, double>;
         F u{shape};
         reticolo::bench::hot_init(u, rng);
-        run_action("Wilson<SU3>", act::Wilson<math::group::SU3, double>{.beta = 6.0}, u, rng, n_md,
-                   shape_arg, th);
+        run_action("Wilson<SU3>",
+                   act::Wilson<math::group::SU3, double>{.beta = 6.0},
+                   u,
+                   rng,
+                   n_md,
+                   shape_arg,
+                   th);
     }
     return 0;
 }

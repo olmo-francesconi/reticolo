@@ -68,9 +68,12 @@ plane_idx(std::size_t d, std::size_t a, std::size_t b) noexcept {
 // per-x). Fills `off[j]` (magnitude) and `wrap[j]` (true → subtract, crossing the
 // seam) from the row index r. Shared by the U(1) strided plane sweeps; the same
 // odometer the SU(N) kernels use. Requires d ≤ 4.
-[[gnu::always_inline]] inline void
-row_fwd_offsets(std::size_t r, Indexing::SizeVec const& sh, std::size_t d,
-                std::size_t const (&stg)[4], std::size_t (&off)[4], bool (&wrap)[4]) noexcept {
+[[gnu::always_inline]] inline void row_fwd_offsets(std::size_t r,
+                                                   Indexing::SizeVec const& sh,
+                                                   std::size_t d,
+                                                   std::size_t const (&stg)[4],
+                                                   std::size_t (&off)[4],
+                                                   bool (&wrap)[4]) noexcept {
     std::size_t rr = r;
     for (std::size_t j = 1; j < d; ++j) {
         std::size_t const lj = sh[j];

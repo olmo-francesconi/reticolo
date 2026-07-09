@@ -37,8 +37,8 @@ int g_rf = 20;  // force/s_full timed reps
 int g_rt = 8;   // trajectory timed reps
 
 template <class A, class Field>
-void bench_one(char const* name, A const& a, Field& fld, FastRng& rng, char const* shape,
-               char const* th) {
+void bench_one(
+    char const* name, A const& a, Field& fld, FastRng& rng, char const* shape, char const* th) {
     Field force{fld.indexing()};
     double const fms = time_ms([&] { a.compute_force(fld, force); }, g_rf);
     double sink      = 0.0;
@@ -57,7 +57,14 @@ void bench_one(char const* name, A const& a, Field& fld, FastRng& rng, char cons
     int const nthr        = std::min<int>(reticolo::exec::traverse_threads(n, bps),
                                    static_cast<int>(reticolo::exec::partition(fld).n_items));
     std::printf("%-11s %-13s %-3s %10.4f %10.4f %10.4f %9.2f %5d\n",
-                name, shape, th, fms, sms, trms, mb, nthr);
+                name,
+                shape,
+                th,
+                fms,
+                sms,
+                trms,
+                mb,
+                nthr);
     (void)sink;
 }
 

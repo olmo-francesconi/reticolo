@@ -1,5 +1,3 @@
-#include "nn_reference.hpp"
-
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/action/site/sine_gordon.hpp>
 #include <reticolo/action/sweep/site.hpp>
@@ -8,6 +6,8 @@
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/parallel.hpp>
 #include <reticolo/core/rng/rng.hpp>
+
+#include "nn_reference.hpp"
 
 #include <cstddef>
 #include <utility>
@@ -64,9 +64,8 @@ TEST_CASE("threaded compute_force equals the gather fallback, every dimension",
 
         auto kern = action.force_kernel();
         std::vector<double> ref(phi.nsites(), 0.0);
-        reticolo::test::visit_nn_ref<double>(phi, [&](std::size_t i, double p, double nb) {
-            ref[i] = kern(i, p, nb);
-        });
+        reticolo::test::visit_nn_ref<double>(
+            phi, [&](std::size_t i, double p, double nb) { ref[i] = kern(i, p, nb); });
 
         auto const got = force_vec(action, phi);
         for (std::size_t i = 0; i < ref.size(); ++i) {

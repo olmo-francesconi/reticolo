@@ -22,11 +22,11 @@ using Clock = std::chrono::steady_clock;
 
 namespace {
 
-constexpr std::size_t kLs[]   = {16, 24, 32, 48};
-constexpr int kThreads[]      = {1, 2, 4, 8, 16};
-constexpr int kQ[]            = {1, 2, 4};
-constexpr double kBudget      = 0.5;  // timed seconds per config
-constexpr int kWarm          = 3;
+constexpr std::size_t kLs[] = {16, 24, 32, 48};
+constexpr int kThreads[]    = {1, 2, 4, 8, 16};
+constexpr int kQ[]          = {1, 2, 4};
+constexpr double kBudget    = 0.5;  // timed seconds per config
+constexpr int kWarm         = 3;
 
 double time_force(Wilson<SU3, double> const& action,
                   MatrixLinkLattice<SU3, double> const& u,
@@ -77,17 +77,22 @@ int main() {
                 for (int q : kQ) {
                     reticolo::exec::team_scope const ts{team};
                     reticolo::exec::slab_scope const ss{q};
-                    auto const part = reticolo::exec::partition(u);
+                    auto const part   = reticolo::exec::partition(u);
                     double const mlps = time_force(action, u, f, d, ns);
                     if (!first) {
                         std::printf(",\n");
                     }
                     first = false;
-                    std::printf(
-                        "  {\"L\":%zu,\"nsites\":%zu,\"threads\":%d,\"q\":%d,\"pad\":%d,"
-                        "\"n_items\":%zu,\"slabs_per_thread\":%.3f,\"mlps\":%.3f}",
-                        L, ns, team, q, pad, part.n_items,
-                        static_cast<double>(part.n_items) / team, mlps);
+                    std::printf("  {\"L\":%zu,\"nsites\":%zu,\"threads\":%d,\"q\":%d,\"pad\":%d,"
+                                "\"n_items\":%zu,\"slabs_per_thread\":%.3f,\"mlps\":%.3f}",
+                                L,
+                                ns,
+                                team,
+                                q,
+                                pad,
+                                part.n_items,
+                                static_cast<double>(part.n_items) / team,
+                                mlps);
                     std::fflush(stdout);
                 }
             }

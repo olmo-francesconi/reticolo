@@ -15,8 +15,8 @@ namespace reticolo::test {
 // body(i, phi, nbrs): nbrs = Σ_mu (data[next(i,mu)] + data[prev(i,mu)]).
 template <class T, class Body>
 inline void visit_nn_ref(Lattice<T> const& l, Body const& body) {
-    auto const& idx = l.indexing_ref();
-    T const* const d = l.data();
+    auto const& idx      = l.indexing_ref();
+    T const* const d     = l.data();
     std::size_t const nd = l.ndims();
     for (std::size_t i = 0; i < l.nsites(); ++i) {
         T nb{0};
@@ -31,8 +31,8 @@ inline void visit_nn_ref(Lattice<T> const& l, Body const& body) {
 // body(phi, fwd) -> Acc, summed over sites. fwd = Σ_mu data[next(i,mu)].
 template <class T, class Acc = T, class Body>
 [[nodiscard]] inline Acc reduce_fwd_ref(Lattice<T> const& l, Body const& body) {
-    auto const& idx = l.indexing_ref();
-    T const* const d = l.data();
+    auto const& idx      = l.indexing_ref();
+    T const* const d     = l.data();
     std::size_t const nd = l.ndims();
     Acc total{};
     for (std::size_t i = 0; i < l.nsites(); ++i) {

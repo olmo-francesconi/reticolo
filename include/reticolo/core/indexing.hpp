@@ -83,7 +83,8 @@ public:
     [[nodiscard]] Site next(Site s, std::size_t mu) const noexcept {
         std::size_t const v = s.value();
         std::size_t const c = (v / strides_[mu]) % shape_[mu];
-        return Site{(c + 1 < shape_[mu]) ? v + strides_[mu] : v - ((shape_[mu] - 1) * strides_[mu])};
+        return Site{(c + 1 < shape_[mu]) ? v + strides_[mu]
+                                         : v - ((shape_[mu] - 1) * strides_[mu])};
     }
     [[nodiscard]] Site prev(Site s, std::size_t mu) const noexcept {
         std::size_t const v = s.value();

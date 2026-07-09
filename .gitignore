@@ -5,7 +5,8 @@ out/
 .idea/
 .vscode/
 .zed/
-.claude/
+.claude/*
+!.claude/skills/
 .DS_Store
 *.swp
 *.swo

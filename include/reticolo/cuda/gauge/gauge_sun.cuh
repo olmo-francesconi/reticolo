@@ -47,11 +47,10 @@ inline constexpr int kSuMinBlocks = 0;
 // Per-site Wilson action contribution over forward planes μ<ν:
 //   site_out[x] = Σ_{μ<ν} ( β − (β/N)·ReTr U_{μν}(x) )   →   Σ_x = S_W.
 template <class GD>
-__global__ void
-su_plaq_energy_kernel(double const* __restrict__ field,
-                      double* __restrict__ site_out,
-                      DeviceTopology topo,
-                      double beta) {
+__global__ void su_plaq_energy_kernel(double const* __restrict__ field,
+                                      double* __restrict__ site_out,
+                                      DeviceTopology topo,
+                                      double beta) {
     long const x = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     if (x >= topo.nsites) {
         return;
@@ -84,11 +83,10 @@ su_plaq_energy_kernel(double const* __restrict__ field,
 
 // Per-link staple force gather. scale = −(β/N); writes F = scale·TA[U·V].
 template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
-__global__ void __launch_bounds__(MaxT, MinB)
-    su_plaq_force_kernel(double const* __restrict__ field,
-                         double* __restrict__ force,
-                         DeviceTopology topo,
-                         double scale) {
+__global__ void __launch_bounds__(MaxT, MinB) su_plaq_force_kernel(double const* __restrict__ field,
+                                                                   double* __restrict__ force,
+                                                                   DeviceTopology topo,
+                                                                   double scale) {
     long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const ns    = topo.nsites;
     int const d      = topo.ndim;
@@ -219,17 +217,16 @@ __global__ void __launch_bounds__(MaxT, MinB)
     GD::store_scaled(force, mu, x, ns, ta, -beta_n);
     double uw[GD::nc];
     GD::mul(uw, u, w);
-    double const n_fwd = static_cast<double>((d - 1) - mu);
+    double const n_fwd                               = static_cast<double>((d - 1) - mu);
     energy_partial[(static_cast<long>(mu) * ns) + x] = (n_fwd * beta) - (beta_n * GD::retr(uw));
 }
 
 // Per-link group exponential drift: U ← exp(dt·P)·U.
 template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
-__global__ void __launch_bounds__(MaxT, MinB)
-    su_expi_lmul_kernel(double* __restrict__ u,
-                        double const* __restrict__ p,
-                        DeviceTopology topo,
-                        double dt) {
+__global__ void __launch_bounds__(MaxT, MinB) su_expi_lmul_kernel(double* __restrict__ u,
+                                                                  double const* __restrict__ p,
+                                                                  DeviceTopology topo,
+                                                                  double dt) {
     long const tid   = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
     long const ns    = topo.nsites;
     int const d      = topo.ndim;

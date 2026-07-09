@@ -141,10 +141,10 @@ public:
 
         if (n_pairs > 0) {
             thread_local std::vector<double> buf;
-            double* const r_buf     = exec::thread_scratch(buf, 4 * n_pairs);
-            double* const theta_buf = r_buf + n_pairs;
-            double* const sin_buf   = r_buf + (2 * n_pairs);
-            double* const cos_buf   = r_buf + (3 * n_pairs);
+            double* const r_buf       = exec::thread_scratch(buf, 4 * n_pairs);
+            double* const theta_buf   = r_buf + n_pairs;
+            double* const sin_buf     = r_buf + (2 * n_pairs);
+            double* const cos_buf     = r_buf + (3 * n_pairs);
             constexpr double k_two_pi = 2.0 * std::numbers::pi;
             for (std::size_t p = 0; p < n_pairs; ++p) {
                 double const u1 = std::max(uniform(), 1.0e-300);

@@ -1,9 +1,9 @@
-#include "nn_reference.hpp"
-
 #include <reticolo/action/sweep/site.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng/rng.hpp>
 #include <reticolo/core/site.hpp>
+
+#include "nn_reference.hpp"
 
 #include <cstddef>
 #include <vector>

@@ -37,8 +37,8 @@ namespace reticolo::action::sweep {
 
 // 1D: the single dimension IS the last direction, so total == last (the ±τ pair).
 template <class T, class Body>
-inline void
-map_split_1d_(T const* data, std::size_t x0, std::size_t x1, std::size_t l0, Body const& body) noexcept {
+inline void map_split_1d_(
+    T const* data, std::size_t x0, std::size_t x1, std::size_t l0, Body const& body) noexcept {
     for (std::size_t x = x0; x < x1; ++x) {
         std::size_t const xp = (x + 1 == l0) ? 0 : (x + 1);
         std::size_t const xm = (x == 0) ? (l0 - 1) : (x - 1);
@@ -48,8 +48,8 @@ map_split_1d_(T const* data, std::size_t x0, std::size_t x1, std::size_t l0, Bod
 }
 
 template <class Acc, class T, class Body>
-[[nodiscard]] inline Acc
-reduce_split_1d_(T const* data, std::size_t x0, std::size_t x1, std::size_t l0, Body const& body) noexcept {
+[[nodiscard]] inline Acc reduce_split_1d_(
+    T const* data, std::size_t x0, std::size_t x1, std::size_t l0, Body const& body) noexcept {
     RETICOLO_FP_REASSOCIATE
     Acc total{};
     for (std::size_t x = x0; x < x1; ++x) {
@@ -62,11 +62,11 @@ reduce_split_1d_(T const* data, std::size_t x0, std::size_t x1, std::size_t l0, 
 
 template <class T, class Body>
 inline void map_split_2d_(T const* data,
-                               std::array<std::size_t, 2> const& L,
-                               std::array<std::size_t, 2> const& stride,
-                               std::array<std::size_t, 2> const& lo,
-                               std::array<std::size_t, 2> const& hi,
-                               Body const& body) noexcept {
+                          std::array<std::size_t, 2> const& L,
+                          std::array<std::size_t, 2> const& stride,
+                          std::array<std::size_t, 2> const& lo,
+                          std::array<std::size_t, 2> const& hi,
+                          Body const& body) noexcept {
     std::size_t const L0 = L[0];
     std::size_t const L1 = L[1];
     std::size_t const s1 = stride[1];
@@ -91,11 +91,11 @@ inline void map_split_2d_(T const* data,
 
 template <class Acc, class T, class Body>
 [[nodiscard]] inline Acc reduce_split_2d_(T const* data,
-                                               std::array<std::size_t, 2> const& L,
-                                               std::array<std::size_t, 2> const& stride,
-                                               std::array<std::size_t, 2> const& lo,
-                                               std::array<std::size_t, 2> const& hi,
-                                               Body const& body) noexcept {
+                                          std::array<std::size_t, 2> const& L,
+                                          std::array<std::size_t, 2> const& stride,
+                                          std::array<std::size_t, 2> const& lo,
+                                          std::array<std::size_t, 2> const& hi,
+                                          Body const& body) noexcept {
     std::size_t const L0 = L[0];
     std::size_t const L1 = L[1];
     std::size_t const s1 = stride[1];
@@ -118,11 +118,11 @@ template <class Acc, class T, class Body>
 
 template <class T, class Body>
 inline void map_split_3d_(T const* data,
-                               std::array<std::size_t, 3> const& L,
-                               std::array<std::size_t, 3> const& stride,
-                               std::array<std::size_t, 3> const& lo,
-                               std::array<std::size_t, 3> const& hi,
-                               Body const& body) noexcept {
+                          std::array<std::size_t, 3> const& L,
+                          std::array<std::size_t, 3> const& stride,
+                          std::array<std::size_t, 3> const& lo,
+                          std::array<std::size_t, 3> const& hi,
+                          Body const& body) noexcept {
     std::size_t const L0 = L[0];
     std::size_t const L1 = L[1];
     std::size_t const L2 = L[2];
@@ -145,8 +145,10 @@ inline void map_split_3d_(T const* data,
             auto const emit = [&](std::size_t i, std::size_t xm, std::size_t xp, std::size_t off) {
                 T const self = data[i];
                 T const last = data[row_zp + off] + data[row_zm + off];
-                body(i, self,
-                     data[xp] + data[xm] + data[row_yp + off] + data[row_ym + off] + last, last);
+                body(i,
+                     self,
+                     data[xp] + data[xm] + data[row_yp + off] + data[row_ym + off] + last,
+                     last);
             };
             emit(row, row + (L0 - 1), row + 1, 0);
             for (std::size_t x = 1; x + 1 < L0; ++x) {
@@ -159,11 +161,11 @@ inline void map_split_3d_(T const* data,
 
 template <class Acc, class T, class Body>
 [[nodiscard]] inline Acc reduce_split_3d_(T const* data,
-                                               std::array<std::size_t, 3> const& L,
-                                               std::array<std::size_t, 3> const& stride,
-                                               std::array<std::size_t, 3> const& lo,
-                                               std::array<std::size_t, 3> const& hi,
-                                               Body const& body) noexcept {
+                                          std::array<std::size_t, 3> const& L,
+                                          std::array<std::size_t, 3> const& stride,
+                                          std::array<std::size_t, 3> const& lo,
+                                          std::array<std::size_t, 3> const& hi,
+                                          Body const& body) noexcept {
     std::size_t const L0 = L[0];
     std::size_t const L1 = L[1];
     std::size_t const L2 = L[2];
@@ -194,11 +196,11 @@ template <class Acc, class T, class Body>
 
 template <class T, class Body>
 inline void map_split_4d_(T const* data,
-                               std::array<std::size_t, 4> const& L,
-                               std::array<std::size_t, 4> const& stride,
-                               std::array<std::size_t, 4> const& lo,
-                               std::array<std::size_t, 4> const& hi,
-                               Body const& body) noexcept {
+                          std::array<std::size_t, 4> const& L,
+                          std::array<std::size_t, 4> const& stride,
+                          std::array<std::size_t, 4> const& lo,
+                          std::array<std::size_t, 4> const& hi,
+                          Body const& body) noexcept {
     std::size_t const L0 = L[0];
     std::size_t const L1 = L[1];
     std::size_t const L2 = L[2];
@@ -230,15 +232,16 @@ inline void map_split_4d_(T const* data,
                 std::size_t const row_zm = plane_zm + (y * s1);
                 std::size_t const row_wp = plane_wp + (y * s1);
                 std::size_t const row_wm = plane_wm + (y * s1);
-                auto const emit = [&](std::size_t i, std::size_t xm, std::size_t xp,
-                                      std::size_t off) {
-                    T const self = data[i];
-                    T const last = data[row_wp + off] + data[row_wm + off];
-                    body(i, self,
-                         data[xp] + data[xm] + data[row_yp + off] + data[row_ym + off] +
-                             data[row_zp + off] + data[row_zm + off] + last,
-                         last);
-                };
+                auto const emit =
+                    [&](std::size_t i, std::size_t xm, std::size_t xp, std::size_t off) {
+                        T const self = data[i];
+                        T const last = data[row_wp + off] + data[row_wm + off];
+                        body(i,
+                             self,
+                             data[xp] + data[xm] + data[row_yp + off] + data[row_ym + off] +
+                                 data[row_zp + off] + data[row_zm + off] + last,
+                             last);
+                    };
                 emit(row, row + (L0 - 1), row + 1, 0);
                 for (std::size_t x = 1; x + 1 < L0; ++x) {
                     emit(row + x, row + x - 1, row + x + 1, x);
@@ -251,11 +254,11 @@ inline void map_split_4d_(T const* data,
 
 template <class Acc, class T, class Body>
 [[nodiscard]] inline Acc reduce_split_4d_(T const* data,
-                                               std::array<std::size_t, 4> const& L,
-                                               std::array<std::size_t, 4> const& stride,
-                                               std::array<std::size_t, 4> const& lo,
-                                               std::array<std::size_t, 4> const& hi,
-                                               Body const& body) noexcept {
+                                          std::array<std::size_t, 4> const& L,
+                                          std::array<std::size_t, 4> const& stride,
+                                          std::array<std::size_t, 4> const& lo,
+                                          std::array<std::size_t, 4> const& hi,
+                                          Body const& body) noexcept {
     std::size_t const L0 = L[0];
     std::size_t const L1 = L[1];
     std::size_t const L2 = L[2];
@@ -282,8 +285,8 @@ template <class Acc, class T, class Body>
                 for (std::size_t x = 0; x + 1 < L0; ++x) {
                     std::size_t const i = row + x;
                     T const last        = data[row_wp + x];
-                    total += body(data[i],
-                                  data[i + 1] + data[row_yp + x] + data[row_zp + x] + last, last);
+                    total += body(
+                        data[i], data[i + 1] + data[row_yp + x] + data[row_zp + x] + last, last);
                 }
                 std::size_t const i = row + (L0 - 1);
                 T const last        = data[row_wp + (L0 - 1)];

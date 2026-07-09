@@ -226,11 +226,11 @@ public:
             // is per-x). `*wrap` flags that the offset crosses the periodic seam,
             // so it is subtracted (fwd) / added (bwd) instead — matching the
             // Indexing table's wrap exactly.
-            std::size_t fwd[4]  = {0, 0, 0, 0};
-            std::size_t bwd[4]  = {0, 0, 0, 0};
-            bool fwd_wrap[4]    = {false, false, false, false};
-            bool bwd_wrap[4]    = {false, false, false, false};
-            std::size_t rr      = r;
+            std::size_t fwd[4] = {0, 0, 0, 0};
+            std::size_t bwd[4] = {0, 0, 0, 0};
+            bool fwd_wrap[4]   = {false, false, false, false};
+            bool bwd_wrap[4]   = {false, false, false, false};
+            std::size_t rr     = r;
             for (std::size_t j = 1; j < d; ++j) {
                 std::size_t const lj = sh[j];
                 std::size_t const cj = rr % lj;
@@ -352,8 +352,8 @@ public:
                 // Row remainder (l0 % k_batch sites) — scalar, same math, same
                 // strided neighbours. Nonzero only when k_batch ∤ L0.
                 for (; x < l0; ++x) {
-                    force_one_site_<Fused>(u, u_mu_blk, out_mu_blk, scale, mu, d, span, row + x, x,
-                                           nxt, prv);
+                    force_one_site_<Fused>(
+                        u, u_mu_blk, out_mu_blk, scale, mu, d, span, row + x, x, nxt, prv);
                 }
             }
         }
