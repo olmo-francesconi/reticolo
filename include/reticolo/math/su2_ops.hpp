@@ -658,8 +658,8 @@ kinetic_range(T const* p, std::size_t stride, std::size_t base, std::size_t cnt)
             acc[b] = (h1_row[b] * h1_row[b]) + (h2_row[b] * h2_row[b]) + (h3_row[b] * h3_row[b]);
         }
         double blk = 0.0;
-        for (std::size_t b = 0; b < k_b; ++b) {
-            blk += static_cast<double>(acc[b]);
+        for (auto& b : acc) {
+            blk += static_cast<double>(b);
         }
         k += blk;
     }

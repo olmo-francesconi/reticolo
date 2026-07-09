@@ -293,9 +293,9 @@ better_slabs(std::size_t items, std::size_t best, std::size_t target, std::size_
 
 template <class Field>
 [[nodiscard]] inline Partition partition(Field const& f) noexcept {
-    std::size_t const n    = f.nsites();
-    std::size_t const d    = f.ndims();
-    std::size_t const team = static_cast<std::size_t>(traverse_threads(0, 0));
+    std::size_t const n = f.nsites();
+    std::size_t const d = f.ndims();
+    auto const team     = static_cast<std::size_t>(traverse_threads(0, 0));
     std::size_t const q =
         g_slabs_per_thread > 0 ? static_cast<std::size_t>(g_slabs_per_thread) : std::size_t{1};
     std::size_t const target = team * q;

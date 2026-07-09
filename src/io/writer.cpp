@@ -79,7 +79,7 @@ template <> hid_t native_type<unsigned long long>() { return H5T_NATIVE_ULLONG; 
 template <>
 hid_t native_type<std::complex<float>>() {
     static hid_t const t = []() {
-        hid_t cid = H5Tcreate(H5T_COMPOUND, sizeof(std::complex<float>));
+        hid_t const cid = H5Tcreate(H5T_COMPOUND, sizeof(std::complex<float>));
         H5Tinsert(cid, "r", 0, H5T_NATIVE_FLOAT);
         H5Tinsert(cid, "i", sizeof(float), H5T_NATIVE_FLOAT);
         return cid;
@@ -90,7 +90,7 @@ hid_t native_type<std::complex<float>>() {
 template <>
 hid_t native_type<std::complex<double>>() {
     static hid_t const t = []() {
-        hid_t cid = H5Tcreate(H5T_COMPOUND, sizeof(std::complex<double>));
+        hid_t const cid = H5Tcreate(H5T_COMPOUND, sizeof(std::complex<double>));
         H5Tinsert(cid, "r", 0, H5T_NATIVE_DOUBLE);
         H5Tinsert(cid, "i", sizeof(double), H5T_NATIVE_DOUBLE);
         return cid;
@@ -167,7 +167,7 @@ std::string utc_now_iso() {
     gmtime_r(&tt, &tm);
 #endif
     std::array<char, 32> buf{};
-    std::strftime(buf.data(), buf.size(), "%Y-%m-%dT%H:%M:%SZ", &tm);
+    (void)std::strftime(buf.data(), buf.size(), "%Y-%m-%dT%H:%M:%SZ", &tm);
     return buf.data();
 }
 
@@ -181,7 +181,7 @@ std::string hostname_str() {
 #else
     if (gethostname(buf.data(), buf.size()) == 0) {
         buf.back() = '\0';
-        return std::string(buf.data());
+        return {buf.data()};
     }
 #endif
     return "<unknown>";
@@ -210,15 +210,17 @@ std::string join_argv(int argc, char const* const* argv) {
 }
 
 void write_string_attr(hid_t obj, char const* name, std::string const& value) {
-    hid_t dtype = H5Tcopy(H5T_C_S1);
+    hid_t const dtype = H5Tcopy(H5T_C_S1);
     hid_check(dtype, "Tcopy");
     herr_check(H5Tset_size(dtype, H5T_VARIABLE), "Tset_size");
     herr_check(H5Tset_strpad(dtype, H5T_STR_NULLTERM), "Tset_strpad");
-    hid_t space = H5Screate(H5S_SCALAR);
+    hid_t const space = H5Screate(H5S_SCALAR);
     hid_check(space, "Screate scalar");
-    hid_t attr = H5Acreate2(obj, name, dtype, space, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t const attr = H5Acreate2(obj, name, dtype, space, H5P_DEFAULT, H5P_DEFAULT);
     hid_check(attr, "Acreate2");
     char const* cstr = value.c_str();
+    // HDF5 takes the address of the char* for a variable-length string write.
+    // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
     herr_check(H5Awrite(attr, dtype, &cstr), "Awrite string");
     H5Aclose(attr);
     H5Sclose(space);
@@ -227,9 +229,9 @@ void write_string_attr(hid_t obj, char const* name, std::string const& value) {
 
 template <class T>
 void write_scalar_attr(hid_t obj, char const* name, T const& value) {
-    hid_t space = H5Screate(H5S_SCALAR);
+    hid_t const space = H5Screate(H5S_SCALAR);
     hid_check(space, "Screate scalar");
-    hid_t attr = H5Acreate2(obj, name, native_type<T>(), space, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t const attr = H5Acreate2(obj, name, native_type<T>(), space, H5P_DEFAULT, H5P_DEFAULT);
     hid_check(attr, "Acreate2");
     herr_check(H5Awrite(attr, native_type<T>(), &value), "Awrite scalar");
     H5Aclose(attr);
@@ -269,8 +271,8 @@ struct Writer::Impl {
     Impl(Impl&&)                 = delete;
     Impl& operator=(Impl&&)      = delete;
 
-    void stamp_run(int argc, char const* const* argv) {
-        hid_t grp = H5Gcreate2(file, "/run", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    void stamp_run(int argc, char const* const* argv) const {
+        hid_t const grp = H5Gcreate2(file, "/run", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         hid_check(grp, "stamp_run create /run");
 
         write_string_attr(grp, "cmdline", join_argv(argc, argv));
@@ -305,7 +307,7 @@ struct Series<T>::Impl {
     ~Impl() {
         try {
             flush_locked();
-        } catch (...) {
+        } catch (...) {  // NOLINT(bugprone-empty-catch) — a destructor must not propagate
             // dtor cannot throw
         }
         if (dataset != H5I_INVALID_HID) {
@@ -314,7 +316,7 @@ struct Series<T>::Impl {
     }
 
     void append(T const& v) {
-        std::lock_guard<std::mutex> lock{*mu_ptr};
+        std::lock_guard<std::mutex> const lock{*mu_ptr};
         buffer.push_back(v);
         if (buffer.size() >= chunk_rows) {
             flush_locked();
@@ -329,13 +331,13 @@ struct Series<T>::Impl {
         hsize_t const new_size = total_written + count;
         herr_check(H5Dset_extent(dataset, &new_size), "Dset_extent");
 
-        hid_t fspace = H5Dget_space(dataset);
+        hid_t const fspace = H5Dget_space(dataset);
         hid_check(fspace, "Dget_space");
-        hsize_t offset = total_written;
+        hsize_t const offset = total_written;
         herr_check(H5Sselect_hyperslab(fspace, H5S_SELECT_SET, &offset, nullptr, &count, nullptr),
                    "Sselect_hyperslab");
 
-        hid_t mspace = H5Screate_simple(1, &count, nullptr);
+        hid_t const mspace = H5Screate_simple(1, &count, nullptr);
         if (mspace < 0) {
             H5Sclose(fspace);
             hdf5_throw("Screate_simple");
@@ -380,7 +382,7 @@ void Series<T>::flush() {
     if (!impl_) {
         return;
     }
-    std::lock_guard<std::mutex> lock{*impl_->mu_ptr};
+    std::lock_guard<std::mutex> const lock{*impl_->mu_ptr};
     impl_->flush_locked();
 }
 
@@ -389,7 +391,7 @@ std::size_t Series<T>::size() const noexcept {
     if (!impl_) {
         return 0;
     }
-    std::lock_guard<std::mutex> lock{*impl_->mu_ptr};
+    std::lock_guard<std::mutex> const lock{*impl_->mu_ptr};
     return impl_->total_written + impl_->buffer.size();
 }
 
@@ -419,7 +421,7 @@ std::filesystem::path const& Writer::path() const noexcept {
 }
 
 void Writer::start_phase(std::string_view phase) {
-    std::lock_guard<std::mutex> lock{impl_->mu};
+    std::lock_guard<std::mutex> const lock{impl_->mu};
     if (std::ranges::find(impl_->phases, phase) != impl_->phases.end()) {
         throw std::runtime_error{"Writer::start_phase: phase '" + std::string(phase) +
                                  "' already started"};
@@ -429,7 +431,8 @@ void Writer::start_phase(std::string_view phase) {
     if (exists > 0) {
         throw std::runtime_error{"Writer::start_phase: '" + phase_path + "' already exists"};
     }
-    hid_t grp = H5Gcreate2(impl_->file, phase_path.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t const grp =
+        H5Gcreate2(impl_->file, phase_path.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     hid_check(grp, "start_phase create");
     H5Gclose(grp);
     impl_->phases.emplace_back(phase);
@@ -437,25 +440,25 @@ void Writer::start_phase(std::string_view phase) {
 
 template <class T>
 Series<T> Writer::series(std::string_view path, std::size_t chunk) {
-    std::lock_guard<std::mutex> lock{impl_->mu};
+    std::lock_guard<std::mutex> const lock{impl_->mu};
 
     auto segments = split_path(path);
     if (segments.empty()) {
         throw std::invalid_argument{"Writer::series: empty path"};
     }
 
-    hid_t parent = ensure_parent_groups(impl_->file, segments);
+    hid_t const parent = ensure_parent_groups(impl_->file, segments);
 
-    hsize_t initial = 0;
-    hsize_t maxdim  = H5S_UNLIMITED;
-    hid_t space     = H5Screate_simple(1, &initial, &maxdim);
+    hsize_t const initial = 0;
+    hsize_t const maxdim  = H5S_UNLIMITED;
+    hid_t const space     = H5Screate_simple(1, &initial, &maxdim);
     hid_check(space, "Screate_simple");
 
-    hid_t dcpl       = H5Pcreate(H5P_DATASET_CREATE);
-    hsize_t chunkdim = chunk == 0 ? hsize_t{4096} : static_cast<hsize_t>(chunk);
+    hid_t const dcpl       = H5Pcreate(H5P_DATASET_CREATE);
+    hsize_t const chunkdim = chunk == 0 ? hsize_t{4096} : static_cast<hsize_t>(chunk);
     H5Pset_chunk(dcpl, 1, &chunkdim);
 
-    hid_t dset = H5Dcreate2(
+    hid_t const dset = H5Dcreate2(
         parent, segments.back().c_str(), native_type<T>(), space, H5P_DEFAULT, dcpl, H5P_DEFAULT);
 
     H5Pclose(dcpl);
@@ -474,7 +477,7 @@ Series<T> Writer::series(std::string_view path, std::size_t chunk) {
 
 template <class T>
 void Writer::attr(std::string_view path, T const& value) {
-    std::lock_guard<std::mutex> lock{impl_->mu};
+    std::lock_guard<std::mutex> const lock{impl_->mu};
     auto const [obj_path, attr_name] = split_attr(path);
     auto segments                    = split_path(obj_path);
 
@@ -482,7 +485,7 @@ void Writer::attr(std::string_view path, T const& value) {
     if (segments.empty()) {
         parent = H5Gopen2(impl_->file, "/", H5P_DEFAULT);
     } else {
-        hid_t pre               = ensure_parent_groups(impl_->file, segments);
+        hid_t const pre         = ensure_parent_groups(impl_->file, segments);
         std::string const& leaf = segments.back();
         htri_t const ex         = H5Lexists(pre, leaf.c_str(), H5P_DEFAULT);
         hid_t leaf_grp          = H5I_INVALID_HID;
@@ -506,6 +509,7 @@ void Writer::attr(std::string_view path, T const& value) {
 }
 
 // Explicit instantiations
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage) — token-pasting instantiation list, not a constant
 #define RETICOLO_IO_INSTANTIATE(T)                                                                 \
     template class Series<T>;                                                                      \
     template Series<T> Writer::series<T>(std::string_view, std::size_t);                           \
@@ -584,9 +588,10 @@ std::string join_shape(std::vector<std::size_t> const& shape) {
 
 void write_1d_dataset(
     hid_t parent, char const* leaf, hid_t htype, void const* data, hsize_t count) {
-    hid_t space = H5Screate_simple(1, &count, nullptr);
+    hid_t const space = H5Screate_simple(1, &count, nullptr);
     hid_check(space, "Screate_simple field");
-    hid_t dset = H5Dcreate2(parent, leaf, htype, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t const dset =
+        H5Dcreate2(parent, leaf, htype, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     if (dset < 0) {
         H5Sclose(space);
         hdf5_throw("Dcreate2 field");
@@ -607,19 +612,19 @@ void Writer::write_field_raw_(std::string_view path,
                               std::vector<std::size_t> const& shape,
                               std::size_t n_components,
                               char const* group_name) {
-    std::lock_guard<std::mutex> lock{impl_->mu};
+    std::lock_guard<std::mutex> const lock{impl_->mu};
 
     auto segments = split_path(path);
     if (segments.empty()) {
         throw std::invalid_argument{"Writer::field: empty path"};
     }
 
-    hid_t parent = ensure_parent_groups(impl_->file, segments);
+    hid_t const parent = ensure_parent_groups(impl_->file, segments);
 
     hid_t const htype = native_type_for(scalar_kind);
     write_1d_dataset(parent, segments.back().c_str(), htype, data, n_elems);
 
-    hid_t dset = H5Oopen(parent, segments.back().c_str(), H5P_DEFAULT);
+    hid_t const dset = H5Oopen(parent, segments.back().c_str(), H5P_DEFAULT);
     H5Gclose(parent);
     hid_check(dset, "field reopen for attrs");
 
@@ -635,19 +640,19 @@ void Writer::write_field_raw_(std::string_view path,
 }
 
 void Writer::rng_state(std::string_view path, FastRng const& rng) {
-    std::lock_guard<std::mutex> lock{impl_->mu};
+    std::lock_guard<std::mutex> const lock{impl_->mu};
 
     auto segments = split_path(path);
     if (segments.empty()) {
         throw std::invalid_argument{"Writer::rng_state: empty path"};
     }
 
-    hid_t parent = ensure_parent_groups(impl_->file, segments);
+    hid_t const parent = ensure_parent_groups(impl_->file, segments);
 
     auto const& s = rng.state();
     write_1d_dataset(parent, segments.back().c_str(), H5T_NATIVE_UINT64, s.data(), s.size());
 
-    hid_t dset = H5Oopen(parent, segments.back().c_str(), H5P_DEFAULT);
+    hid_t const dset = H5Oopen(parent, segments.back().c_str(), H5P_DEFAULT);
     H5Gclose(parent);
     hid_check(dset, "rng_state reopen for attrs");
 
@@ -658,6 +663,7 @@ void Writer::rng_state(std::string_view path, FastRng const& rng) {
     H5Oclose(dset);
 }
 
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage) — token-pasting instantiation list, not a constant
 #define RETICOLO_IO_INSTANTIATE_FIELD(T)                                                           \
     template void Writer::field<T>(std::string_view, Lattice<T> const&);
 RETICOLO_IO_INSTANTIATE_FIELD(float)

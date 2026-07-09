@@ -45,8 +45,8 @@ struct ComplexAction : SFullCache, SImagCache {
             l, [&kern](complex_t phi, complex_t fwd_total, complex_t fwd_last) {
                 return complex_t{kern(phi, fwd_total, fwd_last), T{0}};
             });
-        double const s = static_cast<double>(std::real(total));
-        last_s_full_   = s;
+        auto const s = static_cast<double>(std::real(total));
+        last_s_full_ = s;
         return s;
     }
 

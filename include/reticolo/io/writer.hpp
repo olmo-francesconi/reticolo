@@ -135,14 +135,14 @@ public:
     // Wire-level scalar type tag. Public because the templated `field<T>`
     // helpers above translate `T` to this tag and hand it to the writer's
     // private raw-write path.
-    enum class ScalarKind : int {
+    enum class ScalarKind : std::uint8_t {
         f32,
         f64,
         c32,
         c64,
     };
 
-    enum class FieldKind : int {
+    enum class FieldKind : std::uint8_t {
         scalar,
         link,
         matrix_link,

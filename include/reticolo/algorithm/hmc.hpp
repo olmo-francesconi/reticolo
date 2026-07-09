@@ -166,7 +166,7 @@ public:
         std::size_t const n = flat_size(field_);
         copy_flat_(old_field_.data(), field_.data(), n);
         double const kin0 = kinetic_();
-        double const s0   = static_cast<double>(action_.s_full(field_));
+        auto const s0     = static_cast<double>(action_.s_full(field_));
         // Snapshot the action's raw-scalar cache(s) at h0 so a reject can
         // roll them back to match the restored phi0 field. No-op for
         // actions that don't satisfy the cache concepts.
@@ -176,7 +176,7 @@ public:
         run_md_(tau_, n_md_);
 
         double const kin1 = kinetic_();
-        double const s1   = static_cast<double>(action_.s_full(field_));
+        auto const s1     = static_cast<double>(action_.s_full(field_));
         double const h1   = kin1 + s1;
         // NOLINTNEXTLINE(readability-identifier-naming) physics convention
         double const dH = h1 - h0;
@@ -284,12 +284,16 @@ private:
             exec::philox_normal_fill(mom_.data(), flat_size(mom_), rng_.uniform_u64(), mom_);
         } else if constexpr (std::is_same_v<Scalar, std::complex<double>>) {
             std::size_t const n = flat_size(mom_);
-            exec::philox_normal_fill(
-                reinterpret_cast<double*>(mom_.data()), 2 * n, rng_.uniform_u64(), mom_);
+            // Independent N(0,1) on Re/Im is the correct complex-Gaussian sampling;
+            // std guarantees the {Re,Im} layout (§29.5.4).
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+            auto* const md = reinterpret_cast<double*>(mom_.data());
+            exec::philox_normal_fill(md, 2 * n, rng_.uniform_u64(), mom_);
         } else if constexpr (std::is_same_v<Scalar, float>) {
             fill_normals_narrowed_(mom_.data(), flat_size(mom_));
         } else if constexpr (std::is_same_v<Scalar, std::complex<float>>) {
             std::size_t const n = flat_size(mom_);
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
             fill_normals_narrowed_(reinterpret_cast<float*>(mom_.data()), 2 * n);
         } else {
             Scalar* const m     = mom_.data();
@@ -342,7 +346,7 @@ private:
                         if constexpr (is_complex_v_) {
                             return std::norm(p[i]);
                         } else {
-                            double const pi = static_cast<double>(p[i]);
+                            auto const pi = static_cast<double>(p[i]);
                             return pi * pi;
                         }
                     });

@@ -382,7 +382,7 @@ inline void Entry::emit() {
     // One lock covers stdout/stderr emission AND the file writes.
     // Line-atomic for the whole multi-line Entry — no other thread can
     // interleave between our lines.
-    std::lock_guard lk{sink_mutex()};
+    std::lock_guard const lk{sink_mutex()};
 
 #ifdef _OPENMP
     if (omp_in_parallel() && run.empty()) {
@@ -480,7 +480,7 @@ private:
 // Format a byte count with a binary unit, e.g. 2048 → "2.0 KiB". A display
 // helper for log lines (slab footprints, buffer sizes, …).
 [[nodiscard]] inline std::string human_bytes(std::size_t n) {
-    double v         = static_cast<double>(n);
+    auto v           = static_cast<double>(n);
     char const* unit = "B";
     for (char const* u : std::array<char const*, 3>{"KiB", "MiB", "GiB"}) {
         if (v < 1024.0) {
@@ -578,7 +578,7 @@ inline void banner() {
     bottom += tag;
     bottom += "━┛";
 
-    std::lock_guard lk{impl::sink_mutex()};
+    std::lock_guard const lk{impl::sink_mutex()};
     auto& mf  = impl::main_file();
     auto emit = [&](std::string const& s) {
         std::cout << s;

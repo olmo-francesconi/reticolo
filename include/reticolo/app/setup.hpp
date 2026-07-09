@@ -44,12 +44,11 @@ struct CommonFlags {
 // references to read after `p.parse()`. Apps register `ndim` / physics / loop
 // counts themselves, before or after this call.
 inline CommonFlags common_flags(cli::Parser& p, CommonDefaults const& d) {
-    int const& L                   = p.opt<int>("L,size", d.L, "linear lattice extent");
-    unsigned long long const& seed = p.opt<unsigned long long>("seed", d.seed, "RNG seed");
-    std::string const& workspace =
+    int const& L     = p.opt<int>("L,size", d.L, "linear lattice extent");
+    auto const& seed = p.opt<unsigned long long>("seed", d.seed, "RNG seed");
+    auto const& workspace =
         p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
-    std::string const& out =
-        p.opt<std::string>("out", d.out, "HDF5 output file name, inside workspace");
+    auto const& out = p.opt<std::string>("out", d.out, "HDF5 output file name, inside workspace");
     return CommonFlags{L, seed, workspace, out};
 }
 

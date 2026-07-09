@@ -27,17 +27,17 @@ namespace reticolo::llr {
 // at the right path.
 
 struct DriverSpec {
-    int n_nr;
-    int n_therm_nr;
-    int n_meas_nr;
-    int n_rm;
-    int n_therm_rm;
-    int n_meas_rm;
-    double delta;
-    double e_min;
+    int n_nr{};
+    int n_therm_nr{};
+    int n_meas_nr{};
+    int n_rm{};
+    int n_therm_rm{};
+    int n_meas_rm{};
+    double delta{};
+    double e_min{};
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
-    double E_max;  // already snapped to the (n_rep - 1) * delta grid
-    double d_e;
+    double E_max{};  // already snapped to the (n_rep - 1) * delta grid
+    double d_e{};
     bool exchange = true;  // even/odd replica swaps each RM sweep
 };
 
@@ -120,7 +120,7 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
             a_series[n].append(a_buf[n]);
             de_series[n].append(de_buf[n]);
             iter("RM",
-                 static_cast<std::size_t>(s + 1),
+                 static_cast<std::size_t>(s) + 1,
                  static_cast<std::size_t>(spec.n_rm),
                  a_buf[n],
                  de_buf[n],
@@ -133,7 +133,7 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
         int accepted = 0;
         int attempts = 0;
         if (spec.exchange) {
-            std::size_t const off = static_cast<std::size_t>(s & 1);
+            auto const off = static_cast<std::size_t>(s & 1);
             for (std::size_t i = off; i + 1 < reps.size(); i += 2) {
                 ++attempts;
                 if (try_exchange(*reps[i], *reps[i + 1], exch_rng)) {

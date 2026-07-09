@@ -129,8 +129,8 @@ public:
         }
         scalar_t const dE = sum / static_cast<scalar_t>(n);
         if (log_mode == log::Mode::normal) {
-            double const dE_d  = static_cast<double>(dE);
-            double const delta = static_cast<double>(windowed_.delta);
+            auto const dE_d    = static_cast<double>(dE);
+            auto const delta   = static_cast<double>(windowed_.delta);
             double const ratio = (delta != 0.0) ? (dE_d / delta) : 0.0;
             log::info("repl", "sample n={}  ⟨dE⟩={:+.3e}  ⟨dE⟩/δ={:+.3f}", n, dE_d, ratio);
         }

@@ -56,7 +56,7 @@ template <class Field>
 }
 
 [[nodiscard]] inline std::vector<std::size_t> load_field_shape(std::filesystem::path const& path) {
-    Reader r{path};
+    Reader const r{path};
     return r.field_shape("/field");
 }
 

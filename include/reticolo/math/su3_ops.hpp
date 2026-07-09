@@ -350,8 +350,8 @@ template <std::size_t B, class T>
     // Q_{ji} = conj(Q_{ij}), so Q_{ij}·Q_{ji} = |Q_{ij}|². So c1 reduces to
     // (1/2)·sum_{ij} |Q_{ij}|² = (1/2)·‖Q‖²_F (Frobenius squared / 2).
     double c1 = 0.0;
-    for (std::size_t k = 0; k < 18; ++k) {
-        c1 += q[k] * q[k];
+    for (double const k : q) {
+        c1 += k * k;
     }
     c1 *= 0.5;
 
@@ -484,12 +484,12 @@ template <std::size_t B, class T>
         r0[(2 * j) + 1] = m[idx_im(0, j)];
     }
     double n0_sq = 0.0;
-    for (std::size_t k = 0; k < 6; ++k) {
-        n0_sq += r0[k] * r0[k];
+    for (double const k : r0) {
+        n0_sq += k * k;
     }
     double const inv_n0 = 1.0 / std::sqrt(n0_sq);
-    for (std::size_t k = 0; k < 6; ++k) {
-        r0[k] *= inv_n0;
+    for (double& k : r0) {
+        k *= inv_n0;
     }
 
     // Row 1: subtract <r0, r1>·r0 then normalise.
@@ -518,12 +518,12 @@ template <std::size_t B, class T>
         r1[(2 * j) + 1] -= (dot_re * ai) + (dot_im * ar);
     }
     double n1_sq = 0.0;
-    for (std::size_t k = 0; k < 6; ++k) {
-        n1_sq += r1[k] * r1[k];
+    for (double const k : r1) {
+        n1_sq += k * k;
     }
     double const inv_n1 = 1.0 / std::sqrt(n1_sq);
-    for (std::size_t k = 0; k < 6; ++k) {
-        r1[k] *= inv_n1;
+    for (double& k : r1) {
+        k *= inv_n1;
     }
 
     // Row 2 = conj(r0 × r1) so that det = +1.
@@ -1138,8 +1138,8 @@ kinetic_range(T const* p, std::size_t stride, std::size_t base, std::size_t cnt)
     double k                  = 0.0;
     for (std::size_t s0 = base; s0 < tail_lo; s0 += k_b) {
         T acc[k_b];
-        for (std::size_t b = 0; b < k_b; ++b) {
-            acc[b] = T{0};
+        for (auto& b : acc) {
+            b = T{0};
         }
         for (std::size_t c = 0; c < 18; ++c) {
             T const* row = p + (c * stride) + s0;
@@ -1148,8 +1148,8 @@ kinetic_range(T const* p, std::size_t stride, std::size_t base, std::size_t cnt)
             }
         }
         double blk = 0.0;
-        for (std::size_t b = 0; b < k_b; ++b) {
-            blk += static_cast<double>(acc[b]);
+        for (auto& b : acc) {
+            blk += static_cast<double>(b);
         }
         k += blk;
     }

@@ -40,12 +40,12 @@ struct Philox4x32 {
     };
 
     [[nodiscard]] RETICOLO_HD static U32x4 single_round(U32x4 ctr, U32x2 key) {
-        std::uint64_t const p0  = static_cast<std::uint64_t>(kMul0) * ctr[0];
-        std::uint64_t const p1  = static_cast<std::uint64_t>(kMul1) * ctr[2];
-        std::uint32_t const hi0 = static_cast<std::uint32_t>(p0 >> 32U);
-        std::uint32_t const lo0 = static_cast<std::uint32_t>(p0);
-        std::uint32_t const hi1 = static_cast<std::uint32_t>(p1 >> 32U);
-        std::uint32_t const lo1 = static_cast<std::uint32_t>(p1);
+        std::uint64_t const p0 = static_cast<std::uint64_t>(kMul0) * ctr[0];
+        std::uint64_t const p1 = static_cast<std::uint64_t>(kMul1) * ctr[2];
+        auto const hi0         = static_cast<std::uint32_t>(p0 >> 32U);
+        auto const lo0         = static_cast<std::uint32_t>(p0);
+        auto const hi1         = static_cast<std::uint32_t>(p1 >> 32U);
+        auto const lo1         = static_cast<std::uint32_t>(p1);
         return U32x4{hi1 ^ ctr[1] ^ key[0], lo1, hi0 ^ ctr[3] ^ key[1], lo0};
     }
 
@@ -93,11 +93,11 @@ inline void philox_uniform2_batch(std::uint64_t seed,
                                   std::size_t cnt,
                                   double* u0,
                                   double* u1) {
-    constexpr std::size_t W  = 8;  // fixed lane count: vector-friendly on any ISA
-    std::uint32_t const key0 = static_cast<std::uint32_t>(seed);
-    std::uint32_t const key1 = static_cast<std::uint32_t>(seed >> 32U);
-    std::uint32_t const c0   = static_cast<std::uint32_t>(traj);
-    std::uint32_t const c1   = static_cast<std::uint32_t>(traj >> 32U);
+    constexpr std::size_t W = 8;  // fixed lane count: vector-friendly on any ISA
+    auto const key0         = static_cast<std::uint32_t>(seed);
+    auto const key1         = static_cast<std::uint32_t>(seed >> 32U);
+    auto const c0           = static_cast<std::uint32_t>(traj);
+    auto const c1           = static_cast<std::uint32_t>(traj >> 32U);
 
     std::size_t k = 0;
     for (; k + W <= cnt; k += W) {
@@ -123,9 +123,9 @@ inline void philox_uniform2_batch(std::uint64_t seed,
                 std::uint64_t const p0 = static_cast<std::uint64_t>(Philox4x32::kMul0) * x0[w];
                 std::uint64_t const p1 = static_cast<std::uint64_t>(Philox4x32::kMul1) * x2[w];
                 std::uint32_t const n0 = static_cast<std::uint32_t>(p1 >> 32U) ^ x1[w] ^ rk0;
-                std::uint32_t const n1 = static_cast<std::uint32_t>(p1);
+                auto const n1          = static_cast<std::uint32_t>(p1);
                 std::uint32_t const n2 = static_cast<std::uint32_t>(p0 >> 32U) ^ x3[w] ^ rk1;
-                std::uint32_t const n3 = static_cast<std::uint32_t>(p0);
+                auto const n3          = static_cast<std::uint32_t>(p0);
                 x0[w]                  = n0;
                 x1[w]                  = n1;
                 x2[w]                  = n2;

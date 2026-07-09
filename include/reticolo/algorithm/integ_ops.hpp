@@ -29,10 +29,10 @@ namespace reticolo::alg::integ {
 // mom, and force are always distinct sibling lattices).
 template <class Field, class Mom>
 inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
-    using F                  = typename Field::value_type;
-    real_scalar_t<F> const c = static_cast<real_scalar_t<F>>(cdt);
-    F* const fd              = field.data();
-    auto const* const pd     = mom.data();
+    using F              = typename Field::value_type;
+    auto const c         = static_cast<real_scalar_t<F>>(cdt);
+    F* const fd          = field.data();
+    auto const* const pd = mom.data();
     // Elementwise axpy on the canonical field partition — each element is
     // independent → bit-identical for any partition / thread count. __restrict
     // is re-applied inside the worker so the vectoriser keeps the no-alias
@@ -49,10 +49,10 @@ inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
 
 template <class Mom, class Force>
 inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
-    using F                  = typename Mom::value_type;
-    real_scalar_t<F> const c = static_cast<real_scalar_t<F>>(kdt);
-    F* const md              = mom.data();
-    auto const* const fd     = force.data();
+    using F              = typename Mom::value_type;
+    auto const c         = static_cast<real_scalar_t<F>>(kdt);
+    F* const md          = mom.data();
+    auto const* const fd = force.data();
     reticolo::exec::field_visit(mom, 1, [md, fd, c](std::size_t base, std::size_t cnt) {
         F* __restrict const m           = md;
         auto const* __restrict const fp = fd;
@@ -93,9 +93,8 @@ inline void drift_field(MatrixLinkLattice<G, T>& field,
 // aligned with every other pass. Elementwise-independent → bit-identical for any
 // thread count.
 template <class G, class T>
-inline void kick_add(MatrixLinkLattice<G, T>& mom,
-                     MatrixLinkLattice<G, T> const& force,
-                     double kdt) noexcept {
+inline void
+kick_add(MatrixLinkLattice<G, T>& mom, MatrixLinkLattice<G, T> const& force, double kdt) noexcept {
     constexpr std::size_t nc = MatrixLinkLattice<G, T>::n_real_components;
     std::size_t const nblk   = mom.ndims() * nc;
     std::size_t const span   = mom.link_span();  // padded component stride
@@ -104,8 +103,8 @@ inline void kick_add(MatrixLinkLattice<G, T>& mom,
     T const* const fd        = force.data();
     reticolo::exec::field_visit(mom, 1, [md, fd, c, nblk, span](std::size_t base, std::size_t cnt) {
         for (std::size_t blk = 0; blk < nblk; ++blk) {
-            T* __restrict const m           = md + (blk * span) + base;
-            T const* __restrict const fp    = fd + (blk * span) + base;
+            T* __restrict const m        = md + (blk * span) + base;
+            T const* __restrict const fp = fd + (blk * span) + base;
             for (std::size_t i = 0; i < cnt; ++i) {
                 m[i] += c * fp[i];
             }

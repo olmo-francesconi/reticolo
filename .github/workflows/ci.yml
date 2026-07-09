@@ -153,11 +153,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # Pinned to clang-tidy 18 (compiler + analyzer): the enabled-check set and
+      # its diagnostics are version-sensitive, so an Ubuntu default bump to
+      # clang-19/20 would silently change what the gate enforces. The compile DB
+      # is built with the same clang so clang-tidy parses it without frontend
+      # errors. Reproduce locally with the same clang-18 + clang-tidy-18.
       - name: install
-        run: sudo apt-get update && sudo apt-get install -y clang-tidy clang ninja-build libhdf5-dev libomp-dev
+        run: sudo apt-get update && sudo apt-get install -y clang-18 clang-tools-18 clang-tidy-18 ninja-build libhdf5-dev libomp-dev
 
       - name: configure
-        run: cmake --preset linux-clang
+        run: cmake --preset linux-clang -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18
 
       # Sleef generates <sleef.h> at build time, not configure time. Build the
       # sleef target so the umbrella TU's `#include <sleef.h>` resolves when
@@ -178,7 +183,8 @@ jobs:
           # tests already gate app and test code).
           files=(src/**/*.cpp)
           if [ ${#files[@]} -gt 0 ]; then
-            run-clang-tidy -p build/linux-clang -j "$(nproc)" -quiet "${files[@]}"
+            # WarningsAsErrors in .clang-tidy makes any finding fail the job.
+            run-clang-tidy-18 -p build/linux-clang -j "$(nproc)" -quiet "${files[@]}"
           else
             echo "no production TUs yet — skipping"
           fi

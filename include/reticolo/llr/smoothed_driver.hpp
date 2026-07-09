@@ -148,17 +148,17 @@ inline void local_poly_fit(std::vector<double> const& e,
 }  // namespace impl
 
 struct DriverSpec {
-    int n_nr;
-    int n_therm_nr;
-    int n_meas_nr;
-    int n_rm;
-    int n_therm_rm;
-    int n_meas_rm;
-    double delta;
-    double e_min;
+    int n_nr{};
+    int n_therm_nr{};
+    int n_meas_nr{};
+    int n_rm{};
+    int n_therm_rm{};
+    int n_meas_rm{};
+    double delta{};
+    double e_min{};
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
-    double E_max;
-    double d_e;
+    double E_max{};
+    double d_e{};
     bool exchange = true;
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
     int smooth_K          = 4;
@@ -273,9 +273,9 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
         double sm_step_sum = 0.0;
         double sm_step_max = 0.0;
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            double const a_old = static_cast<double>(reps[n]->a());
-            drm_buf[n]         = std::abs(a_rm[n] - a_old);
-            dsm_buf[n]         = std::abs(lam * (a_hat[n] - a_rm[n]));
+            auto const a_old = static_cast<double>(reps[n]->a());
+            drm_buf[n]       = std::abs(a_rm[n] - a_old);
+            dsm_buf[n]       = std::abs(lam * (a_hat[n] - a_rm[n]));
             rm_step_sum += drm_buf[n];
             sm_step_sum += dsm_buf[n];
             if (drm_buf[n] > rm_step_max) {
@@ -288,7 +288,7 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
             reps[n]->set_a(a_buf[n]);
             auto _ = log::scope(reps[n]->id());
             iter("sRM",
-                 static_cast<std::size_t>(s + 1),
+                 static_cast<std::size_t>(s) + 1,
                  static_cast<std::size_t>(spec.n_rm),
                  a_buf[n],
                  de_buf[n],
@@ -324,7 +324,7 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
         int accepted = 0;
         int attempts = 0;
         if (spec.exchange) {
-            std::size_t const off = static_cast<std::size_t>(s & 1);
+            auto const off = static_cast<std::size_t>(s & 1);
             for (std::size_t i = off; i + 1 < reps.size(); i += 2) {
                 ++attempts;
                 if (try_exchange(*reps[i], *reps[i + 1], exch_rng)) {

@@ -21,6 +21,9 @@ namespace reticolo::math::group {
 // -mprefer-vector-width=512 -DRETICOLO_GAUGE_K_BATCH_MAX=16 (double stays at
 // 8 = one zmm per row; only float grows to 16).
 #ifndef RETICOLO_GAUGE_K_BATCH_MAX
+    // A macro (not constexpr) so the cap is overridable at build time with
+    // -DRETICOLO_GAUGE_K_BATCH_MAX=16 for full 512-bit float lanes.
+    // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
     #define RETICOLO_GAUGE_K_BATCH_MAX 8
 #endif
 
@@ -28,7 +31,7 @@ template <class T>
 [[nodiscard]] consteval std::size_t gauge_k_batch_() noexcept {
     std::size_t const lanes = std::is_same_v<T, float> ? math::k_vec_width_f : math::k_vec_width_d;
     std::size_t const w     = lanes > 8 ? lanes : std::size_t{8};
-    std::size_t const cap   = static_cast<std::size_t>(RETICOLO_GAUGE_K_BATCH_MAX);
+    auto const cap          = static_cast<std::size_t>(RETICOLO_GAUGE_K_BATCH_MAX);
     return w < cap ? w : cap;
 }
 

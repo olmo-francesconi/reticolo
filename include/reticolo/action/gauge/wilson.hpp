@@ -71,13 +71,13 @@ struct Wilson : GaugeAction<Wilson<G, T>> {
         constexpr std::size_t gran = math::group::k_gauge_batch<T>;
         for (std::size_t mu = 0; mu < d; ++mu) {
             for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                accum_re_tr += reticolo::exec::field_reduce(
-                    U, gran, [&](std::size_t base, std::size_t cnt) {
+                accum_re_tr +=
+                    reticolo::exec::field_reduce(U, gran, [&](std::size_t base, std::size_t cnt) {
                         return kernels::template s_full_plane_range<T>(U, mu, nu, base, cnt);
                     });
             }
         }
-        double const beta_d      = static_cast<double>(beta);
+        auto const beta_d        = static_cast<double>(beta);
         double const beta_over_n = beta_d / static_cast<double>(G::n_color);
         return (beta_d * static_cast<double>(n_plaq)) - (beta_over_n * accum_re_tr);
     }
@@ -86,7 +86,7 @@ struct Wilson : GaugeAction<Wilson<G, T>> {
     // kernels the β/N prefactor. U(1) uses the per-plaquette sin scatter that
     // matches CompactU1 bit-for-bit; SU(N) uses the link-centric staple + TA[U·V].
     void force_into(field_type const& U, field_type& force) const noexcept {
-        double const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
+        auto const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
         // Each group's compute_force owns its own threading — SU(N) worksplit the
         // staple kernel over write-disjoint chunks via field_visit; U(1) runs its
         // two-phase sinP fill+gather — so the action layer stays uniform with no
@@ -102,7 +102,7 @@ struct Wilson : GaugeAction<Wilson<G, T>> {
             kernels::compute_force_and_kick(cu, m, double{}, double{});
         }
     {
-        double const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
+        auto const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
         // Same uniformity as force_into: the group's fused kernel owns its
         // threading, so the fused scatter is one call with no dispatch here.
         kernels::compute_force_and_kick(U, mom, beta_over_n_dbl, static_cast<double>(k_dt));
@@ -120,7 +120,7 @@ struct Wilson : GaugeAction<Wilson<G, T>> {
         std::size_t const d          = U.ndims();
         std::size_t const ns         = U.nsites();
         std::size_t const n_plaq     = (d * (d - 1) / 2) * ns;
-        double const beta_d          = static_cast<double>(beta);
+        auto const beta_d            = static_cast<double>(beta);
         double const beta_over_n_dbl = beta_d / static_cast<double>(G::n_color);
         double const accum           = kernels::s_full_and_force(force, U, beta_over_n_dbl);
         return (beta_d * static_cast<double>(n_plaq)) - (beta_over_n_dbl * accum);
