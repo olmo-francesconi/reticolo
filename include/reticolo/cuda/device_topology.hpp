@@ -3,11 +3,13 @@
 #include <reticolo/cuda/macros.hpp>
 
 #include <cstddef>
+#include <stdexcept>
 #include <vector>
 
 namespace reticolo::cuda {
 
-inline constexpr int kMaxDim = 6;
+// Matches the CPU `Indexing` support window (1..4 dims); see next/prev parity.
+inline constexpr int kMaxDim = 4;
 
 // Periodic hypercubic indexing, computed closed-form per thread rather than
 // gathered from a neighbour table — passed BY VALUE into kernels (lands in the
@@ -35,6 +37,9 @@ struct DeviceTopology {
 // Host-side builder from a shape (matches reticolo::Indexing's column-major /
 // x-fastest layout). Host-only; not called from device code.
 [[nodiscard]] inline DeviceTopology make_device_topology(std::vector<std::size_t> const& shape) {
+    if (shape.empty() || shape.size() > static_cast<std::size_t>(kMaxDim)) {
+        throw std::invalid_argument{"make_device_topology: ndims must be 1..4"};
+    }
     DeviceTopology t;
     t.ndim  = static_cast<int>(shape.size());
     long st = 1;
