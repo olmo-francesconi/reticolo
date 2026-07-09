@@ -265,9 +265,9 @@ private:
             // Algebra-aware momentum sampling per direction. The group writes
             // anti-hermitian elements with the right structural zeros;
             // raw normal_fill would put noise on the constrained slots.
-            using Group          = typename Field::group_type;
-            std::size_t const d  = mom_.ndims();
-            std::size_t const ns = mom_.nsites();
+            using Group            = typename Field::group_type;
+            std::size_t const d    = mom_.ndims();
+            std::size_t const span = mom_.link_span();  // padded component stride
             // Parallel counter-based sampler: one RNG draw per trajectory keys
             // Philox, then each direction slab worksplits (site-indexed draws).
             // The one serial draw advances the driver RNG identically on a resumed
@@ -276,8 +276,8 @@ private:
             for (std::size_t mu = 0; mu < d; ++mu) {
                 Scalar* const pblk = mom_.mu_block_data(mu);
                 reticolo::exec::field_visit(
-                    mom_, 1, [pblk, key, mu, ns](std::size_t base, std::size_t cnt) {
-                        Group::sample_algebra_philox_range(pblk, key, mu, ns, base, cnt);
+                    mom_, 1, [pblk, key, mu, span](std::size_t base, std::size_t cnt) {
+                        Group::sample_algebra_philox_range(pblk, key, mu, span, base, cnt);
                     });
             }
         } else if constexpr (std::is_same_v<Scalar, double>) {
@@ -320,17 +320,17 @@ private:
             // dU/dt = P·U gives ∂K/∂P = P → K = (1/2)·Tr(P†P) = ‖h‖² (no extra
             // 1/2 here). For exp(-K) detailed balance the algebra coords are
             // sampled with variance 1/2 (see SU2::sample_algebra_slab).
-            using Group          = typename Field::group_type;
-            std::size_t const d  = mom_.ndims();
-            std::size_t const ns = mom_.nsites();
+            using Group            = typename Field::group_type;
+            std::size_t const d    = mom_.ndims();
+            std::size_t const span = mom_.link_span();  // padded component stride
             // Parallel deterministic reduce per direction; ½ applied once.
             // gran = 8 (kinetic_range's internal batch).
             double raw = 0.0;
             for (std::size_t mu = 0; mu < d; ++mu) {
                 Scalar const* const pblk = mom_.mu_block_data(mu);
                 raw += reticolo::exec::field_reduce(
-                    mom_, 8, [pblk, ns](std::size_t base, std::size_t cnt) {
-                        return Group::kinetic_range(pblk, ns, base, cnt);
+                    mom_, 8, [pblk, span](std::size_t base, std::size_t cnt) {
+                        return Group::kinetic_range(pblk, span, base, cnt);
                     });
             }
             kin += 0.5 * raw;

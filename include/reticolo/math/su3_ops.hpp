@@ -983,6 +983,14 @@ inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept 
     expi_lmul_range(u, p, dt, n, 0, n);
 }
 
+// Padded form: `count` links with component stride `stride` (≥ count). Both u
+// and p must share this stride. Packed (stride == count) matches the 4-arg form.
+template <class T>
+inline void
+expi_lmul_slab(T* u, T const* p, double dt, std::size_t stride, std::size_t count) noexcept {
+    expi_lmul_range(u, p, dt, stride, 0, count);
+}
+
 [[gnu::always_inline]] inline void project_slab(double* u, std::size_t n) noexcept {
     for (std::size_t s = 0; s < n; ++s) {
         double m[18];
@@ -1001,24 +1009,30 @@ inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept 
 // P = i·sum_a h_a·λ_a (Tr(λ_a λ_b) = 2 δ_ab convention, no extra 1/2 in
 // the basis). Gives Q(P) ∝ exp(−K) with K = (1/2) Tr(P† P) = ‖h‖² — same
 // matching convention as SU(2).
+// (stride, count) form: write `count` links' algebra with component stride
+// `stride` (≥ count, padded ≥ nsites for cache-friendly gauge storage). The
+// draw order is a pure function of `count` (8·count normals, count-major), so
+// for stride == count this is bit-identical to the historic packed layout —
+// the 2-arg overload below forwards to exactly that.
 template <class T, class Rng>
-[[gnu::always_inline]] inline void sample_algebra_slab(T* p, Rng& rng, std::size_t n) noexcept {
+[[gnu::always_inline]] inline void
+sample_algebra_slab(T* p, Rng& rng, std::size_t stride, std::size_t count) noexcept {
     constexpr double k_inv_sqrt2 = std::numbers::sqrt2 / 2.0;
     constexpr double k_inv_sqrt3 = std::numbers::inv_sqrt3;
-    // Pre-fill 8n independent N(0, 1/√2) draws into a thread-local buffer
+    // Pre-fill 8·count independent N(0, 1/√2) draws into a thread-local buffer
     // then scatter — same shape as SU(2)::sample_algebra_slab.
     thread_local std::vector<double> h_buf;
-    double* const h = reticolo::exec::thread_scratch(h_buf, 8 * n);
-    rng.normal_fill(h, 8 * n);
-    double const* const h1_arr = h + (0 * n);
-    double const* const h2_arr = h + (1 * n);
-    double const* const h3_arr = h + (2 * n);
-    double const* const h4_arr = h + (3 * n);
-    double const* const h5_arr = h + (4 * n);
-    double const* const h6_arr = h + (5 * n);
-    double const* const h7_arr = h + (6 * n);
-    double const* const h8_arr = h + (7 * n);
-    for (std::size_t s = 0; s < n; ++s) {
+    double* const h = reticolo::exec::thread_scratch(h_buf, 8 * count);
+    rng.normal_fill(h, 8 * count);
+    double const* const h1_arr = h + (0 * count);
+    double const* const h2_arr = h + (1 * count);
+    double const* const h3_arr = h + (2 * count);
+    double const* const h4_arr = h + (3 * count);
+    double const* const h5_arr = h + (4 * count);
+    double const* const h6_arr = h + (5 * count);
+    double const* const h7_arr = h + (6 * count);
+    double const* const h8_arr = h + (7 * count);
+    for (std::size_t s = 0; s < count; ++s) {
         T const h1            = static_cast<T>(h1_arr[s] * k_inv_sqrt2);
         T const h2            = static_cast<T>(h2_arr[s] * k_inv_sqrt2);
         T const h3            = static_cast<T>(h3_arr[s] * k_inv_sqrt2);
@@ -1029,26 +1043,32 @@ template <class T, class Rng>
         T const h8            = static_cast<T>(h8_arr[s] * k_inv_sqrt2);
         T const h8_over_sqrt3 = static_cast<T>(static_cast<double>(h8) * k_inv_sqrt3);
         // Diagonal: 00 = i·(h3 + h8/√3), 11 = i·(-h3 + h8/√3), 22 = i·(-2 h8/√3)
-        p[(idx_re(0, 0) * n) + s] = T{0};
-        p[(idx_im(0, 0) * n) + s] = h3 + h8_over_sqrt3;
-        p[(idx_re(1, 1) * n) + s] = T{0};
-        p[(idx_im(1, 1) * n) + s] = -h3 + h8_over_sqrt3;
-        p[(idx_re(2, 2) * n) + s] = T{0};
-        p[(idx_im(2, 2) * n) + s] = T{-2} * h8_over_sqrt3;
+        p[(idx_re(0, 0) * stride) + s] = T{0};
+        p[(idx_im(0, 0) * stride) + s] = h3 + h8_over_sqrt3;
+        p[(idx_re(1, 1) * stride) + s] = T{0};
+        p[(idx_im(1, 1) * stride) + s] = -h3 + h8_over_sqrt3;
+        p[(idx_re(2, 2) * stride) + s] = T{0};
+        p[(idx_im(2, 2) * stride) + s] = T{-2} * h8_over_sqrt3;
         // Off-diagonal: P_{ij} = h_re + i·h_im, P_{ji} = -h_re + i·h_im.
-        p[(idx_re(0, 1) * n) + s] = h2;
-        p[(idx_im(0, 1) * n) + s] = h1;
-        p[(idx_re(1, 0) * n) + s] = -h2;
-        p[(idx_im(1, 0) * n) + s] = h1;
-        p[(idx_re(0, 2) * n) + s] = h5;
-        p[(idx_im(0, 2) * n) + s] = h4;
-        p[(idx_re(2, 0) * n) + s] = -h5;
-        p[(idx_im(2, 0) * n) + s] = h4;
-        p[(idx_re(1, 2) * n) + s] = h7;
-        p[(idx_im(1, 2) * n) + s] = h6;
-        p[(idx_re(2, 1) * n) + s] = -h7;
-        p[(idx_im(2, 1) * n) + s] = h6;
+        p[(idx_re(0, 1) * stride) + s] = h2;
+        p[(idx_im(0, 1) * stride) + s] = h1;
+        p[(idx_re(1, 0) * stride) + s] = -h2;
+        p[(idx_im(1, 0) * stride) + s] = h1;
+        p[(idx_re(0, 2) * stride) + s] = h5;
+        p[(idx_im(0, 2) * stride) + s] = h4;
+        p[(idx_re(2, 0) * stride) + s] = -h5;
+        p[(idx_im(2, 0) * stride) + s] = h4;
+        p[(idx_re(1, 2) * stride) + s] = h7;
+        p[(idx_im(1, 2) * stride) + s] = h6;
+        p[(idx_re(2, 1) * stride) + s] = -h7;
+        p[(idx_im(2, 1) * stride) + s] = h6;
     }
+}
+
+// Packed convenience: stride == count == n (component slab of exactly n links).
+template <class T, class Rng>
+[[gnu::always_inline]] inline void sample_algebra_slab(T* p, Rng& rng, std::size_t n) noexcept {
+    sample_algebra_slab(p, rng, n, n);
 }
 
 // Parallel counter-based momentum sampler over links [base, base+cnt) of one
@@ -1146,6 +1166,12 @@ kinetic_range(T const* p, std::size_t stride, std::size_t base, std::size_t cnt)
 
 // K_per_link = (1/2) Tr(P† P) = (1/2)·sum_18 P_storage[k]². Returns sum over
 // n links in this direction. Matches the SU(2) convention.
+template <class T>
+[[gnu::always_inline]] inline double
+kinetic_slab(T const* p, std::size_t stride, std::size_t count) noexcept {
+    return 0.5 * kinetic_range(p, stride, 0, count);
+}
+
 template <class T>
 [[gnu::always_inline]] inline double kinetic_slab(T const* p, std::size_t n) noexcept {
     return 0.5 * kinetic_range(p, n, 0, n);

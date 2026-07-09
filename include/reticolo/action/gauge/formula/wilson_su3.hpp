@@ -68,7 +68,7 @@ struct wilson_kernels<math::group::SU3> {
                                      std::size_t base,
                                      std::size_t cnt) noexcept {
         constexpr std::size_t k_batch = math::group::k_gauge_batch<T>;
-        std::size_t const ns          = u.nsites();
+        std::size_t const ns          = u.link_span();  // padded component stride
         Indexing const& idx           = u.indexing_ref();
         T const* const u_mu_blk       = u.mu_block_data(mu);
         T const* const u_nu_blk       = u.mu_block_data(nu);
@@ -177,7 +177,7 @@ public:
                         std::size_t cnt) noexcept {
         constexpr std::size_t k_batch = math::group::k_gauge_batch<T>;
         std::size_t const d           = u.ndims();
-        std::size_t const ns          = u.nsites();
+        std::size_t const ns          = u.link_span();  // padded component stride
         Indexing const& idx           = u.indexing_ref();
 
         std::size_t const n_full  = (cnt / k_batch) * k_batch;  // full-batch part
@@ -301,7 +301,7 @@ private:
                              std::size_t s_start,
                              std::size_t s_end) noexcept {
         std::size_t const d  = u.ndims();
-        std::size_t const ns = u.nsites();
+        std::size_t const ns = u.link_span();  // padded component stride
         Indexing const& idx  = u.indexing_ref();
 
         auto load_link = [ns](double* dst, auto const* blk, std::size_t s) noexcept {

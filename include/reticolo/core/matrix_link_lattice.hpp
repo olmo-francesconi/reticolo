@@ -11,21 +11,74 @@
 
 namespace reticolo {
 
+// Per-component storage span (in elements) for a matrix-link field of `nsites`
+// links and scalar size `elem`. The site axis of each SoA component slab is
+// padded from `nsites` up to `link_span >= nsites` so that consecutive
+// components (which sit `link_span·elem` bytes apart) do NOT collapse onto one
+// cache set. A Wilson SU(3) link is 18 components at stride link_span; with the
+// natural packed stride `link_span = nsites` and a power-of-two lattice,
+// `nsites·8` is a clean multiple of the L1 way-size, so all 18 components alias
+// into a single set and an 8-way cache cannot hold one link — the origin of the
+// 16⁴/32⁴ throughput dips. The fix is target-agnostic: round the span up to a
+// whole cache line (so component starts stay line-aligned) and then force an
+// ODD number of lines per component. An odd line-count makes the component
+// stride coprime to any power-of-two set count, so the 18 component starts fan
+// out across distinct sets instead of colliding. The pad is a few lines per
+// component (~0.01% of the buffer); the holes [nsites, link_span) are never
+// read or written by any kernel — every access is blk[k·link_span + s] with
+// s < nsites — so the field's physics is byte-identical to the packed layout.
+[[nodiscard]] inline std::size_t padded_link_span(std::size_t nsites,
+                                                  std::size_t elem) noexcept {
+    constexpr std::size_t line_bytes = 128;  // ≥ any current L1 line (M1 = 128)
+    std::size_t const line_elems     = elem != 0 ? (line_bytes / elem) : 1;
+    if (line_elems <= 1) {
+        return nsites;
+    }
+    std::size_t span = ((nsites + line_elems - 1) / line_elems) * line_elems;
+    if (((span / line_elems) & 1U) == 0) {  // even #lines/component → still aliases
+        span += line_elems;                 // bump to an odd line count → set spread
+    }
+    return span;
+}
+
+// Opt-in switch for the site-axis cache padding (see padded_link_span). OFF by
+// default, so every gauge lattice is PACKED (link_span == nsites) and its buffer
+// is byte-for-byte the historic layout — existing tests, config IO, and the
+// packed `_slab` helpers need no change. A production HMC app flips this ON once
+// at startup, BEFORE constructing any gauge field; the field and the HMC
+// momentum/force/rollback siblings it spawns (all built from the same shape while
+// the flag is on) derive the same deterministic link_span, so their component
+// strides match. It changes only the in-memory storage stride — physics is
+// identical, and config IO stays packed regardless — so it is safe to leave a
+// run's result untouched while making the hot loop cache-friendly. Set once,
+// single-threaded at startup; not meant to be toggled mid-run.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+inline bool g_gauge_link_padding = false;
+
+// The component stride a fresh gauge lattice of `nsites` links (scalar size
+// `elem`) should use: padded when the opt-in flag is set, else exactly nsites.
+[[nodiscard]] inline std::size_t gauge_link_span(std::size_t nsites, std::size_t elem) noexcept {
+    return g_gauge_link_padding ? padded_link_span(nsites, elem) : nsites;
+}
+
 // Matrix-valued link field on a hypercubic (periodic) lattice. Each link
 // carries one N×N complex group element (SU(N), or any GaugeGroup model);
 // storage is split into `n_real_components = 2*N*N` real arrays per
-// direction, each contiguous over the nsites site axis. The flat buffer
-// layout is
+// direction, each contiguous over a PADDED site axis of `link_span >= nsites`
+// elements (see padded_link_span). The flat buffer layout is
 //
-//      [ndim][n_real_components][nsites]      (lex order)
-//      flat = ((mu * nc) + k) * nsites + site_index(x)
+//      [ndim][n_real_components][link_span]   (lex order)
+//      flat = ((mu * nc) + k) * link_span + site_index(x)
 //
 // i.e. the existing direction-major LinkLattice pattern, refined one level
 // further into per-component SoA slabs. For a fixed direction mu the per-
 // component array `mu_comp_data(mu, k)` is a plain stride-1 buffer — the
 // Wilson plaquette plane loops can walk all 2*N*N component streams in
 // lockstep, giving the compiler clean stride-1 FMA chains across sites
-// without any intrinsics.
+// without any intrinsics. The site-axis padding keeps those component streams
+// off a shared cache set (see padded_link_span); it is invisible to the
+// physics because every kernel indexes site s ∈ [0, nsites) at stride
+// link_span, never touching the [nsites, link_span) tail.
 //
 // The momentum field for matrix-group HMC has the same shape (algebra
 // elements stored as anti-hermitian traceless N×N matrices), so the same
@@ -43,7 +96,8 @@ public:
 
     explicit MatrixLinkLattice(SizeVec shape)
         : idx_{Indexing::acquire(std::move(shape))},
-          data_(idx_->ndims() * n_real_components * idx_->nsites(), T{}) {
+          link_span_{gauge_link_span(idx_->nsites(), sizeof(T))},
+          data_(idx_->ndims() * n_real_components * link_span_, T{}) {
         log::info("init",
                   "MatrixLinkLattice<{}, {}>  shape={}  links={}",
                   G::name,
@@ -53,7 +107,9 @@ public:
     }
 
     explicit MatrixLinkLattice(std::shared_ptr<Indexing const> idx)
-        : idx_{std::move(idx)}, data_(idx_->ndims() * n_real_components * idx_->nsites(), T{}) {}
+        : idx_{std::move(idx)},
+          link_span_{gauge_link_span(idx_->nsites(), sizeof(T))},
+          data_(idx_->ndims() * n_real_components * link_span_, T{}) {}
 
     MatrixLinkLattice(MatrixLinkLattice const&)                = default;
     MatrixLinkLattice(MatrixLinkLattice&&) noexcept            = default;
@@ -61,23 +117,31 @@ public:
     MatrixLinkLattice& operator=(MatrixLinkLattice&&) noexcept = default;
     ~MatrixLinkLattice()                                       = default;
 
-    // Pointer to the contiguous nsites array holding the k-th real component
-    // of all links in direction mu. Stride-1, length nsites.
+    // Component-slab stride (elements between component k and k+1 of one link,
+    // and between direction blocks). Padded ≥ nsites so components don't share a
+    // cache set (see padded_link_span). This is the multiplier every gauge
+    // kernel must use for the `k·span + s` addressing — NOT nsites, which is the
+    // valid-site count. The two coincide only when no padding is applied.
+    [[nodiscard]] std::size_t link_span() const noexcept { return link_span_; }
+
+    // Pointer to the (padded) link_span array holding the k-th real component
+    // of all links in direction mu. Stride-1 over sites [0, nsites); component
+    // stride is link_span().
     [[nodiscard]] T* mu_comp_data(std::size_t mu, std::size_t k) noexcept {
-        return data_.data() + ((mu * n_real_components + k) * idx_->nsites());
+        return data_.data() + ((mu * n_real_components + k) * link_span_);
     }
     [[nodiscard]] T const* mu_comp_data(std::size_t mu, std::size_t k) const noexcept {
-        return data_.data() + ((mu * n_real_components + k) * idx_->nsites());
+        return data_.data() + ((mu * n_real_components + k) * link_span_);
     }
 
-    // Pointer to the full nc-component block for direction mu (length nc*nsites).
-    // Convenient for passing all component pointers to a group slab kernel by
-    // base + stride.
+    // Pointer to the full nc-component block for direction mu (length
+    // nc·link_span). Convenient for passing all component pointers to a group
+    // slab kernel by base + stride (the stride being link_span()).
     [[nodiscard]] T* mu_block_data(std::size_t mu) noexcept {
-        return data_.data() + (mu * n_real_components * idx_->nsites());
+        return data_.data() + (mu * n_real_components * link_span_);
     }
     [[nodiscard]] T const* mu_block_data(std::size_t mu) const noexcept {
-        return data_.data() + (mu * n_real_components * idx_->nsites());
+        return data_.data() + (mu * n_real_components * link_span_);
     }
 
     [[nodiscard]] Site next(Site s, std::size_t mu) const noexcept { return idx_->next(s, mu); }
@@ -115,6 +179,7 @@ public:
 
 private:
     std::shared_ptr<Indexing const> idx_;
+    std::size_t link_span_;
     std::vector<T> data_;
 };
 

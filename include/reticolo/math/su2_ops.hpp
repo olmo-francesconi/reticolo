@@ -532,6 +532,13 @@ expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {
     expi_lmul_range(u, p, dt, n, 0, n);
 }
 
+// Padded form: `count` links at component stride `stride` (u and p share it).
+template <class T>
+[[gnu::always_inline]] inline void
+expi_lmul_slab(T* u, T const* p, double dt, std::size_t stride, std::size_t count) noexcept {
+    expi_lmul_range(u, p, dt, stride, 0, count);
+}
+
 [[gnu::always_inline]] inline void project_slab(double* u, std::size_t n) noexcept {
     for (std::size_t s = 0; s < n; ++s) {
         double m[8];
@@ -551,33 +558,44 @@ expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {
 // matches the kinetic part of H used by the Metropolis accept (HMC detailed
 // balance). Variance 1/2 is the SU(N) analog of the scalar N(0, 1) sampling
 // against K = (1/2)·p²: in both cases σ² = 1 / (∂²K/∂coord²).
+// (stride, count) form: write `count` links' algebra with component stride
+// `stride` (≥ count, padded ≥ nsites for cache-friendly gauge storage). The
+// 3·count-normal draw order is a pure function of `count`, so stride == count
+// is bit-identical to the packed layout (the 2-arg overload forwards to it).
 template <class T, class Rng>
-[[gnu::always_inline]] inline void sample_algebra_slab(T* p, Rng& rng, std::size_t n) noexcept {
+[[gnu::always_inline]] inline void
+sample_algebra_slab(T* p, Rng& rng, std::size_t stride, std::size_t count) noexcept {
     constexpr double k_inv_sqrt2 = std::numbers::sqrt2 / 2.0;
-    // Pre-fill 3n independent N(0, 1/√2) draws into a thread-local buffer,
+    // Pre-fill 3·count independent N(0, 1/√2) draws into a thread-local buffer,
     // then a single stride-1 scatter pass into the storage layout. Splits
     // the random-draw (rng-state-bound) from the scatter (memory-bound,
     // auto-vectorisable) — both phases run cleanly without interleaving.
     // Draws are double (the RNG stream is double); the scatter narrows to T.
     thread_local std::vector<double> h_buf;
-    double* const h = reticolo::exec::thread_scratch(h_buf, 3 * n);
-    rng.normal_fill(h, 3 * n);
+    double* const h = reticolo::exec::thread_scratch(h_buf, 3 * count);
+    rng.normal_fill(h, 3 * count);
     double const* const h1_arr = h;
-    double const* const h2_arr = h + n;
-    double const* const h3_arr = h + (2 * n);
-    for (std::size_t s = 0; s < n; ++s) {
-        T const h1     = static_cast<T>(h1_arr[s] * k_inv_sqrt2);
-        T const h2     = static_cast<T>(h2_arr[s] * k_inv_sqrt2);
-        T const h3     = static_cast<T>(h3_arr[s] * k_inv_sqrt2);
-        p[(0 * n) + s] = T{0};
-        p[(1 * n) + s] = h3;
-        p[(2 * n) + s] = h2;
-        p[(3 * n) + s] = h1;
-        p[(4 * n) + s] = -h2;
-        p[(5 * n) + s] = h1;
-        p[(6 * n) + s] = T{0};
-        p[(7 * n) + s] = -h3;
+    double const* const h2_arr = h + count;
+    double const* const h3_arr = h + (2 * count);
+    for (std::size_t s = 0; s < count; ++s) {
+        T const h1          = static_cast<T>(h1_arr[s] * k_inv_sqrt2);
+        T const h2          = static_cast<T>(h2_arr[s] * k_inv_sqrt2);
+        T const h3          = static_cast<T>(h3_arr[s] * k_inv_sqrt2);
+        p[(0 * stride) + s] = T{0};
+        p[(1 * stride) + s] = h3;
+        p[(2 * stride) + s] = h2;
+        p[(3 * stride) + s] = h1;
+        p[(4 * stride) + s] = -h2;
+        p[(5 * stride) + s] = h1;
+        p[(6 * stride) + s] = T{0};
+        p[(7 * stride) + s] = -h3;
     }
+}
+
+// Packed convenience: stride == count == n.
+template <class T, class Rng>
+[[gnu::always_inline]] inline void sample_algebra_slab(T* p, Rng& rng, std::size_t n) noexcept {
+    sample_algebra_slab(p, rng, n, n);
 }
 
 // Parallel counter-based momentum sampler over links [base, base+cnt) of one
@@ -661,6 +679,12 @@ kinetic_range(T const* p, std::size_t stride, std::size_t base, std::size_t cnt)
 template <class T>
 [[gnu::always_inline]] inline double kinetic_slab(T const* p, std::size_t n) noexcept {
     return kinetic_range(p, n, 0, n);
+}
+
+template <class T>
+[[gnu::always_inline]] inline double
+kinetic_slab(T const* p, std::size_t stride, std::size_t count) noexcept {
+    return kinetic_range(p, stride, 0, count);
 }
 
 }  // namespace reticolo::math::su2

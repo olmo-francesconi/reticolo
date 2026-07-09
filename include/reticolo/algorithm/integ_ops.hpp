@@ -73,14 +73,14 @@ template <class G, class T>
 inline void drift_field(MatrixLinkLattice<G, T>& field,
                         MatrixLinkLattice<G, T> const& mom,
                         double cdt) noexcept {
-    std::size_t const d  = field.ndims();
-    std::size_t const ns = field.nsites();
+    std::size_t const d    = field.ndims();
+    std::size_t const span = field.link_span();  // padded component stride
     // gran = pass-5 k_b=8 batch so chunks stay batch-aligned; threshold/chunk
     // from the (large) gauge footprint.
     reticolo::exec::field_visit(field, 8, [&](std::size_t base, std::size_t cnt) {
         for (std::size_t mu = 0; mu < d; ++mu) {
             G::expi_lmul_range(
-                field.mu_block_data(mu), mom.mu_block_data(mu), cdt, ns, base, cnt);
+                field.mu_block_data(mu), mom.mu_block_data(mu), cdt, span, base, cnt);
         }
     });
 }
@@ -98,14 +98,14 @@ inline void kick_add(MatrixLinkLattice<G, T>& mom,
                      double kdt) noexcept {
     constexpr std::size_t nc = MatrixLinkLattice<G, T>::n_real_components;
     std::size_t const nblk   = mom.ndims() * nc;
-    std::size_t const ns     = mom.nsites();
+    std::size_t const span   = mom.link_span();  // padded component stride
     T const c                = static_cast<T>(kdt);
     T* const md              = mom.data();
     T const* const fd        = force.data();
-    reticolo::exec::field_visit(mom, 1, [md, fd, c, nblk, ns](std::size_t base, std::size_t cnt) {
+    reticolo::exec::field_visit(mom, 1, [md, fd, c, nblk, span](std::size_t base, std::size_t cnt) {
         for (std::size_t blk = 0; blk < nblk; ++blk) {
-            T* __restrict const m           = md + (blk * ns) + base;
-            T const* __restrict const fp    = fd + (blk * ns) + base;
+            T* __restrict const m           = md + (blk * span) + base;
+            T const* __restrict const fp    = fd + (blk * span) + base;
             for (std::size_t i = 0; i < cnt; ++i) {
                 m[i] += c * fp[i];
             }

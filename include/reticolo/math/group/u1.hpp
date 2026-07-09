@@ -34,6 +34,15 @@ struct U1 {
         }
     }
 
+    // (stride, count) form for layout uniformity with SU(N). U(1) has one real
+    // component per link, so `stride` is irrelevant — only `count` links matter.
+    template <class Rng>
+    [[gnu::always_inline]] static inline void
+    sample_algebra_slab(double* p_blk, Rng& rng, std::size_t stride, std::size_t count) noexcept {
+        (void)stride;
+        sample_algebra_slab(p_blk, rng, count);
+    }
+
     // Counter-based (Philox) momentum sampler over links [base, base+cnt) of
     // direction `mu`: one N(0,1) draw per link, keyed by (key, mu, site) — a
     // pure function of the site index, so the draw worksplits and is
@@ -78,6 +87,11 @@ struct U1 {
         return 0.5 * kinetic_range(p_blk, n, 0, n);
     }
 
+    [[gnu::always_inline]] static inline double
+    kinetic_slab(double const* p_blk, std::size_t stride, std::size_t count) noexcept {
+        return 0.5 * kinetic_range(p_blk, stride, 0, count);
+    }
+
     // Pure per-range drift worker: θ ← θ + dt·p over [base, base+cnt).
     // `stride` unused (one real component per link). The integrator op layer
     // partitions the slab and calls this per thread-chunk.
@@ -98,6 +112,14 @@ struct U1 {
     [[gnu::always_inline]] static inline void
     expi_lmul_slab(double* u_blk, double const* p_blk, double dt, std::size_t n) noexcept {
         expi_lmul_range(u_blk, p_blk, dt, n, 0, n);
+    }
+
+    [[gnu::always_inline]] static inline void expi_lmul_slab(double* u_blk,
+                                                             double const* p_blk,
+                                                             double dt,
+                                                             std::size_t stride,
+                                                             std::size_t count) noexcept {
+        expi_lmul_range(u_blk, p_blk, dt, stride, 0, count);
     }
 };
 

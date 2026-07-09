@@ -31,10 +31,23 @@ struct SU2 {
         math::su2::sample_algebra_slab(p_blk, rng, n);
     }
 
+    // Padded-stride form: `count` links at component stride `stride` (≥ count).
+    template <class T, class Rng>
+    [[gnu::always_inline]] static inline void
+    sample_algebra_slab(T* p_blk, Rng& rng, std::size_t stride, std::size_t count) noexcept {
+        math::su2::sample_algebra_slab(p_blk, rng, stride, count);
+    }
+
     template <class T>
     [[gnu::always_inline]] static inline double kinetic_slab(T const* p_blk,
                                                              std::size_t n) noexcept {
         return math::su2::kinetic_slab(p_blk, n);
+    }
+
+    template <class T>
+    [[gnu::always_inline]] static inline double
+    kinetic_slab(T const* p_blk, std::size_t stride, std::size_t count) noexcept {
+        return math::su2::kinetic_slab(p_blk, stride, count);
     }
 
     // Pure per-range kinetic worker: raw Σ (h₁²+h₂²+h₃²) over [base, base+cnt).
@@ -63,6 +76,12 @@ struct SU2 {
     [[gnu::always_inline]] static inline void
     expi_lmul_slab(T* u_blk, T const* p_blk, double dt, std::size_t n) noexcept {
         math::su2::expi_lmul_slab(u_blk, p_blk, dt, n);
+    }
+
+    template <class T>
+    [[gnu::always_inline]] static inline void expi_lmul_slab(
+        T* u_blk, T const* p_blk, double dt, std::size_t stride, std::size_t count) noexcept {
+        math::su2::expi_lmul_slab(u_blk, p_blk, dt, stride, count);
     }
 
     // Pure per-range drift worker (U ← exp(dt·P)·U over [base, base+cnt) with
