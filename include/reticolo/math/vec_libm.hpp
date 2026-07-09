@@ -399,48 +399,6 @@ inline void sincos_batch(float* dst_sin, float* dst_cos, float const* src, std::
     }
 }
 
-// --------------- exp_batch ---------------------------------------------------
-//
-// Vectorised exp with 1 ULP at 10 digits, mirroring sin/cos. Used by the
-// checkerboard Metropolis sweep to batch the per-site exp(-ds) acceptance
-// weight off the scalar critical path. Underflows to 0 / overflows to inf for
-// out-of-range arguments — callers gate on the ds<=0 short-circuit, so those
-// values are computed but never read.
-
-inline void exp_batch(double* dst, double const* src, std::size_t n) noexcept {
-    std::size_t i = 0;
-    #ifdef __AVX512F__
-    for (; i + 8 <= n; i += 8) {
-        __m512d const v = _mm512_loadu_pd(src + i);
-        _mm512_storeu_pd(dst + i, Sleef_expd8_u10avx512f(v));
-    }
-    #elif defined(__AVX2__)
-    for (; i + 4 <= n; i += 4) {
-        __m256d const v = _mm256_loadu_pd(src + i);
-        _mm256_storeu_pd(dst + i, Sleef_expd4_u10avx2(v));
-    }
-    #elif defined(__AVX__)
-    for (; i + 4 <= n; i += 4) {
-        __m256d const v = _mm256_loadu_pd(src + i);
-        _mm256_storeu_pd(dst + i, Sleef_expd4_u10avx(v));
-    }
-    #elif defined(__ARM_NEON) || defined(__aarch64__)
-    // NOLINTNEXTLINE(bugprone-infinite-loop) — increment is `i += 2` in the for header
-    for (; i + 2 <= n; i += 2) {
-        float64x2_t const v = vld1q_f64(src + i);
-        vst1q_f64(dst + i, Sleef_expd2_u10advsimd(v));
-    }
-    #elif defined(__SSE2__)
-    for (; i + 2 <= n; i += 2) {
-        __m128d const v = _mm_loadu_pd(src + i);
-        _mm_storeu_pd(dst + i, Sleef_expd2_u10sse2(v));
-    }
-    #endif
-    for (; i < n; ++i) {
-        dst[i] = Sleef_exp_u10(src[i]);
-    }
-}
-
 // --------------- log_batch ---------------------------------------------------
 //
 // Vectorised natural log with 1 ULP at 10 digits, mirroring exp. Used by the
@@ -524,13 +482,6 @@ sincos_batch(T* dst_sin, T* dst_cos, T const* src, std::size_t n) noexcept {
     for (std::size_t i = 0; i < n; ++i) {
         dst_sin[i] = std::sin(src[i]);
         dst_cos[i] = std::cos(src[i]);
-    }
-}
-
-template <class T>
-__host__ __device__ inline void exp_batch(T* dst, T const* src, std::size_t n) noexcept {
-    for (std::size_t i = 0; i < n; ++i) {
-        dst[i] = std::exp(src[i]);
     }
 }
 

@@ -21,11 +21,9 @@
 //   obs::sq_of_mean — <φ>²          = ((1/V) Σ_x φ(x))²
 //   obs::two_point  — G(r,μ)        translation-averaged two-point function
 //   obs::mag::abs   — |<φ>|         magnetisation modulus for a scalar field
-//   obs::mag::xy_sq — |M|²/V²       for a θ-valued (XY) lattice
-//   obs::mag::on_sq — |M|²/V²       for an O(N) array<T,N> lattice
 //
 // Moments live bare in `obs::`. Anything specific to the magnetisation
-// symmetry channel (scalar / XY / O(N)) lives under `obs::mag::`.
+// symmetry channel lives under `obs::mag::`.
 
 namespace reticolo::obs {
 
@@ -105,44 +103,6 @@ namespace mag {
 template <class T>
 [[nodiscard]] double abs(Lattice<T> const& l) noexcept {
     return std::abs(obs::mean(l));
-}
-
-// Squared magnetisation per site for a vector-valued field:
-//  |M|^2 / V^2  with M = Σ_x phi(x)  (phi(x) ∈ R^N)
-// Returns a rotation-invariant scalar suitable for ensemble averaging into
-// susceptibility / Binder cumulants of an O(N) symmetry.
-template <std::size_t N, class T>
-[[nodiscard]] double on_sq(Lattice<std::array<T, N>> const& l) noexcept {
-    std::array<double, N> sum{};
-    for (Site const x : l.sites()) {
-        auto const& v = l[x];
-        for (std::size_t i = 0; i < N; ++i) {
-            sum[i] += static_cast<double>(v[i]);
-        }
-    }
-    double m_sq = 0.0;
-    for (std::size_t i = 0; i < N; ++i) {
-        m_sq += sum[i] * sum[i];
-    }
-    auto const inv_v_sq = 1.0 / (static_cast<double>(l.nsites()) * static_cast<double>(l.nsites()));
-    return m_sq * inv_v_sq;
-}
-
-// XY-specialised |M|^2 / V^2 for a Lattice<theta>: projects theta -> (cosθ,sinθ)
-// before summing so the rotation-invariant 2-vector magnetisation comes out
-// without forcing the app to allocate an array<double,2> field.
-template <class T>
-[[nodiscard]] double xy_sq(Lattice<T> const& theta) noexcept {
-    double mx = 0.0;
-    double my = 0.0;
-    for (Site const x : theta.sites()) {
-        auto const t = static_cast<double>(theta[x]);
-        mx += std::cos(t);
-        my += std::sin(t);
-    }
-    auto const inv_v_sq =
-        1.0 / (static_cast<double>(theta.nsites()) * static_cast<double>(theta.nsites()));
-    return ((mx * mx) + (my * my)) * inv_v_sq;
 }
 
 }  // namespace mag

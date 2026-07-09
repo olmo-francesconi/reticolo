@@ -70,9 +70,9 @@ inline bool g_gauge_link_padding = false;
 //      flat = ((mu * nc) + k) * link_span + site_index(x)
 //
 // i.e. the existing direction-major LinkLattice pattern, refined one level
-// further into per-component SoA slabs. For a fixed direction mu the per-
-// component array `mu_comp_data(mu, k)` is a plain stride-1 buffer — the
-// Wilson plaquette plane loops can walk all 2*N*N component streams in
+// further into per-component SoA slabs. For a fixed direction mu each per-
+// component array (`mu_block_data(mu)` + k·link_span) is a plain stride-1
+// buffer — the Wilson plaquette plane loops can walk all 2*N*N component streams in
 // lockstep, giving the compiler clean stride-1 FMA chains across sites
 // without any intrinsics. The site-axis padding keeps those component streams
 // off a shared cache set (see padded_link_span); it is invisible to the
@@ -125,16 +125,6 @@ public:
     // valid-site count. The two coincide only when no padding is applied.
     [[nodiscard]] std::size_t link_span() const noexcept { return link_span_; }
 
-    // Pointer to the (padded) link_span array holding the k-th real component
-    // of all links in direction mu. Stride-1 over sites [0, nsites); component
-    // stride is link_span().
-    [[nodiscard]] T* mu_comp_data(std::size_t mu, std::size_t k) noexcept {
-        return data_.data() + ((mu * n_real_components + k) * link_span_);
-    }
-    [[nodiscard]] T const* mu_comp_data(std::size_t mu, std::size_t k) const noexcept {
-        return data_.data() + ((mu * n_real_components + k) * link_span_);
-    }
-
     // Pointer to the full nc-component block for direction mu (length
     // nc·link_span). Convenient for passing all component pointers to a group
     // slab kernel by base + stride (the stride being link_span()).
@@ -152,8 +142,8 @@ public:
     [[nodiscard]] std::size_t ndims() const noexcept { return idx_->ndims(); }
     [[nodiscard]] std::size_t nsites() const noexcept { return idx_->nsites(); }
 
-    // Per-site storage footprint (bytes) = ndims · components · sizeof(T). Drives
-    // the threading threshold / chunk size so they reflect the real (large) gauge
+    // Per-site storage footprint (bytes) = ndims · components · sizeof(T).
+    // Reported by the lattice so slab logging reflects the real (large) gauge
     // footprint rather than a bare site count.
     [[nodiscard]] std::size_t bytes_per_site() const noexcept {
         return idx_->ndims() * n_real_components * sizeof(T);

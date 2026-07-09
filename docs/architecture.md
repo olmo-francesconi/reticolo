@@ -59,15 +59,16 @@ Lattice<std::array<double, 3>> on3{{20, 20, 20}};        // O(3)
 ```
 
 The sibling constructor lets HMC stash momentum, force, and rollback
-buffers with one neighbour table instead of three. It is the most
+buffers sharing one `Indexing` instead of three. It is the most
 performance-sensitive shortcut in the library.
 
 ### `Indexing` + pool
 
-`Indexing` holds the neighbour table (`next(s, mu)`, `prev(s, mu)`), parity
-labels, and the shape it was built from. It's expensive to construct
-(precomputes everything once) and immutable, so the library keeps a
-process-wide pool keyed on `shape`:
+`Indexing` holds the shape it was built from and the corresponding strides, and
+computes the neighbours `next(s, mu)` / `prev(s, mu)` on the fly from those
+strides — no stored table (the periodic wrap is closed-form, `ndims ≤ 4`). It's
+immutable and cheaply shared, so the library keeps a process-wide pool keyed on
+`shape`:
 
 ```cpp
 auto idx = Indexing::acquire(shape);   // hits pool, builds once
@@ -201,7 +202,7 @@ struct with a static `run(...)`; the matching `inline constexpr` tag is a
 one-liner.
 
 HMC keeps its momentum, force, and rollback buffers as sibling lattices
-of the field — one neighbour table, three lattices.
+of the field — one shared `Indexing`, three lattices.
 
 ## IO
 

@@ -128,8 +128,8 @@ struct wilson_kernels<math::group::SU3> {
                 T ab_im[9][k_batch];
                 T dc_re[9][k_batch];
                 T dc_im[9][k_batch];
-                math::su3::mul_3x3_batched<false>(ab_re, ab_im, a_re, a_im, b_re, b_im);
-                math::su3::mul_3x3_batched<false>(dc_re, dc_im, d_re, d_im, c_re, c_im);
+                math::su3::mul_3x3_batched(ab_re, ab_im, a_re, a_im, b_re, b_im);
+                math::su3::mul_3x3_batched(dc_re, dc_im, d_re, d_im, c_re, c_im);
                 // Re Tr (AB · DC†) = Σ_k [Re·Re + Im·Im] — 18-real inner product.
                 T acc[k_batch];
                 for (std::size_t b = 0; b < k_batch; ++b) {
@@ -150,16 +150,6 @@ struct wilson_kernels<math::group::SU3> {
             }
         }
         return total;
-    }
-
-    // Whole-plane Σ Re Tr U_p (serial). The `Wilson<G>::s_full` present/absent
-    // probe binds to this name; the parallel path calls `s_full_plane_range`
-    // per block via parallel_reduce_ranges.
-    template <class T>
-    static double s_full_plane_re_tr_sum(MatrixLinkLattice<math::group::SU3, T> const& u,
-                                         std::size_t mu,
-                                         std::size_t nu) noexcept {
-        return s_full_plane_range<T>(u, mu, nu, 0, u.nsites());
     }
 
     // -------- link-centric Wilson force --------------------------------------
@@ -328,7 +318,7 @@ public:
                     // uv = U · V, then TA into the algebra.
                     T uv_re[9][k_batch];
                     T uv_im[9][k_batch];
-                    math::su3::mul_3x3_batched<false>(uv_re, uv_im, u_re, u_im, v_re, v_im);
+                    math::su3::mul_3x3_batched(uv_re, uv_im, u_re, u_im, v_re, v_im);
                     T ta_re[9][k_batch];
                     T ta_im[9][k_batch];
                     math::su3::traceless_antiherm_3x3_batched(ta_re, ta_im, uv_re, uv_im);

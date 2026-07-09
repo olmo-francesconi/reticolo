@@ -5,8 +5,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using reticolo::flip;
-using reticolo::Parity;
 using reticolo::Site;
 
 TEST_CASE("Site default-constructs to zero", "[site]") {
@@ -31,9 +29,4 @@ TEST_CASE("Site is hashable and usable in unordered_set", "[site]") {
     REQUIRE(seen.size() == 10);
     REQUIRE(seen.contains(Site{4}));
     REQUIRE_FALSE(seen.contains(Site{42}));
-}
-
-TEST_CASE("flip(Parity) swaps Even <-> Odd", "[site]") {
-    REQUIRE(flip(Parity::Even) == Parity::Odd);
-    REQUIRE(flip(Parity::Odd) == Parity::Even);
 }

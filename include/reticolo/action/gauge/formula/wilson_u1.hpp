@@ -332,16 +332,6 @@ struct wilson_kernels<math::group::U1> {
         return accum;
     }
 
-    // Whole-plane Sigma Re Tr U_p (serial). Thin wrapper — `Wilson<G>::s_full`
-    // binds to `s_full_plane_range` first (worksplits); this stays for any
-    // caller that wants the whole-plane sum directly.
-    template <class T>
-    static double s_full_plane_re_tr_sum(MatrixLinkLattice<G, T> const& u,
-                                         std::size_t mu,
-                                         std::size_t nu) noexcept {
-        return s_full_plane_range<T>(u, mu, nu, 0, u.nsites());
-    }
-
     // Fused Sigma Re Tr U_p + link-centric force in one pass: Phase 1 fills
     // sinP AND folds cos(theta_p) into `accum` via one sincos_batch per plane
     // (deterministic chunked reduce); Phase 2 is the same gather as

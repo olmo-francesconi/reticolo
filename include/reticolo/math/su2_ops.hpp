@@ -159,8 +159,8 @@ adj_mul_2x2(double* out, double const* a, double const* b) noexcept {
 // packed data, so the compiler vectorises it at the target SIMD width.
 // `Acc` selects `out +=` over `out =`. Out must not alias the inputs.
 
-// out (+)= a · b
-template <bool Acc, std::size_t B, class T>
+// out = a · b
+template <std::size_t B, class T>
 [[gnu::always_inline]] inline void mul_2x2_batched(T (&out_re)[4][B],
                                                    T (&out_im)[4][B],
                                                    T const (&a_re)[4][B],
@@ -185,13 +185,8 @@ template <bool Acc, std::size_t B, class T>
             }
             std::size_t const out_k = (2 * i) + j;
             for (std::size_t b = 0; b < B; ++b) {
-                if constexpr (Acc) {
-                    out_re[out_k][b] += cr[b];
-                    out_im[out_k][b] += ci[b];
-                } else {
-                    out_re[out_k][b] = cr[b];
-                    out_im[out_k][b] = ci[b];
-                }
+                out_re[out_k][b] = cr[b];
+                out_im[out_k][b] = ci[b];
             }
         }
     }
@@ -382,62 +377,6 @@ template <std::size_t B, class T>
     m[7]             = -ai;
 }
 
-// ---------- slab driver: walk n sites, call per-site kernel inline ----------
-// All slab kernels assume the n component arrays are stride-1 in site index,
-// with components separated by `n`. The compiler auto-vectorises the outer
-// `for (s : n)` because every load/store is stride-1.
-
-[[gnu::always_inline]] inline void
-mul_slab(double* out, double const* a, double const* b, std::size_t n) noexcept {
-    for (std::size_t s = 0; s < n; ++s) {
-        double a_s[8];
-        double b_s[8];
-        for (std::size_t k = 0; k < 8; ++k) {
-            a_s[k] = a[(k * n) + s];
-            b_s[k] = b[(k * n) + s];
-        }
-        double o_s[8];
-        mul_2x2(o_s, a_s, b_s);
-        for (std::size_t k = 0; k < 8; ++k) {
-            out[(k * n) + s] = o_s[k];
-        }
-    }
-}
-
-[[gnu::always_inline]] inline void
-mul_adj_slab(double* out, double const* a, double const* b, std::size_t n) noexcept {
-    for (std::size_t s = 0; s < n; ++s) {
-        double a_s[8];
-        double b_s[8];
-        for (std::size_t k = 0; k < 8; ++k) {
-            a_s[k] = a[(k * n) + s];
-            b_s[k] = b[(k * n) + s];
-        }
-        double o_s[8];
-        mul_adj_2x2(o_s, a_s, b_s);
-        for (std::size_t k = 0; k < 8; ++k) {
-            out[(k * n) + s] = o_s[k];
-        }
-    }
-}
-
-[[gnu::always_inline]] inline void
-adj_mul_slab(double* out, double const* a, double const* b, std::size_t n) noexcept {
-    for (std::size_t s = 0; s < n; ++s) {
-        double a_s[8];
-        double b_s[8];
-        for (std::size_t k = 0; k < 8; ++k) {
-            a_s[k] = a[(k * n) + s];
-            b_s[k] = b[(k * n) + s];
-        }
-        double o_s[8];
-        adj_mul_2x2(o_s, a_s, b_s);
-        for (std::size_t k = 0; k < 8; ++k) {
-            out[(k * n) + s] = o_s[k];
-        }
-    }
-}
-
 // In-place U ← exp(dt·P) · U.
 //
 // Three-pass slab kernel that hoists the two transcendental calls (sin+cos
@@ -537,19 +476,6 @@ template <class T>
 [[gnu::always_inline]] inline void
 expi_lmul_slab(T* u, T const* p, double dt, std::size_t stride, std::size_t count) noexcept {
     expi_lmul_range(u, p, dt, stride, 0, count);
-}
-
-[[gnu::always_inline]] inline void project_slab(double* u, std::size_t n) noexcept {
-    for (std::size_t s = 0; s < n; ++s) {
-        double m[8];
-        for (std::size_t k = 0; k < 8; ++k) {
-            m[k] = u[(k * n) + s];
-        }
-        project_su2(m);
-        for (std::size_t k = 0; k < 8; ++k) {
-            u[(k * n) + s] = m[k];
-        }
-    }
 }
 
 // Sample P from the anti-hermitian-traceless Gaussian ensemble. Algebra

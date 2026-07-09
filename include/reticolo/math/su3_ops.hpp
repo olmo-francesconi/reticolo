@@ -136,8 +136,8 @@ adj_mul_3x3(double* out, double const* a, double const* b) noexcept {
 // no cross-lane permutation. `Acc` selects `out +=` over `out =`. Out must
 // not alias the inputs.
 
-// out (+)= a · b
-template <bool Acc, std::size_t B, class T>
+// out = a · b
+template <std::size_t B, class T>
 [[gnu::always_inline]] inline void mul_3x3_batched(T (&out_re)[9][B],
                                                    T (&out_im)[9][B],
                                                    T const (&a_re)[9][B],
@@ -162,13 +162,8 @@ template <bool Acc, std::size_t B, class T>
             }
             std::size_t const out_k = (3 * i) + j;
             for (std::size_t b = 0; b < B; ++b) {
-                if constexpr (Acc) {
-                    out_re[out_k][b] += cr[b];
-                    out_im[out_k][b] += ci[b];
-                } else {
-                    out_re[out_k][b] = cr[b];
-                    out_im[out_k][b] = ci[b];
-                }
+                out_re[out_k][b] = cr[b];
+                out_im[out_k][b] = ci[b];
             }
         }
     }
@@ -561,59 +556,6 @@ template <std::size_t B, class T>
     }
 }
 
-// ---------- slab drivers ----------------------------------------------------
-
-[[gnu::always_inline]] inline void
-mul_slab(double* out, double const* a, double const* b, std::size_t n) noexcept {
-    for (std::size_t s = 0; s < n; ++s) {
-        double a_s[18];
-        double b_s[18];
-        for (std::size_t k = 0; k < 18; ++k) {
-            a_s[k] = a[(k * n) + s];
-            b_s[k] = b[(k * n) + s];
-        }
-        double o_s[18];
-        mul_3x3(o_s, a_s, b_s);
-        for (std::size_t k = 0; k < 18; ++k) {
-            out[(k * n) + s] = o_s[k];
-        }
-    }
-}
-
-[[gnu::always_inline]] inline void
-mul_adj_slab(double* out, double const* a, double const* b, std::size_t n) noexcept {
-    for (std::size_t s = 0; s < n; ++s) {
-        double a_s[18];
-        double b_s[18];
-        for (std::size_t k = 0; k < 18; ++k) {
-            a_s[k] = a[(k * n) + s];
-            b_s[k] = b[(k * n) + s];
-        }
-        double o_s[18];
-        mul_adj_3x3(o_s, a_s, b_s);
-        for (std::size_t k = 0; k < 18; ++k) {
-            out[(k * n) + s] = o_s[k];
-        }
-    }
-}
-
-[[gnu::always_inline]] inline void
-adj_mul_slab(double* out, double const* a, double const* b, std::size_t n) noexcept {
-    for (std::size_t s = 0; s < n; ++s) {
-        double a_s[18];
-        double b_s[18];
-        for (std::size_t k = 0; k < 18; ++k) {
-            a_s[k] = a[(k * n) + s];
-            b_s[k] = b[(k * n) + s];
-        }
-        double o_s[18];
-        adj_mul_3x3(o_s, a_s, b_s);
-        for (std::size_t k = 0; k < 18; ++k) {
-            out[(k * n) + s] = o_s[k];
-        }
-    }
-}
-
 namespace impl {
 
 // Cayley-Hamilton coefficient pass of expi_lmul_slab. Per site: branchless
@@ -897,7 +839,7 @@ inline void expi_lmul_range(
         }
         double q2_re[9][k_b];
         double q2_im[9][k_b];
-        mul_3x3_batched<false>(q2_re, q2_im, q_re, q_im, q_re, q_im);
+        mul_3x3_batched(q2_re, q2_im, q_re, q_im, q_re, q_im);
 
         double v_re[9][k_b];
         double v_im[9][k_b];
@@ -922,7 +864,7 @@ inline void expi_lmul_range(
 
         double o_re[9][k_b];
         double o_im[9][k_b];
-        mul_3x3_batched<false>(o_re, o_im, v_re, v_im, uo_re, uo_im);
+        mul_3x3_batched(o_re, o_im, v_re, v_im, uo_re, uo_im);
         for (std::size_t k = 0; k < 9; ++k) {
             T* u_re = u + ((2 * k) * stride) + g0;
             T* u_im = u + (((2 * k) + 1) * stride) + g0;
@@ -989,19 +931,6 @@ template <class T>
 inline void
 expi_lmul_slab(T* u, T const* p, double dt, std::size_t stride, std::size_t count) noexcept {
     expi_lmul_range(u, p, dt, stride, 0, count);
-}
-
-[[gnu::always_inline]] inline void project_slab(double* u, std::size_t n) noexcept {
-    for (std::size_t s = 0; s < n; ++s) {
-        double m[18];
-        for (std::size_t k = 0; k < 18; ++k) {
-            m[k] = u[(k * n) + s];
-        }
-        project_su3(m);
-        for (std::size_t k = 0; k < 18; ++k) {
-            u[(k * n) + s] = m[k];
-        }
-    }
 }
 
 // Sample P from the anti-hermitian-traceless Gaussian on su(3). 8 Gell-Mann

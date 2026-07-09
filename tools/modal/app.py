@@ -164,6 +164,55 @@ def _exec(script: str, run_id: str, arch: str = "native",
     cache.commit()                                     # persist build tree + ccache + artifacts
 
 
+def _build_target(target, arch, jobs):
+    """Reconfigure the shared linux-nvcc tree for this GPU's arch (sequential runs
+    → no contention), build one target, and return its repo-relative binary path.
+    Raises if the build produced nothing."""
+    import subprocess
+    arch_flag = f"-DCMAKE_CUDA_ARCHITECTURES={arch}" if arch and arch != "native" else ""
+    subprocess.run(f"cmake --preset linux-nvcc {arch_flag}", shell=True,
+                   cwd="/root/reticolo", check=True)
+    subprocess.run(f"cmake --build --preset linux-nvcc --target {target} -j {jobs}",
+                   shell=True, cwd="/root/reticolo", check=True)
+    binpath = subprocess.run(
+        f'find {BUILD} -name {target} -type f -perm -u+x | head -1',
+        shell=True, cwd="/root/reticolo", capture_output=True, text=True).stdout.strip()
+    if not binpath:
+        raise RuntimeError(f"{target} produced no binary")
+    return binpath
+
+
+def _cpu_setup(run_id, jobs, threads, meta):
+    """Shared CPU-container bootstrap for the scaling/breakdown execs: symlink the
+    persistent gcc build tree, bump source mtimes so ninja re-evaluates, wire
+    ccache, and stamp meta.json. Returns the run's output dir."""
+    import json
+    import os
+    import subprocess
+    out = f"/cache/out/{run_id}"
+    os.makedirs(out, exist_ok=True)
+    # Dedicated CPU build tree on the Volume (separate from the per-GPU CUDA
+    # trees) so gcc objects + ccache persist across runs.
+    buildroot = "/cache/build-cpu-gcc"
+    os.makedirs(buildroot, exist_ok=True)
+    subprocess.run(f"ln -sfn {buildroot} /root/reticolo/build", shell=True, check=True)
+    subprocess.run(
+        "find /root/reticolo/include /root/reticolo/src /root/reticolo/apps "
+        "/root/reticolo/tests -type f -exec touch {} +", shell=True, check=True)
+    os.environ.update({
+        "PATH": "/usr/lib/ccache:" + os.environ["PATH"],
+        "CCACHE_DIR": "/cache/ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "JOBS": str(jobs),
+    })
+    cores = os.cpu_count()
+    print(f"run_id={run_id}  cores={cores}  jobs={jobs}  threads=[{threads}]", flush=True)
+    with open(f"{out}/meta.json", "w") as f:
+        json.dump({**(meta or {}), "run_id": run_id, "cores": cores}, f, indent=2)
+    cache.commit()
+    return out
+
+
 @app.function(image=IMAGE, gpu="T4", volumes={"/cache": cache}, timeout=7200)
 def _stress_exec(run_id: str, vols: dict, nreps: list,
                  arch: str = "native", jobs: int = 8, meta: dict | None = None):
@@ -184,16 +233,7 @@ def _stress_exec(run_id: str, vols: dict, nreps: list,
         logf.write(msg + "\n")
         logf.flush()
 
-    arch_flag = f"-DCMAKE_CUDA_ARCHITECTURES={arch}" if arch and arch != "native" else ""
-    subprocess.run(f"cmake --preset linux-nvcc {arch_flag}", shell=True,
-                   cwd="/root/reticolo", check=True)
-    subprocess.run(f"cmake --build --preset linux-nvcc --target phi4_llr_cuda -j {jobs}",
-                   shell=True, cwd="/root/reticolo", check=True)
-    binpath = subprocess.run(
-        f'find {BUILD} -name phi4_llr_cuda -type f -perm -u+x | head -1',
-        shell=True, cwd="/root/reticolo", capture_output=True, text=True).stdout.strip()
-    if not binpath:
-        raise RuntimeError("phi4_llr_cuda produced no binary")
+    binpath = _build_target("phi4_llr_cuda", arch, jobs)
 
     sched = dict(n_nr=1, n_therm_nr=30, n_meas_nr=100, n_rm=4, n_therm_rm=30, n_meas_rm=100)
     traj_per_rep = (sched["n_nr"] * (sched["n_therm_nr"] + sched["n_meas_nr"])
@@ -262,18 +302,7 @@ def _bench_exec(run_id: str, actions: list, grids: dict, n_md: int, iters: int,
         logf.write(msg + "\n")
         logf.flush()
 
-    # Reconfigure the shared tree for this GPU's arch (sequential runs → no
-    # contention), then build the one target.
-    arch_flag = f"-DCMAKE_CUDA_ARCHITECTURES={arch}" if arch and arch != "native" else ""
-    subprocess.run(f"cmake --preset linux-nvcc {arch_flag}", shell=True,
-                   cwd="/root/reticolo", check=True)
-    subprocess.run(f"cmake --build --preset linux-nvcc --target profile_hmc_cuda -j {jobs}",
-                   shell=True, cwd="/root/reticolo", check=True)
-    binpath = subprocess.run(
-        f'find {BUILD} -name profile_hmc_cuda -type f -perm -u+x | head -1',
-        shell=True, cwd="/root/reticolo", capture_output=True, text=True).stdout.strip()
-    if not binpath:
-        raise RuntimeError("profile_hmc_cuda produced no binary")
+    binpath = _build_target("profile_hmc_cuda", arch, jobs)
 
     def run_one(extra):
         r = subprocess.run([f"/root/reticolo/{binpath}", *extra],
@@ -315,32 +344,10 @@ def _scaling_exec(run_id, threads, strong_sizes, weak_bases, family,
     preset, then run the shared tools/bench/scaling.sh harness across the thread
     sweep. Reusing the local script verbatim keeps remote and local identical;
     CSVs + scaling.pdf land in the run dir. No GPU, no nvidia-smi."""
-    import json
     import os
     import subprocess
 
-    out = f"/cache/out/{run_id}"
-    os.makedirs(out, exist_ok=True)
-    # Dedicated CPU build tree on the Volume (separate from the per-GPU CUDA
-    # trees) so gcc objects + ccache persist across scaling runs.
-    buildroot = "/cache/build-cpu-gcc"
-    os.makedirs(buildroot, exist_ok=True)
-    subprocess.run(f"ln -sfn {buildroot} /root/reticolo/build", shell=True, check=True)
-    subprocess.run(                                    # bump mtimes so ninja re-evaluates
-        "find /root/reticolo/include /root/reticolo/src /root/reticolo/apps "
-        "/root/reticolo/tests -type f -exec touch {} +", shell=True, check=True)
-    os.environ.update({
-        "PATH": "/usr/lib/ccache:" + os.environ["PATH"],
-        "CCACHE_DIR": "/cache/ccache",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
-        "JOBS": str(jobs),
-    })
-    cores = os.cpu_count()
-    print(f"run_id={run_id}  cores={cores}  jobs={jobs}  threads=[{threads}]", flush=True)
-    with open(f"{out}/meta.json", "w") as f:
-        json.dump({**(meta or {}), "run_id": run_id, "cores": cores}, f, indent=2)
-    cache.commit()
-
+    out = _cpu_setup(run_id, jobs, threads, meta)
     subprocess.run("cmake --preset linux-gcc", shell=True, cwd="/root/reticolo", check=True)
     env = {**os.environ, "OUT_DIR": out, "PRESET": "linux-gcc", "THREADS": threads,
            "STRONG_SIZES": strong_sizes, "WEAK_BASES": weak_bases, "FAMILY": family,
@@ -361,29 +368,10 @@ def _breakdown_exec(run_id, threads, phi4_sizes, su3_sizes, n_md, jobs, meta=Non
     linux-gcc preset, then run the shared tools/bench/breakdown.sh harness across
     the size × thread sweep. CSV + throughput/composition PNGs land in the run
     dir. Mirrors _scaling_exec (same CPU image, no GPU)."""
-    import json
     import os
     import subprocess
 
-    out = f"/cache/out/{run_id}"
-    os.makedirs(out, exist_ok=True)
-    buildroot = "/cache/build-cpu-gcc"
-    os.makedirs(buildroot, exist_ok=True)
-    subprocess.run(f"ln -sfn {buildroot} /root/reticolo/build", shell=True, check=True)
-    subprocess.run(
-        "find /root/reticolo/include /root/reticolo/src /root/reticolo/apps "
-        "/root/reticolo/tests -type f -exec touch {} +", shell=True, check=True)
-    os.environ.update({
-        "PATH": "/usr/lib/ccache:" + os.environ["PATH"],
-        "CCACHE_DIR": "/cache/ccache",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
-        "JOBS": str(jobs),
-    })
-    print(f"run_id={run_id}  cores={os.cpu_count()}  jobs={jobs}  threads=[{threads}]", flush=True)
-    with open(f"{out}/meta.json", "w") as f:
-        json.dump({**(meta or {}), "run_id": run_id, "cores": os.cpu_count()}, f, indent=2)
-    cache.commit()
-
+    out = _cpu_setup(run_id, jobs, threads, meta)
     subprocess.run("cmake --preset linux-gcc", shell=True, cwd="/root/reticolo", check=True)
     env = {**os.environ, "OUT_DIR": out, "PRESET": "linux-gcc", "THREADS": threads,
            "PHI4_SIZES": phi4_sizes, "SU3_SIZES": su3_sizes, "N_MD": str(n_md)}

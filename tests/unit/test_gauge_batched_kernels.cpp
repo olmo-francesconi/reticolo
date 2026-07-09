@@ -1,10 +1,10 @@
 // Batched-vs-scalar consistency for the gauge fast paths added in the
-// vectorization pass: `action::formula::wilson_kernels<G>::template s_full_plane_re_tr_sum` (Wilson
-// s_full plane sums) against the per-plaquette `plaq_re_tr` reference, and the AoSoA
-// `su3::expi_lmul_slab` against the per-site Cayley-Hamilton `exp_su3`.
+// vectorization pass: `action::formula::wilson_kernels<G>::template s_full_plane_range` (Wilson
+// s_full plane sums, whole plane as one range) against the per-plaquette `plaq_re_tr`
+// reference, and the AoSoA `su3::expi_lmul_slab` against the per-site Cayley-Hamilton `exp_su3`.
 // Shape 5×6×7 is deliberately awkward: ns % 8 ≠ 0 exercises the scalar
 // tails, every row crosses batch boundaries (gather fallback), and the
-// SU(2) misaligned-L0 visit_plane guard is taken.
+// SU(2) misaligned-L0 scalar-peel path is taken.
 
 #include <reticolo/action/gauge/formula/wilson_su2.hpp>
 #include <reticolo/action/gauge/formula/wilson_su3.hpp>
@@ -50,8 +50,8 @@ double plane_sum_batched(MatrixLinkLattice<G, T> const& u) {
     double accum        = 0.0;
     for (std::size_t mu = 0; mu < d; ++mu) {
         for (std::size_t nu = mu + 1; nu < d; ++nu) {
-            accum +=
-                action::formula::wilson_kernels<G>::template s_full_plane_re_tr_sum<T>(u, mu, nu);
+            accum += action::formula::wilson_kernels<G>::template s_full_plane_range<T>(
+                u, mu, nu, 0, u.nsites());
         }
     }
     return accum;
@@ -84,7 +84,7 @@ TEST_CASE("batched plane Re Tr sum matches per-plaquette reference", "[gauge][s_
         double const ref = plane_sum_reference(u);
         CHECK(std::abs(plane_sum_batched(u) - ref) <= 1e-5 * std::abs(ref));
     }
-    SECTION("SU2 double, misaligned L0 (visit_plane guard)") {
+    SECTION("SU2 double, misaligned L0 (scalar peel)") {
         MatrixLinkLattice<math::group::SU2, double> u{{5, 6, 7}};
         fill_random(u, rng);
         double const ref = plane_sum_reference(u);

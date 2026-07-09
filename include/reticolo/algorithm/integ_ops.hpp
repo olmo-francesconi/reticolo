@@ -65,18 +65,19 @@ inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
 
 // Matrix-link drift overload: U ← exp(dt·P)·U per direction, dispatched through
 // the group model's `expi_lmul_range` so SU(2)/SU(3)/U(1) all reuse the same
-// per-direction worker. Compute-bound matrix-exponential drift → worksplit like
-// the staple force: each thread applies it to an 8-aligned site chunk (matching
-// the group's pass-5 batch), so the result is bit-identical to a serial sweep
-// for any thread count. Own fork/join, per-op model.
+// per-direction worker. Compute-bound matrix-exponential drift → worksplit through
+// the shared field partition (contiguous row-aligned items); each item runs
+// expi_lmul_range over its own site range and handles the CH batch/scalar tail
+// itself, so the result is bit-identical to a serial sweep for any thread count.
+// Own fork/join, per-op model.
 template <class G, class T>
 inline void drift_field(MatrixLinkLattice<G, T>& field,
                         MatrixLinkLattice<G, T> const& mom,
                         double cdt) noexcept {
     std::size_t const d    = field.ndims();
     std::size_t const span = field.link_span();  // padded component stride
-    // gran = pass-5 k_b=8 batch so chunks stay batch-aligned; threshold/chunk
-    // from the (large) gauge footprint.
+    // gran = pass-5 k_b=8 batch, kept for the kernel's tail handling; the field
+    // partition itself is row-aligned (whole inner-dim products), not gran-aligned.
     reticolo::exec::field_visit(field, 8, [&](std::size_t base, std::size_t cnt) {
         for (std::size_t mu = 0; mu < d; ++mu) {
             G::expi_lmul_range(

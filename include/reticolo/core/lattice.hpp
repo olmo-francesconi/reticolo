@@ -89,19 +89,6 @@ public:
                std::views::transform([](std::size_t i) { return Site{i}; });
     }
 
-    // Visit every elementary update slot — one DOF per site for a scalar
-    // field. Body is called as `body(T& ref, Site x)`. ref-first is required
-    // so the twin call on LinkLattice can append a `mu` arg captured by a
-    // trailing parameter pack in the body (`auto... loc` after `T& ref`).
-    template <class Body>
-    void for_each_update(Body&& body) {
-        T* const d          = data_.data();
-        std::size_t const n = idx_->nsites();
-        for (std::size_t i = 0; i < n; ++i) {
-            body(d[i], Site{i});
-        }
-    }
-
     [[nodiscard]] T* data() noexcept { return data_.data(); }
     [[nodiscard]] T const* data() const noexcept { return data_.data(); }
 

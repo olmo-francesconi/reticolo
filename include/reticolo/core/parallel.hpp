@@ -215,11 +215,12 @@ template <class Acc = double, class Worker>
 }
 
 // Range-convenience: map `worker(base, cnt)` over gran-aligned chunks of [0, n).
-// Threshold (want) and chunk size are both derived from `bytes_per_site` — the
-// field's per-site footprint — so a heavy field (gauge) threads early and chunks
-// small while a light one (scalar) threads later and chunks large. `gran` is the
-// kernel's batch width; chunk alignment keeps batched kernels bit-identical to a
-// serial full-range sweep. (Only the final chunk carries the remainder.)
+// Chunk size derives from `bytes_per_site` — a heavy field (gauge) gets smaller
+// chunks that stay in cache, a light one (scalar) larger chunks. The thread count
+// is the caller's team size (traverse_threads); there is no byte-gated threshold.
+// `gran` is the kernel's batch width; chunk alignment keeps batched kernels
+// bit-identical to a serial full-range sweep. (Only the final chunk carries the
+// remainder.)
 template <class Worker>
 inline void parallel_map_ranges(std::size_t n,
                                 std::size_t bytes_per_site,
