@@ -58,6 +58,38 @@ inline CommonFlags common_flags(cli::Parser& p, CommonDefaults const& d) {
     return (std::filesystem::path{f.workspace} / f.out).string();
 }
 
+// Stable references to the LLR run-control flags: CPU-thread budget, per-replica
+// HMC threading, and checkpoint/resume. Single-sourced because every LLR app
+// takes the same six with the same wording; the app feeds `threads` /
+// `replica_threads` to `llr::plan_threads` and the rest into its DriverSpec.
+struct LlrRunFlags {
+    int const& threads;
+    int const& replica_threads;
+    int const& slabs;
+    std::string const& resume;
+    std::string const& checkpoint;
+    int const& checkpoint_every;
+};
+
+inline LlrRunFlags llr_run_flags(cli::Parser& p) {
+    int const& threads = p.opt<int>("threads", 0, "total CPU threads to spend (0 = OMP ambient)");
+    int const& replica_threads = p.opt<int>(
+        "replica_threads", 1, "HMC threads per replica (1 = serial default, 0 = auto-balance)");
+    int const& slabs = p.opt<int>("slabs_per_thread", 0, "HMC slab granularity per thread (0 = 1)");
+    auto const& resume =
+        p.opt<std::string>("resume", std::string{}, "resume from an LLR ensemble checkpoint (.h5)");
+    auto const& checkpoint = p.opt<std::string>(
+        "checkpoint", std::string{}, "rolling ensemble checkpoint path (empty = off)");
+    int const& checkpoint_every =
+        p.opt<int>("checkpoint_every", 0, "sweeps between checkpoints (0 = only at end)");
+    return {.threads          = threads,
+            .replica_threads  = replica_threads,
+            .slabs            = slabs,
+            .resume           = resume,
+            .checkpoint       = checkpoint,
+            .checkpoint_every = checkpoint_every};
+}
+
 // Open the workspace log + HDF5 writer the way every app does:
 // `log::start(workspace, out[, replicas])` then `Writer{<workspace>/<out>, …}`.
 // LLR apps pass `replicas = true`. Returns the move-only Writer by value; the

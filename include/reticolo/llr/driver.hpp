@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/io/writer.hpp>
+#include <reticolo/llr/checkpoint.hpp>
 #include <reticolo/llr/exchange.hpp>
 #include <reticolo/llr/log.hpp>
 #include <reticolo/llr/update_a.hpp>
@@ -8,7 +9,12 @@
 #include <cstddef>
 #include <format>
 #include <memory>
+#include <string>
 #include <vector>
+
+#ifdef _OPENMP
+    #include <omp.h>
+#endif
 
 namespace reticolo::llr {
 
@@ -39,6 +45,29 @@ struct DriverSpec {
     double E_max{};  // already snapped to the (n_rep - 1) * delta grid
     double d_e{};
     bool exchange = true;  // even/odd replica swaps each RM sweep
+
+    // ---- threading (see llr::plan_threads) ----
+    // Per-replica HMC thread count `m` and slab granularity, recorded in the
+    // checkpoint so a resume reconstructs the same partition. `concurrency` is
+    // the outer replica-team size (num_threads on the replica loop); 0 = ambient
+    // = today's flat model. `nested` (set when m>1) enables OpenMP's second
+    // active level so a replica's HMC traverse can spawn its inner team.
+    int replica_threads = 1;
+    int slabs           = 0;
+    int concurrency     = 0;
+    bool nested         = false;
+
+    // ---- checkpoint / resume ----
+    // `checkpoint_path` empty ⇒ no checkpointing. `checkpoint_every` sweeps
+    // between rolling snapshots (0 ⇒ only the final one). start_phase/start_iter
+    // are set by the app from load_ensemble: (0,k) resumes NR at iter k, (1,s)
+    // skips NR and resumes RM at sweep s. Default (0,0) runs the whole schedule.
+    // Default member init so a partial DriverSpec{...} (the examples) can omit it
+    // without tripping -Wmissing-designated-field-initializers.
+    std::string checkpoint_path{};  // NOLINT(readability-redundant-member-init)
+    int checkpoint_every = 0;
+    int start_phase      = 0;
+    int start_iter       = 0;
 };
 
 template <class Replica, class ExchRng>
@@ -84,26 +113,62 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     std::vector<double> de_buf(n_rep_u);
     std::vector<double> a_buf(n_rep_u);
 
-    log::info("llr", "NR phase  {} iters × {} replicas", spec.n_nr, n_rep_u);
-    for (int k = 0; k < spec.n_nr; ++k) {
-#pragma omp parallel for schedule(dynamic, 1)
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto& r = *reps[n];
-            r.thermalize(spec.n_therm_nr);
-            de_buf[n] = r.sample(spec.n_meas_nr);
-            a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
-            r.set_a(a_buf[n]);
+    // Outer replica-team size + nested-region enable. num_threads(outer_nt)
+    // pins the replica loop to `concurrency` lanes so `concurrency × m` inner
+    // HMC threads don't oversubscribe; at m=1 (concurrency=0) outer_nt is the
+    // ambient count and the clause is a no-op — today's flat behaviour.
+#ifdef _OPENMP
+    if (spec.nested) {
+        omp_set_max_active_levels(2);
+    }
+    int const outer_nt = spec.concurrency > 0 ? spec.concurrency : omp_get_max_threads();
+#else
+    [[maybe_unused]] int const outer_nt = spec.concurrency > 0 ? spec.concurrency : 1;
+#endif
+
+    // Rolling atomic snapshot at (phase, next-iter). No-op when no path is set;
+    // otherwise runs serially (HDF5 is not thread-safe) after the sweep drains.
+    auto checkpoint = [&](int phase, int next_iter) {
+        if (spec.checkpoint_path.empty()) {
+            return;
         }
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            a_series[n].append(a_buf[n]);
-            de_series[n].append(de_buf[n]);
+        save_ensemble(spec.checkpoint_path,
+                      reps,
+                      exch_rng,
+                      OrchState{.phase     = phase,
+                                .iter      = next_iter,
+                                .n_threads = spec.replica_threads,
+                                .slabs     = spec.slabs});
+    };
+
+    if (spec.start_phase == 0) {
+        log::info("llr", "NR phase  {} iters × {} replicas", spec.n_nr, n_rep_u);
+        for (int k = spec.start_iter; k < spec.n_nr; ++k) {
+#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
+            for (std::size_t n = 0; n < n_rep_u; ++n) {
+                auto& r = *reps[n];
+                r.thermalize(spec.n_therm_nr);
+                de_buf[n] = r.sample(spec.n_meas_nr);
+                a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
+                r.set_a(a_buf[n]);
+            }
+            for (std::size_t n = 0; n < n_rep_u; ++n) {
+                a_series[n].append(a_buf[n]);
+                de_series[n].append(de_buf[n]);
+            }
+            log::info("llr", "NR iter  {:>3}/{}  done", k + 1, spec.n_nr);
+            if (spec.checkpoint_every > 0 && (k + 1) % spec.checkpoint_every == 0) {
+                checkpoint(0, k + 1);
+            }
         }
-        log::info("llr", "NR iter  {:>3}/{}  done", k + 1, spec.n_nr);
+        // NR complete → next resume enters RM at sweep 0.
+        checkpoint(1, 0);
     }
 
+    int const rm_start = spec.start_phase == 1 ? spec.start_iter : 0;
     log::info("llr", "RM phase  {} iters × {} replicas", spec.n_rm, n_rep_u);
-    for (int s = 0; s < spec.n_rm; ++s) {
-#pragma omp parallel for schedule(dynamic, 1)
+    for (int s = rm_start; s < spec.n_rm; ++s) {
+#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
             auto& r = *reps[n];
             r.thermalize(spec.n_therm_rm, log::Mode::silent);
@@ -144,6 +209,13 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
         exch_series.append(accepted);
         log::info("exch", "step  {:>3}  accepted  {}/{}", s + 1, accepted, attempts);
         log::info("llr", "RM iter  {:>3}/{}  done", s + 1, spec.n_rm);
+
+        // Snapshot AFTER exchange, at a sweep boundary: the saved fields include
+        // this sweep's swaps and the resume re-enters at sweep s+1.
+        bool const last = (s + 1) == spec.n_rm;
+        if (last || (spec.checkpoint_every > 0 && (s + 1) % spec.checkpoint_every == 0)) {
+            checkpoint(1, s + 1);
+        }
     }
 }
 

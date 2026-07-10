@@ -57,6 +57,7 @@ int main(int argc, char** argv) {
         "smooth_lambda0", 1.0, "shrinkage weight prefactor (lambda_s = lambda0/(s+1)^exp)");
     auto const& smooth_lambda_exp = p.opt<double>(
         "smooth_lambda_exp", 2.0, "shrinkage decay exponent; >1 keeps the perturbation summable");
+    auto const rf = app::llr_run_flags(p);
     if (!p.parse(argc, argv)) {
         return 0;
     }
@@ -72,6 +73,7 @@ int main(int argc, char** argv) {
     double const d_e = spacing > 0.0 ? spacing : delta;
     int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
+    auto const plan            = llr::plan_threads(n_rep, rf.threads, rf.replica_threads);
 
     std::vector<std::unique_ptr<ReplicaT>> reps;
     reps.reserve(static_cast<std::size_t>(n_rep));
@@ -82,22 +84,36 @@ int main(int argc, char** argv) {
             FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
             ReplicaT::Spec{
                 .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
-            alg::HmcSpec{.tau = tau, .n_md = n_md}));
+            alg::HmcSpec{
+                .tau = tau, .n_md = n_md, .n_threads = plan.m, .slabs_per_thread = rf.slabs}));
     }
 
     FastRng exch_rng{cf.seed};
+    bool const resuming = !rf.resume.empty();
+    llr::OrchState resume_state{};
+    if (resuming) {
+        resume_state = llr::load_ensemble(rf.resume, reps, exch_rng);
+        log::info("llr",
+                  "resumed from {}  phase={} iter={}",
+                  rf.resume,
+                  resume_state.phase,
+                  resume_state.iter);
+    }
+
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
-    constexpr double k_hot_sigma   = std::numbers::pi;
-    constexpr int k_warm_batches   = 50;
-    constexpr int k_warm_batch_len = 10;
-    std::size_t const n_rep_u      = static_cast<std::size_t>(n_rep);
+    if (!resuming) {
+        constexpr double k_hot_sigma   = std::numbers::pi;
+        constexpr int k_warm_batches   = 50;
+        constexpr int k_warm_batch_len = 10;
+        std::size_t const n_rep_u      = static_cast<std::size_t>(n_rep);
 #pragma omp parallel for schedule(dynamic, 1)
-    for (std::size_t n = 0; n < n_rep_u; ++n) {
-        auto _ = log::scope(reps[n]->id());
-        reps[n]->hot_start(k_hot_sigma);
-        reps[n]->warm_into_window(k_warm_batches, k_warm_batch_len, 1.0);
+        for (std::size_t n = 0; n < n_rep_u; ++n) {
+            auto _ = log::scope(reps[n]->id());
+            reps[n]->hot_start(k_hot_sigma);
+            reps[n]->warm_into_window(k_warm_batches, k_warm_batch_len, 1.0);
+        }
     }
 
     llr::smoothed::run(reps,
@@ -116,6 +132,14 @@ int main(int argc, char** argv) {
                                                  .smooth_K          = smooth_K,
                                                  .smooth_degree     = smooth_degree,
                                                  .smooth_lambda0    = smooth_lambda0,
-                                                 .smooth_lambda_exp = smooth_lambda_exp},
+                                                 .smooth_lambda_exp = smooth_lambda_exp,
+                                                 .replica_threads   = plan.m,
+                                                 .slabs             = rf.slabs,
+                                                 .concurrency       = plan.concurrency,
+                                                 .nested            = plan.m > 1,
+                                                 .checkpoint_path   = rf.checkpoint,
+                                                 .checkpoint_every  = rf.checkpoint_every,
+                                                 .start_phase = resuming ? resume_state.phase : 0,
+                                                 .start_iter  = resuming ? resume_state.iter : 0},
                        out);
 }

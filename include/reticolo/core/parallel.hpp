@@ -147,10 +147,24 @@ inline thread_local bool g_in_traverse_region = false;
 
 // body is run by every thread in the team (SPMD), so it is invoked as a const
 // lvalue, never forwarded/moved.
+//
+// The region opens when we are not already inside one of OUR OWN traverse
+// regions (`!g_in_traverse_region`) — NOT merely when omp_in_parallel() is
+// false. The distinction only matters when a traverse runs nested inside a
+// FOREIGN reticolo region (the LLR replica `omp parallel for`): there we now
+// open a fresh inner team of `nthreads` instead of forcing serial, which is
+// how a replica gets an m>1 threaded HMC. Two things keep this inert on the
+// default path: (1) at m=1 `nthreads==1` so the condition is false and the
+// body runs serial exactly as before; (2) libgomp still needs
+// omp_set_max_active_levels(≥2) for the inner region to actually spawn — the
+// LLR driver sets it only when it hands out m>1, so an accidental nest stays
+// serial otherwise. Nested inside our own region g_in_traverse_region is
+// already true → inline worksplit of the current team (unchanged); standalone
+// top-level both flags are false → opens (unchanged).
 template <class Body>
 inline void in_traverse_region([[maybe_unused]] int nthreads, Body const& body) {
 #ifdef _OPENMP
-    if (nthreads > 1 && omp_in_parallel() == 0) {
+    if (nthreads > 1 && !g_in_traverse_region) {
     #pragma omp parallel num_threads(nthreads)
         {
             bool const prev      = g_in_traverse_region;

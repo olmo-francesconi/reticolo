@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/io/writer.hpp>
+#include <reticolo/llr/checkpoint.hpp>
 #include <reticolo/llr/exchange.hpp>
 #include <reticolo/llr/log.hpp>
 #include <reticolo/llr/update_a.hpp>
@@ -10,7 +11,12 @@
 #include <cstddef>
 #include <format>
 #include <memory>
+#include <string>
 #include <vector>
+
+#ifdef _OPENMP
+    #include <omp.h>
+#endif
 
 namespace reticolo::llr::smoothed {
 
@@ -166,6 +172,19 @@ struct DriverSpec {
     double smooth_lambda0 = 1.0;
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
     double smooth_lambda_exp = 2.0;
+
+    // Threading + checkpoint/resume — identical semantics to llr::DriverSpec
+    // (see llr::plan_threads and llr/checkpoint.hpp).
+    int replica_threads = 1;
+    int slabs           = 0;
+    int concurrency     = 0;
+    bool nested         = false;
+    // Default member init so a partial DriverSpec{...} omitting it doesn't trip
+    // -Wmissing-designated-field-initializers.
+    std::string checkpoint_path{};  // NOLINT(readability-redundant-member-init)
+    int checkpoint_every = 0;
+    int start_phase      = 0;
+    int start_iter       = 0;
 };
 
 template <class Replica, class ExchRng>
@@ -227,25 +246,53 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     std::vector<double> drm_buf(n_rep_u);
     std::vector<double> dsm_buf(n_rep_u);
 
-    log::info("llr", "smoothed NR phase  {} iters × {} replicas", spec.n_nr, n_rep_u);
-    for (int k = 0; k < spec.n_nr; ++k) {
-#pragma omp parallel for schedule(dynamic, 1)
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto& r = *reps[n];
-            r.thermalize(spec.n_therm_nr);
-            de_buf[n] = r.sample(spec.n_meas_nr);
-            a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
-            r.set_a(a_buf[n]);
+    // Outer replica-team size + nested enable (see llr::run for the rationale).
+#ifdef _OPENMP
+    if (spec.nested) {
+        omp_set_max_active_levels(2);
+    }
+    int const outer_nt = spec.concurrency > 0 ? spec.concurrency : omp_get_max_threads();
+#else
+    [[maybe_unused]] int const outer_nt = spec.concurrency > 0 ? spec.concurrency : 1;
+#endif
+    auto checkpoint = [&](int phase, int next_iter) {
+        if (spec.checkpoint_path.empty()) {
+            return;
         }
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            a_series[n].append(a_buf[n]);
-            de_series[n].append(de_buf[n]);
-            a_pre_series[n].append(a_buf[n]);
-            a_hat_series[n].append(a_buf[n]);
-            drm_series[n].append(0.0);
-            dsm_series[n].append(0.0);
+        save_ensemble(spec.checkpoint_path,
+                      reps,
+                      exch_rng,
+                      OrchState{.phase     = phase,
+                                .iter      = next_iter,
+                                .n_threads = spec.replica_threads,
+                                .slabs     = spec.slabs});
+    };
+
+    if (spec.start_phase == 0) {
+        log::info("llr", "smoothed NR phase  {} iters × {} replicas", spec.n_nr, n_rep_u);
+        for (int k = spec.start_iter; k < spec.n_nr; ++k) {
+#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
+            for (std::size_t n = 0; n < n_rep_u; ++n) {
+                auto& r = *reps[n];
+                r.thermalize(spec.n_therm_nr);
+                de_buf[n] = r.sample(spec.n_meas_nr);
+                a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
+                r.set_a(a_buf[n]);
+            }
+            for (std::size_t n = 0; n < n_rep_u; ++n) {
+                a_series[n].append(a_buf[n]);
+                de_series[n].append(de_buf[n]);
+                a_pre_series[n].append(a_buf[n]);
+                a_hat_series[n].append(a_buf[n]);
+                drm_series[n].append(0.0);
+                dsm_series[n].append(0.0);
+            }
+            log::info("llr", "NR iter  {:>3}/{}  done", k + 1, spec.n_nr);
+            if (spec.checkpoint_every > 0 && (k + 1) % spec.checkpoint_every == 0) {
+                checkpoint(0, k + 1);
+            }
         }
-        log::info("llr", "NR iter  {:>3}/{}  done", k + 1, spec.n_nr);
+        checkpoint(1, 0);
     }
 
     log::info("llr",
@@ -256,8 +303,9 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
               spec.smooth_degree,
               spec.smooth_lambda0,
               spec.smooth_lambda_exp);
-    for (int s = 0; s < spec.n_rm; ++s) {
-#pragma omp parallel for schedule(dynamic, 1)
+    int const rm_start = spec.start_phase == 1 ? spec.start_iter : 0;
+    for (int s = rm_start; s < spec.n_rm; ++s) {
+#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
             auto& r = *reps[n];
             r.thermalize(spec.n_therm_rm, log::Mode::silent);
@@ -330,6 +378,11 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
         }
         exch_series.append(accepted);
         log::info("exch", "step  {:>3}  accepted  {}/{}", s + 1, accepted, attempts);
+
+        bool const last = (s + 1) == spec.n_rm;
+        if (last || (spec.checkpoint_every > 0 && (s + 1) % spec.checkpoint_every == 0)) {
+            checkpoint(1, s + 1);
+        }
     }
 }
 
