@@ -23,7 +23,9 @@ using reticolo::RanlxdRng;
 using reticolo::log::Mode;
 
 namespace {
-std::uint64_t bits(double d) { return std::bit_cast<std::uint64_t>(d); }
+std::uint64_t bits(double d) {
+    return std::bit_cast<std::uint64_t>(d);
+}
 
 void check_stream(int level,
                   std::uint64_t seed,
@@ -54,8 +56,7 @@ TEST_CASE("RanlxdRng reproduces the reference ranlxd stream bit-for-bit", "[rng]
         check_stream(1, 42, level1_seed42_first96, level1_seed42_after1e6);
     }
     SECTION("level 1, seed 2147483646") {
-        check_stream(
-            1, 2147483646, level1_seed2147483646_first96, level1_seed2147483646_after1e6);
+        check_stream(1, 2147483646, level1_seed2147483646_first96, level1_seed2147483646_after1e6);
     }
 }
 

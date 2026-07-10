@@ -104,7 +104,7 @@ struct HmcResult {
     bool accepted = false;
 };
 
-template <class A, class Integ = alg::integ::Leapfrog, class Field = DeviceField<double>>
+template <class A, class Integ = alg::integ::Omelyan2, class Field = DeviceField<double>>
 class Hmc {
 public:
     Hmc(A action, Field& field, double tau, int n_md, std::uint64_t seed = 0xC0FFEEULL)

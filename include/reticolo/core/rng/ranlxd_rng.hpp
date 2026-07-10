@@ -32,15 +32,15 @@ namespace reticolo {
 // fully portable flat words (no std-engine textual state).
 
 class RanlxdRng {
-    static constexpr int k_copies         = 4;   // parallel SWC copies
-    static constexpr int k_ring           = 12;  // long lag R (slots per copy)
-    static constexpr int k_short_lag      = 5;   // short lag S
-    static constexpr int k_ring_words     = k_copies * k_ring;  // 48
-    static constexpr int k_batch          = k_copies * k_ring;  // 48 surfaced per batch
-    static constexpr int k_p_level1       = 202;
-    static constexpr int k_p_level2       = 397;
-    static constexpr std::uint64_t k_base = 1ULL << 48U;  // B
-    static constexpr double k_u48_scale   = 1.0 / static_cast<double>(1ULL << 48U);
+    static constexpr int k_copies                = 4;   // parallel SWC copies
+    static constexpr int k_ring                  = 12;  // long lag R (slots per copy)
+    static constexpr int k_short_lag             = 5;   // short lag S
+    static constexpr int k_ring_words            = k_copies * k_ring;  // 48
+    static constexpr int k_batch                 = k_copies * k_ring;  // 48 surfaced per batch
+    static constexpr int k_p_level1              = 202;
+    static constexpr int k_p_level2              = 397;
+    static constexpr std::uint64_t k_base        = 1ULL << 48U;  // B
+    static constexpr double k_u48_scale          = 1.0 / static_cast<double>(1ULL << 48U);
     static constexpr std::uint64_t k_lfsr_period = (1ULL << 31U) - 1U;  // 2^31 - 1
 
 public:
@@ -199,9 +199,9 @@ public:
         for (state_type& v : r.buf_) {
             v = w[o++];
         }
-        r.buf_pos_ = static_cast<int>(w[o++]);
-        r.level_   = static_cast<int>(w[o++]);
-        r.p_       = (r.level_ == 1) ? k_p_level1 : k_p_level2;
+        r.buf_pos_           = static_cast<int>(w[o++]);
+        r.level_             = static_cast<int>(w[o++]);
+        r.p_                 = (r.level_ == 1) ? k_p_level1 : k_p_level2;
         r.cached_normal_     = std::bit_cast<double>(w[o++]);
         r.has_cached_normal_ = w[o] != 0;
         return r;
@@ -222,7 +222,7 @@ private:
         for (int n = 0; n < 31; ++n) {
             reg[static_cast<std::size_t>(n)] = static_cast<std::uint8_t>((s31 >> n) & 1U);
         }
-        int p = 0;
+        int p         = 0;
         auto next_bit = [&reg, &p]() noexcept -> std::uint32_t {
             std::uint8_t const b = reg[static_cast<std::size_t>(p)];
             reg[static_cast<std::size_t>(p)] ^= reg[static_cast<std::size_t>((p + 18) % 31)];
@@ -264,7 +264,7 @@ private:
             for (int c = 0; c < k_copies; ++c) {
                 std::size_t const base = static_cast<std::size_t>(c) * k_ring;
                 std::uint64_t const s  = ring_[base + static_cast<std::size_t>(short_slot)];
-                std::uint64_t const l = ring_[base + static_cast<std::size_t>(cursor_)];
+                std::uint64_t const l  = ring_[base + static_cast<std::size_t>(cursor_)];
                 auto d = static_cast<std::int64_t>(s) - static_cast<std::int64_t>(l) -
                          static_cast<std::int64_t>(carry_[static_cast<std::size_t>(c)]);
                 if (d < 0) {

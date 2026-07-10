@@ -39,7 +39,7 @@ struct ReplicaStats {
 
 template <class Base,
           class Rng,
-          class Integrator = alg::integ::Leapfrog,
+          class Integrator = alg::integ::Omelyan2,
           class T          = Base::value_type,
           class Field      = Lattice<T>>
 class Replica {

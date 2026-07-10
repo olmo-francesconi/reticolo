@@ -28,7 +28,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using Action   = act::Phi4<double>;
-    using ReplicaT = llr::Replica<Action, FastRng, alg::integ::Omelyan2>;
+    using ReplicaT = llr::Replica<Action, FastRng>;
 
     // ---- CLI ----
     cli::Parser p{"phi4_llr", "LLR (Gaussian-penalty) with replica exchange for phi^4"};

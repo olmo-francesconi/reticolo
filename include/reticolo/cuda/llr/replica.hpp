@@ -29,7 +29,7 @@
 
 namespace reticolo::cuda::llr {
 
-template <class HostAction, class Integ = alg::integ::Leapfrog, class Field = DeviceField<double>>
+template <class HostAction, class Integ = alg::integ::Omelyan2, class Field = DeviceField<double>>
 class Replica {
 public:
     using value_type = typename Field::value_type;

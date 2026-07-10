@@ -159,11 +159,11 @@ TEST_CASE("Hmc constructed twice with the same seed is bit-identical", "[rng][st
             v = seed_rng.normal();
         }
         Hmc hmc{action,
-               phi,
-               FastRng{99},
-               HmcSpec{.tau = 0.3, .n_md = 4},
-               reticolo::alg::integ::leapfrog,
-               reticolo::log::Mode::silent};
+                phi,
+                FastRng{99},
+                HmcSpec{.tau = 0.3, .n_md = 4},
+                reticolo::alg::integ::leapfrog,
+                reticolo::log::Mode::silent};
         for (int t = 0; t < 3; ++t) {
             hmc.step(reticolo::log::Mode::silent);
         }
@@ -175,8 +175,7 @@ TEST_CASE("Hmc constructed twice with the same seed is bit-identical", "[rng][st
     REQUIRE(f1 == f2);
 }
 
-TEST_CASE("Hmc::set_spec throws on a threading change but not on tau/n_md",
-          "[rng][stream][hmc]") {
+TEST_CASE("Hmc::set_spec throws on a threading change but not on tau/n_md", "[rng][stream][hmc]") {
     using reticolo::Lattice;
     using reticolo::action::Phi4;
     using reticolo::alg::Hmc;
@@ -185,15 +184,13 @@ TEST_CASE("Hmc::set_spec throws on a threading change but not on tau/n_md",
     Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
     Lattice<double> phi{{4, 4, 4}};
     Hmc hmc{action,
-           phi,
-           FastRng{7},
-           HmcSpec{.tau = 0.3, .n_md = 4, .n_threads = 1, .slabs_per_thread = 1},
-           reticolo::alg::integ::leapfrog,
-           reticolo::log::Mode::silent};
+            phi,
+            FastRng{7},
+            HmcSpec{.tau = 0.3, .n_md = 4, .n_threads = 1, .slabs_per_thread = 1},
+            reticolo::alg::integ::leapfrog,
+            reticolo::log::Mode::silent};
 
-    REQUIRE_NOTHROW(
-        hmc.set_spec({.tau = 0.7, .n_md = 8, .n_threads = 1, .slabs_per_thread = 1}));
-    REQUIRE_THROWS_AS(
-        hmc.set_spec({.tau = 0.7, .n_md = 8, .n_threads = 1, .slabs_per_thread = 2}),
-        std::logic_error);
+    REQUIRE_NOTHROW(hmc.set_spec({.tau = 0.7, .n_md = 8, .n_threads = 1, .slabs_per_thread = 1}));
+    REQUIRE_THROWS_AS(hmc.set_spec({.tau = 0.7, .n_md = 8, .n_threads = 1, .slabs_per_thread = 2}),
+                      std::logic_error);
 }

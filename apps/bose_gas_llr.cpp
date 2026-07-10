@@ -28,7 +28,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using Action   = act::BoseGas<double>;
-    using ReplicaT = llr::Replica<Action, FastRng, alg::integ::Omelyan2>;
+    using ReplicaT = llr::Replica<Action, FastRng>;
 
     // ---- CLI ----
     cli::Parser p{"bose_gas_llr", "LLR for the 4D Bose gas at finite chemical potential"};

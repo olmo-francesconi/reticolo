@@ -120,9 +120,9 @@ alg::Hmc hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
 ```
 
 Action, RNG, and field types deduce (CTAD); the default integrator is
-Leapfrog. A trailing tag value selects another — `alg::integ::omelyan2`
+Omelyan2. A trailing tag value selects another — `alg::integ::leapfrog`
 or `alg::integ::omelyan4`, e.g.
-`alg::Hmc hmc{phi4, phi, rng, spec, alg::integ::omelyan2}`. The tag's
+`alg::Hmc hmc{phi4, phi, rng, spec, alg::integ::leapfrog}`. The tag's
 type is what picks the integrator at compile time — it's a type, not a
 runtime flag. The `Hmc` ctor pre-allocates momentum, force, and rollback
 as sibling lattices of `phi`.

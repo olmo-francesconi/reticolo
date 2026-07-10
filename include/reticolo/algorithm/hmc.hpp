@@ -109,7 +109,7 @@ concept MatrixLinkField = requires { typename Field::group_type; };
 
 template <class A,
           class R,
-          class Integrator = integ::Leapfrog,
+          class Integrator = integ::Omelyan2,
           class Field      = Lattice<typename A::value_type>,
           class Scalar     = A::value_type>
     requires HmcAction<A, Field> && Rng<R> && (JumpStream<R> || KeyedStream<R>)
@@ -121,8 +121,8 @@ public:
     static constexpr std::string_view log_tag = "hmc";
 
     // The defaulted Integrator parameter is a deduction anchor only: it lets
-    // CTAD pick the integrator from a tag value (e.g. integ::omelyan2) while
-    // A/R/Field/Scalar deduce from the other args. Omit it for Leapfrog.
+    // CTAD pick the integrator from a tag value (e.g. integ::leapfrog) while
+    // A/R/Field/Scalar deduce from the other args. Omit it for Omelyan2.
     //
     // `rng` is taken BY VALUE: the caller hands over a freshly-seeded family
     // generator as the entropy source and Hmc owns the randomness from there —
