@@ -1,6 +1,6 @@
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/algorithm/integrators.hpp>
-#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
