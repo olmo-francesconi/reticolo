@@ -15,9 +15,9 @@
 //    creates the workspace folder, opens <ws>/<stem>.log (stem = out_name
 //    minus extension — sweep-safe when sims share a workspace) and mirrors
 //    every entry into it, then prints the banner.
-//  * With replicas=true the run-id column is rendered and each scoped run
-//    id additionally gets its own <ws>/<stem>.<rid>.log (lazy-open,
-//    per-entry flush). Scoped lines land in both files.
+//  * With replicas=true the run-id column is rendered so scoped lines carry
+//    their run id; everything still lands in the single main log (there are no
+//    separate per-replica files).
 //  * Run-id is bound per thread via RAII `log::scope(id)` (works with
 //    schedule(dynamic) and N_sims > N_threads — same thread rebinds each
 //    iteration). Library code that owns a run id (llr::Replica) binds it
@@ -43,7 +43,6 @@
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -93,11 +92,6 @@ inline std::chrono::system_clock::time_point& wall_start() {
 
 inline std::mutex& sink_mutex() {
     static std::mutex m;
-    return m;
-}
-
-inline std::unordered_map<std::string, std::ofstream>& run_files() {
-    static std::unordered_map<std::string, std::ofstream> m;
     return m;
 }
 
@@ -200,21 +194,6 @@ inline std::ostream& sink_for(Level lv) {
 // a std::format + vector allocation per call.
 [[nodiscard]] inline bool suppressed(Level lv) noexcept {
     return !cfg().enabled || static_cast<int>(lv) < static_cast<int>(cfg().min_level);
-}
-
-// Must be called with sink_mutex() held by the caller.
-inline std::ofstream* run_file_for_locked(std::string const& run_id) {
-    if (!cfg().replicas || run_id.empty()) {
-        return nullptr;
-    }
-    auto& files = run_files();
-    auto it     = files.find(run_id);
-    if (it != files.end()) {
-        return &it->second;
-    }
-    auto path     = cfg().workspace / std::format("{}.{}.log", cfg().stem, run_id);
-    auto [ins, _] = files.emplace(run_id, std::ofstream(path));
-    return &ins->second;
 }
 
 // Optional banner extensions filled by the cuda umbrella. Core cannot include
@@ -401,15 +380,6 @@ inline void Entry::emit() {
         }
         mf.flush();
     }
-
-    if (auto* rf = run_file_for_locked(run); rf != nullptr) {
-        std::string const fp = std::format("{} {} {}  {}  ", sig, run, ts, tag4);
-        std::string const fc(fp.size(), ' ');
-        for (std::size_t i = 0; i < lines_.size(); ++i) {
-            (*rf) << (i == 0 ? fp : fc) << lines_[i] << '\n';
-        }
-        rf->flush();
-    }
 }
 
 // Free-function entry points -------------------------------------------------
@@ -475,6 +445,28 @@ private:
 
 [[nodiscard]] inline Scope scope(std::string_view run_id) {
     return Scope{std::string{run_id}};
+}
+
+// RAII global-suppression guard: silence ALL log output for its lifetime and
+// restore the previous enabled state on destruction. Nests correctly (saves and
+// restores rather than forcing on). Used to wrap noisy setup — e.g. per-replica
+// ensemble construction, where every lattice / RNG / HMC ctor self-announces —
+// so the driver can print one compact summary instead of N× the boilerplate.
+class Quiet {
+public:
+    Quiet() : prev_{std::exchange(impl::cfg().enabled, false)} {}
+    ~Quiet() { impl::cfg().enabled = prev_; }
+    Quiet(Quiet const&)            = delete;
+    Quiet& operator=(Quiet const&) = delete;
+    Quiet(Quiet&&)                 = delete;
+    Quiet& operator=(Quiet&&)      = delete;
+
+private:
+    bool prev_;
+};
+
+[[nodiscard]] inline Quiet quiet() {
+    return Quiet{};
 }
 
 // Format a byte count with a binary unit, e.g. 2048 → "2.0 KiB". A display
@@ -636,7 +628,7 @@ inline void banner() {
 // The single app entry point. Creates the workspace folder, opens the main
 // log file <workspace>/<stem>.log (stem = out_name minus extension) and
 // prints the banner. With replicas=true, scoped lines carry a run-id column
-// and additionally land in per-replica <workspace>/<stem>.<rid>.log files.
+// (all output still goes to the single main log).
 inline void
 start(std::filesystem::path const& workspace, std::string_view out_name, bool replicas = false) {
     auto& c     = impl::cfg();

@@ -19,18 +19,19 @@
 namespace reticolo::llr {
 
 // Shared LLR driver: stamps /cfg metadata, opens the per-replica /a /dE
-// series + /exchange/accepted, runs the Newton-Raphson warm-up phase, then
-// the Robbins-Monro phase with even/odd nearest-neighbour exchange. The four
-// LLR apps differ only in (action type, field type, optional pre-NR warmup,
-// optional extra HDF5 attrs); everything from "stamp cfg" through "drain RM
-// buffers" is identical and lives here.
+// series + /exchange/accepted, then runs the full schedule — a windowed-HMC
+// warm-up phase (drive each replica into its E_n window), the Newton-Raphson
+// warm-up, then the Robbins-Monro phase with even/odd nearest-neighbour
+// exchange. The LLR apps differ only in (action type, field type, optional
+// hot start, optional extra HDF5 attrs); everything from "stamp cfg" through
+// "drain RM buffers" is identical and lives here.
 //
-// Callers are expected to: (1) construct the replica vector and bind it to
-// the writer's "llr" phase, (2) stamp any app-specific extra attrs on the
-// writer before invoking `run`, (3) run any pre-NR work (e.g. the Bose gas
-// Metropolis warmup cascade), (4) call `run`. The driver does not start
-// the writer phase — that's the app's call so app-specific attrs can land
-// at the right path.
+// Callers are expected to: (1) construct the replica vector and bind it to the
+// writer's "llr" phase, (2) stamp any app-specific extra attrs on the writer
+// before invoking `run`, (3) optionally hot-start the fields (field-specific —
+// unsafe for matrix gauge groups, so gauge apps warm in from cold identity),
+// (4) call `run`. The driver does not start the writer phase — that's the app's
+// call so app-specific attrs can land at the right path.
 
 struct DriverSpec {
     int n_nr{};
@@ -45,6 +46,18 @@ struct DriverSpec {
     double E_max{};  // already snapped to the (n_rep - 1) * delta grid
     double d_e{};
     bool exchange = true;  // even/odd replica swaps each RM sweep
+
+    // ---- warm-up (seat each replica in its E_n window before NR) ----
+    // Two-stage pre-phase run once on a fresh start (skipped on resume — the
+    // checkpoint already holds warmed fields + tilt). Stage 1: warm_therm
+    // trajectories of plain BASE-action HMC to reach statistical equilibrium.
+    // Stage 2: coarse Newton a-adaptation until ⟨S⟩ sits within warm_thresh·δ of
+    // E_n; the warmed `a` is carried into NR. warm_max_traj caps stage 2 (a
+    // warning if hit). warm_therm = 0 skips stage 1; warm_max_traj = 0 disables
+    // the whole phase.
+    int warm_therm     = 200;
+    int warm_max_traj  = 2000;
+    double warm_thresh = 1.0;
 
     // ---- threading (see llr::plan_threads) ----
     // Per-replica HMC thread count `m` and slab granularity, recorded in the
@@ -126,6 +139,42 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     [[maybe_unused]] int const outer_nt = spec.concurrency > 0 ? spec.concurrency : 1;
 #endif
 
+    // One-shot run summary: ensemble geometry, the shared HMC sampler (announced
+    // once via a representative replica — all share the same integrator / τ /
+    // n_md), and the schedule + thread split. Per-replica construction is logged
+    // under log::quiet() by the app, so this stands in for that boilerplate.
+    log::info("llr",
+              "ensemble  {} replicas · E_n ∈ [{:+.1f} … {:+.1f}] · dE={:.1f} · δ={:.1f}",
+              n_rep,
+              spec.e_min,
+              spec.E_max,
+              spec.d_e,
+              spec.delta);
+    if (!reps.empty()) {
+        reps.front()->announce_sampler();
+    }
+    log::info("llr",
+              "schedule  NR {}×(therm {}, meas {}) · RM {}×(therm {}, meas {}){}",
+              spec.n_nr,
+              spec.n_therm_nr,
+              spec.n_meas_nr,
+              spec.n_rm,
+              spec.n_therm_rm,
+              spec.n_meas_rm,
+              spec.exchange ? " · exchange" : "");
+    log::info("llr", "threads   m={} × {} concurrent", spec.replica_threads, outer_nt);
+
+    // Warm-up phase: seat every replica in its E_n window by coarse tilt
+    // adaptation (group-safe — plain HMC steps + Newton `a` updates, unlike a hot
+    // start). Fresh runs only; a resume enters with already-warmed fields + tilt.
+    if (spec.start_phase == 0 && spec.start_iter == 0 && spec.warm_max_traj > 0) {
+        log::info("llr", "warm phase  seat {} replicas in window (a-adapting)", n_rep_u);
+#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
+        for (std::size_t n = 0; n < n_rep_u; ++n) {
+            reps[n]->warm_into_window(spec.warm_therm, spec.warm_max_traj, spec.warm_thresh);
+        }
+    }
+
     // Rolling atomic snapshot at (phase, next-iter). No-op when no path is set;
     // otherwise runs serially (HDF5 is not thread-safe) after the sweep drains.
     auto checkpoint = [&](int phase, int next_iter) {
@@ -147,14 +196,23 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
 #pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
             for (std::size_t n = 0; n < n_rep_u; ++n) {
                 auto& r = *reps[n];
-                r.thermalize(spec.n_therm_nr);
-                de_buf[n] = r.sample(spec.n_meas_nr);
+                r.thermalize(spec.n_therm_nr, log::Mode::silent);
+                de_buf[n] = r.sample(spec.n_meas_nr, log::Mode::silent);
                 a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
                 r.set_a(a_buf[n]);
             }
+            // Drain + per-replica NR row serially (same schema as RM), binding
+            // each replica's scope since we're outside the Replica's methods.
             for (std::size_t n = 0; n < n_rep_u; ++n) {
+                auto _ = log::scope(reps[n]->id());
                 a_series[n].append(a_buf[n]);
                 de_series[n].append(de_buf[n]);
+                iter("NR",
+                     static_cast<std::size_t>(k) + 1,
+                     static_cast<std::size_t>(spec.n_nr),
+                     a_buf[n],
+                     de_buf[n],
+                     spec.delta);
             }
             log::info("llr", "NR iter  {:>3}/{}  done", k + 1, spec.n_nr);
             if (spec.checkpoint_every > 0 && (k + 1) % spec.checkpoint_every == 0) {

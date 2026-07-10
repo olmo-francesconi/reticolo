@@ -58,12 +58,13 @@ inline CommonFlags common_flags(cli::Parser& p, CommonDefaults const& d) {
     return (std::filesystem::path{f.workspace} / f.out).string();
 }
 
-// Stable references to the LLR run-control flags: CPU-thread budget, per-replica
-// HMC threading, and checkpoint/resume. Single-sourced because every LLR app
-// takes the same six with the same wording; the app feeds `threads` /
+// Stable references to the LLR run-control flags: per-replica HMC threading and
+// checkpoint/resume. The total CPU budget is NOT a flag — `llr::plan_threads`
+// reads it from the OpenMP environment (OMP_NUM_THREADS) and splits it into an
+// outer replica team and inner per-replica HMC teams. Single-sourced because
+// every LLR app takes the same five with the same wording; the app feeds
 // `replica_threads` to `llr::plan_threads` and the rest into its DriverSpec.
 struct LlrRunFlags {
-    int const& threads;
     int const& replica_threads;
     int const& slabs;
     std::string const& resume;
@@ -72,9 +73,8 @@ struct LlrRunFlags {
 };
 
 inline LlrRunFlags llr_run_flags(cli::Parser& p) {
-    int const& threads = p.opt<int>("threads", 0, "total CPU threads to spend (0 = OMP ambient)");
     int const& replica_threads = p.opt<int>(
-        "replica_threads", 1, "HMC threads per replica (1 = serial default, 0 = auto-balance)");
+        "replica_threads", 1, "HMC threads per replica (1 = serial default; 0 = auto-balance)");
     int const& slabs = p.opt<int>("slabs_per_thread", 0, "HMC slab granularity per thread (0 = 1)");
     auto const& resume =
         p.opt<std::string>("resume", std::string{}, "resume from an LLR ensemble checkpoint (.h5)");
@@ -82,8 +82,7 @@ inline LlrRunFlags llr_run_flags(cli::Parser& p) {
         "checkpoint", std::string{}, "rolling ensemble checkpoint path (empty = off)");
     int const& checkpoint_every =
         p.opt<int>("checkpoint_every", 0, "sweeps between checkpoints (0 = only at end)");
-    return {.threads          = threads,
-            .replica_threads  = replica_threads,
+    return {.replica_threads  = replica_threads,
             .slabs            = slabs,
             .resume           = resume,
             .checkpoint       = checkpoint,

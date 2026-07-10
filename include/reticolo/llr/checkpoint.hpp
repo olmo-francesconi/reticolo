@@ -53,25 +53,26 @@ struct OrchState {
     int slabs     = 0;
 };
 
-// Allocate `total_threads` over `n_rep` replicas. Replica parallelism is ~linear
-// and bandwidth-efficient; site-level HMC threading is sublinear and BW-capped
-// (~6×), so saturate replicas first and spill leftover threads into per-replica
-// site teams only when replicas run out — never past the site-scaling knee
-// `m_max`. requested_m: >0 pins m; 0 = auto (m = clamp(T/n_rep, 1, m_max));
-// <0 or 1 keeps the serial default (m=1, today's flat model). concurrency is the
-// outer replica-team size, m·concurrency ≤ T.
+// Allocate the ambient OpenMP thread budget (`omp_get_max_threads()`) over
+// `n_rep` replicas. There is no total-threads flag: the driver reads the budget
+// from the environment (OMP_NUM_THREADS / omp_set_num_threads) and splits it into
+// an outer replica team and inner per-replica HMC teams itself. Replica
+// parallelism is ~linear and bandwidth-efficient; site-level HMC threading is
+// sublinear and BW-capped (~6×), so saturate replicas first and spill leftover
+// threads into per-replica site teams only when replicas run out — never past the
+// site-scaling knee `m_max`. requested_m: 1 (the app default) = one thread per
+// replica, so the whole env budget goes to replica concurrency; 0 = auto-balance
+// (m = clamp(T/n_rep, 1, m_max)); >1 pins a larger per-replica site team.
+// concurrency is the outer replica-team size, m·concurrency ≤ T.
 struct ThreadPlan {
     int m           = 1;  // HMC threads per replica
     int concurrency = 0;  // replicas run at once (outer omp team); 0 = ambient
 };
 
-[[nodiscard]] inline ThreadPlan
-plan_threads(int n_rep, int total_threads, int requested_m, int m_max = 4) {
-    int total = total_threads;
+[[nodiscard]] inline ThreadPlan plan_threads(int n_rep, int requested_m = 0, int m_max = 4) {
+    int total = 0;
 #ifdef _OPENMP
-    if (total <= 0) {
-        total = omp_get_max_threads();
-    }
+    total = omp_get_max_threads();
 #endif
     if (total <= 0) {
         total = 1;
@@ -95,10 +96,10 @@ void save_ensemble(std::filesystem::path const& path,
                    std::vector<std::unique_ptr<Replica>>& reps,
                    ExchRng const& exch_rng,
                    OrchState const& orch) {
-    namespace fs           = std::filesystem;
-    fs::path tmp           = path;
-    tmp                    += ".tmp";
-    auto const n_rep       = static_cast<int>(reps.size());
+    namespace fs = std::filesystem;
+    fs::path tmp = path;
+    tmp += ".tmp";
+    auto const n_rep = static_cast<int>(reps.size());
     {
         io::Writer w{tmp};
         w.attr<int>("/orch@n_rep", n_rep);
@@ -108,11 +109,11 @@ void save_ensemble(std::filesystem::path const& path,
         w.attr<int>("/orch@slabs", orch.slabs);
         w.rng_state("/orch/exch_rng", exch_rng);
         for (int n = 0; n < n_rep; ++n) {
-            auto& rep            = *reps[static_cast<std::size_t>(n)];
-            std::string const g  = std::format("/replica_{:03d}", n);
-            auto& ss             = rep.rng();
-            using SS             = std::remove_reference_t<decltype(ss)>;
-            using R              = SS::rng_type;
+            auto& rep           = *reps[static_cast<std::size_t>(n)];
+            std::string const g = std::format("/replica_{:03d}", n);
+            auto& ss            = rep.rng();
+            using SS            = std::remove_reference_t<decltype(ss)>;
+            using R             = SS::rng_type;
             w.field(g + "/field", rep.phi());
             w.rng_streams(
                 g + "/rng", R::name, ss.state_words(), ss.n_streams(), SS::words_per_stream);

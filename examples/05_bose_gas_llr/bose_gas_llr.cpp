@@ -103,21 +103,14 @@ int main(int argc, char** argv) {
     out.start_phase("llr");
     out.attr<double>("/cfg@mu", mu);
 
-    // ---- Warm-up: windowed HMC into S_I window ----
-    // Hot-start every replica with an independent random field, then run this
-    // replica's own windowed HMC until it is inside its E_n window. The
-    // windowed force (base phase-quenched force + the S_I constraint window)
-    // pins trajectories toward E_n; deep in the S_I tail keep the integrator
-    // stable with enough MD steps (HmcSpec n_md).
-    constexpr double k_hot_sigma   = 0.5;
-    constexpr int k_warm_batches   = 50;
-    constexpr int k_warm_batch_len = 10;
-    std::size_t const n_rep_u      = static_cast<std::size_t>(n_rep);
+    // ---- Hot start: give every replica an independent random field; the LLR
+    //      driver's warm-up phase then drives each into its E_n (S_I) window. ----
+    constexpr double k_hot_sigma = 0.5;
+    std::size_t const n_rep_u    = static_cast<std::size_t>(n_rep);
 #pragma omp parallel for schedule(dynamic, 1)
     for (std::size_t n = 0; n < n_rep_u; ++n) {
         auto _ = log::scope(reps[n]->id());
         reps[n]->hot_start(k_hot_sigma);
-        reps[n]->warm_into_window(k_warm_batches, k_warm_batch_len, 1.0);
     }
 
     // ---- Drive: NR warm-up + RM + exchange ----

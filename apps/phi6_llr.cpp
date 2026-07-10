@@ -1,19 +1,15 @@
-// LLR (Gaussian-penalty) with replica exchange for the phi^4 scalar field.
+// LLR (Gaussian-penalty) with replica exchange for the phi^6 scalar field.
 //
-// Energy variable: E(phi) = S_base(phi) (the full action).
-// Sampler:        HMC with a templated integrator (default Omelyan2).
-// Update:         Newton-Raphson warm-up (n_nr iters), then restarted RM
-//                 with counter k reset to 0 after the warm-up.
-// Geometry:       n_rep replicas at E_n = E_min + n * dE,
-//                 dE = (E_max - E_min) / (n_rep - 1).
-// Exchange:       even/odd alternating nearest-neighbour swaps after each RM sweep.
+// Mirrors phi4_llr on a plain Lattice<double>. Energy variable E(phi) =
+// S_base(phi) (the full action). Default window bracketed to the action
+// distribution of a short phi6_hmc run at the same geometry/couplings.
 //
 // Output schema (HDF5):
 //   /cfg@n_rep, /cfg@delta, /cfg@E_min, /cfg@E_max, /cfg@dE
 //   /cfg/E_n                  — series, length n_rep
 //   /replica_NNN/a            — series, one append per NR iter + per RM sweep
 //   /replica_NNN/dE           — series, paired with /a
-//   /exchange/accepted        — series, one append per RM sweep (count, 0..n_rep/2)
+//   /exchange/accepted        — series, one append per RM sweep
 
 #include <reticolo/reticolo.hpp>
 
@@ -27,19 +23,20 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action   = act::Phi4<double>;
+    using Action   = act::Phi6<double>;
     using ReplicaT = llr::Replica<Action, FastRng>;
 
     // ---- CLI ----
-    cli::Parser p{"phi4_llr", "LLR (Gaussian-penalty) with replica exchange for phi^4"};
-    auto const cf      = app::common_flags(p, {.L = 8, .out = "phi4_llr.h5"});
+    cli::Parser p{"phi6_llr", "LLR (Gaussian-penalty) with replica exchange for phi^6"};
+    auto const cf      = app::common_flags(p, {.L = 8, .out = "phi6_llr.h5"});
     auto const& ndim   = p.opt<int>("ndim", 4, "spatial dimensions");
-    auto const& kappa  = p.opt<double>("kappa", 0.18, "hopping parameter");
-    auto const& lambda = p.opt<double>("lambda", 1.0, "quartic coupling");
-    auto const& e_min  = p.opt<double>("E_min", 550.0, "lower window centre");
-    auto const& e_max  = p.opt<double>("E_max", 1070.0, "upper window centre");
+    auto const& kappa  = p.opt<double>("kappa", 0.13, "hopping parameter");
+    auto const& lambda = p.opt<double>("lambda", 0.05, "quartic coupling");
+    auto const& g6     = p.opt<double>("g6", 0.01, "sextic coupling");
+    auto const& e_min  = p.opt<double>("E_min", 1830.0, "lower window centre");
+    auto const& e_max  = p.opt<double>("E_max", 2150.0, "upper window centre");
     auto const& delta  = p.opt<double>(
-        "delta", 60.0, "Gaussian penalty width δ in (S−E_n)²/2δ² (also the a-update scale)");
+        "delta", 40.0, "Gaussian penalty width δ in (S−E_n)²/2δ² (also the a-update scale)");
     auto const& spacing = p.opt<double>(
         "spacing", 0.0, "replica energy interval between window centres; 0 ⇒ equal to delta");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
@@ -62,17 +59,14 @@ int main(int argc, char** argv) {
 
     // ---- Base action ----
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
-    Action const base{.kappa = kappa, .lambda = lambda};
+    Action const base{.kappa = kappa, .lambda = lambda, .g6 = g6};
     log::act(base);
 
     // ---- Replica geometry ----
     double const d_e = spacing > 0.0 ? spacing : delta;
     int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
-
-    // ---- Thread allocation: saturate replicas first, spill into per-replica
-    //      HMC site teams only when threads outnumber replicas (m>1). ----
-    auto const plan = llr::plan_threads(n_rep, rf.replica_threads);
+    auto const plan            = llr::plan_threads(n_rep, rf.replica_threads);
 
     // ---- Replicas ----
     std::vector<std::unique_ptr<ReplicaT>> reps;
@@ -91,7 +85,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    // ---- Resume: restore fields / RNG streams / a / exch_rng before driving ----
+    // ---- Resume ----
     FastRng exch_rng{cf.seed};
     bool const resuming = !rf.resume.empty();
     llr::OrchState resume_state{};

@@ -166,6 +166,11 @@ struct DriverSpec {
     double E_max{};
     double d_e{};
     bool exchange = true;
+    // Two-stage warm-up pre-phase (base-action therm to equilibrium, then Newton
+    // a-adaptation into the window; fresh runs only). Same as llr::run.
+    int warm_therm     = 200;
+    int warm_max_traj  = 2000;
+    double warm_thresh = 1.0;
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
     int smooth_K          = 4;
     int smooth_degree     = 2;
@@ -255,6 +260,46 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
 #else
     [[maybe_unused]] int const outer_nt = spec.concurrency > 0 ? spec.concurrency : 1;
 #endif
+
+    // One-shot run summary (see llr::run) — ensemble, the shared HMC sampler via
+    // a representative replica, and the smoothed schedule. Per-replica ctors were
+    // logged under log::quiet() by the app.
+    log::info("llr",
+              "ensemble  {} replicas · E_n ∈ [{:+.1f} … {:+.1f}] · dE={:.1f} · δ={:.1f}",
+              n_rep,
+              spec.e_min,
+              spec.E_max,
+              spec.d_e,
+              spec.delta);
+    if (!reps.empty()) {
+        reps.front()->announce_sampler();
+    }
+    log::info("llr",
+              "schedule  NR {}×(therm {}, meas {}) · sRM {}×(therm {}, meas {}){} · "
+              "smooth K={} deg={} λ0={:.2g} exp={:.2g}",
+              spec.n_nr,
+              spec.n_therm_nr,
+              spec.n_meas_nr,
+              spec.n_rm,
+              spec.n_therm_rm,
+              spec.n_meas_rm,
+              spec.exchange ? " · exchange" : "",
+              spec.smooth_K,
+              spec.smooth_degree,
+              spec.smooth_lambda0,
+              spec.smooth_lambda_exp);
+    log::info("llr", "threads   m={} × {} concurrent", spec.replica_threads, outer_nt);
+
+    // Warm-up phase (see llr::run): drive every replica into its E_n window with
+    // coarse Newton a-adaptation. Fresh runs only.
+    if (spec.start_phase == 0 && spec.start_iter == 0 && spec.warm_max_traj > 0) {
+        log::info("llr", "warm phase  seat {} replicas in window (a-adapting)", n_rep_u);
+#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
+        for (std::size_t n = 0; n < n_rep_u; ++n) {
+            reps[n]->warm_into_window(spec.warm_therm, spec.warm_max_traj, spec.warm_thresh);
+        }
+    }
+
     auto checkpoint = [&](int phase, int next_iter) {
         if (spec.checkpoint_path.empty()) {
             return;
@@ -274,18 +319,25 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
 #pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
             for (std::size_t n = 0; n < n_rep_u; ++n) {
                 auto& r = *reps[n];
-                r.thermalize(spec.n_therm_nr);
-                de_buf[n] = r.sample(spec.n_meas_nr);
+                r.thermalize(spec.n_therm_nr, log::Mode::silent);
+                de_buf[n] = r.sample(spec.n_meas_nr, log::Mode::silent);
                 a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
                 r.set_a(a_buf[n]);
             }
             for (std::size_t n = 0; n < n_rep_u; ++n) {
+                auto _ = log::scope(reps[n]->id());
                 a_series[n].append(a_buf[n]);
                 de_series[n].append(de_buf[n]);
                 a_pre_series[n].append(a_buf[n]);
                 a_hat_series[n].append(a_buf[n]);
                 drm_series[n].append(0.0);
                 dsm_series[n].append(0.0);
+                iter("NR",
+                     static_cast<std::size_t>(k) + 1,
+                     static_cast<std::size_t>(spec.n_nr),
+                     a_buf[n],
+                     de_buf[n],
+                     spec.delta);
             }
             log::info("llr", "NR iter  {:>3}/{}  done", k + 1, spec.n_nr);
             if (spec.checkpoint_every > 0 && (k + 1) % spec.checkpoint_every == 0) {

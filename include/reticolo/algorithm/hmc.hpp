@@ -418,7 +418,7 @@ private:
                 reticolo::exec::field_reduce(mom_, 1, [p](std::size_t base, std::size_t cnt) {
                     return reticolo::exec::lane_sum8(base, cnt, [p](std::size_t i) {
                         if constexpr (is_complex_v_) {
-                            return std::norm(p[i]);
+                            return static_cast<double>(std::norm(p[i]));
                         } else {
                             auto const pi = static_cast<double>(p[i]);
                             return pi * pi;

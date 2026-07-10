@@ -92,20 +92,14 @@ int main(int argc, char** argv) {
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
-    // ---- Warm-up: windowed HMC into S window ----
-    // Hot-start each replica with random link angles, then run this replica's
-    // own windowed HMC until it sits inside its E_n window. The windowed force
-    // pins trajectories toward E_n; deep in the S tail keep the leapfrog stable
-    // with enough MD steps (HmcSpec n_md).
-    constexpr double k_hot_sigma   = std::numbers::pi;  // ~uniform theta
-    constexpr int k_warm_batches   = 50;
-    constexpr int k_warm_batch_len = 10;
-    std::size_t const n_rep_u      = static_cast<std::size_t>(n_rep);
+    // ---- Hot start: randomise each replica's link angles; the LLR driver's
+    //      warm-up phase then drives each into its E_n window. ----
+    constexpr double k_hot_sigma = std::numbers::pi;  // ~uniform theta
+    std::size_t const n_rep_u    = static_cast<std::size_t>(n_rep);
 #pragma omp parallel for schedule(dynamic, 1)
     for (std::size_t n = 0; n < n_rep_u; ++n) {
         auto _ = log::scope(reps[n]->id());
         reps[n]->hot_start(k_hot_sigma);
-        reps[n]->warm_into_window(k_warm_batches, k_warm_batch_len, 1.0);
     }
 
     // ---- Drive: NR warm-up + RM + (optional) exchange ----

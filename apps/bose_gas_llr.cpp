@@ -37,10 +37,10 @@ int main(int argc, char** argv) {
     auto const& mass   = p.opt<double>("mass", 1.0, "bare mass m");
     auto const& lambda = p.opt<double>("lambda", 1.0, "quartic coupling lambda");
     auto const& mu     = p.opt<double>("mu", 1.0, "chemical potential mu");
-    auto const& e_min  = p.opt<double>("E_min", -10.0, "lower S_I window centre");
-    auto const& e_max  = p.opt<double>("E_max", 10.0, "upper S_I window centre");
+    auto const& e_min  = p.opt<double>("E_min", -11.0, "lower S_I window centre");
+    auto const& e_max  = p.opt<double>("E_max", 11.0, "upper S_I window centre");
     auto const& delta  = p.opt<double>(
-        "delta", 2.0, "Gaussian penalty width δ in (S_I−E_n)²/2δ² (also the a-update scale)");
+        "delta", 2.5, "Gaussian penalty width δ in (S_I−E_n)²/2δ² (also the a-update scale)");
     auto const& spacing =
         p.opt<double>("spacing",
                       0.0,
@@ -73,20 +73,23 @@ int main(int argc, char** argv) {
     double const d_e = spacing > 0.0 ? spacing : delta;
     int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
-    auto const plan            = llr::plan_threads(n_rep, rf.threads, rf.replica_threads);
+    auto const plan            = llr::plan_threads(n_rep, rf.replica_threads);
 
     // ---- Replicas ----
     std::vector<std::unique_ptr<ReplicaT>> reps;
     reps.reserve(static_cast<std::size_t>(n_rep));
-    for (int n = 0; n < n_rep; ++n) {
-        double const e_n = e_min + (static_cast<double>(n) * d_e);
-        reps.push_back(std::make_unique<ReplicaT>(
-            base,
-            FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
-            ReplicaT::Spec{
-                .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
-            alg::HmcSpec{
-                .tau = tau, .n_md = n_md, .n_threads = plan.m, .slabs_per_thread = rf.slabs}));
+    {
+        auto const quiet = log::quiet();  // silence per-replica ctor announces
+        for (int n = 0; n < n_rep; ++n) {
+            double const e_n = e_min + (static_cast<double>(n) * d_e);
+            reps.push_back(std::make_unique<ReplicaT>(
+                base,
+                FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
+                ReplicaT::Spec{
+                    .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
+                alg::HmcSpec{
+                    .tau = tau, .n_md = n_md, .n_threads = plan.m, .slabs_per_thread = rf.slabs}));
+        }
     }
 
     // ---- Resume or fresh warm-up ----
@@ -107,23 +110,15 @@ int main(int argc, char** argv) {
     out.start_phase("llr");
     out.attr<double>("/cfg@mu", mu);
 
-    // ---- Warm-up: windowed HMC into S_I window (fresh runs only; a resume
-    //      restores already-warmed fields from the checkpoint). ----
+    // ---- Hot start (fresh runs only): give every replica an independent random
+    //      field; the LLR driver's warm-up phase then drives each into its E_n
+    //      (S_I) window. A resume restores already-warmed fields. ----
     if (!resuming) {
-        // Hot-start every replica with an independent random field, then run its
-        // own windowed HMC until it is inside its E_n window. The windowed force
-        // (base phase-quenched force + the S_I constraint window) pins
-        // trajectories toward E_n; deep in the S_I tail keep the integrator
-        // stable with enough MD steps (HmcSpec n_md).
-        constexpr double k_hot_sigma   = 0.5;
-        constexpr int k_warm_batches   = 50;
-        constexpr int k_warm_batch_len = 10;
-        std::size_t const n_rep_u      = static_cast<std::size_t>(n_rep);
+        constexpr double k_hot_sigma = 0.5;
+        std::size_t const n_rep_u    = static_cast<std::size_t>(n_rep);
 #pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto _ = log::scope(reps[n]->id());
             reps[n]->hot_start(k_hot_sigma);
-            reps[n]->warm_into_window(k_warm_batches, k_warm_batch_len, 1.0);
         }
     }
 

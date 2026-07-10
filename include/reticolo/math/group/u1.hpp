@@ -26,19 +26,19 @@ struct U1 {
     static constexpr std::string_view name         = "U1";
 
     // Sample p ~ N(0,1) so K = (1/2)·Σ p² gives detailed balance.
-    template <class Rng>
+    template <class T, class Rng>
     [[gnu::always_inline]] static inline void
-    sample_algebra_slab(double* p_blk, Rng& rng, std::size_t n) noexcept {
+    sample_algebra_slab(T* p_blk, Rng& rng, std::size_t n) noexcept {
         for (std::size_t s = 0; s < n; ++s) {
-            p_blk[s] = rng.normal();
+            p_blk[s] = static_cast<T>(rng.normal());
         }
     }
 
     // (stride, count) form for layout uniformity with SU(N). U(1) has one real
     // component per link, so `stride` is irrelevant — only `count` links matter.
-    template <class Rng>
+    template <class T, class Rng>
     [[gnu::always_inline]] static inline void
-    sample_algebra_slab(double* p_blk, Rng& rng, std::size_t stride, std::size_t count) noexcept {
+    sample_algebra_slab(T* p_blk, Rng& rng, std::size_t stride, std::size_t count) noexcept {
         (void)stride;
         sample_algebra_slab(p_blk, rng, count);
     }
@@ -49,8 +49,9 @@ struct U1 {
     // bit-identical for any thread count. `stride` unused (one real component
     // per link). Opt-in parallel replacement for `sample_algebra_slab`'s
     // serial FastRng fill.
+    template <class T>
     [[gnu::always_inline]] static inline void
-    sample_algebra_philox_range(double* p_blk,
+    sample_algebra_philox_range(T* p_blk,
                                 std::uint64_t key,
                                 std::uint64_t mu,
                                 std::size_t stride,
@@ -62,41 +63,44 @@ struct U1 {
             double n0 = 0.0;
             double n1 = 0.0;
             reticolo::philox_normal2(key, mu, s, n0, n1);
-            p_blk[s] = n0;
+            p_blk[s] = static_cast<T>(n0);
         }
     }
 
     // Pure per-range kinetic worker: raw Σ p² (no ½) over [base, base+cnt).
     // The HMC kinetic reduce partitions the slab and folds these; the ½ is
     // applied once at the end.
-    [[gnu::always_inline]] static inline double kinetic_range(double const* p_blk,
-                                                              std::size_t stride,
-                                                              std::size_t base,
-                                                              std::size_t cnt) noexcept {
+    template <class T>
+    [[gnu::always_inline]] static inline double
+    kinetic_range(T const* p_blk, std::size_t stride, std::size_t base, std::size_t cnt) noexcept {
         (void)stride;
         double k              = 0.0;
         std::size_t const end = base + cnt;
         for (std::size_t s = base; s < end; ++s) {
-            k += p_blk[s] * p_blk[s];
+            double const v = static_cast<double>(p_blk[s]);
+            k += v * v;
         }
         return k;
     }
 
-    [[gnu::always_inline]] static inline double kinetic_slab(double const* p_blk,
+    template <class T>
+    [[gnu::always_inline]] static inline double kinetic_slab(T const* p_blk,
                                                              std::size_t n) noexcept {
         return 0.5 * kinetic_range(p_blk, n, 0, n);
     }
 
+    template <class T>
     [[gnu::always_inline]] static inline double
-    kinetic_slab(double const* p_blk, std::size_t stride, std::size_t count) noexcept {
+    kinetic_slab(T const* p_blk, std::size_t stride, std::size_t count) noexcept {
         return 0.5 * kinetic_range(p_blk, stride, 0, count);
     }
 
     // Pure per-range drift worker: θ ← θ + dt·p over [base, base+cnt).
     // `stride` unused (one real component per link). The integrator op layer
     // partitions the slab and calls this per thread-chunk.
-    [[gnu::always_inline]] static inline void expi_lmul_range(double* u_blk,
-                                                              double const* p_blk,
+    template <class T>
+    [[gnu::always_inline]] static inline void expi_lmul_range(T* u_blk,
+                                                              T const* p_blk,
                                                               double dt,
                                                               std::size_t stride,
                                                               std::size_t base,
@@ -104,21 +108,20 @@ struct U1 {
         (void)stride;
         std::size_t const end = base + cnt;
         for (std::size_t s = base; s < end; ++s) {
-            u_blk[s] += dt * p_blk[s];
+            u_blk[s] += static_cast<T>(dt * static_cast<double>(p_blk[s]));
         }
     }
 
     // U(1) drift: U_new = exp(i·dt·p)·U_old reduces to θ_new = θ_old + dt·p.
+    template <class T>
     [[gnu::always_inline]] static inline void
-    expi_lmul_slab(double* u_blk, double const* p_blk, double dt, std::size_t n) noexcept {
+    expi_lmul_slab(T* u_blk, T const* p_blk, double dt, std::size_t n) noexcept {
         expi_lmul_range(u_blk, p_blk, dt, n, 0, n);
     }
 
-    [[gnu::always_inline]] static inline void expi_lmul_slab(double* u_blk,
-                                                             double const* p_blk,
-                                                             double dt,
-                                                             std::size_t stride,
-                                                             std::size_t count) noexcept {
+    template <class T>
+    [[gnu::always_inline]] static inline void expi_lmul_slab(
+        T* u_blk, T const* p_blk, double dt, std::size_t stride, std::size_t count) noexcept {
         expi_lmul_range(u_blk, p_blk, dt, stride, 0, count);
     }
 };

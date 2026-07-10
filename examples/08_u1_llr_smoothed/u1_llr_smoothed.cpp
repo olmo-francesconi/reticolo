@@ -96,15 +96,12 @@ int main(int argc, char** argv) {
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
-    constexpr double k_hot_sigma   = std::numbers::pi;
-    constexpr int k_warm_batches   = 50;
-    constexpr int k_warm_batch_len = 10;
-    std::size_t const n_rep_u      = static_cast<std::size_t>(n_rep);
+    constexpr double k_hot_sigma = std::numbers::pi;
+    std::size_t const n_rep_u    = static_cast<std::size_t>(n_rep);
 #pragma omp parallel for schedule(dynamic, 1)
     for (std::size_t n = 0; n < n_rep_u; ++n) {
         auto _ = log::scope(reps[n]->id());
         reps[n]->hot_start(k_hot_sigma);
-        reps[n]->warm_into_window(k_warm_batches, k_warm_batch_len, 1.0);
     }
 
     llr::smoothed::run(reps,
