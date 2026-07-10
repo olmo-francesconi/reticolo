@@ -181,7 +181,11 @@ inline Acc run_ranges_(std::size_t n, std::size_t bps, std::size_t gran, Range c
 // thread k's static block is the same contiguous slab in every pass.
 template <class Acc, std::size_t D, class T, class Item>
 inline Acc run_partition_items_(Lattice<T> const& l, int nthreads, Item const& item) {
-    auto const [L, stride]  = geometry_<D>(l);
+    // Named locals, not a structured binding: older Clang's OpenMP frontend
+    // rejects capturing a structured binding into the `omp for` lambda below.
+    auto const geo          = geometry_<D>(l);
+    auto const& L           = geo.first;
+    auto const& stride      = geo.second;
     exec::Partition const p = reticolo::exec::partition(l);
     reticolo::exec::note_slicing(L.data(), D, l.bytes_per_site(), p, nthreads);
     return run_items_<Acc>(nthreads, p.n_items, [&](std::size_t it) {

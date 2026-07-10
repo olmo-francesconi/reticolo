@@ -17,6 +17,7 @@
 # Env: PRESET (build/test preset, default macos-appleclang)
 #      CLANG_FORMAT / CLANG_TIDY  (override the auto-detected binaries)
 set -euo pipefail
+shopt -s globstar nullglob  # src/**/*.cpp must recurse (matches CI's tidy glob)
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -88,13 +89,17 @@ ensure_tidy_db() {
 do_tidy() {
     local ct; ct="$(resolve_clang_tidy)"
     ensure_tidy_db "$ct"
-    local tus=(src/lint/amalgamation.cpp src/io/writer.cpp)
+    # Match CI exactly: every production TU under src/ (amalgamation.cpp gives
+    # full public-header coverage; writer.cpp/reader.cpp/cli are the impl TUs).
+    # Globbing here — not a fixed two-file list — is what stops a src/ TU (e.g.
+    # reader.cpp) from being tidied by CI but skipped locally.
+    local tus=(src/**/*.cpp)
     if [ "${1:-}" = fix ]; then
         say "clang-tidy --fix ($(basename "$ct"))"
         "$ct" -p "$TIDY_DB" --fix "${tus[@]}" || true
         echo "applied fixes — re-run 'tools/check.sh tidy' to confirm clean, then format --fix"
     else
-        say "clang-tidy ($(basename "$ct"), WarningsAsErrors) — amalgamation + writer.cpp"
+        say "clang-tidy ($(basename "$ct"), WarningsAsErrors) — src/**/*.cpp"
         "$ct" -p "$TIDY_DB" "${tus[@]}" && echo "tidy clean" || die "clang-tidy findings"
     fi
 }
