@@ -61,10 +61,10 @@ inline void require_llr_resume_equivalence(std::string const& binary,
                                            int ckpt_sweep,
                                            std::string const& tag,
                                            int omp_threads = 1) {
-    namespace fs         = std::filesystem;
-    std::string const d  = fs::temp_directory_path().string();
+    namespace fs          = std::filesystem;
+    std::string const d   = fs::temp_directory_path().string();
     std::string const pid = std::to_string(::getpid());
-    auto name            = [&](char const* p) { return "reticolo_" + tag + "_" + p + "_" + pid + ".h5"; };
+    auto name = [&](char const* p) { return "reticolo_" + tag + "_" + p + "_" + pid + ".h5"; };
     std::string const full_out = name("full");
     std::string const seg2_out = name("seg2");
     std::string const ckpt     = d + "/" + name("ckpt");
@@ -111,7 +111,8 @@ inline void require_llr_resume_equivalence(std::string const& binary,
     REQUIRE(xs.size() == static_cast<std::size_t>(tail_len));
     for (int i = 0; i < tail_len; ++i) {
         INFO("/exchange/accepted mismatch at tail i=" << i);
-        REQUIRE(xf.at(static_cast<std::size_t>(ckpt_sweep + i)) == xs.at(static_cast<std::size_t>(i)));
+        REQUIRE(xf.at(static_cast<std::size_t>(ckpt_sweep + i)) ==
+                xs.at(static_cast<std::size_t>(i)));
     }
 
     H5Fclose(full);

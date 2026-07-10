@@ -77,7 +77,7 @@ struct U1 {
         double k              = 0.0;
         std::size_t const end = base + cnt;
         for (std::size_t s = base; s < end; ++s) {
-            double const v = static_cast<double>(p_blk[s]);
+            auto const v = static_cast<double>(p_blk[s]);
             k += v * v;
         }
         return k;
