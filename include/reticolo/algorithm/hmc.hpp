@@ -7,9 +7,8 @@
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
 #include <reticolo/core/parallel.hpp>
-#include <reticolo/core/rng/normal_fill.hpp>
-#include <reticolo/core/rng/philox.hpp>
 #include <reticolo/core/rng/rng.hpp>
+#include <reticolo/core/rng/stream_set.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
@@ -22,6 +21,8 @@
 #include <limits>
 #include <numbers>
 #include <optional>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -65,13 +66,20 @@ struct HmcResult {
 //   - real F:    H_kin = (1/2) sum_i mom_i^2
 //   - complex F: H_kin = (1/2) sum_i |mom_i|^2  (= (Re^2 + Im^2)/2 per slot)
 //
-// Momentum sampling:
-//   - double:                 one batched normal_fill
-//   - std::complex<double>:   reinterpret-cast to double[2] and batch-fill;
-//                             gives independent N(0,1) on Re and Im, which
-//                             is the correct sampling for the complex
-//                             Gaussian (§29.5.4 guarantees the layout).
-//   - anything else:          per-element static_cast<F>(rng_.normal())
+// Momentum sampling: Hmc OWNS a StreamSet<R> sized from the canonical field
+// partition — one site stream per slab, bound one-to-one by the partition
+// item index (exec::field_visit_indexed), never by the executing thread or
+// the schedule. The count and the (n_threads, slabs_per_thread) config are
+// frozen at construction; every fill re-derives the partition and throws
+// std::logic_error if it no longer matches the streams. The Metropolis
+// accept draws from the set's dedicated driver stream. Field-type mapping:
+//   - double:                 per-slab batched normal_fill from stream i
+//   - std::complex<double>:   reinterpret-cast to double[2], per-slab fill;
+//                             independent N(0,1) on Re and Im — the correct
+//                             complex Gaussian (§29.5.4 guarantees layout).
+//   - float / complex<float>: per-slab double fill narrowed to float
+//   - matrix links:           Group::sample_algebra_slab per (slab, μ)
+//   - anything else:          per-element stream_i.normal()
 
 // The field-agnostic action gate `action::HmcAction<A, Field>` (defined in
 // action/concepts.hpp) is the single source of truth: any action with
@@ -104,7 +112,7 @@ template <class A,
           class Integrator = integ::Leapfrog,
           class Field      = Lattice<typename A::value_type>,
           class Scalar     = A::value_type>
-    requires HmcAction<A, Field> && Rng<R>
+    requires HmcAction<A, Field> && Rng<R> && (JumpStream<R> || KeyedStream<R>)
 class Hmc {
 public:
     using value_type = Scalar;
@@ -115,15 +123,24 @@ public:
     // The defaulted Integrator parameter is a deduction anchor only: it lets
     // CTAD pick the integrator from a tag value (e.g. integ::omelyan2) while
     // A/R/Field/Scalar deduce from the other args. Omit it for Leapfrog.
+    //
+    // `rng` is taken BY VALUE: the caller hands over a freshly-seeded family
+    // generator as the entropy source and Hmc owns the randomness from there —
+    // one uniform_u64() draw seeds the StreamSet, sized to the canonical
+    // partition of `field` under this Hmc's (frozen) thread/slab config.
+    // n_threads = 0 resolves to the ambient team ONCE, here, so a later
+    // OMP_NUM_THREADS change cannot silently re-partition a running chain
+    // (the per-fill check below would refuse it anyway).
     Hmc(A const& action,
         Field& field,
-        R& rng,
+        R rng,
         HmcSpec const& spec,
         Integrator         = {},
         log::Mode announce = log::Mode::normal)
-        : action_{action}, field_{field}, rng_{rng}, mom_{field.indexing()},
-          force_{field.indexing()}, old_field_{field.indexing()}, tau_{spec.tau}, n_md_{spec.n_md},
-          n_threads_{spec.n_threads}, n_slabs_{spec.slabs_per_thread} {
+        : action_{action}, field_{field}, mom_{field.indexing()}, force_{field.indexing()},
+          old_field_{field.indexing()}, tau_{spec.tau}, n_md_{spec.n_md},
+          n_threads_{resolve_threads_(spec.n_threads)}, n_slabs_{spec.slabs_per_thread},
+          streams_{rng.uniform_u64(), slab_count_(field, n_threads_, n_slabs_), announce} {
         if (announce == log::Mode::normal) {
             log::algo(*this);
         }
@@ -131,12 +148,12 @@ public:
 
     // The action is retained by `const&` — binding it to a temporary would
     // dangle for the life of the driver. Delete construction from an rvalue
-    // action so the mistake is a compile error. (field_/rng_ are non-const
-    // lvalue references, so temporaries there already fail to bind — only the
-    // const-ref action needs an explicit guard.)
+    // action so the mistake is a compile error. (field_ is a non-const lvalue
+    // reference, so a temporary there already fails to bind; rng is by-value
+    // ownership transfer, so an rvalue is exactly right for it.)
     Hmc(A const&& action,
         Field& field,
-        R& rng,
+        R rng,
         HmcSpec const& spec,
         Integrator         = {},
         log::Mode announce = log::Mode::normal) = delete;
@@ -145,12 +162,13 @@ public:
         e.line("HMC<{}>", Integrator::name);
         e.param("τ={:.3f}", tau_);
         e.param("n_md={}", n_md_);
-        if (n_threads_ > 0) {
+        if (n_threads_ > 1) {
             e.param("threads={}", n_threads_);
         }
         if (n_slabs_ > 0) {
             e.param("slabs/thr={}", n_slabs_);
         }
+        e.param("streams={}", streams_.n_streams());
     }
 
     HmcResult step(log::Mode log_mode = log::Mode::normal) {
@@ -187,7 +205,7 @@ public:
                       step_count_ + 1);
         }
 
-        bool const accepted = (dH <= 0.0) || (rng_.uniform() < std::exp(-dH));
+        bool const accepted = (dH <= 0.0) || (streams_.uniform() < std::exp(-dH));
         if (!accepted) {
             copy_flat_(field_.data(), old_field_.data(), n);
             // s_full now reflects the field BEFORE the trajectory — restore to s0.
@@ -216,12 +234,23 @@ public:
     [[nodiscard]] HmcSpec spec() const noexcept {
         return {.tau = tau_, .n_md = n_md_, .n_threads = n_threads_, .slabs_per_thread = n_slabs_};
     }
-    void set_spec(HmcSpec const& s) noexcept {
-        tau_       = s.tau;
-        n_md_      = s.n_md;
-        n_threads_ = s.n_threads;
-        n_slabs_   = s.slabs_per_thread;
+    // tau / n_md are tunable; the threading config is frozen at construction
+    // (the RNG streams are bound to its partition) — changing it would need a
+    // new Hmc, so a mismatch here is refused rather than silently re-binding.
+    void set_spec(HmcSpec const& s) {
+        if (resolve_threads_(s.n_threads) != n_threads_ || s.slabs_per_thread != n_slabs_) {
+            throw std::logic_error{"Hmc::set_spec: n_threads/slabs_per_thread are frozen at "
+                                   "construction (RNG streams are bound to the partition)"};
+        }
+        tau_  = s.tau;
+        n_md_ = s.n_md;
     }
+
+    // The owned stream set — one site stream per canonical slab + the driver.
+    // Exposed for checkpointing: io::save_config(path, field, hmc.rng(), i)
+    // and load_config(path, field, hmc.rng()) round-trip the full RNG state.
+    [[nodiscard]] StreamSet<R>& rng() noexcept { return streams_; }
+    [[nodiscard]] StreamSet<R> const& rng() const noexcept { return streams_; }
 
     // Exposed so reversibility tests can run a bare integrator without
     // the Metropolis acceptance and momentum sampling.
@@ -260,60 +289,105 @@ private:
             });
     }
 
-    void sample_momenta_() {
-        if constexpr (MatrixLinkField<Field>) {
-            // Algebra-aware momentum sampling per direction. The group writes
-            // anti-hermitian elements with the right structural zeros;
-            // raw normal_fill would put noise on the constrained slots.
-            using Group            = Field::group_type;
-            std::size_t const d    = mom_.ndims();
-            std::size_t const span = mom_.link_span();  // padded component stride
-            // Parallel counter-based sampler: one RNG draw per trajectory keys
-            // Philox, then each direction slab worksplits (site-indexed draws).
-            // The one serial draw advances the driver RNG identically on a resumed
-            // run, so checkpoint/resume stays bit-exact.
-            std::uint64_t const key = rng_.uniform_u64();
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                Scalar* const pblk = mom_.mu_block_data(mu);
-                reticolo::exec::field_visit(
-                    mom_, 1, [pblk, key, mu, span](std::size_t base, std::size_t cnt) {
-                        Group::sample_algebra_philox_range(pblk, key, mu, span, base, cnt);
-                    });
-            }
-        } else if constexpr (std::is_same_v<Scalar, double>) {
-            exec::philox_normal_fill(mom_.data(), flat_size(mom_), rng_.uniform_u64(), mom_);
-        } else if constexpr (std::is_same_v<Scalar, std::complex<double>>) {
-            std::size_t const n = flat_size(mom_);
-            // Independent N(0,1) on Re/Im is the correct complex-Gaussian sampling;
-            // std guarantees the {Re,Im} layout (§29.5.4).
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-            auto* const md = reinterpret_cast<double*>(mom_.data());
-            exec::philox_normal_fill(md, 2 * n, rng_.uniform_u64(), mom_);
-        } else if constexpr (std::is_same_v<Scalar, float>) {
-            fill_normals_narrowed_(mom_.data(), flat_size(mom_));
-        } else if constexpr (std::is_same_v<Scalar, std::complex<float>>) {
-            std::size_t const n = flat_size(mom_);
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-            fill_normals_narrowed_(reinterpret_cast<float*>(mom_.data()), 2 * n);
-        } else {
-            Scalar* const m     = mom_.data();
-            std::size_t const n = flat_size(mom_);
-            for (std::size_t i = 0; i < n; ++i) {
-                m[i] = static_cast<Scalar>(rng_.normal());
-            }
+    // n_threads = 0 resolves to the ambient team once, at construction time.
+    [[nodiscard]] static int resolve_threads_(int n) noexcept {
+        return n > 0 ? n : exec::traverse_threads(0, 0);
+    }
+
+    // The canonical slab count for `field` under this Hmc's thread/slab config
+    // — the stream count the set is built with, and the value every fill is
+    // checked against.
+    [[nodiscard]] static std::size_t slab_count_(Field const& field, int nthr, int slabs) {
+        exec::team_scope const team{nthr};
+        exec::slab_scope const sl{slabs};
+        return exec::partition(field).n_items;
+    }
+
+    // Strict slab↔stream binding guard, run before every momentum fill (under
+    // the trajectory's team/slab scopes): the partition must still produce
+    // exactly one item per site stream. It cannot drift under normal use —
+    // the config is frozen and set_spec refuses threading changes — so a
+    // mismatch means the environment changed under us; refuse to sample
+    // rather than silently rebind streams to different slabs.
+    void check_streams_() const {
+        std::size_t const items = exec::partition(mom_).n_items;
+        if (items != streams_.n_streams()) {
+            throw std::logic_error{"Hmc: field partition (" + std::to_string(items) +
+                                   " slabs) no longer matches the " +
+                                   std::to_string(streams_.n_streams()) +
+                                   " RNG streams bound at construction"};
         }
     }
 
-    // Batched standard-normal fill for float buffers. Draws doubles (so the RNG
-    // stream matches the double path one-for-one) into a thread_local scratch,
-    // then narrows to float. Momentum precision is non-critical — the kinetic
+    void sample_momenta_() {
+        check_streams_();
+        if constexpr (MatrixLinkField<Field>) {
+            // Algebra-aware momentum sampling per direction. The group writes
+            // anti-hermitian elements with the right structural zeros; raw
+            // normal_fill would put noise on the constrained slots. Slab i of
+            // every direction draws from site stream i, in μ order — the draw
+            // sequence is a pure function of the frozen partition.
+            using Group            = Field::group_type;
+            std::size_t const d    = mom_.ndims();
+            std::size_t const span = mom_.link_span();  // padded component stride
+            for (std::size_t mu = 0; mu < d; ++mu) {
+                Scalar* const pblk = mom_.mu_block_data(mu);
+                exec::field_visit_indexed(
+                    mom_, 1, [this, pblk, span](std::size_t i, std::size_t base, std::size_t cnt) {
+                        Group::sample_algebra_slab(pblk + base, streams_.site_stream(i), span, cnt);
+                    });
+            }
+        } else if constexpr (std::is_same_v<Scalar, double>) {
+            double* const m = mom_.data();
+            exec::field_visit_indexed(
+                mom_, 1, [this, m](std::size_t i, std::size_t base, std::size_t cnt) {
+                    streams_.site_stream(i).normal_fill(m + base, cnt);
+                });
+        } else if constexpr (std::is_same_v<Scalar, std::complex<double>>) {
+            // Independent N(0,1) on Re/Im is the correct complex-Gaussian sampling;
+            // std guarantees the {Re,Im} layout (§29.5.4). Two doubles per site,
+            // so slab i covers doubles [2·base, 2·(base+cnt)).
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+            auto* const md = reinterpret_cast<double*>(mom_.data());
+            exec::field_visit_indexed(
+                mom_, 1, [this, md](std::size_t i, std::size_t base, std::size_t cnt) {
+                    streams_.site_stream(i).normal_fill(md + (2 * base), 2 * cnt);
+                });
+        } else if constexpr (std::is_same_v<Scalar, float>) {
+            float* const m = mom_.data();
+            exec::field_visit_indexed(
+                mom_, 1, [this, m](std::size_t i, std::size_t base, std::size_t cnt) {
+                    fill_narrowed_slab_(streams_.site_stream(i), m + base, cnt);
+                });
+        } else if constexpr (std::is_same_v<Scalar, std::complex<float>>) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+            auto* const mf = reinterpret_cast<float*>(mom_.data());
+            exec::field_visit_indexed(
+                mom_, 1, [this, mf](std::size_t i, std::size_t base, std::size_t cnt) {
+                    fill_narrowed_slab_(streams_.site_stream(i), mf + (2 * base), 2 * cnt);
+                });
+        } else {
+            Scalar* const m = mom_.data();
+            exec::field_visit_indexed(
+                mom_, 1, [this, m](std::size_t i, std::size_t base, std::size_t cnt) {
+                    R& r = streams_.site_stream(i);
+                    for (std::size_t j = base; j < base + cnt; ++j) {
+                        m[j] = static_cast<Scalar>(r.normal());
+                    }
+                });
+        }
+    }
+
+    // Per-slab standard-normal fill narrowed to float. Draws doubles (so the
+    // stream advances exactly as the double path would) into a thread_local
+    // scratch, then narrows. Momentum precision is non-critical — the kinetic
     // energy is summed in double regardless of the field's scalar type.
-    void fill_normals_narrowed_(float* out, std::size_t n) {
+    static void fill_narrowed_slab_(R& r, float* out, std::size_t n) {
         thread_local std::vector<double> scratch;
         double* const s = reticolo::exec::thread_scratch(scratch, n);
-        rng_.normal_fill(s, n);
-        for (std::size_t i = 0; i < n; ++i) {
-            out[i] = static_cast<float>(s[i]);
+        r.normal_fill(s, n);
+        for (std::size_t j = 0; j < n; ++j) {
+            out[j] = static_cast<float>(s[j]);
         }
     }
 
@@ -386,14 +460,18 @@ private:
 
     A const& action_;
     Field& field_;
-    R& rng_;
     Field mom_;
     Field force_;
     Field old_field_;
     double tau_;
     int n_md_;
-    int n_threads_;  // bound via team_scope each trajectory; 0 = ambient
+    int n_threads_;  // bound via team_scope each trajectory; resolved from
+                     // ambient at construction, frozen thereafter
     int n_slabs_;    // bound via slab_scope each trajectory; 0 = 1 slab/thread
+    // Owned randomness: one site stream per canonical slab + a driver for the
+    // serial draws. Declared after the threading fields — its size derives
+    // from them (member init order).
+    StreamSet<R> streams_;
     // last s_full of `field_` after the most recent trajectory. NaN until the
     // first trajectory runs. Used by Replica / Exchange so they can read the
     // current action without re-sweeping.

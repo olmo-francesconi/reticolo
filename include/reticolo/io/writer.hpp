@@ -2,7 +2,7 @@
 
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 
 #include <complex>
 #include <cstddef>
@@ -125,10 +125,20 @@ public:
     void field(std::string_view path, MatrixLinkLattice<G, T> const& lat);
 
     // Write the RNG's full state (state words + cached normal) under `path`.
-    // The corresponding Reader::rng_state restores it bit-exact. Checkpoint /
-    // resume is FastRng-only: only FastRng exposes the state introspection
-    // (`state()`, `from_state`) this serialises — RanluxRng / Mt19937Rng don't.
+    // The corresponding Reader::rng_state restores it bit-exact. This
+    // single-generator layout is FastRng-only; multi-stream generators
+    // (StreamSet) go through `rng_streams` below.
     void rng_state(std::string_view path, FastRng const& rng);
+
+    // Write a multi-stream RNG state (StreamSet checkpoint): one flat uint64
+    // dataset of (n_streams+1)·n_words words — driver stream first — with
+    // @kind / @n_streams / @n_words attributes. Reader::rng_streams validates
+    // all three against the resuming StreamSet and returns the words.
+    void rng_streams(std::string_view path,
+                     std::string_view kind,
+                     std::vector<std::uint64_t> const& words,
+                     std::size_t n_streams,
+                     std::size_t n_words);
 
     [[nodiscard]] std::filesystem::path const& path() const noexcept;
 

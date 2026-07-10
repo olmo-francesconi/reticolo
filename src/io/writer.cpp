@@ -2,7 +2,7 @@
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/io/writer.hpp>
 
 #include <algorithm>
@@ -659,6 +659,36 @@ void Writer::rng_state(std::string_view path, FastRng const& rng) {
     write_string_attr(dset, "kind", "FastRng");
     write_scalar_attr<unsigned int>(dset, "has_cached_normal", rng.has_cached_normal() ? 1U : 0U);
     write_scalar_attr<double>(dset, "cached_normal", rng.cached_normal());
+
+    H5Oclose(dset);
+}
+
+void Writer::rng_streams(std::string_view path,
+                         std::string_view kind,
+                         std::vector<std::uint64_t> const& words,
+                         std::size_t n_streams,
+                         std::size_t n_words) {
+    std::scoped_lock const lock{impl_->mu};
+
+    auto segments = split_path(path);
+    if (segments.empty()) {
+        throw std::invalid_argument{"Writer::rng_streams: empty path"};
+    }
+    if (words.size() != (n_streams + 1) * n_words) {
+        throw std::invalid_argument{"Writer::rng_streams: word count mismatch"};
+    }
+
+    hid_t const parent = ensure_parent_groups(impl_->file, segments);
+    write_1d_dataset(
+        parent, segments.back().c_str(), H5T_NATIVE_UINT64, words.data(), words.size());
+
+    hid_t const dset = H5Oopen(parent, segments.back().c_str(), H5P_DEFAULT);
+    H5Gclose(parent);
+    hid_check(dset, "rng_streams reopen for attrs");
+
+    write_string_attr(dset, "kind", std::string{kind});
+    write_scalar_attr<std::uint64_t>(dset, "n_streams", n_streams);
+    write_scalar_attr<std::uint64_t>(dset, "n_words", n_words);
 
     H5Oclose(dset);
 }

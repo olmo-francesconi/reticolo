@@ -47,7 +47,6 @@ int main(int argc, char** argv) {
             blk[(6 * ns) + s] = 1.0;
         }
     }
-    FastRng rng{cf.seed};
     Action const action{.beta = beta};
     log::act(action);
 
@@ -61,7 +60,7 @@ int main(int argc, char** argv) {
     auto plaq     = out.series<double>("/prod/obs/plaq");
 
     // ---- Updater ----
-    alg::Hmc hmc{action, links, rng, {.tau = tau, .n_md = n_md}, alg::integ::omelyan2};
+    alg::Hmc hmc{action, links, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}, alg::integ::omelyan2};
 
     std::size_t const n_plaq =
         (static_cast<std::size_t>(ndim) * static_cast<std::size_t>(ndim - 1) / 2U) * ns;

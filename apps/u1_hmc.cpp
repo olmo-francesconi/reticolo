@@ -30,7 +30,6 @@ int main(int argc, char** argv) {
     MatrixLinkLattice<math::group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                               static_cast<std::size_t>(cf.L));
     MatrixLinkLattice<math::group::U1, double> links{shape};
-    FastRng rng{cf.seed};
     Action const action{.beta = beta};
     log::act(action);
 
@@ -44,7 +43,7 @@ int main(int argc, char** argv) {
     auto plaq     = out.series<double>("/prod/obs/plaq");
 
     // ---- Updater ----
-    alg::Hmc hmc{action, links, rng, {.tau = tau, .n_md = n_md}, alg::integ::omelyan2};
+    alg::Hmc hmc{action, links, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}, alg::integ::omelyan2};
 
     std::size_t const v_sites = links.nsites();
     std::size_t const n_plaq =

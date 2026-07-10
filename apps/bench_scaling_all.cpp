@@ -45,7 +45,17 @@ void bench_one(
     double const sms = time_ms([&] { sink += a.s_full(fld); }, g_rf);
     double trms      = 0.0;  // g_rt <= 0 skips the (expensive) trajectory
     if (g_rt > 0) {
-        alg::Hmc hmc{a, fld, rng, {.tau = 1.0, .n_md = 8}, alg::integ::leapfrog, log::Mode::silent};
+        // Draw a fresh seed from the shared `rng` per call: `bench_one` is invoked
+        // once per action against the same `rng`, and Hmc now takes its RNG by
+        // value — reusing the lvalue as-is would hand every action an identical
+        // stream since the by-value copy's own draws never advance the caller's
+        // object.
+        alg::Hmc hmc{a,
+                     fld,
+                     FastRng{rng.uniform_u64()},
+                     {.tau = 1.0, .n_md = 8},
+                     alg::integ::leapfrog,
+                     log::Mode::silent};
         trms = time_ms([&] { (void)hmc.step(log::Mode::silent); }, g_rt);
     }
     // Working-set MB of one field pass and the thread count the policy actually

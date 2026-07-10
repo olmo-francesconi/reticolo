@@ -2,7 +2,7 @@
 //
 // For each (field type, RNG) tuple, measure the cost of filling a buffer
 // the size of one trajectory's worth of momenta. Three RNGs (FastRng,
-// RanluxRng, Mt19937Rng) all satisfy the same `Rng` concept and plug in
+// RanlxdRng, Mt19937Rng) all satisfy the same `Rng` concept and plug in
 // at every existing call site.
 
 #include <reticolo/reticolo.hpp>
@@ -155,6 +155,6 @@ int main() {
     std::printf("RNG — momentum-sampling throughput\n\n");
     print_header();
     bench_rng_for<FastRng>("FastRng");
-    bench_rng_for<RanluxRng>("Ranlux48");
+    bench_rng_for<RanlxdRng>("Ranlxd");
     bench_rng_for<Mt19937Rng>("Mt19937_64");
 }

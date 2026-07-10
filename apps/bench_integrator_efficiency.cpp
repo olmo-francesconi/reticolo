@@ -46,8 +46,7 @@ Result measure(Field const& thermalised,
                double tau,
                int n_meas) {
     Field phi = thermalised;  // start each point from the same equilibrium config
-    FastRng rng{9001};
-    alg::Hmc hmc{action, phi, rng, {.tau = tau, .n_md = n_md}, integ, log::Mode::silent};
+    alg::Hmc hmc{action, phi, FastRng{9001}, {.tau = tau, .n_md = n_md}, integ, log::Mode::silent};
 
     long accepted = 0;
     double sum_dh = 0.0, sum_dh2 = 0.0;
@@ -81,9 +80,9 @@ void run_action(char const* label, Field& phi, Action const& action, double tau,
 
     // Thermalise once with a reliable integrator; every point starts from a
     // copy of this equilibrium config (HMC targets exp(-S) for all integrators).
-    FastRng warm_rng{42};
     {
-        alg::Hmc warm{action, phi, warm_rng, {.tau = tau, .n_md = 24}, omelyan2, log::Mode::silent};
+        alg::Hmc warm{
+            action, phi, FastRng{42}, {.tau = tau, .n_md = 24}, omelyan2, log::Mode::silent};
         for (int i = 0; i < 400; ++i) {
             (void)warm.step(log::Mode::silent);
         }

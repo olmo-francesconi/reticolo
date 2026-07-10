@@ -156,8 +156,7 @@ int main() {
         // Phi4.
         {
             Lattice<double> phi{shape_s};
-            FastRng rng{42};
-            alg::Hmc hmc{phi4, phi, rng, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
+            alg::Hmc hmc{phi4, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.step();
             }
@@ -179,8 +178,7 @@ int main() {
         // SineGordon.
         {
             Lattice<double> phi{shape_s};
-            FastRng rng{42};
-            alg::Hmc hmc{sg, phi, rng, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
+            alg::Hmc hmc{sg, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.step();
             }
@@ -202,8 +200,7 @@ int main() {
         // CompactU1 (gauge).
         {
             MatrixLinkLattice<math::group::U1, double> theta{shape_g};
-            FastRng rng{42};
-            alg::Hmc hmc{u1, theta, rng, {.tau = k_tau, .n_md = k_n_md}, GaugeInteg{}};
+            alg::Hmc hmc{u1, theta, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, GaugeInteg{}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.step();
             }

@@ -26,7 +26,7 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/math/group/su2.hpp>
 #include <reticolo/math/group/su3.hpp>
 #include <reticolo/math/group/u1.hpp>

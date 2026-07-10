@@ -2,6 +2,7 @@
 
 #include <reticolo/core/indexing.hpp>
 #include <reticolo/core/log.hpp>
+#include <reticolo/core/parallel.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <cstddef>
@@ -28,7 +29,7 @@ namespace reticolo {
 // read or written by any kernel — every access is blk[k·link_span + s] with
 // s < nsites — so the field's physics is byte-identical to the packed layout.
 [[nodiscard]] inline std::size_t padded_link_span(std::size_t nsites, std::size_t elem) noexcept {
-    constexpr std::size_t line_bytes = 128;  // ≥ any current L1 line (M1 = 128)
+    constexpr std::size_t line_bytes = exec::k_cache_line_bytes;
     std::size_t const line_elems     = elem != 0 ? (line_bytes / elem) : 1;
     if (line_elems <= 1) {
         return nsites;

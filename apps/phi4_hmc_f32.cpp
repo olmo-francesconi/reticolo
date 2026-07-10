@@ -44,7 +44,6 @@ int main(int argc, char** argv) {
     // ---- State: float lattice, RNG, float action ----
     Lattice<float>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
     Lattice<float> phi{shape};
-    FastRng rng{cf.seed};
 
     act::Phi4<float> phi4{.kappa = static_cast<float>(kappa), .lambda = static_cast<float>(lambda)};
     log::act(phi4);
@@ -60,7 +59,7 @@ int main(int argc, char** argv) {
     auto m_sq     = out.series<double>("/prod/obs/m2");
 
     // ---- Updater (precision deduced from the float lattice + action) ----
-    alg::Hmc hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
+    alg::Hmc hmc{phi4, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     // ---- Thermalisation ----
     log::info("hmc", "therm  {} trajectories", n_therm);

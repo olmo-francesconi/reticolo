@@ -80,13 +80,49 @@ with the same shape automatically share.
 Boundary conditions are always periodic. `next` / `prev` are unbranched.
 Open / antiperiodic BCs are out of scope.
 
-### `FastRng`
+### `FastRng` and the RNG families
 
 xoshiro256++ with SplitMix64 seeding, Box-Muller polar normal with the
 second sample cached, Lemire's debiased rejection for `uniform_int(n)`.
 Copies are independent — each subsequent draw on a copy diverges. There's
 also an `Rng` concept; algorithms typecheck a different generator against
-it.
+it. Three siblings share the surface: `PhiloxRng` (counter-based, shared
+core with the CUDA sampler), `RanlxdRng` (a clean-room, bit-compatible
+reimplementation of Lüscher's `ranlxd` — provably distinct streams per seed),
+`Mt19937Rng` (`std::mt19937_64`).
+
+### `StreamSet<R>` — per-slab parallel streams
+
+`core/rng/stream_set.hpp`. A pool of independent streams over one family:
+one dedicated **driver** stream (serial draws: Metropolis accept, LLR
+exchange, hot starts) + n **site** streams, each padded to its own cache
+line (`exec::k_cache_line_bytes` — engine state is written per draw, packed
+streams false-share). Stream independence is per-family: `FastRng::jump()`
+(the published 2^128 xoshiro jump polynomial, provably disjoint),
+`PhiloxRng::stream(seed, k)` (disjoint counter subspaces),
+`RanlxdRng::stream(seed, k)` (sequential 31-bit seeds — Lüscher's seeding
+proves distinct trajectories), and SplitMix-decorrelated seeds for the one
+remaining std engine, `Mt19937Rng` (`JumpStream` / `KeyedStream` concepts).
+The pool
+holds **no geometry** — who draws from which stream is the owning
+algorithm's contract.
+
+`alg::Hmc` **owns** its randomness: the ctor takes a freshly-seeded family
+generator **by value**, draws one `uniform_u64()` from it, and builds a
+`StreamSet` with exactly one site stream per item of the canonical field
+partition (`exec::partition` under the Hmc's frozen thread/slab config).
+Momentum fills bind slab i to site stream i through
+`exec::field_visit_indexed` — the binding is the partition item index, never
+the executing thread — and every fill re-derives the partition and throws
+`std::logic_error` on a count mismatch, so an environment change mid-run
+refuses to sample instead of silently re-binding streams. Consequences:
+`n_threads = 0` resolves against the ambient once at construction and is
+frozen (`set_spec` refuses threading changes); a chain's identity is
+(seed, shape, n_threads, slabs_per_thread), matching the contract the
+`s_full`/kinetic reduce folds already impose. Checkpointing goes through
+`hmc.rng()`: `io::save_config`/`load_config` write and validate every
+stream's state words (`/rng@kind`, `@n_streams`, `@n_words` — a resume with
+a different threading config fails loudly).
 
 ## Actions
 

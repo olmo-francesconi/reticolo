@@ -5,7 +5,7 @@
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/parallel.hpp>
-#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 
 #include "nn_reference.hpp"
 

@@ -61,9 +61,9 @@ public:
     };
 
     Replica(Base const& base, Rng rng_init, Spec spec, alg::HmcSpec const& hmc_spec)
-        : id_{std::move(spec.id)}, phi_{std::move(spec.shape)}, rng_{std::move(rng_init)},
+        : id_{std::move(spec.id)}, phi_{std::move(spec.shape)},
           windowed_{.base = base, .a = spec.a_init, .E_n = spec.e_n, .delta = spec.delta},
-          hmc_{windowed_, phi_, rng_, hmc_spec, Integrator{}, log::Mode::silent} {
+          hmc_{windowed_, phi_, std::move(rng_init), hmc_spec, Integrator{}, log::Mode::silent} {
         // Self-announce with our run id bound as scope so the line carries
         // `r0NN` automatically — apps don't have to wrap construction in
         // `log::scope` themselves. Announce the nested HMC too so its tau /
@@ -181,7 +181,9 @@ public:
 
     [[nodiscard]] Field& phi() noexcept { return phi_; }
     [[nodiscard]] Field const& phi() const noexcept { return phi_; }
-    [[nodiscard]] Rng& rng() noexcept { return rng_; }
+    // The replica's randomness is owned by its Hmc (one site stream per slab —
+    // one stream inside the replica team — plus a driver for serial draws).
+    [[nodiscard]] StreamSet<Rng>& rng() noexcept { return hmc_.rng(); }
     [[nodiscard]] windowed_action_type const& windowed_action() const noexcept { return windowed_; }
 
     // Random Gaussian-shift seed of the field, sigma per real component.
@@ -189,16 +191,17 @@ public:
     void hot_start(scalar_t sigma) noexcept {
         T* const data       = phi_.data();
         std::size_t const n = phi_.nsites();
+        Rng& drv            = hmc_.rng().driver();  // serial draw → driver stream
         if constexpr (std::is_same_v<T, std::complex<double>> ||
                       std::is_same_v<T, std::complex<float>>) {
             using R = T::value_type;
             for (std::size_t i = 0; i < n; ++i) {
-                data[i] = T{static_cast<R>(static_cast<scalar_t>(rng_.normal()) * sigma),
-                            static_cast<R>(static_cast<scalar_t>(rng_.normal()) * sigma)};
+                data[i] = T{static_cast<R>(static_cast<scalar_t>(drv.normal()) * sigma),
+                            static_cast<R>(static_cast<scalar_t>(drv.normal()) * sigma)};
             }
         } else {
             for (std::size_t i = 0; i < n; ++i) {
-                data[i] = static_cast<T>(static_cast<scalar_t>(rng_.normal()) * sigma);
+                data[i] = static_cast<T>(static_cast<scalar_t>(drv.normal()) * sigma);
             }
         }
     }
@@ -244,7 +247,6 @@ private:
 
     std::string id_;
     Field phi_;
-    Rng rng_;
     Windowed windowed_;
     alg::Hmc<Windowed, Rng, Integrator, Field, T> hmc_;
     ReplicaStats stats_{};

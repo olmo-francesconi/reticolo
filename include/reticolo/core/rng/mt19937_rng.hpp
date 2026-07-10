@@ -1,11 +1,17 @@
 #pragma once
 
+#include <reticolo/core/log.hpp>
 #include <reticolo/core/rng/rng.hpp>
 
+#include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <random>
+#include <sstream>
+#include <stdexcept>
+#include <string_view>
 
 namespace reticolo {
 
@@ -26,8 +32,24 @@ class Mt19937Rng {
 public:
     using state_type = std::uint64_t;
 
-    explicit Mt19937Rng(state_type seed = 0xC0FFEEULL) noexcept : engine_{seed} {
-        log::info("rng", "Mt19937Rng  seed={:#x}", seed);
+    static constexpr std::string_view name = "Mt19937Rng";
+
+    explicit Mt19937Rng(state_type seed    = 0xC0FFEEULL,
+                        log::Mode announce = log::Mode::normal) noexcept
+        : engine_{seed} {
+        if (announce == log::Mode::normal) {
+            log::info("rng", "Mt19937Rng  seed={:#x}", seed);
+        }
+    }
+
+    // Independent stream k: engine seeded from splitmix64(seed + k·golden) —
+    // decorrelated seeds, no formal disjointness proof (no jump in the std
+    // wrapper; unlike RanlxdRng, whose seeding proves distinct streams).
+    // SplitMix is
+    // the recommended seeder for MT anyway (a raw small seed leaves the huge
+    // state poorly mixed for many draws).
+    [[nodiscard]] static Mt19937Rng stream(state_type seed, std::uint64_t k) noexcept {
+        return Mt19937Rng{splitmix64(seed + (k * 0x9E3779B97F4A7C15ULL)), log::Mode::silent};
     }
 
     void reseed(state_type seed) noexcept {
@@ -106,6 +128,59 @@ public:
         if (i < n) {
             out[i] = normal();
         }
+    }
+
+    // Full state as flat words via the engine's textual representation. This
+    // checkpoint is portable across runs of the SAME standard library only
+    // (implementations disagree on token count / trailing position index);
+    // FastRng / PhiloxRng / RanlxdRng checkpoints are fully portable.
+    // mt19937_64's textual state
+    // is 312 words on libc++; the capacity leaves room for implementations
+    // that append a position index.
+    static constexpr std::size_t k_engine_token_cap = 314;
+    static constexpr std::size_t n_state_words      = k_engine_token_cap + 3;
+
+    [[nodiscard]] std::array<state_type, n_state_words> state_words() const {
+        std::array<state_type, n_state_words> w{};
+        std::ostringstream os;
+        os << engine_;
+        std::istringstream is{std::move(os).str()};
+        std::size_t n = 0;
+        state_type v  = 0;
+        while (is >> v) {
+            if (n >= k_engine_token_cap) {
+                throw std::runtime_error{"Mt19937Rng::state_words: engine token overflow"};
+            }
+            w[1 + n++] = v;
+        }
+        w[0]                      = n;
+        w[k_engine_token_cap + 1] = std::bit_cast<state_type>(cached_normal_);
+        w[k_engine_token_cap + 2] = has_cached_normal_ ? 1ULL : 0ULL;
+        return w;
+    }
+
+    [[nodiscard]] static Mt19937Rng from_words(std::array<state_type, n_state_words> const& w) {
+        auto const n = static_cast<std::size_t>(w[0]);
+        if (n == 0 || n > k_engine_token_cap) {
+            throw std::runtime_error{"Mt19937Rng::from_words: bad token count"};
+        }
+        std::ostringstream os;
+        for (std::size_t i = 0; i < n; ++i) {
+            if (i != 0) {
+                os << ' ';
+            }
+            os << w[1 + i];
+        }
+        Mt19937Rng r{0, log::Mode::silent};
+        std::istringstream is{std::move(os).str()};
+        is >> r.engine_;
+        if (is.fail()) {
+            throw std::runtime_error{"Mt19937Rng::from_words: engine state rejected "
+                                     "(checkpoint from a different standard library?)"};
+        }
+        r.cached_normal_     = std::bit_cast<double>(w[k_engine_token_cap + 1]);
+        r.has_cached_normal_ = w[k_engine_token_cap + 2] != 0;
+        return r;
     }
 
 private:

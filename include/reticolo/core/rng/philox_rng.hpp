@@ -6,10 +6,12 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <numbers>
+#include <string_view>
 
 namespace reticolo {
 
@@ -23,8 +25,53 @@ class PhiloxRng {
 public:
     using state_type = std::uint64_t;
 
-    explicit PhiloxRng(state_type seed = 0xC0FFEEULL) noexcept : seed_{seed} {
-        log::info("rng", "PhiloxRng seed={:#x}", seed);
+    static constexpr std::string_view name = "PhiloxRng";
+
+    explicit PhiloxRng(state_type seed    = 0xC0FFEEULL,
+                       log::Mode announce = log::Mode::normal) noexcept
+        : seed_{seed} {
+        if (announce == log::Mode::normal) {
+            log::info("rng", "PhiloxRng seed={:#x}", seed);
+        }
+    }
+
+    // Independent stream k: same key, counter word-pair [2],[3] = k — every
+    // stream draws from a disjoint 2^64 counter subspace (the incrementing
+    // counter occupies words [0],[1]). Stream 0 is bit-identical to a plain
+    // PhiloxRng with the same seed.
+    [[nodiscard]] static PhiloxRng stream(state_type seed, std::uint64_t k) noexcept {
+        PhiloxRng r{seed, log::Mode::silent};
+        r.stream_ = k;
+        return r;
+    }
+
+    // Full state as flat words for the multi-stream checkpoint layout:
+    // [seed, stream, counter, idx, buf0, buf1, bit_cast(cached_normal),
+    // has_cached_normal] — everything the generator owns, restored bit-exact
+    // mid-buffer.
+    static constexpr std::size_t n_state_words = 8;
+
+    [[nodiscard]] std::array<state_type, n_state_words> state_words() const noexcept {
+        return {seed_,
+                stream_,
+                counter_,
+                static_cast<state_type>(idx_),
+                buf_[0],
+                buf_[1],
+                std::bit_cast<state_type>(cached_normal_),
+                has_cached_normal_ ? 1ULL : 0ULL};
+    }
+
+    [[nodiscard]] static PhiloxRng
+    from_words(std::array<state_type, n_state_words> const& w) noexcept {
+        PhiloxRng r{w[0], log::Mode::silent};
+        r.stream_            = w[1];
+        r.counter_           = w[2];
+        r.idx_               = static_cast<std::size_t>(w[3]);
+        r.buf_               = {w[4], w[5]};
+        r.cached_normal_     = std::bit_cast<double>(w[6]);
+        r.has_cached_normal_ = w[7] != 0;
+        return r;
     }
 
     [[nodiscard]] state_type uniform_u64() noexcept {
@@ -108,8 +155,8 @@ private:
                                     static_cast<std::uint32_t>(seed_ >> 32U)};
         Philox4x32::U32x4 const ctr{static_cast<std::uint32_t>(counter_),
                                     static_cast<std::uint32_t>(counter_ >> 32U),
-                                    0U,
-                                    0U};
+                                    static_cast<std::uint32_t>(stream_),
+                                    static_cast<std::uint32_t>(stream_ >> 32U)};
         Philox4x32::U32x4 const o = Philox4x32::bijection(ctr, key);
         buf_[0]                   = (static_cast<state_type>(o[1]) << 32U) | o[0];
         buf_[1]                   = (static_cast<state_type>(o[3]) << 32U) | o[2];
@@ -118,6 +165,7 @@ private:
     }
 
     state_type seed_;
+    state_type stream_  = 0;
     state_type counter_ = 0;
     std::array<state_type, 2> buf_{};
     std::size_t idx_        = 2;  // forces a refill on first draw

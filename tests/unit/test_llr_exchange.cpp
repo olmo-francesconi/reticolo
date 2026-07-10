@@ -1,6 +1,6 @@
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/llr/exchange.hpp>
 #include <reticolo/llr/replica.hpp>
 

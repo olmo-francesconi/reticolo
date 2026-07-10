@@ -53,6 +53,8 @@ reticolo_add_test(test_hmc_integrator_order         physics/test_hmc_integrator_
 reticolo_add_test(test_phi4_hmc_mixed_precision      physics/test_phi4_hmc_mixed_precision.cpp)
 reticolo_add_test(test_api_uniformity               unit/test_api_uniformity.cpp)
 reticolo_add_test(test_philox                        unit/test_philox.cpp)
+reticolo_add_test(test_ranlxd                        unit/test_ranlxd.cpp)
+reticolo_add_test(test_stream_set                    unit/test_stream_set.cpp)
 
 if(RETICOLO_ENABLE_CUDA)
     # Native .cu Catch2 tests: each device-validation gate is its own TU, like
@@ -99,6 +101,7 @@ if(RETICOLO_BUILD_IO)
     reticolo_add_test(test_writer_phase_collision   io/test_writer_phase_collision.cpp)
     reticolo_add_test(test_writer_vars_stamping     io/test_writer_vars_stamping.cpp)
     reticolo_add_test(test_checkpoint_roundtrip     io/test_checkpoint_roundtrip.cpp)
+    reticolo_add_test(test_stream_set_checkpoint    io/test_stream_set_checkpoint.cpp)
     reticolo_add_test(test_cli_parser               unit/test_cli_parser.cpp)
 endif()
 

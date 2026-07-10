@@ -38,6 +38,18 @@ namespace reticolo::exec {
 // per-chunk dispatch and keep the inner loop vectorising.
 inline constexpr std::size_t k_chunk_bytes = 64UL * 1024;
 
+// Fleet-wide upper bound on the L1 cache-line size (x86 = 64, Apple Silicon =
+// 128). Every line-geometry padding in the tree derives from this one constant:
+// StreamSet's per-stream false-sharing slots and the gauge link-span set-aliasing
+// pad. An upper bound is always correct — over-padding costs bytes, under-padding
+// costs line ping-pong / set collisions — and on x86 128 is what you want anyway
+// (the adjacent-line prefetcher couples 64 B line pairs). Deliberately NOT
+// std::hardware_destructive_interference_size: that is a per-target compile-time
+// guess, not a machine detection, its value follows -mtune on GCC (an ODR/ABI
+// hazard in an INTERFACE library, see -Winterference-size), and it disagrees
+// across this project's CI toolchains (64 / 128 / 256).
+inline constexpr std::size_t k_cache_line_bytes = 128;
+
 // The traverse team size for THIS thread: how many threads the next lattice pass
 // opens. 0 = inherit the OpenMP ambient (`omp_get_max_threads()`, i.e. the
 // process-wide OMP_NUM_THREADS). An algorithm binds an explicit size for the span
@@ -425,6 +437,13 @@ template <class Term>
 // write-disjoint over the site range for the map form; the reduce folds
 // per-item partials in canonical item order (thread-count invariant).
 //
+// The `_indexed` form additionally hands the worker the canonical partition
+// item index: `worker(item, base, cnt)`. The index is a property of the
+// partition, NOT of the executing thread or the schedule — item i covers the
+// same site range on every invocation for a fixed (team, slabs_per_thread).
+// It exists for state that must be bound one-to-one to a slab (the per-slab
+// RNG streams: Hmc's momentum fill draws slab i strictly from site stream i).
+//
 // `gran` is the kernel's SIMD batch width, kept for documentation and the
 // batched kernels' tail handling: the partition itself ignores it (there is ONE
 // partition per field, shared by every op), but item sizes are whole products
@@ -432,13 +451,20 @@ template <class Term>
 // any power-of-two batch — batched kernels split vector/scalar tails per item,
 // deterministically.
 template <class Field, class Worker>
-inline void field_visit(Field const& field, std::size_t /*gran*/, Worker const& worker) {
+inline void field_visit_indexed(Field const& field, std::size_t /*gran*/, Worker const& worker) {
     Partition const p  = partition(field);
     int const nthreads = traverse_threads(p.n_sites, field.bytes_per_site());
     note_slicing(field.shape().data(), field.ndims(), field.bytes_per_site(), p, nthreads);
     parallel_map(nthreads, p.n_items, [&](std::size_t i) {
         std::size_t const base = i * p.item_sites;
-        worker(base, std::min(p.item_sites, p.n_sites - base));
+        worker(i, base, std::min(p.item_sites, p.n_sites - base));
+    });
+}
+
+template <class Field, class Worker>
+inline void field_visit(Field const& field, std::size_t gran, Worker const& worker) {
+    field_visit_indexed(field, gran, [&](std::size_t /*item*/, std::size_t base, std::size_t cnt) {
+        worker(base, cnt);
     });
 }
 

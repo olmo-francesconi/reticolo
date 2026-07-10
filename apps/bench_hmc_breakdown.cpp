@@ -1,7 +1,7 @@
-#include <reticolo/core/rng/normal_fill.hpp>
 #include <reticolo/reticolo.hpp>
 
 #include "_bench/hot_init.hpp"
+#include "_bench/philox_normal_fill.hpp"
 #include "_bench/timing.hpp"
 
 #include <cstddef>
@@ -74,7 +74,7 @@ void refresh_mom(Field& mom, FastRng& rng) {
             });
         }
     } else {
-        exec::philox_normal_fill(mom.data(), flat_size(mom), rng.uniform_u64(), mom);
+        bench::philox_normal_fill(mom.data(), flat_size(mom), rng.uniform_u64(), mom);
     }
 }
 

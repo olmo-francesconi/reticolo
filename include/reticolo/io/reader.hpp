@@ -2,11 +2,12 @@
 
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/io/writer.hpp>
 
 #include <complex>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -62,6 +63,16 @@ public:
 
     // Restore a FastRng's full state (state words + cached normal).
     [[nodiscard]] FastRng rng_state(std::string_view path) const;
+
+    // Read a multi-stream RNG state written by Writer::rng_streams. Validates
+    // kind, stream count, and words-per-stream against the resuming StreamSet;
+    // throws std::runtime_error on any mismatch (a resume must reconstruct the
+    // set with the same family and n_streams). Returns the flat words,
+    // driver stream first.
+    [[nodiscard]] std::vector<std::uint64_t> rng_streams(std::string_view path,
+                                                         std::string_view expected_kind,
+                                                         std::size_t expected_n_streams,
+                                                         std::size_t expected_n_words) const;
 
 private:
     struct Impl;

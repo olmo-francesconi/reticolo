@@ -36,7 +36,6 @@ int main(int argc, char** argv) {
     Lattice<std::complex<double>>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                  static_cast<std::size_t>(cf.L));
     Lattice<std::complex<double>> phi{shape};
-    FastRng rng{cf.seed};
     Action const action{.mass = mass, .lambda = lambda, .mu = mu};
     log::act(action);
 
@@ -50,7 +49,7 @@ int main(int argc, char** argv) {
     auto s_i      = out.series<double>("/prod/obs/s_i");
 
     // ---- Updater ----
-    alg::Hmc hmc{action, phi, rng, {.tau = tau, .n_md = n_md}, alg::integ::omelyan2};
+    alg::Hmc hmc{action, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}, alg::integ::omelyan2};
 
     // ---- Thermalisation ----
     log::info("hmc", "therm  {} trajectories", n_therm);

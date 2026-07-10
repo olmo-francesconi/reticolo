@@ -11,15 +11,16 @@
 #include <numbers>
 #include <vector>
 
-namespace reticolo::exec {
+namespace reticolo::bench {
 
 // Parallel counter-based standard-normal fill over a field's canonical
 // partition. out[2p], out[2p+1] are the Box-Muller pair of
 // philox_uniform2(key, 0, p) — each pair an independent function of the site
 // index, so the fill worksplits and is bit-identical for any thread count.
-// `key` is one serial RNG draw per trajectory (see Hmc::sample_momenta_): the
-// single draw advances the driver RNG identically on a resumed run, so
-// checkpoint/resume stays bit-exact.
+// Bench infrastructure: this was Hmc's momentum sampler before the owned
+// per-slab StreamSet replaced it; it lives on here as the keyed reference
+// fill for the component benches and as the CPU mirror of the CUDA momentum
+// sampler.
 //
 // Every stage is SIMD-batched: the Philox counter core through
 // philox_uniform2_batch (bit-identical integers, vectorised across pairs), the
@@ -32,8 +33,7 @@ namespace reticolo::exec {
 // runs on a machine.
 //
 // `n` is the flat double count (2·nsites for a complex field, nsites for real);
-// `fld` supplies the partition and nsites. Shared by alg::Hmc and the HMC
-// component bench so the momentum-refresh cost is measured on the real code.
+// `fld` supplies the partition and nsites.
 template <class Field>
 inline void
 philox_normal_fill(double* out, std::size_t n, std::uint64_t key, Field const& fld) noexcept {
@@ -79,4 +79,4 @@ philox_normal_fill(double* out, std::size_t n, std::uint64_t key, Field const& f
     }
 }
 
-}  // namespace reticolo::exec
+}  // namespace reticolo::bench

@@ -3,7 +3,7 @@
 
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/io/checkpoint.hpp>
 #include <reticolo/io/reader.hpp>
 #include <reticolo/io/writer.hpp>

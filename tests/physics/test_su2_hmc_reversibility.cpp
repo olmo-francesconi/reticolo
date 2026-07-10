@@ -8,7 +8,7 @@
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/math/group/su2.hpp>
 #include <reticolo/math/su2_ops.hpp>

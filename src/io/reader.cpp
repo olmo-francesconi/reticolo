@@ -341,6 +341,56 @@ FastRng Reader::rng_state(std::string_view path) const {
     return FastRng::from_state(s, cached, has_cached_u != 0);
 }
 
+std::vector<std::uint64_t> Reader::rng_streams(std::string_view path,
+                                               std::string_view expected_kind,
+                                               std::size_t expected_n_streams,
+                                               std::size_t expected_n_words) const {
+    std::string const p{path};
+    hid_t dset = H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT);
+    hid_check(dset, "rng_streams Oopen");
+
+    auto fail = [&](std::string const& msg) {
+        H5Oclose(dset);
+        throw std::runtime_error{"reticolo::io::Reader::rng_streams('" + p + "'): " + msg};
+    };
+
+    std::string const kind = read_string_attr(dset, "kind");
+    if (kind != expected_kind) {
+        fail("kind mismatch: file='" + kind + "' expected='" + std::string{expected_kind} + "'");
+    }
+    if (H5Aexists(dset, "n_streams") <= 0) {
+        fail("no n_streams attribute — single-generator layout? (use rng_state)");
+    }
+    auto const n_streams = read_scalar_attr<std::uint64_t>(dset, "n_streams");
+    auto const n_words   = read_scalar_attr<std::uint64_t>(dset, "n_words");
+    if (n_streams != expected_n_streams) {
+        fail("n_streams mismatch: file=" + std::to_string(n_streams) +
+             " expected=" + std::to_string(expected_n_streams) +
+             " — a StreamSet resume must keep the checkpoint's stream count");
+    }
+    if (n_words != expected_n_words) {
+        fail("n_words mismatch: file=" + std::to_string(n_words) +
+             " expected=" + std::to_string(expected_n_words));
+    }
+
+    std::size_t const total = (n_streams + 1) * n_words;
+    hid_t space             = H5Dget_space(dset);
+    hid_check(space, "rng_streams Dget_space");
+    hsize_t dims[1] = {0};
+    H5Sget_simple_extent_dims(space, dims, nullptr);
+    H5Sclose(space);
+    if (dims[0] != total) {
+        fail("word count mismatch: file=" + std::to_string(dims[0]) +
+             " expected=" + std::to_string(total));
+    }
+
+    std::vector<std::uint64_t> words(total);
+    herr_t const e = H5Dread(dset, H5T_NATIVE_UINT64, H5S_ALL, H5S_ALL, H5P_DEFAULT, words.data());
+    H5Oclose(dset);
+    herr_check(e, "rng_streams Dread");
+    return words;
+}
+
 #define RETICOLO_IO_READER_INSTANTIATE(T) template T Reader::attr<T>(std::string_view) const;
 RETICOLO_IO_READER_INSTANTIATE(float)
 RETICOLO_IO_READER_INSTANTIATE(double)
