@@ -29,7 +29,8 @@ int main(int argc, char** argv) {
     using DField = cuda::DeviceField<cplx<double>>;
     using DAct   = cuda::DeviceAction<act::BoseGas<double>, DField>;
 
-    cli::Parser p{"bose_gas_hmc_cuda", "Phase-quenched HMC for the 4D Bose gas on CUDA (S_R + S_I)"};
+    cli::Parser p{"bose_gas_hmc_cuda",
+                  "Phase-quenched HMC for the 4D Bose gas on CUDA (S_R + S_I)"};
     auto const cf          = app::common_flags(p, {.L = 4, .out = "bose_gas_cuda.h5"});
     auto const& ndim       = p.opt<int>("ndim", 4, "spacetime dimensions");
     auto const& mass       = p.opt<double>("mass", 1.0, "bare mass m");

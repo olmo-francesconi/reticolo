@@ -1,7 +1,9 @@
-#include <reticolo/action/site/detail/traversal.hpp>
+#include <reticolo/action/sweep/site.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/core/site.hpp>
+
+#include "nn_reference.hpp"
 
 #include <cstddef>
 #include <vector>
@@ -11,10 +13,8 @@
 
 using reticolo::FastRng;
 using reticolo::Lattice;
-using reticolo::action::detail::reduce_fwd;
-using reticolo::action::detail::reduce_fwd_fallback_;
-using reticolo::action::detail::visit_nn;
-using reticolo::action::detail::visit_nn_fallback_;
+using reticolo::action::sweep::reduce_fwd;
+using reticolo::action::sweep::visit_nn;
 
 namespace {
 
@@ -48,10 +48,11 @@ TEST_CASE("visit_nn dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_loop
         visit_nn<double>(l, [&out_dispatch](std::size_t i, double phi, double nbrs) {
             out_dispatch[i] = phi * 7.0 + nbrs;  // arbitrary linear body
         });
-        // Fallback (gather through Indexing).
-        visit_nn_fallback_<double>(l, [&out_fallback](std::size_t i, double phi, double nbrs) {
-            out_fallback[i] = phi * 7.0 + nbrs;
-        });
+        // Reference (gather through the computed Indexing::next/prev).
+        reticolo::test::visit_nn_ref<double>(
+            l, [&out_fallback](std::size_t i, double phi, double nbrs) {
+                out_fallback[i] = phi * 7.0 + nbrs;
+            });
 
         for (std::size_t i = 0; i < l.nsites(); ++i) {
             INFO("ndims=" << shape.size() << " i=" << i);
@@ -74,7 +75,7 @@ TEST_CASE("reduce_fwd dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_lo
         auto body = [](double phi, double fwd) { return (phi * phi) - phi * fwd; };
 
         double const a = reduce_fwd<double>(l, body);
-        double const b = reduce_fwd_fallback_<double>(l, body);
+        double const b = reticolo::test::reduce_fwd_ref<double>(l, body);
 
         // Both paths visit every (site, mu) pair with the same body; the
         // dispatch path accumulates in vector lanes and the fallback in a
@@ -88,17 +89,20 @@ TEST_CASE("reduce_fwd dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_lo
 
 TEST_CASE("visit_nn nbrs sums all 2*ndims neighbours (3D constant field)", "[hot_loop]") {
     Lattice<double> l{{4, 4, 4}, /*fill=*/3.5};
-    std::size_t visited = 0;
-    double max_err      = 0.0;
+    // Write-disjoint capture (the map now threads): assert after the sweep, not
+    // from inside the body — Catch2 REQUIRE is not thread-safe in a parallel region.
+    std::vector<double> phi_seen(l.nsites(), 0.0);
+    std::vector<double> nbr_seen(l.nsites(), 0.0);
 
-    visit_nn<double>(l, [&](std::size_t /*i*/, double phi, double nbrs) {
-        ++visited;
-        REQUIRE(phi == 3.5);
-        // 2 * 3 neighbours, each equal to 3.5 => sum = 6 * 3.5 = 21.0
-        max_err = std::max(max_err, std::abs(nbrs - 21.0));
+    visit_nn<double>(l, [&](std::size_t i, double phi, double nbrs) {
+        phi_seen[i] = phi;
+        nbr_seen[i] = nbrs;
     });
-    REQUIRE(visited == l.nsites());
-    REQUIRE(max_err == 0.0);
+    for (std::size_t i = 0; i < l.nsites(); ++i) {
+        INFO("site=" << i);
+        REQUIRE(phi_seen[i] == 3.5);
+        REQUIRE(nbr_seen[i] == 21.0);  // 2 * 3 neighbours, each 3.5 => 6 * 3.5
+    }
 }
 
 TEST_CASE("reduce_fwd fwd_sum sums ndims forward neighbours (2D constant field)", "[hot_loop]") {

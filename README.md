@@ -10,26 +10,51 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
 </p>
 
-**Modern C++ library for Monte Carlo simulation of lattice quantum field theories.**
+# reticolo
 
-Scalar and gauge actions behind a concept-constrained interface, updated by HMC
-(Leapfrog / Omelyan2 / Omelyan4) with LLR density-of-states reconstruction as an
-orchestration layer on top, and a CUDA backend for HMC. Output in self-describing
-HDF5. See [`docs/architecture.md`](docs/architecture.md) for the design rationale.
+**reticolo** is a C++20 library for Monte Carlo simulation of lattice quantum
+field theories. It provides scalar and gauge field actions on periodic
+hypercubic lattices, samples them with Hybrid Monte Carlo, and reconstructs the
+density of states with the LLR algorithm. An optional CUDA backend runs the same
+simulations on the GPU. Configurations and observables are written to
+self-describing HDF5.
 
-## Build
+## Features
+
+- **Field theories** — scalar φ⁴, φ⁶ and sine-Gordon; the O(2)/XY model; a
+  charged scalar with a sign problem (Bose gas); and Wilson gauge theory for
+  U(1), SU(2) and SU(3).
+- **Updates** — Hybrid Monte Carlo with Leapfrog, second-order Omelyan and
+  fourth-order Omelyan molecular-dynamics integrators.
+- **Density of states** — LLR reconstruction (Newton–Raphson and Robbins–Monro
+  adaptation with replica exchange) over parallel windowed HMC chains.
+- **GPU** — optional CUDA backend covering HMC for every action in single and
+  double precision, sharing one per-site formula with the CPU code.
+- **Random number generators** — xoshiro256++, Philox4×32, Mersenne Twister and
+  RANLUX behind a common interface.
+- **Output** — self-describing HDF5 carrying the full run record (command line,
+  git commit, compile flags) with checkpoint/resume from any trajectory.
+
+## Requirements
+
+- A C++20 compiler (GCC, Clang or Apple Clang)
+- CMake ≥ 3.25 and Ninja
+- HDF5
+- OpenMP — optional, for LLR replica parallelism
+- CUDA — optional, for the GPU backend
+
+## Building
 
 ```sh
-cmake --preset macos-appleclang   # or macos-llvm, linux-gcc, linux-clang, debug
+cmake --preset macos-appleclang   # or macos-llvm, linux-gcc, linux-clang, debug, linux-nvcc
 cmake --build --preset macos-appleclang
 ctest --preset macos-appleclang
 ```
 
-## Sample app
+## Usage
 
-Phi^4 HMC on a 4D periodic lattice — compose `field × RNG × action × updater × writer`,
-then own the trajectory loop. The updater is instantiated against the action's concept at
-compile time; no virtual dispatch, no string registry:
+A simulation composes a field, an RNG, an action, an updater and a writer, then
+runs the trajectory loop:
 
 ```cpp
 #include <reticolo/reticolo.hpp>
@@ -37,166 +62,39 @@ compile time; no virtual dispatch, no string registry:
 int main() {
     using namespace reticolo;
 
-    Lattice<double>   phi{{8, 8, 8, 8}};                       // 4D periodic scalar field
+    Lattice<double>   phi{{8, 8, 8, 8}};
     FastRng           rng{42};
-    act::Phi4<double> action{.kappa = 0.18, .lambda = 1.0};    // plain struct; no inheritance
+    act::Phi4<double> action{.kappa = 0.18, .lambda = 1.0};
+    alg::Hmc          hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
 
-    // Default integrator is Leapfrog; pass alg::integ::omelyan2 / omelyan4 as a trailing tag.
-    alg::Hmc hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
-
-    io::Writer writer{"phi4.h5"};                              // HDF5 + run metadata
+    io::Writer writer{"phi4.h5"};
     auto       s = writer.series<double>("/prod/obs/s");
 
     for (int i = 0; i < 1000; ++i) {
-        hmc.step();                                            // sample momenta + integrate + accept/reject
+        hmc.step();
         s.append(action.s_full(phi));
     }
 }
 ```
 
-## Reading the output
-
-Every app writes a self-describing HDF5 file: reproducibility metadata under
-`/run@*`, the resolved command-line flags under `/vars@*`, and one dataset per
-time series. Read it with `h5py` — attributes carry the run record, datasets are
-plain 1-D arrays:
+The `apps/` directory contains a reference HMC and LLR program for each action.
+Output is read back with any HDF5 tool; run metadata lives in the `/run` and
+`/vars` attributes and each observable is a 1-D dataset:
 
 ```python
 import h5py, numpy as np
 
 with h5py.File("phi4.h5", "r") as f:
-    print(dict(f["/run"].attrs))          # commit, compile_flags, started_utc, ...
-    print(dict(f["/vars"].attrs))          # parsed CLI args
-
-    s   = np.asarray(f["/prod/obs/s"])     # action per production trajectory
-    acc = np.asarray(f["/prod/stats/accepted"])
-    print(f"<S> = {s.mean():.4g} ± {s.std(ddof=1) / len(s)**0.5:.2g}")
-    print(f"acceptance = {acc.mean():.3f}")
+    s = np.asarray(f["/prod/obs/s"])
+    print(f["/run"].attrs["commit"], s.mean())
 ```
 
-[`scripts/read_output.py`](scripts/read_output.py) is a runnable version that
-prints the full metadata and a mean ± stderr summary of every series:
+## Documentation
 
-```sh
-./build/macos-appleclang/apps/phi4_hmc --workspace runs/phi4 --out phi4.h5 --n_prod 1000
-python scripts/read_output.py phi4.h5
-```
+- [`docs/architecture.md`](docs/architecture.md) — library design and data model
+- [`docs/writing_an_app.md`](docs/writing_an_app.md) — adding an action, app or test
+- [`docs/cuda_architecture.md`](docs/cuda_architecture.md) — the GPU backend
 
-```
-dataset                      rows           mean      std err
---------------------------------------------------------------
-/prod/obs/s                  1000        797.566         2.14
-/prod/stats/accepted         1000          0.842       0.0115
-...
-HMC acceptance: 0.842 over 1000 trajectories
-```
+## License
 
-## Performance
-
-Single-thread kernel throughput. Numbers below are from an **Apple M1 Pro** with
-the `macos-appleclang` preset (Apple clang 21, `-O3 -march=native`, OpenMP off).
-Each cell is the mean over many batch samples; `p05`/`p95` are the 5th/95th
-percentiles of throughput across those samples. Indicative — reproduce with:
-
-```sh
-cmake --build --preset macos-appleclang --target bench_readme
-./build/macos-appleclang/apps/bench_readme
-```
-
-All four RNGs satisfy the same `Rng` concept and plug into every call site.
-`uniform()` is a single draw; `gaussian` is the batched `normal_fill` path HMC
-uses to sample momenta. Throughput in M draws/s:
-
-| RNG          | draw     |   mean |   p05 |    p95 |
-|--------------|----------|-------:|------:|-------:|
-| FastRng      | uniform  |  851.6 | 823.8 |  874.6 |
-| FastRng      | gaussian |  186.9 | 181.1 |  190.8 |
-| Philox4x32   | uniform  |  220.7 | 215.3 |  224.2 |
-| Philox4x32   | gaussian |   61.5 |  60.5 |   62.3 |
-| Mt19937_64   | uniform  |  275.2 | 268.3 |  279.2 |
-| Mt19937_64   | gaussian |   95.4 |  93.1 |   97.1 |
-| Ranlux48     | uniform  |    3.3 |   3.3 |    3.4 |
-| Ranlux48     | gaussian |    2.4 |   2.4 |    2.5 |
-
-`compute_force` on a hot random 4D configuration, per degree of freedom (sites
-for scalar, links for gauge). Phi4 is the scalar baseline; the SU(2)/SU(3)
-staple force is correspondingly heavier per link. Throughput in M dof-updates/s:
-
-| Action            | lattice |   mean |    p05 |    p95 |
-|-------------------|---------|-------:|-------:|-------:|
-| Phi4              | 4⁴      |  483.5 |  471.7 |  493.5 |
-| Phi4              | 6⁴      |  561.9 |  545.7 |  575.8 |
-| Phi4              | 8⁴      |  611.7 |  593.0 |  627.0 |
-| Phi4              | 12⁴     |  972.2 |  939.1 |  994.2 |
-| Phi4              | 16⁴     | 1021.2 |  993.3 | 1037.2 |
-| Phi4              | 20⁴     | 1041.7 | 1001.8 | 1069.3 |
-| Phi4              | 24⁴     | 1042.2 | 1001.9 | 1075.5 |
-| Wilson&lt;SU2&gt; | 4⁴      |   12.0 |   11.5 |   12.4 |
-| Wilson&lt;SU2&gt; | 6⁴      |   11.9 |   11.5 |   12.3 |
-| Wilson&lt;SU2&gt; | 8⁴      |    9.8 |    9.3 |   10.3 |
-| Wilson&lt;SU2&gt; | 12⁴     |   10.3 |    9.7 |   10.9 |
-| Wilson&lt;SU2&gt; | 16⁴     |    8.1 |    7.9 |    8.3 |
-| Wilson&lt;SU2&gt; | 20⁴     |    9.1 |    8.9 |    9.3 |
-| Wilson&lt;SU2&gt; | 24⁴     |    8.5 |    8.4 |    8.6 |
-| Wilson&lt;SU3&gt; | 4⁴      |    4.7 |    4.6 |    4.8 |
-| Wilson&lt;SU3&gt; | 6⁴      |    4.7 |    4.5 |    4.9 |
-| Wilson&lt;SU3&gt; | 8⁴      |    3.9 |    3.6 |    4.1 |
-| Wilson&lt;SU3&gt; | 12⁴     |    3.9 |    3.8 |    4.1 |
-| Wilson&lt;SU3&gt; | 16⁴     |    3.1 |    3.0 |    3.1 |
-| Wilson&lt;SU3&gt; | 20⁴     |    3.8 |    3.7 |    3.9 |
-| Wilson&lt;SU3&gt; | 24⁴     |    3.3 |    3.3 |    3.4 |
-
-## GPU benchmarks
-
-Double-precision HMC throughput in **G dof-updates/s** (dof × trajectories/s) on
-three FP64 datacenter GPUs, via Modal (`tools/modal/app.py`), climbing the lattice
-volume until each card runs out of memory (`—`).
-
-φ⁴ (scalar):
-
-| lattice | A100 (40 GB) | H100 (80 GB) | B200 (180 GB) |
-|---------|-------------:|-------------:|--------------:|
-| 16⁴     |         0.32 |         0.61 |          0.67 |
-| 32⁴     |         0.74 |         1.55 |          2.68 |
-| 64⁴     |         0.88 |         1.62 |          2.93 |
-| 128⁴    |         0.85 |         1.53 |          2.93 |
-| 192⁴    |          —   |         1.51 |          2.87 |
-
-SU(3) (gauge):
-
-| lattice | A100 | H100 | B200 |
-|---------|-----:|-----:|-----:|
-| 8⁴      | 0.66 | 1.15 | 1.13 |
-| 16⁴     | 0.84 | 2.12 | 3.09 |
-| 32⁴     | 0.92 | 2.09 | 2.90 |
-| 56⁴     | 0.86 | 1.89 | 2.75 |
-| 72⁴     |  —   |  —   | 2.75 |
-
-Isolated `compute_force` throughput in **G dof-updates/s** (dof ÷ time for one
-force sweep) — the same metric as the CPU force-kernel table above, so these are
-directly comparable across host and device (a full trajectory above bundles
-`n_md=10` of these plus the kicks/drifts). Bandwidth-bound; the sweep sits near
-each card's FP64 memory ceiling.
-
-φ⁴ (scalar):
-
-| lattice | A100 (40 GB) | H100 (80 GB) | B200 (180 GB) |
-|---------|-------------:|-------------:|--------------:|
-| 16⁴     |         5.75 |        12.32 |         10.12 |
-| 32⁴     |        13.94 |        28.19 |         43.47 |
-| 64⁴     |        15.44 |        31.23 |         53.74 |
-| 128⁴    |        17.64 |        28.59 |         53.12 |
-| 192⁴    |          —   |        28.15 |         51.47 |
-
-SU(3) (gauge):
-
-| lattice | A100 | H100 | B200 |
-|---------|-----:|-----:|-----:|
-| 8⁴      | 10.01 | 23.42 | 21.03 |
-| 16⁴     | 16.08 | 42.50 | 58.29 |
-| 32⁴     | 15.42 | 39.65 | 50.43 |
-| 56⁴     | 15.33 | 34.46 | 47.10 |
-| 72⁴     |  —    |  —    | 46.91 |
-
-Reproduce: `uv run tools/modal/app.py bench --gpus A100,H100,B200`, then
-`pull --session <id>` and `python tools/profile/compare.py tools/modal/output/<id>`.
+Released under the MIT License — see [LICENSE](LICENSE).

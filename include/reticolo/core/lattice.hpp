@@ -75,31 +75,19 @@ public:
 
     [[nodiscard]] Site next(Site s, std::size_t mu) const noexcept { return idx_->next(s, mu); }
     [[nodiscard]] Site prev(Site s, std::size_t mu) const noexcept { return idx_->prev(s, mu); }
-    [[nodiscard]] Parity parity_of(Site s) const noexcept { return idx_->parity_of(s); }
 
     [[nodiscard]] SizeVec const& shape() const noexcept { return idx_->shape(); }
     [[nodiscard]] std::size_t ndims() const noexcept { return idx_->ndims(); }
     [[nodiscard]] std::size_t nsites() const noexcept { return idx_->nsites(); }
 
+    // Per-site storage footprint (bytes) — the threading threshold / chunk size are
+    // derived from this, so a memory-bound decision reflects the real footprint.
+    [[nodiscard]] static constexpr std::size_t bytes_per_site() noexcept { return sizeof(T); }
+
     [[nodiscard]] auto sites() const noexcept {
         return std::views::iota(std::size_t{0}, nsites()) |
                std::views::transform([](std::size_t i) { return Site{i}; });
     }
-
-    // Visit every elementary update slot — one DOF per site for a scalar
-    // field. Body is called as `body(T& ref, Site x)`. ref-first is required
-    // so the twin call on LinkLattice can append a `mu` arg captured by a
-    // trailing parameter pack in the body (`auto... loc` after `T& ref`).
-    template <class Body>
-    void for_each_update(Body&& body) {
-        T* const d          = data_.data();
-        std::size_t const n = idx_->nsites();
-        for (std::size_t i = 0; i < n; ++i) {
-            body(d[i], Site{i});
-        }
-    }
-    [[nodiscard]] std::span<Site const> even_sites() const noexcept { return idx_->even_sites(); }
-    [[nodiscard]] std::span<Site const> odd_sites() const noexcept { return idx_->odd_sites(); }
 
     [[nodiscard]] T* data() noexcept { return data_.data(); }
     [[nodiscard]] T const* data() const noexcept { return data_.data(); }

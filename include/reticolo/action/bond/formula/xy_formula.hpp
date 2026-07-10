@@ -11,7 +11,7 @@
 // nvcc (a device intrinsic) and plain libm on the host — the same per-bond math
 // the CPU action already inlined.
 
-namespace reticolo::action::detail {
+namespace reticolo::action::formula {
 
 // Force bond: contribution of one neighbour to -dS/dtheta(x) before the -beta.
 template <class T>
@@ -25,4 +25,4 @@ template <class T>
     return std::cos(theta - nbr);
 }
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::formula

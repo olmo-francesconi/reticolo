@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/site/detail/site_action.hpp>
 #include <reticolo/action/site/formula/phi6_formula.hpp>
+#include <reticolo/action/site/site_action.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/log.hpp>
 
@@ -18,10 +18,10 @@ namespace reticolo::action {
 //               + g6     * phi(x)^6 ]
 //
 // At g6 = 0 this reduces exactly to Phi4 — verified by the physics suite. All
-// physics is in `detail/phi6_formula.hpp`; the machinery is `detail::SiteAction`.
+// physics is in `detail/phi6_formula.hpp`; the machinery is `SiteAction`.
 
 template <class T = double>
-struct Phi6 : detail::SiteAction<Phi6<T>, T> {
+struct Phi6 : SiteAction<Phi6<T>, T> {
     using value_type = T;
 
     T kappa  = T{0};
@@ -40,13 +40,13 @@ struct Phi6 : detail::SiteAction<Phi6<T>, T> {
     //           - 4 lambda phi(x) (phi(x)^2 - 1) - 6 g6 phi(x)^5
     [[nodiscard]] auto force_kernel() const noexcept {
         return [k = kappa, lam = lambda, g = g6](std::size_t /*i*/, T phi, T nbrs) {
-            return detail::phi6_force_site<T>(phi, nbrs, k, lam, g);
+            return formula::phi6_force_site<T>(phi, nbrs, k, lam, g);
         };
     }
 
     [[nodiscard]] auto action_kernel() const noexcept {
         return [k = kappa, lam = lambda, g = g6](T phi, T fwd) {
-            return detail::phi6_action_site<T>(phi, fwd, k, lam, g);
+            return formula::phi6_action_site<T>(phi, fwd, k, lam, g);
         };
     }
 };

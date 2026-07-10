@@ -2,7 +2,7 @@
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/rng.hpp>
 #include <reticolo/cuda/actions/complex/bose_gas.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
@@ -216,7 +216,8 @@ bool bose_gas_s_imag_matches_cpu() {
 
     DeviceField<cplx<double>> dfield{kShape};
     dfield.copy_from_host(as_dev(host.data()));
-    DeviceAction<action::BoseGas<double>, DeviceField<cplx<double>>> const act{a, dfield.topology()};
+    DeviceAction<action::BoseGas<double>, DeviceField<cplx<double>>> const act{a,
+                                                                               dfield.topology()};
     double const s_dev = act.s_imag(dfield);
     RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -234,7 +235,8 @@ bool bose_gas_force_imag_matches_cpu() {
     DeviceField<cplx<double>> dfield{kShape};
     DeviceField<cplx<double>> dforce{dfield.topology()};
     dfield.copy_from_host(as_dev(host.data()));
-    DeviceAction<action::BoseGas<double>, DeviceField<cplx<double>>> const act{a, dfield.topology()};
+    DeviceAction<action::BoseGas<double>, DeviceField<cplx<double>>> const act{a,
+                                                                               dfield.topology()};
     act.compute_force_imag(dfield, dforce);
 
     std::vector<std::complex<double>> f_dev(dforce.size());
@@ -260,9 +262,9 @@ template <class T>
 bool bose_gas_windowed_modeB_matches_cpu_impl(double s_tol, double f_tol) {
     Lattice<std::complex<T>> const host = make_field<T>();
     action::BoseGas<T> const a          = make_action<T>();
-    constexpr double a_slope = 0.3;
-    constexpr double e_n     = 1.5;
-    constexpr double delta   = 4.0;
+    constexpr double a_slope            = 0.3;
+    constexpr double e_n                = 1.5;
+    constexpr double delta              = 4.0;
 
     // CPU windowed (mode B via HasImagPart).
     reticolo::llr::WindowedAction<action::BoseGas<T>> w{

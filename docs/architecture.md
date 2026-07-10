@@ -59,15 +59,16 @@ Lattice<std::array<double, 3>> on3{{20, 20, 20}};        // O(3)
 ```
 
 The sibling constructor lets HMC stash momentum, force, and rollback
-buffers with one neighbour table instead of three. It is the most
+buffers sharing one `Indexing` instead of three. It is the most
 performance-sensitive shortcut in the library.
 
 ### `Indexing` + pool
 
-`Indexing` holds the neighbour table (`next(s, mu)`, `prev(s, mu)`), parity
-labels, and the shape it was built from. It's expensive to construct
-(precomputes everything once) and immutable, so the library keeps a
-process-wide pool keyed on `shape`:
+`Indexing` holds the shape it was built from and the corresponding strides, and
+computes the neighbours `next(s, mu)` / `prev(s, mu)` on the fly from those
+strides — no stored table (the periodic wrap is closed-form, `ndims ≤ 4`). It's
+immutable and cheaply shared, so the library keeps a process-wide pool keyed on
+`shape`:
 
 ```cpp
 auto idx = Indexing::acquire(shape);   // hits pool, builds once
@@ -79,13 +80,49 @@ with the same shape automatically share.
 Boundary conditions are always periodic. `next` / `prev` are unbranched.
 Open / antiperiodic BCs are out of scope.
 
-### `FastRng`
+### `FastRng` and the RNG families
 
 xoshiro256++ with SplitMix64 seeding, Box-Muller polar normal with the
 second sample cached, Lemire's debiased rejection for `uniform_int(n)`.
 Copies are independent — each subsequent draw on a copy diverges. There's
 also an `Rng` concept; algorithms typecheck a different generator against
-it.
+it. Three siblings share the surface: `PhiloxRng` (counter-based, shared
+core with the CUDA sampler), `RanlxdRng` (a clean-room, bit-compatible
+reimplementation of Lüscher's `ranlxd` — provably distinct streams per seed),
+`Mt19937Rng` (`std::mt19937_64`).
+
+### `StreamSet<R>` — per-slab parallel streams
+
+`core/rng/stream_set.hpp`. A pool of independent streams over one family:
+one dedicated **driver** stream (serial draws: Metropolis accept, LLR
+exchange, hot starts) + n **site** streams, each padded to its own cache
+line (`exec::k_cache_line_bytes` — engine state is written per draw, packed
+streams false-share). Stream independence is per-family: `FastRng::jump()`
+(the published 2^128 xoshiro jump polynomial, provably disjoint),
+`PhiloxRng::stream(seed, k)` (disjoint counter subspaces),
+`RanlxdRng::stream(seed, k)` (sequential 31-bit seeds — Lüscher's seeding
+proves distinct trajectories), and SplitMix-decorrelated seeds for the one
+remaining std engine, `Mt19937Rng` (`JumpStream` / `KeyedStream` concepts).
+The pool
+holds **no geometry** — who draws from which stream is the owning
+algorithm's contract.
+
+`alg::Hmc` **owns** its randomness: the ctor takes a freshly-seeded family
+generator **by value**, draws one `uniform_u64()` from it, and builds a
+`StreamSet` with exactly one site stream per item of the canonical field
+partition (`exec::partition` under the Hmc's frozen thread/slab config).
+Momentum fills bind slab i to site stream i through
+`exec::field_visit_indexed` — the binding is the partition item index, never
+the executing thread — and every fill re-derives the partition and throws
+`std::logic_error` on a count mismatch, so an environment change mid-run
+refuses to sample instead of silently re-binding streams. Consequences:
+`n_threads = 0` resolves against the ambient once at construction and is
+frozen (`set_spec` refuses threading changes); a chain's identity is
+(seed, shape, n_threads, slabs_per_thread), matching the contract the
+`s_full`/kinetic reduce folds already impose. Checkpointing goes through
+`hmc.rng()`: `io::save_config`/`load_config` write and validate every
+stream's state words (`/rng@kind`, `@n_streams`, `@n_words` — a resume with
+a different threading config fails loudly).
 
 ## Actions
 
@@ -103,8 +140,9 @@ Actions split into four families by interaction shape, one folder each:
 (`Lattice<complex<T>>` sign problem: BoseGas), and `action/gauge/`
 (`MatrixLinkLattice<G,T>`: Wilson). All satisfy the
 **same** field-agnostic concepts; only the `Field` they name differs. Each family
-folder holds its leaf structs at the top, its per-action physics in `formula/`,
-and its shared machinery (the family base + traversal drivers) in `detail/`.
+folder holds its leaf structs and its family base (`<family>_action.hpp`) at the
+top and its per-action physics in `formula/`; the shared dimension-generic
+traversal engine lives once in `action/sweep/`.
 
 ### The concepts
 
@@ -133,40 +171,40 @@ covers site and gauge alike.
 
 The concepts say *what members* an action needs; the **family bases** supply
 them so a leaf action carries only physics. Each base is a stateless CRTP mixin
-in its family's `detail/` (`action/<family>/detail/<family>_action.hpp`) that
+at its family's top (`action/<family>/<family>_action.hpp`) that
 owns the loop shells, the fused kick, and the `last_s_full` cache, and calls back
 into the leaf's coupling-hoisting kernels:
 
 | base | field | leaf kernels (bind the shared `<family>/formula/*`) |
 | ---- | ----- | ---------------------------------------------------- |
-| `detail::SiteAction<D,T>`    | `Lattice<T>`              | `action_kernel()`, `force_kernel()` (NN-local: Phi4/Phi6/SineGordon) |
-| `detail::BondAction<D,T>`    | `Lattice<T>`              | `action_bond_kernel()`, `force_bond_kernel()`, `bond_scale()` (XY)   |
-| `detail::ComplexAction<D,T>` | `Lattice<complex<T>>`     | real + `imag_*` kernels (`HasImagPart`: BoseGas) |
-| `detail::GaugeAction<D>`     | link field               | `s_full_uncached()`, `force_into()` (Wilson`<G>`) |
+| `SiteAction<D,T>`    | `Lattice<T>`              | `action_kernel()`, `force_kernel()` (NN-local: Phi4/Phi6/SineGordon) |
+| `BondAction<D,T>`    | `Lattice<T>`              | `action_bond_kernel()`, `force_bond_kernel()`, `bond_scale()` (XY)   |
+| `ComplexAction<D,T>` | `Lattice<complex<T>>`     | real + `imag_*` kernels (`HasImagPart`: BoseGas) |
+| `GaugeAction<D>`     | link field               | `s_full_uncached()`, `force_into()` (Wilson`<G>`) |
 
 The scalar kernels return a lambda that captures the couplings by value, so the
 base hoists them into the hot loop exactly as a hand-written action would — the
 vectorised inner loop is unchanged. The gauge family is the odd one out: the
 plaquette *traversal* can't be shared (U(1) batches four signed angles through a
 Sleef cos/sin scratch on a `MatrixLinkLattice<U1,T>`; SU(N) batches complex matrix
-products on a `MatrixLinkLattice<G,T>`), so `detail::GaugeAction` only owns the
+products on a `MatrixLinkLattice<G,T>`), so `GaugeAction` only owns the
 cache + the concept surface and the leaf provides `s_full_uncached`/`force_into`
-(delegating the per-plaquette physics to `detail::wilson_kernels<G>` in the action layer; the group model `G` under `math/gauge_group/` holds only the core group ops).
+(delegating the per-plaquette physics to `formula::wilson_kernels<G>` in the action layer; the group model `G` under `math/group/` holds only the core group ops).
 
 ### Example: `act::Phi4`
 
 ```cpp
 template <class T = double>
-struct Phi4 : detail::SiteAction<Phi4<T>, T> {   // base supplies s_full / compute_force /
+struct Phi4 : SiteAction<Phi4<T>, T> {   // base supplies s_full / compute_force /
     using value_type = T;                        //   compute_force_and_kick / caches
     T kappa  = 0;
     T lambda = 0;
     void describe(log::Entry&) const;
 
     auto force_kernel()  const { return [k=kappa,lam=lambda](std::size_t, T phi, T nbrs)
-                                        { return detail::phi4_force_site<T>(phi,nbrs,k,lam); }; }
+                                        { return formula::phi4_force_site<T>(phi,nbrs,k,lam); }; }
     auto action_kernel() const { return [k=kappa,lam=lambda](T phi, T fwd)
-                                        { return detail::phi4_action_site<T>(phi,fwd,k,lam); }; }
+                                        { return formula::phi4_action_site<T>(phi,fwd,k,lam); }; }
     // optional LLR fast-path: double s_full_and_force(...) via this->staged_force_energy(...)
 };
 ```
@@ -191,16 +229,16 @@ member — read the compiler error.
 ensemble of windowed HMC chains on top of it (see the LLR section).
 
 The HMC integrator is a **type parameter**, not a runtime switch. Three
-ship: `alg::integ::Leapfrog` (2nd-order, cheap default),
-`alg::integ::Omelyan2` (2nd-order minimum-norm, ~1.4× speedup at the same
-acceptance), `alg::integ::Omelyan4` (4th-order, large τ). Select one at
-the `Hmc` ctor with a brace-free tag value (`alg::integ::omelyan2`, CTAD
+ship: `alg::integ::Omelyan2` (2nd-order minimum-norm, ~1.4× speedup at the
+same acceptance — the **default**), `alg::integ::Leapfrog` (2nd-order,
+cheapest per MD step), `alg::integ::Omelyan4` (4th-order, large τ). Select
+one at the `Hmc` ctor with a brace-free tag value (`alg::integ::leapfrog`, CTAD
 deduces the type) or the explicit `Hmc<A, R, Omelyan2>` form. Adding one =
 struct with a static `run(...)`; the matching `inline constexpr` tag is a
 one-liner.
 
 HMC keeps its momentum, force, and rollback buffers as sibling lattices
-of the field — one neighbour table, three lattices.
+of the field — one shared `Indexing`, three lattices.
 
 ## IO
 

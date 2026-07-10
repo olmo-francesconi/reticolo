@@ -1,7 +1,7 @@
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/core/site.hpp>
 
 #include <algorithm>
@@ -15,7 +15,6 @@ using reticolo::FastRng;
 using reticolo::MatrixLinkLattice;
 using reticolo::Site;
 using reticolo::action::Wilson;
-namespace gauge_group = reticolo::gauge_group;
 using reticolo::alg::Hmc;
 using reticolo::alg::integ::Leapfrog;
 using reticolo::alg::integ::Omelyan2;
@@ -23,9 +22,9 @@ using reticolo::alg::integ::Omelyan4;
 
 template <class Integrator>
 static void check_reversibility() {
-    Wilson<gauge_group::U1, double> const action{.beta = 1.0};
+    Wilson<reticolo::math::group::U1, double> const action{.beta = 1.0};
 
-    MatrixLinkLattice<gauge_group::U1, double> links{{4, 4, 4, 4}};
+    MatrixLinkLattice<reticolo::math::group::U1, double> links{{4, 4, 4, 4}};
     FastRng rng{31415};
     {
         double* const d     = links.data();

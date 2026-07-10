@@ -127,11 +127,8 @@ public:
     // `force` and Σ S_base into out[0], no host sync. Present only when the trait
     // provides it (site actions with a force/energy functor); the LLR
     // WindowedAction detects it via `requires`.
-    void s_full_and_force(double* out,
-                          Field const& field,
-                          Field& force,
-                          double* partials,
-                          cudaStream_t stream) const
+    void s_full_and_force(
+        double* out, Field const& field, Field& force, double* partials, cudaStream_t stream) const
         requires HasFusedForce<HostAction, typename Field::value_type>
     {
         traits::s_full_and_force(

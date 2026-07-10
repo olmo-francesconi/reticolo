@@ -55,7 +55,7 @@ inline std::string cpu_brand() {
 #elif defined(__linux__)
     std::ifstream f{"/proc/cpuinfo"};
     for (std::string line; std::getline(f, line);) {
-        if (line.rfind("model name", 0) != 0) {
+        if (!line.starts_with("model name")) {
             continue;
         }
         auto const colon = line.find(':');

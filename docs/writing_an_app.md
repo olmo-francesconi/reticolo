@@ -120,9 +120,9 @@ alg::Hmc hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
 ```
 
 Action, RNG, and field types deduce (CTAD); the default integrator is
-Leapfrog. A trailing tag value selects another — `alg::integ::omelyan2`
+Omelyan2. A trailing tag value selects another — `alg::integ::leapfrog`
 or `alg::integ::omelyan4`, e.g.
-`alg::Hmc hmc{phi4, phi, rng, spec, alg::integ::omelyan2}`. The tag's
+`alg::Hmc hmc{phi4, phi, rng, spec, alg::integ::leapfrog}`. The tag's
 type is what picks the integrator at compile time — it's a type, not a
 runtime flag. The `Hmc` ctor pre-allocates momentum, force, and rollback
 as sibling lattices of `phi`.
@@ -201,10 +201,10 @@ Pick the family base by the shape of the interaction:
 
 | family | base / handle | field | when |
 | ------ | ------------- | ----- | ---- |
-| site   | `detail::SiteAction<D,T>`    | `Lattice<T>`          | self + nearest-neighbour sum (Phi4/Phi6/SineGordon) |
-| bond   | `detail::BondAction<D,T>`    | `Lattice<T>`          | transcendental of the endpoint *difference* (XY) |
-| complex| `detail::ComplexAction<D,T>` | `Lattice<complex<T>>` | S = S_R + i·S_I sign problem (BoseGas) |
-| gauge  | `detail::GaugeAction<D>`     | link field            | plaquette gauge theory — usually just write a group model (see below) |
+| site   | `SiteAction<D,T>`    | `Lattice<T>`          | self + nearest-neighbour sum (Phi4/Phi6/SineGordon) |
+| bond   | `BondAction<D,T>`    | `Lattice<T>`          | transcendental of the endpoint *difference* (XY) |
+| complex| `ComplexAction<D,T>` | `Lattice<complex<T>>` | S = S_R + i·S_I sign problem (BoseGas) |
+| gauge  | `GaugeAction<D>`     | link field            | plaquette gauge theory — usually just write a group model (see below) |
 
 ## A new site action
 
@@ -212,7 +212,7 @@ Copy `site/phi4.hpp` + `site/formula/phi4_formula.hpp` and swap the formula body
 the couplings, and `describe`.
 
 1. **Formula** — `include/reticolo/action/<family>/formula/<name>_formula.hpp`. Two
-   `RETICOLO_HD inline` free templates in `namespace reticolo::action::detail`,
+   `RETICOLO_HD inline` free templates in `namespace reticolo::action::formula`,
    taking pre-gathered neighbour sums. **This is all the physics**, and the
    single source of truth — the CUDA functors call the *same* functions:
 
@@ -231,15 +231,15 @@ the couplings, and `describe`.
 
    ```cpp
    template <class T = double>
-   struct MyAction : detail::SiteAction<MyAction<T>, T> {
+   struct MyAction : SiteAction<MyAction<T>, T> {
        using value_type = T;
        T c1 = T{0};                       // couplings
        void describe(log::Entry& e) const { e.line("MyAction<{}>", scalar_name<T>()); e.param("c1={:.3f}", c1); }
 
        auto force_kernel()  const { return [c = c1](std::size_t /*i*/, T phi, T nbrs)
-                                           { return detail::myaction_force_site<T>(phi, nbrs, c); }; }
+                                           { return formula::myaction_force_site<T>(phi, nbrs, c); }; }
        auto action_kernel() const { return [c = c1](T phi, T fwd)
-                                           { return detail::myaction_action_site<T>(phi, fwd, c); }; }
+                                           { return formula::myaction_action_site<T>(phi, fwd, c); }; }
    };
    ```
 
@@ -251,9 +251,9 @@ the couplings, and `describe`.
    and an LLR fast-path `s_full_and_force` built from `this->staged_force_energy`
    (see `phi4.hpp`).
 
-   Other shapes: for a bond action derive `detail::BondAction` and provide
+   Other shapes: for a bond action derive `BondAction` and provide
    `action_bond_kernel` / `force_bond_kernel` / `bond_scale` (copy `site/xy.hpp`);
-   for a complex sign-problem action derive `detail::ComplexAction` and add the
+   for a complex sign-problem action derive `ComplexAction` and add the
    `imag_*` kernels (copy `site/bose_gas.hpp`).
 
 3. **Register** — add `#include <reticolo/action/site/<name>.hpp>` to
@@ -269,26 +269,26 @@ A gauge group `G` is the template parameter to the generic `Wilson<G>` plaquette
 action over `MatrixLinkLattice<G, T>`. The work splits in two, along the
 core-math / action-physics line:
 
-- **the group model** — `include/reticolo/math/gauge_group/<g>.hpp`: the *core
+- **the group model** — `include/reticolo/math/group/<g>.hpp`: the *core
   group operations only* — the constants (`n_color`, `n_real_components`, `name`)
   and the HMC algebra hooks (`sample_algebra_slab` / `kinetic_slab` /
   `expi_lmul_slab`) the integrator calls. This is pure group math; it lives under
   `math/` and knows nothing about the Wilson action.
 - **the Wilson kernels** — `include/reticolo/action/gauge/formula/wilson_<g>.hpp`:
-  a `detail::wilson_kernels<G>` specialization holding the plaquette *physics*
+  a `formula::wilson_kernels<G>` specialization holding the plaquette *physics*
   (`plaq_re_tr`, the `s_full_plane_re_tr_sum` fast-path, `compute_force`,
   `compute_force_and_kick`). This is action-specific and lives in the action layer.
 
-`Wilson<G>` (and the hand-tuned U(1) `CompactU1`) derive from the
-`detail::GaugeAction<D>` base, which owns the `last_s_full` cache and the concept
+`Wilson<G>` derives from the
+`GaugeAction<D>` base, which owns the `last_s_full` cache and the concept
 surface; `Wilson<G>` dispatches its plaquette work to `wilson_kernels<G>`. (A
 genuinely new gauge *action* — improved, rectangle — derives from
-`detail::GaugeAction` and writes its own `s_full_uncached` / `force_into`.)
-**Copy `SU2`** (`math/gauge_group/su2.hpp` + `action/gauge/formula/wilson_su2.hpp`
+`GaugeAction` and writes its own `s_full_uncached` / `force_into`.)
+**Copy `SU2`** (`math/group/su2.hpp` + `action/gauge/formula/wilson_su2.hpp`
 + `math/su2_ops.hpp`) — the simplest matrix group.
 
 1. **Group model: concept members** (the `GaugeGroup` concept lives in
-   `math/gauge_group/base.hpp`):
+   `math/group/base.hpp`):
 
    ```cpp
    struct MyGroup {
@@ -314,7 +314,7 @@ genuinely new gauge *action* — improved, rectangle — derives from
    piece — the SU(N) analogue of the scalar `phi += dt·mom`, and the one device
    exception to the shared-formula rule.
 
-3. **Wilson kernels** — a `template <> struct detail::wilson_kernels<MyGroup>`
+3. **Wilson kernels** — a `template <> struct formula::wilson_kernels<MyGroup>`
    in `action/gauge/formula/wilson_<g>.hpp` with the statics `Wilson<G>`
    dispatches to:
 
@@ -328,7 +328,7 @@ genuinely new gauge *action* — improved, rectangle — derives from
    Component `k` of the link at site `s` in direction `μ`'s block is at
    `block_ptr[k·stride + s]` (stride = `nsites`). SU(2)/SU(3) batch these over
    `gauge_group::k_gauge_batch<T>` sites — start unbatched (a plain per-site loop,
-   like the Abelian `CompactU1`) and add batching only if it's a measured
+   for the Abelian U(1) case) and add batching only if it's a measured
    bottleneck.
 
 4. **Register + use** — `#include` the new `wilson_<g>.hpp` from
@@ -338,9 +338,8 @@ genuinely new gauge *action* — improved, rectangle — derives from
    plus an equivalence check against a known limit.
 
 The Abelian case (`U(1)`) is degenerate — `n_real_components = 1` (just the
-angle), no matrix exponential — and already ships both the hand-tuned
-`CompactU1` action and a `Wilson<gauge_group::U1>` path that reduces to it
-bit-for-bit (`test_wilson_u1_vs_compact`).
+angle), no matrix exponential — and is handled directly by
+`Wilson<gauge_group::U1>` (`test_wilson_force_consistency`).
 
 ---
 
@@ -388,7 +387,8 @@ static_assert(HasFusedKick<Phi4<double>, Lattice<double>>);  // if the action fu
 ```
 
 Put at the top of every action's force-consistency test. Gauge actions name
-their link field instead, e.g. `HmcAction<CompactU1<double>, LinkLattice<double>>`.
+their link field instead, e.g.
+`HmcAction<Wilson<gauge_group::U1>, MatrixLinkLattice<gauge_group::U1, double>>`.
 
 ### 2. `compute_force` matches central FD of `s_full`
 
@@ -437,9 +437,7 @@ accept/reject). See `tests/physics/test_hmc_reversibility.cpp`,
 Pick a limit where the answer is known analytically:
 
 - **Free theory (λ=0)** for Phi4: `force(x) = 2κ·Σ_NN φ_nn − 2φ(x)`.
-- **Aligned config (θ=0)** for CompactU1: every plaquette contributes 0, so `S = 0`.
-- **Wilson<U1> vs CompactU1**: the generic matrix-group action must match the
-  hand-tuned Abelian path bit-for-bit at N=1.
+- **Aligned config (θ=0)** for Wilson<U1>: every plaquette contributes 0, so `S = 0`.
 - **Integrator order** for HMC: `⟨|ΔH|⟩` scales as `Δt²` (Leapfrog,
   Omelyan2) or `Δt⁴` (Omelyan4). See
   `tests/physics/test_hmc_integrator_order.cpp` for the cleanest example

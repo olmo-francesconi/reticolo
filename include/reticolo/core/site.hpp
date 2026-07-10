@@ -2,7 +2,6 @@
 
 #include <compare>  // NOLINT(misc-include-cleaner): required by defaulted operator<=>
 #include <cstddef>
-#include <cstdint>
 #include <functional>
 
 namespace reticolo {
@@ -21,15 +20,6 @@ public:
 private:
     value_type i_ = 0;
 };
-
-enum class Parity : std::uint8_t {
-    Even = 0,
-    Odd  = 1,
-};
-
-[[nodiscard]] constexpr Parity flip(Parity p) noexcept {
-    return p == Parity::Even ? Parity::Odd : Parity::Even;
-}
 
 }  // namespace reticolo
 

@@ -35,7 +35,7 @@ __global__ void bose_s_imag_site_kernel(cplx<T> const* __restrict__ field,
         return;
     }
     site_out[i] = static_cast<double>(
-        action::detail::bose_gas_action_imag_site<T>(field[i], field[topo.next(i, tau)]));
+        action::formula::bose_gas_action_imag_site<T>(field[i], field[topo.next(i, tau)]));
 }
 
 // F_I(i) = 2i·(φ_{i+τ} − φ_{i−τ}) → force[i]. Overwrites force (no accumulation).
@@ -48,8 +48,8 @@ __global__ void bose_force_imag_kernel(cplx<T> const* __restrict__ field,
     if (i >= topo.nsites) {
         return;
     }
-    force[i] = action::detail::bose_gas_force_imag_site<T>(field[topo.next(i, tau)],
-                                                           field[topo.prev(i, tau)]);
+    force[i] = action::formula::bose_gas_force_imag_site<T>(field[topo.next(i, tau)],
+                                                            field[topo.prev(i, tau)]);
 }
 
 // S_I to a host double (reduce_sum_f64 finishes on the host). `site_scratch` is a
@@ -92,8 +92,7 @@ inline void bose_force_imag_launch(cplx<T> const* field,
                                    cudaStream_t stream = nullptr) {
     constexpr int kBlock = 256;
     auto const grid      = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
-    bose_force_imag_kernel<T>
-        <<<grid, kBlock, 0, stream>>>(field, force, topo, topo.ndim - 1);
+    bose_force_imag_kernel<T><<<grid, kBlock, 0, stream>>>(field, force, topo, topo.ndim - 1);
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
 
@@ -114,8 +113,8 @@ __global__ void bose_force_imag_and_s_imag_kernel(cplx<T> const* __restrict__ fi
     cplx<T> const phi = field[i];
     cplx<T> const fwd = field[topo.next(i, tau)];
     cplx<T> const bwd = field[topo.prev(i, tau)];
-    force[i]    = action::detail::bose_gas_force_imag_site<T>(fwd, bwd);
-    site_out[i] = static_cast<double>(action::detail::bose_gas_action_imag_site<T>(phi, fwd));
+    force[i]          = action::formula::bose_gas_force_imag_site<T>(fwd, bwd);
+    site_out[i] = static_cast<double>(action::formula::bose_gas_action_imag_site<T>(phi, fwd));
 }
 
 // Writes F_I into force and S_I into out[0] (device scalar) in one field gather.

@@ -9,7 +9,7 @@
 // device gathers per-link/per-site with intrinsic cos/sin, honouring the
 // gather-only device invariant). cos/sin are applied by each side in its own loop.
 
-namespace reticolo::action::detail {
+namespace reticolo::action::formula {
 
 // Oriented plaquette angle theta_{mu,nu}(x) from its four link angles:
 //   +theta_mu(x) + theta_nu(x+mu) - theta_mu(x+nu) - theta_nu(x)
@@ -18,4 +18,4 @@ template <class T>
     return a_mu_x + b_nu_xpmu - c_mu_xpnu - d_nu_x;
 }
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::formula

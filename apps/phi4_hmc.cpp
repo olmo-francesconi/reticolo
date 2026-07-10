@@ -58,20 +58,10 @@ int main(int argc, char** argv) {
     log::start(cf.workspace, cf.out);
     std::string const outpath = app::out_path(cf);
 
-    // ---- State: lattice, RNG, action ----
+    // ---- State: lattice, action ----
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
     Lattice<double> phi{shape};
-    FastRng rng{cf.seed};
-    long long start_i   = 0;
     bool const resuming = !resume_path.empty();
-    if (resuming) {
-        auto const file_shape = io::load_field_shape(resume_path);
-        if (file_shape != shape) {
-            throw std::runtime_error{"--resume shape mismatch with --L/--ndim"};
-        }
-        start_i = io::load_config(resume_path, phi, rng);
-        log::info("hmc", "resumed from {} at traj {}", resume_path, start_i);
-    }
 
     act::Phi4<double> phi4{.kappa = kappa, .lambda = lambda};
     log::act(phi4);
@@ -90,8 +80,17 @@ int main(int argc, char** argv) {
     auto mag_sq   = out.series<double>("/prod/obs/mag_sq");
     auto m_sq     = out.series<double>("/prod/obs/m2");
 
-    // ---- Updater ----
-    alg::Hmc hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
+    // ---- Updater: owns the RNG (one site stream per canonical slab) ----
+    alg::Hmc hmc{phi4, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
+    long long start_i = 0;
+    if (resuming) {
+        auto const file_shape = io::load_field_shape(resume_path);
+        if (file_shape != shape) {
+            throw std::runtime_error{"--resume shape mismatch with --L/--ndim"};
+        }
+        start_i = io::load_config(resume_path, phi, hmc.rng());
+        log::info("hmc", "resumed from {} at traj {}", resume_path, start_i);
+    }
 
     // ---- Thermalisation ----
     if (!resuming) {
@@ -115,7 +114,7 @@ int main(int argc, char** argv) {
             m_sq.append(obs::sq(phi));
         }
         if (ckpt_every > 0 && (i + 1) % ckpt_every == 0) {
-            io::save_config(cfg_path(outpath, i + 1), phi, rng, i + 1, argc, argv, &p);
+            io::save_config(cfg_path(outpath, i + 1), phi, hmc.rng(), i + 1, argc, argv, &p);
         }
     }
 }

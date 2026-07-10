@@ -28,7 +28,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using Action   = act::BoseGas<double>;
-    using ReplicaT = llr::Replica<Action, FastRng, alg::integ::Omelyan2>;
+    using ReplicaT = llr::Replica<Action, FastRng>;
 
     // ---- CLI ----
     cli::Parser p{"bose_gas_llr", "LLR for the 4D Bose gas at finite chemical potential"};
@@ -37,10 +37,10 @@ int main(int argc, char** argv) {
     auto const& mass   = p.opt<double>("mass", 1.0, "bare mass m");
     auto const& lambda = p.opt<double>("lambda", 1.0, "quartic coupling lambda");
     auto const& mu     = p.opt<double>("mu", 1.0, "chemical potential mu");
-    auto const& e_min  = p.opt<double>("E_min", -10.0, "lower S_I window centre");
-    auto const& e_max  = p.opt<double>("E_max", 10.0, "upper S_I window centre");
+    auto const& e_min  = p.opt<double>("E_min", -11.0, "lower S_I window centre");
+    auto const& e_max  = p.opt<double>("E_max", 11.0, "upper S_I window centre");
     auto const& delta  = p.opt<double>(
-        "delta", 2.0, "Gaussian penalty width δ in (S_I−E_n)²/2δ² (also the a-update scale)");
+        "delta", 2.5, "Gaussian penalty width δ in (S_I−E_n)²/2δ² (also the a-update scale)");
     auto const& spacing =
         p.opt<double>("spacing",
                       0.0,
@@ -55,6 +55,7 @@ int main(int argc, char** argv) {
     auto const& n_therm_rm =
         p.opt<int>("n_therm_rm", 100, "thermalisation trajectories per RM sweep");
     auto const& n_meas_rm = p.opt<int>("n_meas_rm", 500, "measurement trajectories per RM sweep");
+    auto const rf         = app::llr_run_flags(p);
     if (!p.parse(argc, argv)) {
         return 0;
     }
@@ -72,55 +73,75 @@ int main(int argc, char** argv) {
     double const d_e = spacing > 0.0 ? spacing : delta;
     int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
+    auto const plan            = llr::plan_threads(n_rep, rf.replica_threads);
 
     // ---- Replicas ----
     std::vector<std::unique_ptr<ReplicaT>> reps;
     reps.reserve(static_cast<std::size_t>(n_rep));
-    for (int n = 0; n < n_rep; ++n) {
-        double const e_n = e_min + (static_cast<double>(n) * d_e);
-        reps.push_back(std::make_unique<ReplicaT>(
-            base,
-            FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
-            ReplicaT::Spec{
-                .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
-            alg::HmcSpec{.tau = tau, .n_md = n_md}));
+    {
+        auto const quiet = log::quiet();  // silence per-replica ctor announces
+        for (int n = 0; n < n_rep; ++n) {
+            double const e_n = e_min + (static_cast<double>(n) * d_e);
+            reps.push_back(std::make_unique<ReplicaT>(
+                base,
+                FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
+                ReplicaT::Spec{
+                    .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
+                alg::HmcSpec{
+                    .tau = tau, .n_md = n_md, .n_threads = plan.m, .slabs_per_thread = rf.slabs}));
+        }
+    }
+
+    // ---- Resume or fresh warm-up ----
+    FastRng exch_rng{cf.seed};
+    bool const resuming = !rf.resume.empty();
+    llr::OrchState resume_state{};
+    if (resuming) {
+        resume_state = llr::load_ensemble(rf.resume, reps, exch_rng);
+        log::info("llr",
+                  "resumed from {}  phase={} iter={}",
+                  rf.resume,
+                  resume_state.phase,
+                  resume_state.iter);
     }
 
     // ---- Output ----
-    FastRng exch_rng{cf.seed};
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
     out.attr<double>("/cfg@mu", mu);
 
-    // ---- Warm-up: windowed HMC into S_I window ----
-    // Hot-start every replica with an independent random field, then run this
-    // replica's own windowed HMC until it is inside its E_n window. The
-    // windowed force (base phase-quenched force + the S_I constraint window)
-    // pins trajectories toward E_n; deep in the S_I tail keep the integrator
-    // stable with enough MD steps (HmcSpec n_md).
-    constexpr double k_hot_sigma   = 0.5;
-    constexpr int k_warm_batches   = 50;
-    constexpr int k_warm_batch_len = 10;
-    std::size_t const n_rep_u      = static_cast<std::size_t>(n_rep);
+    // ---- Hot start (fresh runs only): give every replica an independent random
+    //      field; the LLR driver's warm-up phase then drives each into its E_n
+    //      (S_I) window. A resume restores already-warmed fields. ----
+    if (!resuming) {
+        constexpr double k_hot_sigma = 0.5;
+        std::size_t const n_rep_u    = static_cast<std::size_t>(n_rep);
 #pragma omp parallel for schedule(dynamic, 1)
-    for (std::size_t n = 0; n < n_rep_u; ++n) {
-        auto _ = log::scope(reps[n]->id());
-        reps[n]->hot_start(k_hot_sigma);
-        reps[n]->warm_into_window(k_warm_batches, k_warm_batch_len, 1.0);
+        for (std::size_t n = 0; n < n_rep_u; ++n) {
+            reps[n]->hot_start(k_hot_sigma);
+        }
     }
 
     // ---- Drive: NR warm-up + RM + exchange ----
     llr::run(reps,
              exch_rng,
-             llr::DriverSpec{.n_nr       = n_nr,
-                             .n_therm_nr = n_therm_nr,
-                             .n_meas_nr  = n_meas_nr,
-                             .n_rm       = n_rm,
-                             .n_therm_rm = n_therm_rm,
-                             .n_meas_rm  = n_meas_rm,
-                             .delta      = delta,
-                             .e_min      = e_min,
-                             .E_max      = e_max_snapped,
-                             .d_e        = d_e},
+             llr::DriverSpec{.n_nr             = n_nr,
+                             .n_therm_nr       = n_therm_nr,
+                             .n_meas_nr        = n_meas_nr,
+                             .n_rm             = n_rm,
+                             .n_therm_rm       = n_therm_rm,
+                             .n_meas_rm        = n_meas_rm,
+                             .delta            = delta,
+                             .e_min            = e_min,
+                             .E_max            = e_max_snapped,
+                             .d_e              = d_e,
+                             .replica_threads  = plan.m,
+                             .slabs            = rf.slabs,
+                             .concurrency      = plan.concurrency,
+                             .nested           = plan.m > 1,
+                             .checkpoint_path  = rf.checkpoint,
+                             .checkpoint_every = rf.checkpoint_every,
+                             .start_phase      = resuming ? resume_state.phase : 0,
+                             .start_iter       = resuming ? resume_state.iter : 0},
              out);
 }

@@ -1,6 +1,6 @@
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/algorithm/integrators.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
@@ -29,15 +29,15 @@ namespace reticolo::cuda {
 
 namespace {
 
-using U1     = action::Wilson<gauge_group::U1, double>;
+using U1     = action::Wilson<math::group::U1, double>;
 using DField = DeviceField<double, LinkLayout>;
 using DAct   = DeviceAction<U1, DField>;
 
 std::vector<std::size_t> const kShape{4, 4, 4, 4};
 constexpr double kBeta = 1.1;
 
-MatrixLinkLattice<gauge_group::U1, double> make_links() {
-    MatrixLinkLattice<gauge_group::U1, double> l{Indexing::SizeVec(kShape.begin(), kShape.end())};
+MatrixLinkLattice<math::group::U1, double> make_links() {
+    MatrixLinkLattice<math::group::U1, double> l{Indexing::SizeVec(kShape.begin(), kShape.end())};
     double* const d          = l.data();
     std::size_t const nlinks = l.nlinks();
     for (std::size_t i = 0; i < nlinks; ++i) {
@@ -49,12 +49,12 @@ MatrixLinkLattice<gauge_group::U1, double> make_links() {
 }  // namespace
 
 bool u1_cpu_matches_device() {
-    MatrixLinkLattice<gauge_group::U1, double> const host = make_links();
+    MatrixLinkLattice<math::group::U1, double> const host = make_links();
 
     U1 cpu{};
     cpu.beta           = kBeta;
     double const s_cpu = cpu.s_full(host);
-    MatrixLinkLattice<gauge_group::U1, double> f_cpu{host.indexing()};
+    MatrixLinkLattice<math::group::U1, double> f_cpu{host.indexing()};
     cpu.compute_force(host, f_cpu);
 
     DField dfield{kShape};
@@ -85,7 +85,7 @@ bool u1_cpu_matches_device() {
 // (same per-link gather), action to roundoff (per-link plaquette partials summed).
 // The LLR WindowedAction uses the fused path.
 bool u1_fused_matches_twopass() {
-    MatrixLinkLattice<gauge_group::U1, double> const host = make_links();
+    MatrixLinkLattice<math::group::U1, double> const host = make_links();
     U1 a{};
     a.beta = kBeta;
 
@@ -123,7 +123,7 @@ bool u1_fused_matches_twopass() {
 }
 
 bool u1_force_matches_fd() {
-    MatrixLinkLattice<gauge_group::U1, double> host = make_links();
+    MatrixLinkLattice<math::group::U1, double> host = make_links();
     U1 cpu{};
     cpu.beta = kBeta;
 
@@ -163,7 +163,7 @@ bool u1_force_matches_fd() {
 }
 
 bool u1_hmc_reversibility_ok() {
-    MatrixLinkLattice<gauge_group::U1, double> const init = make_links();
+    MatrixLinkLattice<math::group::U1, double> const init = make_links();
 
     DField field{kShape};
     DField mom{field.topology()};

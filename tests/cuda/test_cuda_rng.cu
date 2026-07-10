@@ -1,4 +1,4 @@
-#include <reticolo/core/philox.hpp>
+#include <reticolo/core/rng/philox.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/rng_philox.cuh>

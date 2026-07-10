@@ -39,8 +39,10 @@ int main(int argc, char** argv) {
     auto const& e_max  = p.opt<double>("E_max", 10.0, "upper S_I window centre");
     auto const& delta  = p.opt<double>(
         "delta", 2.0, "Gaussian penalty width δ in (S_I−E_n)²/2δ² (also the a-update scale)");
-    auto const& spacing = p.opt<double>(
-        "spacing", 0.0, "replica energy interval between window centres in S_I; 0 ⇒ equal to delta");
+    auto const& spacing =
+        p.opt<double>("spacing",
+                      0.0,
+                      "replica energy interval between window centres in S_I; 0 ⇒ equal to delta");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md = p.opt<int>("n_md", 10, "MD steps per trajectory");
     auto const& n_nr = p.opt<int>("n_nr", 6, "Newton-Raphson warm-up iterations");

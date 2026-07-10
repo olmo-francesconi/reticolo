@@ -18,13 +18,13 @@ TEST_CASE("Different shapes get distinct Indexing instances", "[indexing][pool]"
 }
 
 TEST_CASE("Pool entries are reclaimed when their last shared_ptr expires", "[indexing][pool]") {
-    Indexing const* raw = nullptr;
+    // Sole ownership inside the scope (the pool holds only a weak_ptr), and a
+    // fresh sole owner after it expires, together prove the expired slot was
+    // reclaimed — a leaked strong ref in the pool would push either count to 2.
     {
         auto a = Indexing::acquire({16, 16});
-        raw    = a.get();
         REQUIRE(a.use_count() == 1);
     }
     auto b = Indexing::acquire({16, 16});
     REQUIRE(b.use_count() == 1);
-    (void)raw;
 }

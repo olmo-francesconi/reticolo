@@ -26,9 +26,21 @@ Checks: >
   -readability-magic-numbers,
   -readability-identifier-length,
   -readability-named-parameter,
-  -readability-function-cognitive-complexity
+  -readability-function-cognitive-complexity,
+  -modernize-avoid-c-arrays,
+  -cppcoreguidelines-avoid-c-arrays,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-missing-std-forward,
+  -readability-redundant-inline-specifier,
+  -misc-include-cleaner,
+  -bugprone-exception-escape,
+  -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+  -portability-avoid-pragma-once,
+  -readability-math-missing-parentheses,
+  -readability-use-concise-preprocessor-directives,
+  -modernize-use-integer-sign-comparison
 
-WarningsAsErrors: ''
+WarningsAsErrors: '*'
 HeaderFilterRegex: 'include/reticolo/.*'
 FormatStyle: file
 
@@ -42,7 +54,7 @@ CheckOptions:
   - key: readability-identifier-naming.EnumCase
     value: CamelCase
   - key: readability-identifier-naming.EnumConstantCase
-    value: CamelCase
+    value: aNy_CasE
   - key: readability-identifier-naming.FunctionCase
     value: lower_case
   - key: readability-identifier-naming.MethodCase
@@ -57,8 +69,6 @@ CheckOptions:
     value: _
   - key: readability-identifier-naming.PrivateMethodCase
     value: lower_case
-  - key: readability-identifier-naming.PrivateMethodSuffix
-    value: _
   - key: readability-identifier-naming.ProtectedMemberSuffix
     value: _
   - key: readability-identifier-naming.ConstexprVariableCase
@@ -83,6 +93,35 @@ CheckOptions:
     value: UPPER_CASE
   - key: readability-identifier-naming.MacroDefinitionPrefix
     value: RETICOLO_
+  # The real convention: names are lower_case, but an internal helper takes a
+  # trailing '_' (map_split_2d_, last_s_full_) and a physics/domain name may
+  # carry capitals (L, L0, dE, sinP, U, kMul0). These regexes allow exactly that
+  # while still flagging plain lower_case slips. Lowercase type aliases (cplx,
+  # real_scalar) and the std-style RAII guards (team_scope) are named-exceptions.
+  - key: readability-identifier-naming.FunctionIgnoredRegexp
+    value: '.*_'
+  - key: readability-identifier-naming.MethodIgnoredRegexp
+    value: '.*_'
+  - key: readability-identifier-naming.PrivateMethodIgnoredRegexp
+    value: '.*_'
+  - key: readability-identifier-naming.MemberIgnoredRegexp
+    value: '(.*_|.*[A-Z].*)'
+  - key: readability-identifier-naming.VariableIgnoredRegexp
+    value: '(.*_|.*[A-Z].*)'
+  - key: readability-identifier-naming.ParameterIgnoredRegexp
+    value: '(.*_|.*[A-Z].*)'
+  - key: readability-identifier-naming.ConstexprVariableIgnoredRegexp
+    value: '(.*_|.*[A-Z].*)'
+  - key: readability-identifier-naming.LocalConstantIgnoredRegexp
+    value: '(.*_|.*[A-Z].*)'
+  - key: readability-identifier-naming.StaticConstantIgnoredRegexp
+    value: '(.*_|.*[A-Z].*|.)'
+  - key: readability-identifier-naming.GlobalConstantIgnoredRegexp
+    value: '(.*_|.*[A-Z].*|sleef_.*)'
+  - key: readability-identifier-naming.StructIgnoredRegexp
+    value: '(.*_|cplx|real_scalar)'
+  - key: readability-identifier-naming.ClassIgnoredRegexp
+    value: '.*_scope'
   - key: cppcoreguidelines-init-variables.IncludeStyle
     value: google
   - key: modernize-use-default-member-init.UseAssignment

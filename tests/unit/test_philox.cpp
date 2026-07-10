@@ -1,6 +1,6 @@
-#include <reticolo/core/philox.hpp>
-#include <reticolo/core/philox_rng.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/philox.hpp>
+#include <reticolo/core/rng/philox_rng.hpp>
+#include <reticolo/core/rng/rng.hpp>
 
 #include <cmath>
 #include <cstdint>

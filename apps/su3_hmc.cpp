@@ -12,7 +12,7 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Group  = gauge_group::SU3;
+    using Group  = math::group::SU3;
     using Action = action::Wilson<Group, double>;
     using Field  = MatrixLinkLattice<Group, double>;
 
@@ -46,7 +46,6 @@ int main(int argc, char** argv) {
             blk[(16 * ns) + s] = 1.0;  // Re U_{22}
         }
     }
-    FastRng rng{cf.seed};
     Action const action{.beta = beta};
     log::act(action);
 
@@ -60,7 +59,7 @@ int main(int argc, char** argv) {
     auto plaq     = out.series<double>("/prod/obs/plaq");
 
     // ---- Updater ----
-    alg::Hmc hmc{action, links, rng, {.tau = tau, .n_md = n_md}, alg::integ::omelyan2};
+    alg::Hmc hmc{action, links, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     std::size_t const n_plaq =
         (static_cast<std::size_t>(ndim) * static_cast<std::size_t>(ndim - 1) / 2U) * ns;

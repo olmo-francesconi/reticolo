@@ -21,9 +21,12 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action = action::Wilson<gauge_group::U1, double>;
-    using ReplicaT =
-        llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, MatrixLinkLattice<gauge_group::U1, double>>;
+    using Action   = action::Wilson<math::group::U1, double>;
+    using ReplicaT = llr::Replica<Action,
+                                  FastRng,
+                                  alg::integ::Omelyan2,
+                                  double,
+                                  MatrixLinkLattice<math::group::U1, double>>;
 
     cli::Parser p{"u1_llr_smoothed", "Smoothed LLR for compact U(1) Wilson action"};
     auto const& L     = p.opt<int>("L,size", 4, "linear lattice extent");
@@ -68,7 +71,8 @@ int main(int argc, char** argv) {
     log::start(workspace, outfile, /*replicas=*/true);
     std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
 
-    MatrixLinkLattice<gauge_group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
+    MatrixLinkLattice<math::group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
+                                                              static_cast<std::size_t>(L));
     Action const base{.beta = beta};
     log::act(base);
 
@@ -92,15 +96,12 @@ int main(int argc, char** argv) {
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
-    constexpr double k_hot_sigma   = std::numbers::pi;
-    constexpr int k_warm_batches   = 50;
-    constexpr int k_warm_batch_len = 10;
-    std::size_t const n_rep_u      = static_cast<std::size_t>(n_rep);
+    constexpr double k_hot_sigma = std::numbers::pi;
+    std::size_t const n_rep_u    = static_cast<std::size_t>(n_rep);
 #pragma omp parallel for schedule(dynamic, 1)
     for (std::size_t n = 0; n < n_rep_u; ++n) {
         auto _ = log::scope(reps[n]->id());
         reps[n]->hot_start(k_hot_sigma);
-        reps[n]->warm_into_window(k_warm_batches, k_warm_batch_len, 1.0);
     }
 
     llr::smoothed::run(reps,

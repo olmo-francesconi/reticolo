@@ -4,7 +4,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 using reticolo::Indexing;
-using reticolo::Parity;
 using reticolo::Site;
 
 TEST_CASE("Indexing reports basic shape geometry", "[indexing]") {
@@ -26,30 +25,13 @@ TEST_CASE("Periodic neighbours wrap on every direction", "[indexing]") {
     REQUIRE(idx->next(idx->next(idx->next(idx->next(Site{5}, 0), 0), 0), 0) == Site{5});
 }
 
-TEST_CASE("Parity matches sum-of-coords mod 2", "[indexing]") {
-    auto idx = Indexing::acquire({4, 4});
-    // (0,0): even. (1,0): odd. (0,1): odd. (1,1): even.
-    REQUIRE(idx->parity_of(Site{0}) == Parity::Even);
-    REQUIRE(idx->parity_of(Site{1}) == Parity::Odd);
-    REQUIRE(idx->parity_of(Site{4}) == Parity::Odd);
-    REQUIRE(idx->parity_of(Site{5}) == Parity::Even);
+TEST_CASE("strides() are the packed geometry", "[indexing]") {
+    auto idx = Indexing::acquire({4, 5, 6});
+    REQUIRE(idx->strides() == Indexing::SizeVec{1, 4, 20});
 }
 
-TEST_CASE("Even + odd sites partition the lattice", "[indexing]") {
-    auto idx = Indexing::acquire({4, 4, 4, 4});
-    REQUIRE(idx->even_sites().size() + idx->odd_sites().size() == idx->nsites());
-    REQUIRE(idx->even_sites().size() == idx->nsites() / 2);
-    REQUIRE(idx->odd_sites().size() == idx->nsites() / 2);
-
-    for (Site s : idx->even_sites()) {
-        REQUIRE(idx->parity_of(s) == Parity::Even);
-    }
-    for (Site s : idx->odd_sites()) {
-        REQUIRE(idx->parity_of(s) == Parity::Odd);
-    }
-}
-
-TEST_CASE("Indexing rejects empty shape and zero dimension", "[indexing]") {
+TEST_CASE("Indexing rejects empty shape, zero dimension, and >4 dims", "[indexing]") {
     REQUIRE_THROWS_AS(Indexing::acquire({}), std::invalid_argument);
     REQUIRE_THROWS_AS(Indexing::acquire({4, 0, 4}), std::invalid_argument);
+    REQUIRE_THROWS_AS(Indexing::acquire({2, 2, 2, 2, 2}), std::invalid_argument);
 }

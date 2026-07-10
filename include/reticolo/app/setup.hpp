@@ -44,19 +44,49 @@ struct CommonFlags {
 // references to read after `p.parse()`. Apps register `ndim` / physics / loop
 // counts themselves, before or after this call.
 inline CommonFlags common_flags(cli::Parser& p, CommonDefaults const& d) {
-    int const& L                   = p.opt<int>("L,size", d.L, "linear lattice extent");
-    unsigned long long const& seed = p.opt<unsigned long long>("seed", d.seed, "RNG seed");
-    std::string const& workspace =
+    int const& L     = p.opt<int>("L,size", d.L, "linear lattice extent");
+    auto const& seed = p.opt<unsigned long long>("seed", d.seed, "RNG seed");
+    auto const& workspace =
         p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
-    std::string const& out =
-        p.opt<std::string>("out", d.out, "HDF5 output file name, inside workspace");
-    return CommonFlags{L, seed, workspace, out};
+    auto const& out = p.opt<std::string>("out", d.out, "HDF5 output file name, inside workspace");
+    return CommonFlags{.L = L, .seed = seed, .workspace = workspace, .out = out};
 }
 
 // The output path an app writes to: `<workspace>/<out>`. Exposed for apps that
 // also need it directly (e.g. per-config checkpoint file names).
 [[nodiscard]] inline std::string out_path(CommonFlags const& f) {
     return (std::filesystem::path{f.workspace} / f.out).string();
+}
+
+// Stable references to the LLR run-control flags: per-replica HMC threading and
+// checkpoint/resume. The total CPU budget is NOT a flag — `llr::plan_threads`
+// reads it from the OpenMP environment (OMP_NUM_THREADS) and splits it into an
+// outer replica team and inner per-replica HMC teams. Single-sourced because
+// every LLR app takes the same five with the same wording; the app feeds
+// `replica_threads` to `llr::plan_threads` and the rest into its DriverSpec.
+struct LlrRunFlags {
+    int const& replica_threads;
+    int const& slabs;
+    std::string const& resume;
+    std::string const& checkpoint;
+    int const& checkpoint_every;
+};
+
+inline LlrRunFlags llr_run_flags(cli::Parser& p) {
+    int const& replica_threads = p.opt<int>(
+        "replica_threads", 1, "HMC threads per replica (1 = serial default; 0 = auto-balance)");
+    int const& slabs = p.opt<int>("slabs_per_thread", 0, "HMC slab granularity per thread (0 = 1)");
+    auto const& resume =
+        p.opt<std::string>("resume", std::string{}, "resume from an LLR ensemble checkpoint (.h5)");
+    auto const& checkpoint = p.opt<std::string>(
+        "checkpoint", std::string{}, "rolling ensemble checkpoint path (empty = off)");
+    int const& checkpoint_every =
+        p.opt<int>("checkpoint_every", 0, "sweeps between checkpoints (0 = only at end)");
+    return {.replica_threads  = replica_threads,
+            .slabs            = slabs,
+            .resume           = resume,
+            .checkpoint       = checkpoint,
+            .checkpoint_every = checkpoint_every};
 }
 
 // Open the workspace log + HDF5 writer the way every app does:

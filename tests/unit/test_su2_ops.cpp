@@ -2,7 +2,7 @@
 // `math::su2`. Verified per-site (slab over n=1) so each test exercises the
 // stack-array helpers AND the slab driver in one pass.
 
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/math/su2_ops.hpp>
 
 #include <array>

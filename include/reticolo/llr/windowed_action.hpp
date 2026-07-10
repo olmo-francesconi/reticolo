@@ -1,9 +1,10 @@
 #pragma once
 
 #include <reticolo/action/concepts.hpp>
+#include <reticolo/algorithm/integ_ops.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/llr/detail/window_formula.hpp>
+#include <reticolo/llr/formula/window_formula.hpp>
 
 #include <complex>
 #include <cstddef>
@@ -38,7 +39,7 @@ using scalar_of_t = real_scalar_t<T>;
 // loop watches <S_I - E_n>; reconstructing ln rho(S_I) recovers the DoS of
 // the imaginary part in the phase-quenched ensemble.
 
-template <class Base, class T = typename Base::value_type, class Field = Lattice<T>>
+template <class Base, class T = Base::value_type, class Field = Lattice<T>>
 struct WindowedAction {
     using value_type = T;
     using field_type = Field;
@@ -66,10 +67,10 @@ struct WindowedAction {
     [[nodiscard]] scalar_t s_full(Field const& l) const noexcept {
         scalar_t const q = constraint_value(l);
         if constexpr (k_complex) {
-            return detail::windowed_value_complex(
+            return formula::windowed_value_complex(
                 static_cast<scalar_t>(base.s_full(l)), q, a, E_n, delta);
         } else {
-            return detail::windowed_value(q, a, E_n, delta);
+            return formula::windowed_value(q, a, E_n, delta);
         }
     }
 
@@ -96,15 +97,10 @@ struct WindowedAction {
             // Combined: F_R + (a + (S_I - E_n)/delta^2) * F_I.
             base.compute_force(l, force);
             scalar_t const s     = base.s_imag(l);
-            scalar_t const scale = detail::force_scale_imag(s, a, E_n, delta);
+            scalar_t const scale = formula::force_scale_imag(s, a, E_n, delta);
             Field& imag_force    = scratch_(force.indexing());
             base.compute_force_imag(l, imag_force);
-            T* const fp         = force.data();
-            T const* const ip   = imag_force.data();
-            std::size_t const n = flat_size(force);
-            for (std::size_t i = 0; i < n; ++i) {
-                fp[i] += scale * ip[i];
-            }
+            alg::integ::kick_add(force, imag_force, scale);  // force += scale·F_I
         } else {
             // Fused base kernel when available: one neighbour pass yields
             // both S_base and the force, dropping the separate full-lattice
@@ -116,7 +112,7 @@ struct WindowedAction {
                 base.compute_force(l, force);
                 s = static_cast<scalar_t>(base.s_full(l));
             }
-            scalar_t const scale = detail::force_scale(s, a, E_n, delta);
+            scalar_t const scale = formula::force_scale(s, a, E_n, delta);
             T* const fp          = force.data();
             std::size_t const n  = flat_size(force);
             for (std::size_t i = 0; i < n; ++i) {
@@ -130,7 +126,7 @@ struct WindowedAction {
     {
         if constexpr (k_complex) {
             scalar_t const s     = base.s_imag(l);
-            scalar_t const scale = detail::force_scale_imag(s, a, E_n, delta);
+            scalar_t const scale = formula::force_scale_imag(s, a, E_n, delta);
             // If the base action exposes a fused combined-force kernel
             // (F_R + scale·F_I in one pass directly into mom), use it —
             // skips the imag_force scratch buffer and the merge pass.
@@ -144,13 +140,7 @@ struct WindowedAction {
                 base.compute_force_and_kick(l, mom, k_dt);
                 Field& imag_force = scratch_(mom.indexing());
                 base.compute_force_imag(l, imag_force);
-                T* const mp         = mom.data();
-                T const* const ip   = imag_force.data();
-                std::size_t const n = flat_size(mom);
-                scalar_t const k    = k_dt * scale;
-                for (std::size_t i = 0; i < n; ++i) {
-                    mp[i] += k * ip[i];
-                }
+                alg::integ::kick_add(mom, imag_force, k_dt * scale);
             }
         } else {
             if constexpr (requires(Field& f) { base.s_full_and_force(l, f); }) {
@@ -160,17 +150,11 @@ struct WindowedAction {
                 // fallback pays on every MD step.
                 Field& f             = scratch_(mom.indexing());
                 auto const s         = static_cast<scalar_t>(base.s_full_and_force(l, f));
-                scalar_t const scale = detail::force_scale(s, a, E_n, delta);
-                scalar_t const c     = k_dt * scale;
-                T* const mp          = mom.data();
-                T const* const fp    = f.data();
-                std::size_t const n  = flat_size(mom);
-                for (std::size_t i = 0; i < n; ++i) {
-                    mp[i] += c * fp[i];
-                }
+                scalar_t const scale = formula::force_scale(s, a, E_n, delta);
+                alg::integ::kick_add(mom, f, k_dt * scale);
             } else {
                 scalar_t const s     = base.s_full(l);
-                scalar_t const scale = detail::force_scale(s, a, E_n, delta);
+                scalar_t const scale = formula::force_scale(s, a, E_n, delta);
                 base.compute_force_and_kick(l, mom, k_dt * scale);
             }
         }

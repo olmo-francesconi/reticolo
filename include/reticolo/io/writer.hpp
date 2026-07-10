@@ -2,7 +2,7 @@
 
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 
 #include <complex>
 #include <cstddef>
@@ -125,24 +125,34 @@ public:
     void field(std::string_view path, MatrixLinkLattice<G, T> const& lat);
 
     // Write the RNG's full state (state words + cached normal) under `path`.
-    // The corresponding Reader::rng_state restores it bit-exact. Checkpoint /
-    // resume is FastRng-only: only FastRng exposes the state introspection
-    // (`state()`, `from_state`) this serialises — RanluxRng / Mt19937Rng don't.
+    // The corresponding Reader::rng_state restores it bit-exact. This
+    // single-generator layout is FastRng-only; multi-stream generators
+    // (StreamSet) go through `rng_streams` below.
     void rng_state(std::string_view path, FastRng const& rng);
+
+    // Write a multi-stream RNG state (StreamSet checkpoint): one flat uint64
+    // dataset of (n_streams+1)·n_words words — driver stream first — with
+    // @kind / @n_streams / @n_words attributes. Reader::rng_streams validates
+    // all three against the resuming StreamSet and returns the words.
+    void rng_streams(std::string_view path,
+                     std::string_view kind,
+                     std::vector<std::uint64_t> const& words,
+                     std::size_t n_streams,
+                     std::size_t n_words);
 
     [[nodiscard]] std::filesystem::path const& path() const noexcept;
 
     // Wire-level scalar type tag. Public because the templated `field<T>`
     // helpers above translate `T` to this tag and hand it to the writer's
     // private raw-write path.
-    enum class ScalarKind : int {
+    enum class ScalarKind : std::uint8_t {
         f32,
         f64,
         c32,
         c64,
     };
 
-    enum class FieldKind : int {
+    enum class FieldKind : std::uint8_t {
         scalar,
         link,
         matrix_link,
@@ -204,23 +214,23 @@ void Writer::field(std::string_view path, MatrixLinkLattice<G, T> const& lat) {
 // only sane way to write three correlated extern-template declarations per
 // type; a `constexpr` template helper can't issue declarations.
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
-#define RETICOLO_IO_DECLARE(T)                                                                     \
+#define RETICOLO_IO_WRITER_DECLARE(T)                                                              \
     extern template class Series<T>;                                                               \
     extern template Series<T> Writer::series<T>(std::string_view, std::size_t);                    \
     extern template void Writer::attr<T>(std::string_view, T const&);
 
-RETICOLO_IO_DECLARE(float)
-RETICOLO_IO_DECLARE(double)
-RETICOLO_IO_DECLARE(int)
-RETICOLO_IO_DECLARE(long)
-RETICOLO_IO_DECLARE(long long)
-RETICOLO_IO_DECLARE(unsigned int)
-RETICOLO_IO_DECLARE(unsigned long)
-RETICOLO_IO_DECLARE(unsigned long long)
-RETICOLO_IO_DECLARE(std::complex<float>)
-RETICOLO_IO_DECLARE(std::complex<double>)
+RETICOLO_IO_WRITER_DECLARE(float)
+RETICOLO_IO_WRITER_DECLARE(double)
+RETICOLO_IO_WRITER_DECLARE(int)
+RETICOLO_IO_WRITER_DECLARE(long)
+RETICOLO_IO_WRITER_DECLARE(long long)
+RETICOLO_IO_WRITER_DECLARE(unsigned int)
+RETICOLO_IO_WRITER_DECLARE(unsigned long)
+RETICOLO_IO_WRITER_DECLARE(unsigned long long)
+RETICOLO_IO_WRITER_DECLARE(std::complex<float>)
+RETICOLO_IO_WRITER_DECLARE(std::complex<double>)
 
-#undef RETICOLO_IO_DECLARE
+#undef RETICOLO_IO_WRITER_DECLARE
 
 // String attributes are a separate codepath (variable-length on disk).
 extern template void Writer::attr<std::string>(std::string_view, std::string const&);

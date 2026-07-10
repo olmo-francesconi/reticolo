@@ -8,20 +8,18 @@
 // link field — the gauge row does ~ndim× the elementwise work at equal V, so
 // compare within an action across V, and across actions at equal DOF.
 
-#include <reticolo/action/gauge/wilson.hpp>
+#include <reticolo/action/bond/xy.hpp>
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/action/site/phi6.hpp>
 #include <reticolo/action/site/sine_gordon.hpp>
-#include <reticolo/action/bond/xy.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/log.hpp>
+#include <reticolo/cuda/actions/bond/xy.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
 #include <reticolo/cuda/actions/site/phi4.hpp>
 #include <reticolo/cuda/actions/site/phi6.hpp>
 #include <reticolo/cuda/actions/site/sine_gordon.hpp>
-#include <reticolo/cuda/actions/gauge/wilson.hpp>
-#include <reticolo/cuda/actions/bond/xy.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/gauge/su2_device.cuh>
@@ -108,13 +106,13 @@ int main() {
         bench<act::SineGordon<double>, DeviceField<double>>(
             "SineGordon<f64>", s4, {.kappa = 0.18, .alpha = 1.0});
         bench<act::Xy<double>, DeviceField<double>>("Xy<f64>", s4, {.beta = 0.5});
-        bench<act::Wilson<reticolo::gauge_group::U1, double>, DeviceField<double, LinkLayout>>(
+        bench<act::Wilson<reticolo::math::group::U1, double>, DeviceField<double, LinkLayout>>(
             "Wilson<U1><f64>", s4, {.beta = 1.0});
-        bench<act::Wilson<reticolo::gauge_group::SU2, double>,
-              DeviceField<double, MatrixLayout<reticolo::gauge_group::SU2>>>(
+        bench<act::Wilson<reticolo::math::group::SU2, double>,
+              DeviceField<double, MatrixLayout<reticolo::math::group::SU2>>>(
             "Wilson<SU2>", s4, {.beta = 2.4});
-        bench<act::Wilson<reticolo::gauge_group::SU3, double>,
-              DeviceField<double, MatrixLayout<reticolo::gauge_group::SU3>>>(
+        bench<act::Wilson<reticolo::math::group::SU3, double>,
+              DeviceField<double, MatrixLayout<reticolo::math::group::SU3>>>(
             "Wilson<SU3>", s4, {.beta = 6.0});
         std::printf("---------------------------------------------------------------------\n");
     }

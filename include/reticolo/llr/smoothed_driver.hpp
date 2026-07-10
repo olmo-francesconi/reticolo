@@ -1,6 +1,7 @@
 #pragma once
 
 #include <reticolo/io/writer.hpp>
+#include <reticolo/llr/checkpoint.hpp>
 #include <reticolo/llr/exchange.hpp>
 #include <reticolo/llr/log.hpp>
 #include <reticolo/llr/update_a.hpp>
@@ -10,7 +11,12 @@
 #include <cstddef>
 #include <format>
 #include <memory>
+#include <string>
 #include <vector>
+
+#ifdef _OPENMP
+    #include <omp.h>
+#endif
 
 namespace reticolo::llr::smoothed {
 
@@ -34,7 +40,7 @@ namespace reticolo::llr::smoothed {
 // (|λ·(â − a_rm)|, the shrinkage step magnitude). At convergence the
 // three a-series must agree to the noise floor.
 
-namespace detail {
+namespace impl {
 
 // In-place Gauss elimination with partial pivoting. `mat` is `n × n`
 // row-major; `vec` is `n`. Returns false if the matrix is singular to
@@ -145,27 +151,45 @@ inline void local_poly_fit(std::vector<double> const& e,
     }
 }
 
-}  // namespace detail
+}  // namespace impl
 
 struct DriverSpec {
-    int n_nr;
-    int n_therm_nr;
-    int n_meas_nr;
-    int n_rm;
-    int n_therm_rm;
-    int n_meas_rm;
-    double delta;
-    double e_min;
+    int n_nr{};
+    int n_therm_nr{};
+    int n_meas_nr{};
+    int n_rm{};
+    int n_therm_rm{};
+    int n_meas_rm{};
+    double delta{};
+    double e_min{};
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
-    double E_max;
-    double d_e;
+    double E_max{};
+    double d_e{};
     bool exchange = true;
+    // Two-stage warm-up pre-phase (base-action therm to equilibrium, then Newton
+    // a-adaptation into the window; fresh runs only). Same as llr::run.
+    int warm_therm     = 200;
+    int warm_max_traj  = 2000;
+    double warm_thresh = 1.0;
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
     int smooth_K          = 4;
     int smooth_degree     = 2;
     double smooth_lambda0 = 1.0;
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
     double smooth_lambda_exp = 2.0;
+
+    // Threading + checkpoint/resume — identical semantics to llr::DriverSpec
+    // (see llr::plan_threads and llr/checkpoint.hpp).
+    int replica_threads = 1;
+    int slabs           = 0;
+    int concurrency     = 0;
+    bool nested         = false;
+    // Default member init so a partial DriverSpec{...} omitting it doesn't trip
+    // -Wmissing-designated-field-initializers.
+    std::string checkpoint_path{};  // NOLINT(readability-redundant-member-init)
+    int checkpoint_every = 0;
+    int start_phase      = 0;
+    int start_iter       = 0;
 };
 
 template <class Replica, class ExchRng>
@@ -227,25 +251,100 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     std::vector<double> drm_buf(n_rep_u);
     std::vector<double> dsm_buf(n_rep_u);
 
-    log::info("llr", "smoothed NR phase  {} iters × {} replicas", spec.n_nr, n_rep_u);
-    for (int k = 0; k < spec.n_nr; ++k) {
-#pragma omp parallel for schedule(dynamic, 1)
+    // Outer replica-team size + nested enable (see llr::run for the rationale).
+#ifdef _OPENMP
+    if (spec.nested) {
+        omp_set_max_active_levels(2);
+    }
+    int const outer_nt = spec.concurrency > 0 ? spec.concurrency : omp_get_max_threads();
+#else
+    [[maybe_unused]] int const outer_nt = spec.concurrency > 0 ? spec.concurrency : 1;
+#endif
+
+    // One-shot run summary (see llr::run) — ensemble, the shared HMC sampler via
+    // a representative replica, and the smoothed schedule. Per-replica ctors were
+    // logged under log::quiet() by the app.
+    log::info("llr",
+              "ensemble  {} replicas · E_n ∈ [{:+.1f} … {:+.1f}] · dE={:.1f} · δ={:.1f}",
+              n_rep,
+              spec.e_min,
+              spec.E_max,
+              spec.d_e,
+              spec.delta);
+    if (!reps.empty()) {
+        reps.front()->announce_sampler();
+    }
+    log::info("llr",
+              "schedule  NR {}×(therm {}, meas {}) · sRM {}×(therm {}, meas {}){} · "
+              "smooth K={} deg={} λ0={:.2g} exp={:.2g}",
+              spec.n_nr,
+              spec.n_therm_nr,
+              spec.n_meas_nr,
+              spec.n_rm,
+              spec.n_therm_rm,
+              spec.n_meas_rm,
+              spec.exchange ? " · exchange" : "",
+              spec.smooth_K,
+              spec.smooth_degree,
+              spec.smooth_lambda0,
+              spec.smooth_lambda_exp);
+    log::info("llr", "threads   m={} × {} concurrent", spec.replica_threads, outer_nt);
+
+    // Warm-up phase (see llr::run): drive every replica into its E_n window with
+    // coarse Newton a-adaptation. Fresh runs only.
+    if (spec.start_phase == 0 && spec.start_iter == 0 && spec.warm_max_traj > 0) {
+        log::info("llr", "warm phase  seat {} replicas in window (a-adapting)", n_rep_u);
+#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto& r = *reps[n];
-            r.thermalize(spec.n_therm_nr);
-            de_buf[n] = r.sample(spec.n_meas_nr);
-            a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
-            r.set_a(a_buf[n]);
+            reps[n]->warm_into_window(spec.warm_therm, spec.warm_max_traj, spec.warm_thresh);
         }
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            a_series[n].append(a_buf[n]);
-            de_series[n].append(de_buf[n]);
-            a_pre_series[n].append(a_buf[n]);
-            a_hat_series[n].append(a_buf[n]);
-            drm_series[n].append(0.0);
-            dsm_series[n].append(0.0);
+    }
+
+    auto checkpoint = [&](int phase, int next_iter) {
+        if (spec.checkpoint_path.empty()) {
+            return;
         }
-        log::info("llr", "NR iter  {:>3}/{}  done", k + 1, spec.n_nr);
+        save_ensemble(spec.checkpoint_path,
+                      reps,
+                      exch_rng,
+                      OrchState{.phase     = phase,
+                                .iter      = next_iter,
+                                .n_threads = spec.replica_threads,
+                                .slabs     = spec.slabs});
+    };
+
+    if (spec.start_phase == 0) {
+        log::info("llr", "smoothed NR phase  {} iters × {} replicas", spec.n_nr, n_rep_u);
+        for (int k = spec.start_iter; k < spec.n_nr; ++k) {
+#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
+            for (std::size_t n = 0; n < n_rep_u; ++n) {
+                auto& r = *reps[n];
+                r.thermalize(spec.n_therm_nr, log::Mode::silent);
+                de_buf[n] = r.sample(spec.n_meas_nr, log::Mode::silent);
+                a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
+                r.set_a(a_buf[n]);
+            }
+            for (std::size_t n = 0; n < n_rep_u; ++n) {
+                auto _ = log::scope(reps[n]->id());
+                a_series[n].append(a_buf[n]);
+                de_series[n].append(de_buf[n]);
+                a_pre_series[n].append(a_buf[n]);
+                a_hat_series[n].append(a_buf[n]);
+                drm_series[n].append(0.0);
+                dsm_series[n].append(0.0);
+                iter("NR",
+                     static_cast<std::size_t>(k) + 1,
+                     static_cast<std::size_t>(spec.n_nr),
+                     a_buf[n],
+                     de_buf[n],
+                     spec.delta);
+            }
+            log::info("llr", "NR iter  {:>3}/{}  done", k + 1, spec.n_nr);
+            if (spec.checkpoint_every > 0 && (k + 1) % spec.checkpoint_every == 0) {
+                checkpoint(0, k + 1);
+            }
+        }
+        checkpoint(1, 0);
     }
 
     log::info("llr",
@@ -256,8 +355,9 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
               spec.smooth_degree,
               spec.smooth_lambda0,
               spec.smooth_lambda_exp);
-    for (int s = 0; s < spec.n_rm; ++s) {
-#pragma omp parallel for schedule(dynamic, 1)
+    int const rm_start = spec.start_phase == 1 ? spec.start_iter : 0;
+    for (int s = rm_start; s < spec.n_rm; ++s) {
+#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
             auto& r = *reps[n];
             r.thermalize(spec.n_therm_rm, log::Mode::silent);
@@ -265,7 +365,7 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
             a_rm[n]   = rm_update(r.a(), de_buf[n], spec.delta, s);
         }
 
-        detail::local_poly_fit(e_n_vec, a_rm, spec.smooth_K, spec.smooth_degree, a_hat);
+        impl::local_poly_fit(e_n_vec, a_rm, spec.smooth_K, spec.smooth_degree, a_hat);
         double const lam =
             spec.smooth_lambda0 / std::pow(static_cast<double>(s + 1), spec.smooth_lambda_exp);
         double rm_step_sum = 0.0;
@@ -273,22 +373,18 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
         double sm_step_sum = 0.0;
         double sm_step_max = 0.0;
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            double const a_old = static_cast<double>(reps[n]->a());
-            drm_buf[n]         = std::abs(a_rm[n] - a_old);
-            dsm_buf[n]         = std::abs(lam * (a_hat[n] - a_rm[n]));
+            auto const a_old = static_cast<double>(reps[n]->a());
+            drm_buf[n]       = std::abs(a_rm[n] - a_old);
+            dsm_buf[n]       = std::abs(lam * (a_hat[n] - a_rm[n]));
             rm_step_sum += drm_buf[n];
             sm_step_sum += dsm_buf[n];
-            if (drm_buf[n] > rm_step_max) {
-                rm_step_max = drm_buf[n];
-            }
-            if (dsm_buf[n] > sm_step_max) {
-                sm_step_max = dsm_buf[n];
-            }
-            a_buf[n] = ((1.0 - lam) * a_rm[n]) + (lam * a_hat[n]);
+            rm_step_max = std::max(drm_buf[n], rm_step_max);
+            sm_step_max = std::max(dsm_buf[n], sm_step_max);
+            a_buf[n]    = ((1.0 - lam) * a_rm[n]) + (lam * a_hat[n]);
             reps[n]->set_a(a_buf[n]);
             auto _ = log::scope(reps[n]->id());
             iter("sRM",
-                 static_cast<std::size_t>(s + 1),
+                 static_cast<std::size_t>(s) + 1,
                  static_cast<std::size_t>(spec.n_rm),
                  a_buf[n],
                  de_buf[n],
@@ -324,7 +420,7 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
         int accepted = 0;
         int attempts = 0;
         if (spec.exchange) {
-            std::size_t const off = static_cast<std::size_t>(s & 1);
+            auto const off = static_cast<std::size_t>(s & 1);
             for (std::size_t i = off; i + 1 < reps.size(); i += 2) {
                 ++attempts;
                 if (try_exchange(*reps[i], *reps[i + 1], exch_rng)) {
@@ -334,6 +430,11 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
         }
         exch_series.append(accepted);
         log::info("exch", "step  {:>3}  accepted  {}/{}", s + 1, accepted, attempts);
+
+        bool const last = (s + 1) == spec.n_rm;
+        if (last || (spec.checkpoint_every > 0 && (s + 1) % spec.checkpoint_every == 0)) {
+            checkpoint(1, s + 1);
+        }
     }
 }
 

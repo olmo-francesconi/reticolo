@@ -52,16 +52,16 @@ template <class T>
     }
 }
 
-// Periodic-only neighbour table for a hypercubic lattice. The library does
-// not currently support open / antiperiodic boundaries — every `next(s, mu)`
-// and `prev(s, mu)` wraps around. Hot kernels therefore never need a
-// validity check in the inner loop. If open BCs are ever needed, they land
-// as a separate `OpenIndexing` (or a constexpr policy template parameter)
-// alongside this class, not as a runtime flag inside it.
+// Shared hypercubic-lattice geometry: shape, strides, site count, held in a
+// process-wide weak-ptr pool so sibling fields reuse one instance. Periodic BCs
+// only; `next(s, mu)` / `prev(s, mu)` are COMPUTED from the packed strides (no
+// stored neighbour table — the hot kernels roll their own row-nested strided
+// offsets, and the tables cost `nsites·d·2·8` bytes for nothing). Supports 1..4
+// dimensions. If open BCs are ever needed, they land as a separate
+// `OpenIndexing` alongside this class, not as a runtime flag inside it.
 class Indexing {
 public:
     using SizeVec = std::vector<std::size_t>;
-    using SiteVec = std::vector<Site>;
 
     static std::shared_ptr<Indexing const> acquire(SizeVec shape);
 
@@ -72,50 +72,37 @@ public:
     ~Indexing()                          = default;
 
     [[nodiscard]] SizeVec const& shape() const noexcept { return shape_; }
-    // Plain member load, not shape_.size(): next()/prev() multiply by ndims()
-    // on the address path of every neighbour lookup, and the vector-size
-    // indirection (two loads + sub + shift) would sit on that critical path.
     [[nodiscard]] std::size_t ndims() const noexcept { return ndims_; }
     [[nodiscard]] std::size_t nsites() const noexcept { return nsites_; }
+    [[nodiscard]] SizeVec const& strides() const noexcept { return strides_; }
 
+    // Periodic +μ̂ / −μ̂ neighbour, COMPUTED from the packed strides — there is no
+    // stored neighbour table. `coord[mu] = (s / stride[mu]) % L[mu]` selects the
+    // wrap. Cold callers only (observers, tests, D=1); the hot kernels roll their
+    // own row-nested strided offsets and never call this per site.
     [[nodiscard]] Site next(Site s, std::size_t mu) const noexcept {
-        return Site{next_[(s.value() * ndims()) + mu]};
+        std::size_t const v = s.value();
+        std::size_t const c = (v / strides_[mu]) % shape_[mu];
+        return Site{(c + 1 < shape_[mu]) ? v + strides_[mu]
+                                         : v - ((shape_[mu] - 1) * strides_[mu])};
     }
     [[nodiscard]] Site prev(Site s, std::size_t mu) const noexcept {
-        return Site{prev_[(s.value() * ndims()) + mu]};
+        std::size_t const v = s.value();
+        std::size_t const c = (v / strides_[mu]) % shape_[mu];
+        return Site{(c > 0) ? v - strides_[mu] : v + ((shape_[mu] - 1) * strides_[mu])};
     }
-    [[nodiscard]] Parity parity_of(Site s) const noexcept {
-        return parity_[s.value()] == 0 ? Parity::Even : Parity::Odd;
-    }
-
-    [[nodiscard]] SiteVec const& even_sites() const noexcept { return even_; }
-    [[nodiscard]] SiteVec const& odd_sites() const noexcept { return odd_; }
-
-    // Raw neighbour-table pointers for hot kernels. Layout: `[site * ndims + mu]`.
-    // Stable for the life of this `Indexing` (immutable post-construction).
-    [[nodiscard]] Site::value_type const* next_data() const noexcept { return next_.data(); }
-    [[nodiscard]] Site::value_type const* prev_data() const noexcept { return prev_.data(); }
 
 private:
     explicit Indexing(SizeVec shape);
     void build_();
 
     SizeVec shape_;
+    SizeVec strides_;  // strides_[0]=1, strides_[mu]=∏_{k<mu} L[k]
     std::size_t nsites_ = 0;
-
-    std::vector<Site::value_type> next_;
-    std::vector<Site::value_type> prev_;
-    std::vector<std::uint8_t> parity_;
-
-    SiteVec even_;
-    SiteVec odd_;
-
-    // Declared last so the hot members above (next_/prev_ headers) keep
-    // their cache-line placement; see ndims() for why this is a member.
-    std::size_t ndims_ = 0;
+    std::size_t ndims_  = 0;
 };
 
-namespace detail {
+namespace impl {
 
 struct IndexingPoolKey {
     Indexing::SizeVec shape;
@@ -133,22 +120,22 @@ struct IndexingPoolKeyHash {
     }
 };
 
-}  // namespace detail
+}  // namespace impl
 
 inline std::shared_ptr<Indexing const> Indexing::acquire(SizeVec shape) {
     static std::mutex pool_mutex;
-    static std::unordered_map<detail::IndexingPoolKey,
+    static std::unordered_map<impl::IndexingPoolKey,
                               std::weak_ptr<Indexing const>,
-                              detail::IndexingPoolKeyHash>
+                              impl::IndexingPoolKeyHash>
         pool;
 
     if (shape.empty()) {
         throw std::invalid_argument{"Indexing: shape must be non-empty"};
     }
 
-    detail::IndexingPoolKey key{std::move(shape)};
+    impl::IndexingPoolKey key{std::move(shape)};
 
-    std::lock_guard const lock{pool_mutex};
+    std::scoped_lock const lock{pool_mutex};
     if (auto it = pool.find(key); it != pool.end()) {
         if (auto sp = it->second.lock()) {
             return sp;
@@ -167,6 +154,11 @@ inline Indexing::Indexing(SizeVec shape) : shape_{std::move(shape)} {
 inline void Indexing::build_() {
     std::size_t const d = shape_.size();
     ndims_              = d;
+    // The library supports 1..4 lattice dimensions; the hand-written per-dim
+    // strided kernels are sized for that range (gauge additionally needs d≥2).
+    if (d > 4) {
+        throw std::invalid_argument{"Indexing: ndims must be 1..4"};
+    }
 
     nsites_ = 1;
     for (auto length : shape_) {
@@ -176,46 +168,11 @@ inline void Indexing::build_() {
         nsites_ *= length;
     }
 
-    next_.assign(nsites_ * d, 0);
-    prev_.assign(nsites_ * d, 0);
-    parity_.assign(nsites_, std::uint8_t{0});
-
-    std::vector<std::size_t> coord(d, 0);
-    std::vector<std::size_t> stride(d, 1);
+    // Packed strides are the whole geometry now: next()/prev() and every hot
+    // kernel derive neighbours from these instead of a stored index table.
+    strides_.assign(d, 1);
     for (std::size_t mu = 1; mu < d; ++mu) {
-        stride[mu] = stride[mu - 1] * shape_[mu - 1];
-    }
-
-    for (std::size_t s = 0; s < nsites_; ++s) {
-        std::size_t r          = s;
-        std::size_t parity_sum = 0;
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            coord[mu] = r % shape_[mu];
-            r /= shape_[mu];
-            parity_sum += coord[mu];
-        }
-        parity_[s] = static_cast<std::uint8_t>(parity_sum & 1U);
-
-        for (std::size_t mu = 0; mu < d; ++mu) {
-            std::size_t const length = shape_[mu];
-            next_[(s * d) + mu] =
-                (coord[mu] + 1 < length) ? s + stride[mu] : s + stride[mu] - (length * stride[mu]);
-            prev_[(s * d) + mu] =
-                (coord[mu] > 0) ? s - stride[mu] : s + ((length - 1) * stride[mu]);
-        }
-    }
-
-    even_.clear();
-    odd_.clear();
-    even_.reserve(nsites_ / 2 + 1);
-    odd_.reserve(nsites_ / 2 + 1);
-    for (std::size_t s = 0; s < nsites_; ++s) {
-        Site const site{s};
-        if (parity_[s] == 0) {
-            even_.push_back(site);
-        } else {
-            odd_.push_back(site);
-        }
+        strides_[mu] = strides_[mu - 1] * shape_[mu - 1];
     }
 }
 

@@ -27,13 +27,14 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Group    = gauge_group::SU3;
+    using Group    = math::group::SU3;
     using Action   = action::Wilson<Group, double>;
     using DField   = cuda::DeviceField<double, cuda::MatrixLayout<Group>>;
     using ReplicaT = cuda::llr::Replica<Action, alg::integ::Omelyan2, DField>;
 
     // ---- CLI (mirrors su2_llr_cuda.cu) ----
-    cli::Parser p{"su3_llr_cuda", "LLR (Gaussian-penalty) + replica exchange for SU(3) Wilson (CUDA)"};
+    cli::Parser p{"su3_llr_cuda",
+                  "LLR (Gaussian-penalty) + replica exchange for SU(3) Wilson (CUDA)"};
     auto const cf     = app::common_flags(p, {.L = 4, .out = "su3_llr_cuda.h5"});
     auto const& ndim  = p.opt<int>("ndim", 4, "spatial dimensions");
     auto const& beta  = p.opt<double>("beta", 6.0, "Wilson coupling");

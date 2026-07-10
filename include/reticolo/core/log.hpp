@@ -15,9 +15,9 @@
 //    creates the workspace folder, opens <ws>/<stem>.log (stem = out_name
 //    minus extension — sweep-safe when sims share a workspace) and mirrors
 //    every entry into it, then prints the banner.
-//  * With replicas=true the run-id column is rendered and each scoped run
-//    id additionally gets its own <ws>/<stem>.<rid>.log (lazy-open,
-//    per-entry flush). Scoped lines land in both files.
+//  * With replicas=true the run-id column is rendered so scoped lines carry
+//    their run id; everything still lands in the single main log (there are no
+//    separate per-replica files).
 //  * Run-id is bound per thread via RAII `log::scope(id)` (works with
 //    schedule(dynamic) and N_sims > N_threads — same thread rebinds each
 //    iteration). Library code that owns a run id (llr::Replica) binds it
@@ -43,7 +43,6 @@
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -64,7 +63,7 @@ enum class Level : std::uint8_t { debug, info, warn, error };
 // new modes as needed.
 enum class Mode : std::uint8_t { normal, silent };
 
-namespace detail {
+namespace impl {
 
 struct Config {
     bool replicas = false;
@@ -93,11 +92,6 @@ inline std::chrono::system_clock::time_point& wall_start() {
 
 inline std::mutex& sink_mutex() {
     static std::mutex m;
-    return m;
-}
-
-inline std::unordered_map<std::string, std::ofstream>& run_files() {
-    static std::unordered_map<std::string, std::ofstream> m;
     return m;
 }
 
@@ -202,21 +196,6 @@ inline std::ostream& sink_for(Level lv) {
     return !cfg().enabled || static_cast<int>(lv) < static_cast<int>(cfg().min_level);
 }
 
-// Must be called with sink_mutex() held by the caller.
-inline std::ofstream* run_file_for_locked(std::string const& run_id) {
-    if (!cfg().replicas || run_id.empty()) {
-        return nullptr;
-    }
-    auto& files = run_files();
-    auto it     = files.find(run_id);
-    if (it != files.end()) {
-        return &it->second;
-    }
-    auto path     = cfg().workspace / std::format("{}.{}.log", cfg().stem, run_id);
-    auto [ins, _] = files.emplace(run_id, std::ofstream(path));
-    return &ins->second;
-}
-
 // Optional banner extensions filled by the cuda umbrella. Core cannot include
 // <cuda_runtime.h> (the one-way core ← cuda rule) nor see the nvcc version
 // macros — those are only defined in the .cu TUs the cuda headers reach. So
@@ -251,7 +230,7 @@ inline bool detect_color(int fd) noexcept {
 #endif
 }
 
-}  // namespace detail
+}  // namespace impl
 
 // Fluent multi-line builder. Move-only. Destructor emits the whole entry
 // atomically — no interleaving across threads.
@@ -260,8 +239,7 @@ public:
     // Suppression is latched at construction: a suppressed Entry skips all
     // line()/param() formatting, so building a never-emitted entry costs
     // nothing beyond the level check.
-    Entry(Level lv, std::string_view tag)
-        : lv_{lv}, tag_{tag}, suppressed_{detail::suppressed(lv)} {}
+    Entry(Level lv, std::string_view tag) : lv_{lv}, tag_{tag}, suppressed_{impl::suppressed(lv)} {}
     Entry(Entry const&)            = delete;
     Entry& operator=(Entry const&) = delete;
     Entry(Entry&& other) noexcept
@@ -326,7 +304,7 @@ public:
         if (emitted_ || lines_.empty()) {
             return;
         }
-        if (detail::suppressed(lv_)) {
+        if (impl::suppressed(lv_)) {
             return;
         }
         emit();
@@ -343,7 +321,7 @@ private:
 };
 
 inline void Entry::emit() {
-    using namespace detail;
+    using namespace impl;
     emitted_ = true;
 
     auto const sig  = sigil(lv_);
@@ -383,7 +361,7 @@ inline void Entry::emit() {
     // One lock covers stdout/stderr emission AND the file writes.
     // Line-atomic for the whole multi-line Entry — no other thread can
     // interleave between our lines.
-    std::lock_guard lk{sink_mutex()};
+    std::scoped_lock const lk{sink_mutex()};
 
 #ifdef _OPENMP
     if (omp_in_parallel() && run.empty()) {
@@ -401,15 +379,6 @@ inline void Entry::emit() {
             mf << (i == 0 ? pfirst : pcont) << lines_[i] << '\n';
         }
         mf.flush();
-    }
-
-    if (auto* rf = run_file_for_locked(run); rf != nullptr) {
-        std::string const fp = std::format("{} {} {}  {}  ", sig, run, ts, tag4);
-        std::string const fc(fp.size(), ' ');
-        for (std::size_t i = 0; i < lines_.size(); ++i) {
-            (*rf) << (i == 0 ? fp : fc) << lines_[i] << '\n';
-        }
-        rf->flush();
     }
 }
 
@@ -430,28 +399,28 @@ inline Entry error(std::string_view tag) {
 
 template <class... Args>
 inline void debug(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
-    if (detail::suppressed(Level::debug)) {
+    if (impl::suppressed(Level::debug)) {
         return;
     }
     Entry{Level::debug, tag}.line(fmt, std::forward<Args>(a)...);
 }
 template <class... Args>
 inline void info(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
-    if (detail::suppressed(Level::info)) {
+    if (impl::suppressed(Level::info)) {
         return;
     }
     Entry{Level::info, tag}.line(fmt, std::forward<Args>(a)...);
 }
 template <class... Args>
 inline void warn(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
-    if (detail::suppressed(Level::warn)) {
+    if (impl::suppressed(Level::warn)) {
         return;
     }
     Entry{Level::warn, tag}.line(fmt, std::forward<Args>(a)...);
 }
 template <class... Args>
 inline void error(std::string_view tag, std::format_string<Args...> fmt, Args&&... a) {
-    if (detail::suppressed(Level::error)) {
+    if (impl::suppressed(Level::error)) {
         return;
     }
     Entry{Level::error, tag}.line(fmt, std::forward<Args>(a)...);
@@ -463,8 +432,8 @@ inline void error(std::string_view tag, std::format_string<Args...> fmt, Args&&.
 class Scope {
 public:
     explicit Scope(std::string run_id)
-        : prev_{std::exchange(detail::bound_run(), std::move(run_id))} {}
-    ~Scope() { detail::bound_run() = std::move(prev_); }
+        : prev_{std::exchange(impl::bound_run(), std::move(run_id))} {}
+    ~Scope() { impl::bound_run() = std::move(prev_); }
     Scope(Scope const&)            = delete;
     Scope& operator=(Scope const&) = delete;
     Scope(Scope&&)                 = delete;
@@ -478,34 +447,71 @@ private:
     return Scope{std::string{run_id}};
 }
 
+// RAII global-suppression guard: silence ALL log output for its lifetime and
+// restore the previous enabled state on destruction. Nests correctly (saves and
+// restores rather than forcing on). Used to wrap noisy setup — e.g. per-replica
+// ensemble construction, where every lattice / RNG / HMC ctor self-announces —
+// so the driver can print one compact summary instead of N× the boilerplate.
+class Quiet {
+public:
+    Quiet() : prev_{std::exchange(impl::cfg().enabled, false)} {}
+    ~Quiet() { impl::cfg().enabled = prev_; }
+    Quiet(Quiet const&)            = delete;
+    Quiet& operator=(Quiet const&) = delete;
+    Quiet(Quiet&&)                 = delete;
+    Quiet& operator=(Quiet&&)      = delete;
+
+private:
+    bool prev_;
+};
+
+[[nodiscard]] inline Quiet quiet() {
+    return Quiet{};
+}
+
+// Format a byte count with a binary unit, e.g. 2048 → "2.0 KiB". A display
+// helper for log lines (slab footprints, buffer sizes, …).
+[[nodiscard]] inline std::string human_bytes(std::size_t n) {
+    auto v           = static_cast<double>(n);
+    char const* unit = "B";
+    for (char const* u : std::array<char const*, 3>{"KiB", "MiB", "GiB"}) {
+        if (v < 1024.0) {
+            break;
+        }
+        v /= 1024.0;
+        unit = u;
+    }
+    return std::format("{:.1f} {}", v, unit);
+}
+
 // Init / config -------------------------------------------------------------
 
 inline void set_min_level(Level lv) {
-    detail::cfg().min_level = lv;
+    impl::cfg().min_level = lv;
 }
 inline void set_color(bool on) {
-    detail::cfg().color = on;
+    impl::cfg().color = on;
 }
 
 // Global on/off — overrides `min_level`. Cheaper than `set_min_level(warn)`
 // because it short-circuits before any formatting. `banner()` is also
 // suppressed while off.
 inline void off() {
-    detail::cfg().enabled = false;
+    impl::cfg().enabled = false;
 }
 inline void on() {
-    detail::cfg().enabled = true;
+    impl::cfg().enabled = true;
 }
 [[nodiscard]] inline bool enabled() {
-    return detail::cfg().enabled;
+    return impl::cfg().enabled;
 }
 
-namespace detail {
+namespace impl {
 inline bool& banner_shown() {
     static bool b = false;
     return b;
 }
-}  // namespace detail
+}  // namespace impl
 
 // Hero banner. Idempotent — calling more than once is a no-op so apps and
 // `log::start` can both invoke it safely.
@@ -516,12 +522,12 @@ inline bool& banner_shown() {
 // Build metadata (branch/compiler/simd) is compile-time-baked via
 // <reticolo/core/build_info.hpp>; the host/cpu/threads rows are read live via
 // <reticolo/core/host_info.hpp>, and the gpu row is filled by the cuda umbrella
-// through detail::gpu_banner_hook() when the app links the CUDA backend.
+// through impl::gpu_banner_hook() when the app links the CUDA backend.
 inline void banner() {
-    if (!detail::cfg().enabled || detail::banner_shown()) {
+    if (!impl::cfg().enabled || impl::banner_shown()) {
         return;
     }
-    detail::banner_shown() = true;
+    impl::banner_shown() = true;
     static constexpr std::array<std::string_view, 6> figlet{{
         "██████╗ ███████╗████████╗██╗ ██████╗ ██████╗ ██╗      ██████╗ ",
         "██╔══██╗██╔════╝╚══██╔══╝██║██╔════╝██╔═══██╗██║     ██╔═══██╗",
@@ -564,8 +570,8 @@ inline void banner() {
     bottom += tag;
     bottom += "━┛";
 
-    std::lock_guard lk{detail::sink_mutex()};
-    auto& mf  = detail::main_file();
+    std::scoped_lock const lk{impl::sink_mutex()};
+    auto& mf  = impl::main_file();
     auto emit = [&](std::string const& s) {
         std::cout << s;
         if (mf.is_open()) {
@@ -587,7 +593,7 @@ inline void banner() {
     // into the run log naturally.
     auto const cores = host::logical_cores();
     std::string compiler_line{build::compiler};
-    if (auto* const hook = detail::nvcc_banner_hook(); hook != nullptr) {
+    if (auto* const hook = impl::nvcc_banner_hook(); hook != nullptr) {
         if (auto const ver = hook(); !ver.empty()) {
             compiler_line = std::format("nvcc {} ({})", ver, build::compiler);
         }
@@ -600,12 +606,12 @@ inline void banner() {
     emit(std::format("┃ threads  : {}\n",
                      build::openmp_enabled ? std::format("OpenMP {} of {}", omp_threads, cores)
                                            : std::format("serial (1 of {})", cores)));
-    if (auto* const hook = detail::gpu_banner_hook(); hook != nullptr) {
+    if (auto* const hook = impl::gpu_banner_hook(); hook != nullptr) {
         if (auto const gpu = hook(); !gpu.empty()) {
             emit(std::format("┃ gpu      : {}\n", gpu));
         }
     }
-    emit(std::format("┃ started  : {} (local)\n", detail::format_wall(detail::wall_start())));
+    emit(std::format("┃ started  : {} (local)\n", impl::format_wall(impl::wall_start())));
 
     // Section break between banner metadata and the live log stream.
     // Heavy T-junction continues the running ┃ column into a horizontal rule.
@@ -622,21 +628,21 @@ inline void banner() {
 // The single app entry point. Creates the workspace folder, opens the main
 // log file <workspace>/<stem>.log (stem = out_name minus extension) and
 // prints the banner. With replicas=true, scoped lines carry a run-id column
-// and additionally land in per-replica <workspace>/<stem>.<rid>.log files.
+// (all output still goes to the single main log).
 inline void
 start(std::filesystem::path const& workspace, std::string_view out_name, bool replicas = false) {
-    auto& c     = detail::cfg();
+    auto& c     = impl::cfg();
     c.replicas  = replicas;
     c.workspace = workspace.empty() ? std::filesystem::path{"."} : workspace;
     c.stem      = std::filesystem::path{out_name}.stem().string();
-    c.color     = detail::detect_color(fileno(stdout));
-    detail::mono_start();
-    detail::wall_start();
+    c.color     = impl::detect_color(fileno(stdout));
+    impl::mono_start();
+    impl::wall_start();
 
     std::error_code ec;
     std::filesystem::create_directories(c.workspace, ec);
     auto const log_path = c.workspace / (c.stem + ".log");
-    auto& mf            = detail::main_file();
+    auto& mf            = impl::main_file();
     if (mf.is_open()) {
         mf.close();
     }

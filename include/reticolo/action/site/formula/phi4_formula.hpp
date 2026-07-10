@@ -9,7 +9,7 @@
 // counter-indexed / FP-reassociated structure and only call into these for the
 // scalar body, so vectorisation is unchanged.
 
-namespace reticolo::action::detail {
+namespace reticolo::action::formula {
 
 // F(x) = -dS/dphi(x), given phi, phi², and the sum over ALL 2*ndims neighbours.
 // The phi²-taking form lets callers that already hold phi² (s_full_and_force)
@@ -33,4 +33,4 @@ template <class T>
     return (T{-2} * kappa * phi * fwd) + phi2 + (lambda * dev * dev);
 }
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::formula

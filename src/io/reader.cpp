@@ -52,7 +52,7 @@ hid_t native_type_for(Writer::ScalarKind k) {
             return H5T_NATIVE_DOUBLE;
         case Writer::ScalarKind::c32: {
             static hid_t const t = []() {
-                hid_t cid = H5Tcreate(H5T_COMPOUND, sizeof(std::complex<float>));
+                hid_t const cid = H5Tcreate(H5T_COMPOUND, sizeof(std::complex<float>));
                 H5Tinsert(cid, "r", 0, H5T_NATIVE_FLOAT);
                 H5Tinsert(cid, "i", sizeof(float), H5T_NATIVE_FLOAT);
                 return cid;
@@ -61,7 +61,7 @@ hid_t native_type_for(Writer::ScalarKind k) {
         }
         case Writer::ScalarKind::c64: {
             static hid_t const t = []() {
-                hid_t cid = H5Tcreate(H5T_COMPOUND, sizeof(std::complex<double>));
+                hid_t const cid = H5Tcreate(H5T_COMPOUND, sizeof(std::complex<double>));
                 H5Tinsert(cid, "r", 0, H5T_NATIVE_DOUBLE);
                 H5Tinsert(cid, "i", sizeof(double), H5T_NATIVE_DOUBLE);
                 return cid;
@@ -108,16 +108,19 @@ std::pair<std::string, std::string> split_attr(std::string_view path) {
 }
 
 std::string read_string_attr(hid_t obj, char const* name) {
-    hid_t attr = H5Aopen(obj, name, H5P_DEFAULT);
+    hid_t const attr = H5Aopen(obj, name, H5P_DEFAULT);
     hid_check(attr, "Aopen string");
-    hid_t dtype = H5Aget_type(attr);
+    hid_t const dtype = H5Aget_type(attr);
     hid_check(dtype, "Aget_type");
     if (H5Tis_variable_str(dtype) > 0) {
-        char* cstr      = nullptr;
+        char* cstr = nullptr;
+        // HDF5 takes the address of the char* for a variable-length string read.
+        // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
         herr_t const e1 = H5Aread(attr, dtype, &cstr);
         std::string out;
         if (e1 >= 0 && cstr != nullptr) {
             out = cstr;
+            // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
             H5Dvlen_reclaim(dtype, H5Aget_space(attr), H5P_DEFAULT, &cstr);
         }
         H5Tclose(dtype);
@@ -141,7 +144,7 @@ std::string read_string_attr(hid_t obj, char const* name) {
 
 template <class T>
 T read_scalar_attr(hid_t obj, char const* name) {
-    hid_t attr = H5Aopen(obj, name, H5P_DEFAULT);
+    hid_t const attr = H5Aopen(obj, name, H5P_DEFAULT);
     hid_check(attr, "Aopen scalar");
     T value{};
     herr_t const e = H5Aread(attr, native_type<T>(), &value);
@@ -212,7 +215,7 @@ bool Reader::has(std::string_view path) const {
         if (lex <= 0) {
             return false;
         }
-        hid_t obj = H5Oopen(impl_->file, probe.c_str(), H5P_DEFAULT);
+        hid_t const obj = H5Oopen(impl_->file, probe.c_str(), H5P_DEFAULT);
         if (obj < 0) {
             return false;
         }
@@ -229,7 +232,7 @@ template <class T>
 T Reader::attr(std::string_view path) const {
     auto const [obj_path, attr_name] = split_attr(path);
     std::string const open_path      = obj_path.empty() ? std::string{"/"} : obj_path;
-    hid_t obj                        = H5Oopen(impl_->file, open_path.c_str(), H5P_DEFAULT);
+    hid_t const obj                  = H5Oopen(impl_->file, open_path.c_str(), H5P_DEFAULT);
     hid_check(obj, "attr Oopen");
     if constexpr (std::is_same_v<T, std::string>) {
         std::string out = read_string_attr(obj, attr_name.c_str());
@@ -244,7 +247,7 @@ T Reader::attr(std::string_view path) const {
 
 std::vector<std::size_t> Reader::field_shape(std::string_view path) const {
     std::string const p{path};
-    hid_t dset = H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT);
+    hid_t const dset = H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT);
     hid_check(dset, "field_shape Oopen");
     std::string const shape_s = read_string_attr(dset, "shape");
     H5Oclose(dset);
@@ -287,7 +290,7 @@ void Reader::read_field_raw_(std::string_view path,
              " expected=" + std::to_string(expected_n_components));
     }
 
-    hid_t space = H5Dget_space(dset);
+    hid_t const space = H5Dget_space(dset);
     hid_check(space, "field Dget_space");
     hsize_t dims[1] = {0};
     int const nd    = H5Sget_simple_extent_ndims(space);
@@ -325,7 +328,7 @@ FastRng Reader::rng_state(std::string_view path) const {
     auto const has_cached_u = read_scalar_attr<unsigned int>(dset, "has_cached_normal");
     auto const cached       = read_scalar_attr<double>(dset, "cached_normal");
 
-    hid_t space = H5Dget_space(dset);
+    hid_t const space = H5Dget_space(dset);
     hid_check(space, "rng Dget_space");
     hsize_t dims[1] = {0};
     H5Sget_simple_extent_dims(space, dims, nullptr);
@@ -341,6 +344,57 @@ FastRng Reader::rng_state(std::string_view path) const {
     return FastRng::from_state(s, cached, has_cached_u != 0);
 }
 
+std::vector<std::uint64_t> Reader::rng_streams(std::string_view path,
+                                               std::string_view expected_kind,
+                                               std::size_t expected_n_streams,
+                                               std::size_t expected_n_words) const {
+    std::string const p{path};
+    hid_t dset = H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT);
+    hid_check(dset, "rng_streams Oopen");
+
+    auto fail = [&](std::string const& msg) {
+        H5Oclose(dset);
+        throw std::runtime_error{"reticolo::io::Reader::rng_streams('" + p + "'): " + msg};
+    };
+
+    std::string const kind = read_string_attr(dset, "kind");
+    if (kind != expected_kind) {
+        fail("kind mismatch: file='" + kind + "' expected='" + std::string{expected_kind} + "'");
+    }
+    if (H5Aexists(dset, "n_streams") <= 0) {
+        fail("no n_streams attribute — single-generator layout? (use rng_state)");
+    }
+    auto const n_streams = read_scalar_attr<std::uint64_t>(dset, "n_streams");
+    auto const n_words   = read_scalar_attr<std::uint64_t>(dset, "n_words");
+    if (n_streams != expected_n_streams) {
+        fail("n_streams mismatch: file=" + std::to_string(n_streams) +
+             " expected=" + std::to_string(expected_n_streams) +
+             " — a StreamSet resume must keep the checkpoint's stream count");
+    }
+    if (n_words != expected_n_words) {
+        fail("n_words mismatch: file=" + std::to_string(n_words) +
+             " expected=" + std::to_string(expected_n_words));
+    }
+
+    std::size_t const total = (n_streams + 1) * n_words;
+    hid_t const space       = H5Dget_space(dset);
+    hid_check(space, "rng_streams Dget_space");
+    hsize_t dims[1] = {0};
+    H5Sget_simple_extent_dims(space, dims, nullptr);
+    H5Sclose(space);
+    if (dims[0] != total) {
+        fail("word count mismatch: file=" + std::to_string(dims[0]) +
+             " expected=" + std::to_string(total));
+    }
+
+    std::vector<std::uint64_t> words(total);
+    herr_t const e = H5Dread(dset, H5T_NATIVE_UINT64, H5S_ALL, H5S_ALL, H5P_DEFAULT, words.data());
+    H5Oclose(dset);
+    herr_check(e, "rng_streams Dread");
+    return words;
+}
+
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage) — token-pasting instantiation list, not a constant
 #define RETICOLO_IO_READER_INSTANTIATE(T) template T Reader::attr<T>(std::string_view) const;
 RETICOLO_IO_READER_INSTANTIATE(float)
 RETICOLO_IO_READER_INSTANTIATE(double)
@@ -353,6 +407,7 @@ RETICOLO_IO_READER_INSTANTIATE(unsigned long long)
 #undef RETICOLO_IO_READER_INSTANTIATE
 template std::string Reader::attr<std::string>(std::string_view) const;
 
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage) — token-pasting instantiation list, not a constant
 #define RETICOLO_IO_READER_INSTANTIATE_FIELD(T)                                                    \
     template void Reader::field<T>(std::string_view, Lattice<T>&) const;
 RETICOLO_IO_READER_INSTANTIATE_FIELD(float)

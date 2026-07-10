@@ -1,7 +1,7 @@
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
-#include <reticolo/math/gauge_group/su3.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
+#include <reticolo/math/group/su3.hpp>
 
 #include <cstddef>
 #include <type_traits>
@@ -14,7 +14,7 @@
 using reticolo::FastRng;
 using reticolo::MatrixLinkLattice;
 using reticolo::action::Wilson;
-using SU3 = reticolo::gauge_group::SU3;
+using SU3 = reticolo::math::group::SU3;
 
 static_assert(std::is_same_v<decltype(std::declval<Wilson<SU3, float> const&>().s_full(
                                  std::declval<MatrixLinkLattice<SU3, float> const&>())),
@@ -57,8 +57,8 @@ TEST_CASE("SU(3): float kernels reproduce double on one configuration",
 
     MatrixLinkLattice<SU3, double> fd{ud.indexing()};
     MatrixLinkLattice<SU3, float> ff{uf.indexing()};
-    reticolo::action::detail::wilson_kernels<SU3>::compute_force(ud, fd, k_beta / 3.0);
-    reticolo::action::detail::wilson_kernels<SU3>::compute_force(uf, ff, k_beta / 3.0);
+    reticolo::action::formula::wilson_kernels<SU3>::compute_force(ud, fd, k_beta / 3.0);
+    reticolo::action::formula::wilson_kernels<SU3>::compute_force(uf, ff, k_beta / 3.0);
     for (std::size_t i = 0; i < fd.ncomponents(); ++i) {
         REQUIRE(static_cast<double>(ff.data()[i]) ==
                 Catch::Approx(fd.data()[i]).epsilon(2.0e-3).margin(1.0e-4));

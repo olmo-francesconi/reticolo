@@ -40,7 +40,6 @@ int main(int argc, char** argv) {
     // ---- State: lattice, RNG, action (+ optional resume) ----
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Lattice<double> phi{shape};
-    FastRng rng{seed};
     act::Phi4<double> const phi4{.kappa = kappa, .lambda = lambda};
 
     if (!init_from.empty()) {
@@ -52,7 +51,7 @@ int main(int argc, char** argv) {
     out.start_phase("prod");
 
     // ---- Updater ----
-    alg::Hmc hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}, Integrator{}};
+    alg::Hmc hmc{phi4, phi, FastRng{seed}, {.tau = tau, .n_md = n_md}, Integrator{}};
 
     // ---- Thermalisation ----
     for (int i = 0; i < n_therm; ++i) {

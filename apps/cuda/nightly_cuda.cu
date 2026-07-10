@@ -91,7 +91,7 @@ void check_equiv(char const* tag, std::vector<double> const& cpu, std::vector<do
     check(tag, nd < 5.0, buf);
 }
 
-void cold_identity_su2(reticolo::MatrixLinkLattice<reticolo::gauge_group::SU2, double>& u,
+void cold_identity_su2(reticolo::MatrixLinkLattice<reticolo::math::group::SU2, double>& u,
                        int ndim) {
     std::size_t const ns = u.nsites();
     std::fill(u.data(), u.data() + u.ncomponents(), 0.0);
@@ -166,7 +166,7 @@ void phi4_block() {
 void su2_block() {
     using namespace reticolo;
     std::printf("su2 Wilson (L=6^4, beta=2.3):\n");
-    using G           = gauge_group::SU2;
+    using G           = math::group::SU2;
     using A           = action::Wilson<G, double>;
     using HField      = MatrixLinkLattice<G, double>;
     using DField      = cuda::DeviceField<double, cuda::MatrixLayout<G>>;

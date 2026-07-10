@@ -78,8 +78,7 @@ int main() {
         std::size_t const L_ = static_cast<std::size_t>(c.L);
         Lattice<double>::SizeVec shape(nd, L_);
         Lattice<double> phi{shape};
-        FastRng rng{42};
-        alg::Hmc hmc{phi4, phi, rng, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
+        alg::Hmc hmc{phi4, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
         for (int i = 0; i < k_warmup; ++i) {
             (void)hmc.step();
         }
@@ -97,8 +96,7 @@ int main() {
         std::size_t const L_ = static_cast<std::size_t>(c.L);
         Lattice<std::complex<double>>::SizeVec shape(nd, L_);
         Lattice<std::complex<double>> phi{shape};
-        FastRng rng{42};
-        alg::Hmc hmc{bg, phi, rng, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
+        alg::Hmc hmc{bg, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
         for (int i = 0; i < k_warmup; ++i) {
             (void)hmc.step();
         }

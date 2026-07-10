@@ -2,7 +2,7 @@
 //
 // For each (field type, RNG) tuple, measure the cost of filling a buffer
 // the size of one trajectory's worth of momenta. Three RNGs (FastRng,
-// RanluxRng, Mt19937Rng) all satisfy the same `Rng` concept and plug in
+// RanlxdRng, Mt19937Rng) all satisfy the same `Rng` concept and plug in
 // at every existing call site.
 
 #include <reticolo/reticolo.hpp>
@@ -120,10 +120,10 @@ void bench_rng_for(char const* rng_name) {
 
     // MatrixLinkLattice<SU2, double> 4D L=8: per-direction sample_algebra_slab
     {
-        MatrixLinkLattice<gauge_group::SU2, double>::SizeVec shape{8, 8, 8, 8};
-        MatrixLinkLattice<gauge_group::SU2, double> mom{shape};
+        MatrixLinkLattice<math::group::SU2, double>::SizeVec shape{8, 8, 8, 8};
+        MatrixLinkLattice<math::group::SU2, double> mom{shape};
         std::size_t const ns      = mom.nsites();
-        std::size_t const doubles = mom.ndims() * gauge_group::SU2::n_real_components * ns;
+        std::size_t const doubles = mom.ndims() * math::group::SU2::n_real_components * ns;
         double const t            = time_per_call([&] {
             for (std::size_t mu = 0; mu < mom.ndims(); ++mu) {
                 math::su2::sample_algebra_slab(mom.mu_block_data(mu), rng, ns);
@@ -134,10 +134,10 @@ void bench_rng_for(char const* rng_name) {
 
     // MatrixLinkLattice<SU3, double> 4D L=8
     {
-        MatrixLinkLattice<gauge_group::SU3, double>::SizeVec shape{8, 8, 8, 8};
-        MatrixLinkLattice<gauge_group::SU3, double> mom{shape};
+        MatrixLinkLattice<math::group::SU3, double>::SizeVec shape{8, 8, 8, 8};
+        MatrixLinkLattice<math::group::SU3, double> mom{shape};
         std::size_t const ns      = mom.nsites();
-        std::size_t const doubles = mom.ndims() * gauge_group::SU3::n_real_components * ns;
+        std::size_t const doubles = mom.ndims() * math::group::SU3::n_real_components * ns;
         double const t            = time_per_call([&] {
             for (std::size_t mu = 0; mu < mom.ndims(); ++mu) {
                 math::su3::sample_algebra_slab(mom.mu_block_data(mu), rng, ns);
@@ -155,6 +155,6 @@ int main() {
     std::printf("RNG — momentum-sampling throughput\n\n");
     print_header();
     bench_rng_for<FastRng>("FastRng");
-    bench_rng_for<RanluxRng>("Ranlux48");
+    bench_rng_for<RanlxdRng>("Ranlxd");
     bench_rng_for<Mt19937Rng>("Mt19937_64");
 }

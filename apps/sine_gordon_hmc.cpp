@@ -41,7 +41,6 @@ int main(int argc, char** argv) {
     // ---- State: lattice, RNG, action ----
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
     Lattice<double> phi{shape};
-    FastRng rng{cf.seed};
     act::SineGordon<double> sg{.kappa = kappa, .alpha = alpha};
     log::act(sg);
 
@@ -56,7 +55,7 @@ int main(int argc, char** argv) {
     auto cos_phi  = out.series<double>("/prod/obs/cos_phi");
 
     // ---- Updater ----
-    alg::Hmc hmc{sg, phi, rng, {.tau = tau, .n_md = n_md}};
+    alg::Hmc hmc{sg, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     auto cos_avg = [&phi]() {
         double sum = 0.0;

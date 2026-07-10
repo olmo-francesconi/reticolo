@@ -1,8 +1,7 @@
-#include <reticolo/math/gauge_group/su2.hpp>
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
@@ -12,6 +11,7 @@
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.cuh>
+#include <reticolo/math/group/su2.hpp>
 #include <reticolo/math/su2_ops.hpp>
 
 #include <cmath>
@@ -36,7 +36,7 @@ namespace reticolo::cuda {
 
 namespace {
 
-using SU2    = gauge_group::SU2;
+using SU2    = math::group::SU2;
 using Wil    = action::Wilson<SU2, double>;
 using DField = DeviceField<double, MatrixLayout<SU2>>;
 using DAct   = DeviceAction<Wil, DField>;

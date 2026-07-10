@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/action/bond/detail/bond_action.hpp>
+#include <reticolo/action/bond/bond_action.hpp>
 #include <reticolo/action/bond/formula/xy_formula.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/log.hpp>
@@ -13,10 +13,10 @@ namespace reticolo::action {
 //   S = -beta * sum_<x,y>  cos(theta(x) - theta(y))
 //
 // HMC-friendly: force is -dS/dtheta. The bond math lives in
-// `detail/xy_formula.hpp`; the loop shells + scale come from `detail::BondAction`.
+// `detail/xy_formula.hpp`; the loop shells + scale come from `BondAction`.
 
 template <class T = double>
-struct Xy : detail::BondAction<Xy<T>, T> {
+struct Xy : BondAction<Xy<T>, T> {
     using value_type = T;
 
     T beta = T{0};
@@ -28,10 +28,10 @@ struct Xy : detail::BondAction<Xy<T>, T> {
 
     // Bond contributions (pre-scale); the -beta prefactor is applied by the base.
     [[nodiscard]] auto action_bond_kernel() const noexcept {
-        return [](T self, T nbr) { return detail::xy_action_bond<T>(self, nbr); };
+        return [](T self, T nbr) { return formula::xy_action_bond<T>(self, nbr); };
     }
     [[nodiscard]] auto force_bond_kernel() const noexcept {
-        return [](T self, T nbr) { return detail::xy_force_bond<T>(self, nbr); };
+        return [](T self, T nbr) { return formula::xy_force_bond<T>(self, nbr); };
     }
     [[nodiscard]] T bond_scale() const noexcept { return -beta; }
 };

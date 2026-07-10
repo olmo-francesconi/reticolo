@@ -2,7 +2,7 @@
 
 // Fills the banner's `gpu` row with live device details. Core cannot query the
 // device (the one-way core ← cuda rule keeps <cuda_runtime.h> out of core), so
-// this header — nvcc-only, host-callable — sets log::detail::gpu_banner_hook()
+// this header — nvcc-only, host-callable — sets log::impl::gpu_banner_hook()
 // at load time via a [[gnu::constructor]]. Any app that links the CUDA backend
 // pulls this in through <reticolo/cuda/cuda.hpp>, so the gpu row appears in the
 // banner with no per-app wiring. The actual cudaGetDeviceProperties call runs
@@ -16,7 +16,7 @@
 
 #include <cuda_runtime.h>
 
-namespace reticolo::cuda::detail {
+namespace reticolo::cuda::impl {
 
 inline std::string device_banner_line() {
     int dev = 0;
@@ -58,8 +58,8 @@ inline std::string nvcc_version() {
 // [[gnu::used]] forces the inline function to be emitted so the constructor is
 // actually scheduled even though nothing references it. Idempotent across TUs.
 [[gnu::used, gnu::constructor]] inline void register_device_banner() {
-    log::detail::gpu_banner_hook()  = &device_banner_line;
-    log::detail::nvcc_banner_hook() = &nvcc_version;
+    log::impl::gpu_banner_hook()  = &device_banner_line;
+    log::impl::nvcc_banner_hook() = &nvcc_version;
 }
 
-}  // namespace reticolo::cuda::detail
+}  // namespace reticolo::cuda::impl

@@ -1,12 +1,12 @@
 #pragma once
 
-#include <reticolo/action/gauge/detail/gauge_action.hpp>
-#include <reticolo/action/gauge/detail/plane.hpp>
-#include <reticolo/action/gauge/detail/wilson_kernels.hpp>
+#include <reticolo/action/gauge/formula/wilson_kernels.hpp>
+#include <reticolo/action/gauge/gauge_action.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/parallel.hpp>
 #include <reticolo/core/site.hpp>
-#include <reticolo/math/gauge_group/base.hpp>
+#include <reticolo/math/group/base.hpp>
 
 // The shipped per-group Wilson kernel specializations, so `Wilson<G>` for any
 // built-in group resolves from a single `wilson.hpp` include. An external group
@@ -20,15 +20,15 @@
 namespace reticolo::action {
 
 // Generic Wilson plaquette action for any SU(N) (and U(1)) gauge group
-// conforming to the `gauge_group::GaugeGroup` concept.
+// conforming to the `math::group::GaugeGroup` concept.
 //
 //     S_W = (β/N) · Σ_x Σ_{μ<ν} ( N − Re Tr U_{μν}(x) )
 //         = β · n_plaq − (β/N) · Σ_p Re Tr U_p
 //
-// The hot loops walk one plaquette plane (μ, ν) at a time via `detail::visit_plane`
-// (bulk-vs-slab, stride-1 inner site loop, peeled wrap boundaries). The
-// per-plaquette physics — Re Tr U_p and the staple force scatter — is the
-// action-specific `detail::wilson_kernels<G>` (in action/gauge/formula/wilson_<g>.hpp),
+// The hot loops walk each plaquette plane (μ, ν) with a table-free row-nested
+// strided sweep (neighbours from the lattice strides, dim-0 inner, wrap peeled).
+// The per-plaquette physics — Re Tr U_p and the staple force scatter — is the
+// action-specific `formula::wilson_kernels<G>` (in action/gauge/formula/wilson_<g>.hpp),
 // which is built on the group model `G`'s core operations. `G` itself carries
 // only the group constants (`n_color`, `name`) and the HMC algebra hooks; the
 // Wilson force lives here in the action layer, not in the group math.
@@ -36,12 +36,12 @@ namespace reticolo::action {
 // At N=1 with U=exp(iθ) this reduces line-for-line to `CompactU1` — the
 // bit-identity is the design point (validated in the physics suite).
 
-template <gauge_group::GaugeGroup G, class T = double>
-struct Wilson : detail::GaugeAction<Wilson<G, T>> {
+template <math::group::GaugeGroup G, class T = double>
+struct Wilson : GaugeAction<Wilson<G, T>> {
     using value_type = T;
     using group_type = G;
     using field_type = MatrixLinkLattice<G, T>;
-    using kernels    = detail::wilson_kernels<G>;
+    using kernels    = formula::wilson_kernels<G>;
 
     T beta = T{0};
 
@@ -64,27 +64,20 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
         std::size_t const ns     = U.nsites();
         std::size_t const n_plaq = (d * (d - 1) / 2) * ns;
         double accum_re_tr       = 0.0;
-        // If the group's kernels provide a per-plane batched Σ Re Tr U_p, use it
-        // (Sleef cos path on U(1)); otherwise fall back to per-plaquette plaq_re_tr.
-        if constexpr (requires { kernels::template s_full_plane_re_tr_sum<T>(U, 0, 1); }) {
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                    accum_re_tr += kernels::template s_full_plane_re_tr_sum<T>(U, mu, nu);
-                }
-            }
-        } else {
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                T const* mb = U.mu_block_data(mu);
-                for (std::size_t nu = mu + 1; nu < d; ++nu) {
-                    T const* nb = U.mu_block_data(nu);
-                    detail::visit_plane(
-                        U, mu, nu, [&](std::size_t s, std::size_t s_pmu, std::size_t s_pnu) {
-                            accum_re_tr += kernels::plaq_re_tr(mb, nb, s, s_pmu, s_pnu, ns);
-                        });
-                }
+        // The parallel range worker: the gauge base worksplits each (μ,ν) plane
+        // over the canonical field partition with deterministic per-item partials.
+        // field_reduce derives the threshold/chunk from the gauge footprint;
+        // gran = k_gauge_batch keeps the batched plane sum on batch boundaries.
+        constexpr std::size_t gran = math::group::k_gauge_batch<T>;
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            for (std::size_t nu = mu + 1; nu < d; ++nu) {
+                accum_re_tr +=
+                    reticolo::exec::field_reduce(U, gran, [&](std::size_t base, std::size_t cnt) {
+                        return kernels::template s_full_plane_range<T>(U, mu, nu, base, cnt);
+                    });
             }
         }
-        double const beta_d      = static_cast<double>(beta);
+        auto const beta_d        = static_cast<double>(beta);
         double const beta_over_n = beta_d / static_cast<double>(G::n_color);
         return (beta_d * static_cast<double>(n_plaq)) - (beta_over_n * accum_re_tr);
     }
@@ -93,7 +86,11 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
     // kernels the β/N prefactor. U(1) uses the per-plaquette sin scatter that
     // matches CompactU1 bit-for-bit; SU(N) uses the link-centric staple + TA[U·V].
     void force_into(field_type const& U, field_type& force) const noexcept {
-        double const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
+        auto const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
+        // Each group's compute_force owns its own threading — SU(N) worksplit the
+        // staple kernel over write-disjoint chunks via field_visit; U(1) runs its
+        // two-phase sinP fill+gather — so the action layer stays uniform with no
+        // parallel-vs-serial branch of its own.
         kernels::compute_force(U, force, beta_over_n_dbl);
     }
 
@@ -105,7 +102,9 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
             kernels::compute_force_and_kick(cu, m, double{}, double{});
         }
     {
-        double const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
+        auto const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
+        // Same uniformity as force_into: the group's fused kernel owns its
+        // threading, so the fused scatter is one call with no dispatch here.
         kernels::compute_force_and_kick(U, mom, beta_over_n_dbl, static_cast<double>(k_dt));
     }
 
@@ -121,7 +120,7 @@ struct Wilson : detail::GaugeAction<Wilson<G, T>> {
         std::size_t const d          = U.ndims();
         std::size_t const ns         = U.nsites();
         std::size_t const n_plaq     = (d * (d - 1) / 2) * ns;
-        double const beta_d          = static_cast<double>(beta);
+        auto const beta_d            = static_cast<double>(beta);
         double const beta_over_n_dbl = beta_d / static_cast<double>(G::n_color);
         double const accum           = kernels::s_full_and_force(force, U, beta_over_n_dbl);
         return (beta_d * static_cast<double>(n_plaq)) - (beta_over_n_dbl * accum);

@@ -12,6 +12,7 @@ wrappers. Pinned to the reticolo-cuda Modal environment. One-time auth:
     uv run tools/modal/app.py run --app phi4_hmc_cuda --args "--L 16 --n_prod 500 --out phi4.h5"
     uv run tools/modal/app.py run --app profile_hmc_cuda --args "--action=su3 --size=16"
     uv run tools/modal/app.py bench --gpus T4,L4,A100,H100 --name multigpu  # cross-GPU sweep
+    uv run tools/modal/app.py scaling --cpu 32   # CPU OpenMP strong/weak scaling (linux-gcc)
     uv run tools/modal/app.py pull            # list runs on the Volume
     uv run tools/modal/app.py pull <run_id>   # fetch a run's artifacts
     uv run tools/modal/app.py pull --session <session>   # fetch a whole bench session
@@ -83,6 +84,21 @@ IMAGE = (
     )
 )
 
+# CPU-only toolchain for the OpenMP scaling sweep (linux-gcc preset — the CUDA
+# image's linux-nvcc preset has OpenMP OFF). Build + run happen in the SAME
+# container, so -march=native (the preset default) is safe and wanted: the whole
+# point is real AVX2/AVX-512 SIMD throughput. matplotlib renders scaling.pdf in-
+# container so `pull` gets the plot too.
+CPU_IMAGE = (
+    modal.Image.from_registry("ubuntu:24.04", add_python="3.12")
+    .apt_install("git", "ninja-build", "libhdf5-dev", "ccache", "build-essential")
+    .pip_install("cmake>=3.25", "matplotlib")
+    .add_local_dir(
+        str(REPO), "/root/reticolo", copy=False,
+        ignore=["**/.git", "**/build", "tools/modal/output", "**/*.h5", "**/.DS_Store"],
+    )
+)
+
 app = modal.App("reticolo-cuda")
 cache = modal.Volume.from_name(VOL, create_if_missing=True)
 
@@ -148,6 +164,55 @@ def _exec(script: str, run_id: str, arch: str = "native",
     cache.commit()                                     # persist build tree + ccache + artifacts
 
 
+def _build_target(target, arch, jobs):
+    """Reconfigure the shared linux-nvcc tree for this GPU's arch (sequential runs
+    → no contention), build one target, and return its repo-relative binary path.
+    Raises if the build produced nothing."""
+    import subprocess
+    arch_flag = f"-DCMAKE_CUDA_ARCHITECTURES={arch}" if arch and arch != "native" else ""
+    subprocess.run(f"cmake --preset linux-nvcc {arch_flag}", shell=True,
+                   cwd="/root/reticolo", check=True)
+    subprocess.run(f"cmake --build --preset linux-nvcc --target {target} -j {jobs}",
+                   shell=True, cwd="/root/reticolo", check=True)
+    binpath = subprocess.run(
+        f'find {BUILD} -name {target} -type f -perm -u+x | head -1',
+        shell=True, cwd="/root/reticolo", capture_output=True, text=True).stdout.strip()
+    if not binpath:
+        raise RuntimeError(f"{target} produced no binary")
+    return binpath
+
+
+def _cpu_setup(run_id, jobs, threads, meta):
+    """Shared CPU-container bootstrap for the scaling/breakdown execs: symlink the
+    persistent gcc build tree, bump source mtimes so ninja re-evaluates, wire
+    ccache, and stamp meta.json. Returns the run's output dir."""
+    import json
+    import os
+    import subprocess
+    out = f"/cache/out/{run_id}"
+    os.makedirs(out, exist_ok=True)
+    # Dedicated CPU build tree on the Volume (separate from the per-GPU CUDA
+    # trees) so gcc objects + ccache persist across runs.
+    buildroot = "/cache/build-cpu-gcc"
+    os.makedirs(buildroot, exist_ok=True)
+    subprocess.run(f"ln -sfn {buildroot} /root/reticolo/build", shell=True, check=True)
+    subprocess.run(
+        "find /root/reticolo/include /root/reticolo/src /root/reticolo/apps "
+        "/root/reticolo/tests -type f -exec touch {} +", shell=True, check=True)
+    os.environ.update({
+        "PATH": "/usr/lib/ccache:" + os.environ["PATH"],
+        "CCACHE_DIR": "/cache/ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "JOBS": str(jobs),
+    })
+    cores = os.cpu_count()
+    print(f"run_id={run_id}  cores={cores}  jobs={jobs}  threads=[{threads}]", flush=True)
+    with open(f"{out}/meta.json", "w") as f:
+        json.dump({**(meta or {}), "run_id": run_id, "cores": cores}, f, indent=2)
+    cache.commit()
+    return out
+
+
 @app.function(image=IMAGE, gpu="T4", volumes={"/cache": cache}, timeout=7200)
 def _stress_exec(run_id: str, vols: dict, nreps: list,
                  arch: str = "native", jobs: int = 8, meta: dict | None = None):
@@ -168,16 +233,7 @@ def _stress_exec(run_id: str, vols: dict, nreps: list,
         logf.write(msg + "\n")
         logf.flush()
 
-    arch_flag = f"-DCMAKE_CUDA_ARCHITECTURES={arch}" if arch and arch != "native" else ""
-    subprocess.run(f"cmake --preset linux-nvcc {arch_flag}", shell=True,
-                   cwd="/root/reticolo", check=True)
-    subprocess.run(f"cmake --build --preset linux-nvcc --target phi4_llr_cuda -j {jobs}",
-                   shell=True, cwd="/root/reticolo", check=True)
-    binpath = subprocess.run(
-        f'find {BUILD} -name phi4_llr_cuda -type f -perm -u+x | head -1',
-        shell=True, cwd="/root/reticolo", capture_output=True, text=True).stdout.strip()
-    if not binpath:
-        raise RuntimeError("phi4_llr_cuda produced no binary")
+    binpath = _build_target("phi4_llr_cuda", arch, jobs)
 
     sched = dict(n_nr=1, n_therm_nr=30, n_meas_nr=100, n_rm=4, n_therm_rm=30, n_meas_rm=100)
     traj_per_rep = (sched["n_nr"] * (sched["n_therm_nr"] + sched["n_meas_nr"])
@@ -246,18 +302,7 @@ def _bench_exec(run_id: str, actions: list, grids: dict, n_md: int, iters: int,
         logf.write(msg + "\n")
         logf.flush()
 
-    # Reconfigure the shared tree for this GPU's arch (sequential runs → no
-    # contention), then build the one target.
-    arch_flag = f"-DCMAKE_CUDA_ARCHITECTURES={arch}" if arch and arch != "native" else ""
-    subprocess.run(f"cmake --preset linux-nvcc {arch_flag}", shell=True,
-                   cwd="/root/reticolo", check=True)
-    subprocess.run(f"cmake --build --preset linux-nvcc --target profile_hmc_cuda -j {jobs}",
-                   shell=True, cwd="/root/reticolo", check=True)
-    binpath = subprocess.run(
-        f'find {BUILD} -name profile_hmc_cuda -type f -perm -u+x | head -1',
-        shell=True, cwd="/root/reticolo", capture_output=True, text=True).stdout.strip()
-    if not binpath:
-        raise RuntimeError("profile_hmc_cuda produced no binary")
+    binpath = _build_target("profile_hmc_cuda", arch, jobs)
 
     def run_one(extra):
         r = subprocess.run([f"/root/reticolo/{binpath}", *extra],
@@ -289,6 +334,54 @@ def _bench_exec(run_id: str, actions: list, grids: dict, n_md: int, iters: int,
     jsonl.close()
     errf.close()
     logf.close()
+    cache.commit()
+
+
+@app.function(image=CPU_IMAGE, volumes={"/cache": cache}, timeout=7200)
+def _scaling_exec(run_id, threads, strong_sizes, weak_bases, family,
+                  force_reps, traj_reps, jobs, meta=None):
+    """CPU OpenMP strong/weak scaling: build bench_scaling_all via the linux-gcc
+    preset, then run the shared tools/bench/scaling.sh harness across the thread
+    sweep. Reusing the local script verbatim keeps remote and local identical;
+    CSVs + scaling.pdf land in the run dir. No GPU, no nvidia-smi."""
+    import os
+    import subprocess
+
+    out = _cpu_setup(run_id, jobs, threads, meta)
+    subprocess.run("cmake --preset linux-gcc", shell=True, cwd="/root/reticolo", check=True)
+    env = {**os.environ, "OUT_DIR": out, "PRESET": "linux-gcc", "THREADS": threads,
+           "STRONG_SIZES": strong_sizes, "WEAK_BASES": weak_bases, "FAMILY": family,
+           "FORCE_REPS": str(force_reps), "TRAJ_REPS": str(traj_reps)}
+    subprocess.run(
+        ["stdbuf", "-oL", "-eL", "bash", "-c",
+         'set -o pipefail; tools/bench/scaling.sh 2>&1 | tee "$OUT_DIR/console.log"'],
+        cwd="/root/reticolo", check=True, env=env)
+    subprocess.run(
+        f'cp /root/reticolo/tools/bench/results/*.csv '
+        f'/root/reticolo/tools/bench/results/*.png {out}/ 2>/dev/null || true', shell=True)
+    cache.commit()
+
+
+@app.function(image=CPU_IMAGE, volumes={"/cache": cache}, timeout=7200)
+def _breakdown_exec(run_id, threads, phi4_sizes, su3_sizes, n_md, jobs, meta=None):
+    """Per-component HMC breakdown on CPU: build bench_hmc_breakdown via the
+    linux-gcc preset, then run the shared tools/bench/breakdown.sh harness across
+    the size × thread sweep. CSV + throughput/composition PNGs land in the run
+    dir. Mirrors _scaling_exec (same CPU image, no GPU)."""
+    import os
+    import subprocess
+
+    out = _cpu_setup(run_id, jobs, threads, meta)
+    subprocess.run("cmake --preset linux-gcc", shell=True, cwd="/root/reticolo", check=True)
+    env = {**os.environ, "OUT_DIR": out, "PRESET": "linux-gcc", "THREADS": threads,
+           "PHI4_SIZES": phi4_sizes, "SU3_SIZES": su3_sizes, "N_MD": str(n_md)}
+    subprocess.run(
+        ["stdbuf", "-oL", "-eL", "bash", "-c",
+         'set -o pipefail; tools/bench/breakdown.sh 2>&1 | tee "$OUT_DIR/console.log"'],
+        cwd="/root/reticolo", check=True, env=env)
+    subprocess.run(
+        f'cp /root/reticolo/tools/bench/results/breakdown.csv '
+        f'/root/reticolo/tools/bench/results/*.png {out}/ 2>/dev/null || true', shell=True)
     cache.commit()
 
 
@@ -390,6 +483,58 @@ def _stress(a):
     print(f"artifacts: out/{run_id}\n  fetch: uv run tools/modal/app.py pull {run_id}")
 
 
+def _thread_ladder(cpu):
+    """1,2,4,…,cpu — powers of two up to the core count, cpu itself appended."""
+    ps, p = [], 1
+    while p < cpu:
+        ps.append(p)
+        p *= 2
+    if not ps or ps[-1] != cpu:
+        ps.append(cpu)
+    return " ".join(str(x) for x in ps)
+
+
+def _scaling(a):
+    now = datetime.now()
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", (a.name or "scaling")).strip("-").lower()
+    run_id = f"{now:%Y-%m-%d}-{now:%H%M%S}-{slug}"
+    sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                         capture_output=True, text=True).stdout.strip()
+    threads = a.threads or _thread_ladder(int(a.cpu))
+    meta = {"label": "scaling", "name": a.name, "cpu": a.cpu, "git_sha": sha,
+            "threads": threads, "strong_sizes": a.strong_sizes, "weak_bases": a.weak_bases,
+            "family": a.family, "started": now.isoformat()}
+    opts = {"cpu": a.cpu, "timeout": 7200, **({"memory": a.mem} if a.mem else {})}
+    print(f"cpu scaling: threads=[{threads}] strong_sizes=[{a.strong_sizes}] "
+          f"weak_bases=[{a.weak_bases}] family={a.family}  run_id={run_id}")
+    with modal.enable_output(), app.run():
+        _scaling_exec.with_options(**opts).remote(
+            run_id=run_id, threads=threads, strong_sizes=a.strong_sizes,
+            weak_bases=a.weak_bases, family=a.family, force_reps=a.force_reps,
+            traj_reps=a.traj_reps, jobs=max(1, int(a.cpu)), meta=meta)
+    print(f"artifacts: out/{run_id}\n  fetch: uv run tools/modal/app.py pull {run_id}")
+
+
+def _breakdown(a):
+    now = datetime.now()
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", (a.name or "breakdown")).strip("-").lower()
+    run_id = f"{now:%Y-%m-%d}-{now:%H%M%S}-{slug}"
+    sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                         capture_output=True, text=True).stdout.strip()
+    threads = a.threads or _thread_ladder(int(a.cpu))
+    meta = {"label": "breakdown", "name": a.name, "cpu": a.cpu, "git_sha": sha,
+            "threads": threads, "phi4_sizes": a.phi4_sizes, "su3_sizes": a.su3_sizes,
+            "n_md": a.n_md, "started": now.isoformat()}
+    opts = {"cpu": a.cpu, "timeout": 7200, **({"memory": a.mem} if a.mem else {})}
+    print(f"cpu breakdown: threads=[{threads}] phi4=[{a.phi4_sizes}] su3=[{a.su3_sizes}] "
+          f"n_md={a.n_md}  run_id={run_id}")
+    with modal.enable_output(), app.run():
+        _breakdown_exec.with_options(**opts).remote(
+            run_id=run_id, threads=threads, phi4_sizes=a.phi4_sizes, su3_sizes=a.su3_sizes,
+            n_md=a.n_md, jobs=max(1, int(a.cpu)), meta=meta)
+    print(f"artifacts: out/{run_id}\n  fetch: uv run tools/modal/app.py pull {run_id}")
+
+
 def _modal(*cmd):
     return subprocess.run([shutil.which("modal") or "modal", *cmd], check=False)
 
@@ -442,6 +587,26 @@ def main():
 
     gpu_opts(subs.add_parser("stress", help="LLR (volume × n_rep) scaling matrix on one GPU"))
 
+    sc = subs.add_parser("scaling", help="CPU OpenMP strong/weak scaling sweep (linux-gcc, no GPU)")
+    sc.add_argument("--cpu", type=float, default=16.0, help="cores requested + build -j + thread ceiling")
+    sc.add_argument("--threads", default="", help="explicit list e.g. '1 2 4 8 16' (default: ladder to --cpu)")
+    sc.add_argument("--strong-sizes", default="16 20 24", help="cube edges for the strong sweep (one curve each)")
+    sc.add_argument("--weak-bases", default="8 12 16", help="per-thread outer-dim bases (one curve each)")
+    sc.add_argument("--family", default="pair", help="bench family: pair|light|gauge|phi|all")
+    sc.add_argument("--force-reps", type=int, default=20, help="force/s_full timed reps")
+    sc.add_argument("--traj-reps", type=int, default=8, help="trajectory timed reps (0 skips)")
+    sc.add_argument("--name", default="", help="run-id label")
+    sc.add_argument("--mem", type=int, default=0, help="memory request (MB)")
+
+    bd = subs.add_parser("breakdown", help="per-component HMC throughput breakdown (linux-gcc, no GPU)")
+    bd.add_argument("--cpu", type=float, default=16.0, help="cores requested + build -j + thread ceiling")
+    bd.add_argument("--threads", default="", help="explicit list e.g. '1 2 4 8 16' (default: ladder to --cpu)")
+    bd.add_argument("--phi4-sizes", default="24 32 48 64", help="Phi4 cube edges (empty to skip)")
+    bd.add_argument("--su3-sizes", default="12 16 20 24", help="Wilson<SU3> cube edges (empty to skip)")
+    bd.add_argument("--n_md", type=int, default=8, help="MD steps (sets kick/drift calls-per-traj)")
+    bd.add_argument("--name", default="", help="run-id label")
+    bd.add_argument("--mem", type=int, default=0, help="memory request (MB)")
+
     pl = subs.add_parser("pull", help="download a run's artifacts (no id → list runs)")
     pl.add_argument("run_id", nargs="?")
     pl.add_argument("--session", help="fetch a whole bench session (out/<session>/*)")
@@ -457,6 +622,10 @@ def main():
         _bench(a)
     elif a.cmd == "stress":
         _stress(a)
+    elif a.cmd == "scaling":
+        _scaling(a)
+    elif a.cmd == "breakdown":
+        _breakdown(a)
 
 
 if __name__ == "__main__":

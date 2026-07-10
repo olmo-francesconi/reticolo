@@ -13,7 +13,7 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Group  = gauge_group::SU2;
+    using Group  = math::group::SU2;
     using Action = action::Wilson<Group, float>;
     using Field  = MatrixLinkLattice<Group, float>;
 
@@ -44,7 +44,6 @@ int main(int argc, char** argv) {
             blk[(6 * ns) + s] = 1.0F;
         }
     }
-    FastRng rng{cf.seed};
     Action const action{.beta = static_cast<float>(beta)};
     log::act(action);
 
@@ -57,7 +56,7 @@ int main(int argc, char** argv) {
     auto plaq     = out.series<double>("/prod/obs/plaq");
 
     // Precision deduced from the float link field + action.
-    alg::Hmc hmc{action, links, rng, {.tau = tau, .n_md = n_md}, alg::integ::omelyan2};
+    alg::Hmc hmc{action, links, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     std::size_t const n_plaq =
         (static_cast<std::size_t>(ndim) * static_cast<std::size_t>(ndim - 1) / 2U) * ns;

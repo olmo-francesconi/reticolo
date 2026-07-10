@@ -39,7 +39,7 @@ concept SupportedVarType =
     std::same_as<T, unsigned long long> || std::same_as<T, float> || std::same_as<T, double> ||
     std::same_as<T, std::string>;
 
-namespace detail {
+namespace impl {
 
 template <class T>
 std::string to_default_string(T const& v) {
@@ -105,7 +105,7 @@ struct VarSlot : VarSlotBase {
     void stamp(io::Writer& w) const override { w.attr<T>("/vars@" + canonical_name(), value); }
 };
 
-}  // namespace detail
+}  // namespace impl
 
 class Parser {
 public:
@@ -122,7 +122,7 @@ public:
     // becomes meaningful after `parse(...)` returns.
     template <SupportedVarType T>
     T const& req(std::string name, std::string desc = {}) {
-        auto slot      = std::make_unique<detail::VarSlot<T>>();
+        auto slot      = std::make_unique<impl::VarSlot<T>>();
         slot->name     = std::move(name);
         slot->desc     = std::move(desc);
         slot->required = true;
@@ -134,8 +134,8 @@ public:
     // Register an optional flag with a default. Reference is valid before
     // parse() (holds the default) and may be updated by parse().
     template <SupportedVarType T>
-    T const& opt(std::string name, T default_value, std::string desc = {}) {
-        auto slot           = std::make_unique<detail::VarSlot<T>>();
+    T const& opt(std::string name, T const& default_value, std::string desc = {}) {
+        auto slot           = std::make_unique<impl::VarSlot<T>>();
         slot->name          = std::move(name);
         slot->desc          = std::move(desc);
         slot->required      = false;
@@ -201,7 +201,7 @@ public:
 private:
     std::string name_;
     std::string desc_;
-    std::vector<std::unique_ptr<detail::VarSlotBase>> slots_;
+    std::vector<std::unique_ptr<impl::VarSlotBase>> slots_;
     bool parsed_ = false;
 };
 

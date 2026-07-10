@@ -29,7 +29,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using Action   = act::Phi4<double>;
-    using ReplicaT = llr::Replica<Action, FastRng, alg::integ::Omelyan2>;
+    using ReplicaT = llr::Replica<Action, FastRng>;
 
     // ---- CLI ----
     cli::Parser p{"phi4_llr", "LLR (Gaussian-penalty) with replica exchange for phi^4"};
@@ -43,7 +43,7 @@ int main(int argc, char** argv) {
         "delta",
         25.0,
         "single LLR tuning knob: Gaussian half-width AND replica spacing. "
-         "n_rep is derived so that adjacent window centres are exactly `delta` apart.");
+        "n_rep is derived so that adjacent window centres are exactly `delta` apart.");
     auto const& tau  = p.opt<double>("tau", 1.0, "HMC trajectory length");
     auto const& n_md = p.opt<int>("n_md", 20, "MD steps per trajectory");
     auto const& n_nr = p.opt<int>("n_nr", 6, "Newton-Raphson warm-up iterations");

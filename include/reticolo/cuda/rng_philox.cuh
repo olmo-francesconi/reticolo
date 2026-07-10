@@ -3,13 +3,13 @@
 // Device momentum sampler — nvcc-only (.cuh; launches a kernel).
 //
 // Fills out[0..n) with standard normals = philox_normal2(seed, *traj, pair)
-// using the SHARED HD Philox primitive (core/philox.hpp) — the same generator
+// using the SHARED HD Philox primitive (core/rng/philox.hpp) — the same generator
 // the CPU PhiloxRng runs. Embarrassingly parallel (one thread per output pair,
 // no shared state). The trajectory counter is read from a DEVICE pointer, never
 // a baked kernel literal, so a captured graph replays with a fresh counter just
 // by advancing the device-side value.
 
-#include <reticolo/core/philox.hpp>
+#include <reticolo/core/rng/philox.hpp>
 #include <reticolo/cuda/check.hpp>
 
 #include <cstdint>

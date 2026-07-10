@@ -1,7 +1,7 @@
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
-#include <reticolo/math/gauge_group/su2.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
+#include <reticolo/math/group/su2.hpp>
 
 #include <cstddef>
 #include <type_traits>
@@ -14,7 +14,7 @@
 using reticolo::FastRng;
 using reticolo::MatrixLinkLattice;
 using reticolo::action::Wilson;
-using SU2 = reticolo::gauge_group::SU2;
+using SU2 = reticolo::math::group::SU2;
 
 // The Wilson S-reduction returns double whatever the link precision — the
 // mixed-precision invariant (the β·n_plaq − (β/N)·Σ combine would cancel
@@ -65,8 +65,8 @@ TEST_CASE("SU(2): float kernels reproduce double on one configuration",
     // Force agreement, elementwise.
     MatrixLinkLattice<SU2, double> fd{ud.indexing()};
     MatrixLinkLattice<SU2, float> ff{uf.indexing()};
-    reticolo::action::detail::wilson_kernels<SU2>::compute_force(ud, fd, k_beta / 2.0);
-    reticolo::action::detail::wilson_kernels<SU2>::compute_force(uf, ff, k_beta / 2.0);
+    reticolo::action::formula::wilson_kernels<SU2>::compute_force(ud, fd, k_beta / 2.0);
+    reticolo::action::formula::wilson_kernels<SU2>::compute_force(uf, ff, k_beta / 2.0);
     for (std::size_t i = 0; i < fd.ncomponents(); ++i) {
         REQUIRE(static_cast<double>(ff.data()[i]) ==
                 Catch::Approx(fd.data()[i]).epsilon(2.0e-3).margin(1.0e-4));

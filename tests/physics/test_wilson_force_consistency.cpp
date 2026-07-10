@@ -26,9 +26,10 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
-#include <reticolo/math/gauge_group/su2.hpp>
-#include <reticolo/math/gauge_group/su3.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
+#include <reticolo/math/group/su2.hpp>
+#include <reticolo/math/group/su3.hpp>
+#include <reticolo/math/group/u1.hpp>
 
 #include <cstddef>
 
@@ -39,32 +40,38 @@ using reticolo::FastRng;
 using reticolo::MatrixLinkLattice;
 using reticolo::action::HmcAction;
 using reticolo::action::Wilson;
-using reticolo::gauge_group::SU2;
-using reticolo::gauge_group::SU3;
+using reticolo::math::group::SU2;
+using reticolo::math::group::SU3;
+using reticolo::math::group::U1;
 
 namespace {
 
-// Set every link to the identity matrix, then left-multiply by exp(scale·X0)
-// with a random algebra X0 so the config is a generic (exact) SU(N) element.
+// Set every link to the identity element, then left-multiply by exp(scale·X0)
+// with a random algebra X0 so the config is a generic (exact) group element.
+// Matrix groups (SU(2)/SU(3)): identity is diag(1) in the NxN complex matrix.
+// U(1) (nc == 1, storage IS the angle theta): identity is theta = 0, already
+// set by the zero-fill above — there is no separate diagonal to write.
 template <class G>
 void hot_start(MatrixLinkLattice<G, double>& u, FastRng& rng, double scale) {
-    constexpr std::size_t nc = G::n_real_components;
-    constexpr std::size_t n  = G::n_color;
-    std::size_t const d      = u.ndims();
-    std::size_t const ns     = u.nsites();
+    constexpr std::size_t nc                 = G::n_real_components;
+    [[maybe_unused]] constexpr std::size_t n = G::n_color;
+    std::size_t const d                      = u.ndims();
+    std::size_t const ns                     = u.nsites();
 
     double* const data      = u.data();
     std::size_t const total = d * nc * ns;
     for (std::size_t i = 0; i < total; ++i) {
         data[i] = 0.0;
     }
-    // Diagonal real parts of each mu-block → identity. Full NxN complex,
-    // row-major: Re(i,i) sits at storage index 2*i*(n+1).
-    for (std::size_t mu = 0; mu < d; ++mu) {
-        double* const blk = u.mu_block_data(mu);
-        for (std::size_t i = 0; i < n; ++i) {
-            for (std::size_t s = 0; s < ns; ++s) {
-                blk[((2 * i * (n + 1)) * ns) + s] = 1.0;
+    if constexpr (nc > 1) {
+        // Diagonal real parts of each mu-block → identity. Full NxN complex,
+        // row-major: Re(i,i) sits at storage index 2*i*(n+1).
+        for (std::size_t mu = 0; mu < d; ++mu) {
+            double* const blk = u.mu_block_data(mu);
+            for (std::size_t i = 0; i < n; ++i) {
+                for (std::size_t s = 0; s < ns; ++s) {
+                    blk[((2 * i * (n + 1)) * ns) + s] = 1.0;
+                }
             }
         }
     }
@@ -146,4 +153,10 @@ TEST_CASE("Wilson<SU3>: compute_force matches finite-difference of s_full",
           "[physics][gauge][su3][force]") {
     check_force_fd<SU3>(6.0, 20240703);
     check_force_fd<SU3>(5.4, 917);
+}
+
+TEST_CASE("Wilson<U1>: compute_force matches finite-difference of s_full",
+          "[physics][gauge][u1][force]") {
+    check_force_fd<U1>(1.0, 20240703);
+    check_force_fd<U1>(0.7, 917);
 }

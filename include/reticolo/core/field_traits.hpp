@@ -28,7 +28,7 @@ struct real_scalar<cplx<T>> {
     using type = T;
 };
 template <class T>
-using real_scalar_t = typename real_scalar<T>::type;
+using real_scalar_t = real_scalar<T>::type;
 
 // Generic flat-element count for the field storage types. Lets algorithm
 // code (HMC, integrators) loop over the underlying buffer without branching

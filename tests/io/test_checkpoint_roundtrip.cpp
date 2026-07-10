@@ -3,11 +3,11 @@
 
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/io/checkpoint.hpp>
 #include <reticolo/io/reader.hpp>
 #include <reticolo/io/writer.hpp>
-#include <reticolo/math/gauge_group/u1.hpp>
+#include <reticolo/math/group/u1.hpp>
 
 #include "../test_helpers.hpp"
 
@@ -165,8 +165,8 @@ TEST_CASE("Reader::field rejects shape, scalar-type, and kind mismatches",
     }
 
     SECTION("wrong field kind throws") {
-        MatrixLinkLattice<gauge_group::U1, double> bad{
-            MatrixLinkLattice<gauge_group::U1, double>::SizeVec{4, 4}};
+        MatrixLinkLattice<math::group::U1, double> bad{
+            MatrixLinkLattice<math::group::U1, double>::SizeVec{4, 4}};
         REQUIRE_THROWS_AS(r.field("/field", bad), std::runtime_error);
     }
 }

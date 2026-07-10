@@ -38,7 +38,6 @@ int main(int argc, char** argv) {
     // ---- State: lattice, RNG, action ----
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
     Lattice<double> phi{shape};
-    FastRng rng{cf.seed};
     act::Phi6<double> phi6{.kappa = kappa, .lambda = lambda, .g6 = g6};
     log::act(phi6);
 
@@ -53,7 +52,7 @@ int main(int argc, char** argv) {
     auto m_sq     = out.series<double>("/prod/obs/m2");
 
     // ---- Updater ----
-    alg::Hmc hmc{phi6, phi, rng, {.tau = tau, .n_md = n_md}};
+    alg::Hmc hmc{phi6, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     // ---- Thermalisation ----
     log::info("hmc", "therm  {} trajectories", n_therm);

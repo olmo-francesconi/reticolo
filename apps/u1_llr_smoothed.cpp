@@ -20,12 +20,12 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action   = action::Wilson<gauge_group::U1, double>;
+    using Action   = action::Wilson<math::group::U1, double>;
     using ReplicaT = llr::Replica<Action,
                                   FastRng,
                                   alg::integ::Omelyan2,
                                   double,
-                                  MatrixLinkLattice<gauge_group::U1, double>>;
+                                  MatrixLinkLattice<math::group::U1, double>>;
 
     cli::Parser p{"u1_llr_smoothed", "Smoothed LLR for compact U(1) Wilson action"};
     auto const cf     = app::common_flags(p, {.L = 4, .out = "u1_llr_smoothed.h5"});
@@ -57,6 +57,7 @@ int main(int argc, char** argv) {
         "smooth_lambda0", 1.0, "shrinkage weight prefactor (lambda_s = lambda0/(s+1)^exp)");
     auto const& smooth_lambda_exp = p.opt<double>(
         "smooth_lambda_exp", 2.0, "shrinkage decay exponent; >1 keeps the perturbation summable");
+    auto const rf = app::llr_run_flags(p);
     if (!p.parse(argc, argv)) {
         return 0;
     }
@@ -64,7 +65,7 @@ int main(int argc, char** argv) {
     log::start(cf.workspace, cf.out, /*replicas=*/true);
     std::string const outpath = app::out_path(cf);
 
-    MatrixLinkLattice<gauge_group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
+    MatrixLinkLattice<math::group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                               static_cast<std::size_t>(cf.L));
     Action const base{.beta = beta};
     log::act(base);
@@ -72,32 +73,48 @@ int main(int argc, char** argv) {
     double const d_e = spacing > 0.0 ? spacing : delta;
     int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
+    auto const plan            = llr::plan_threads(n_rep, rf.replica_threads);
 
     std::vector<std::unique_ptr<ReplicaT>> reps;
     reps.reserve(static_cast<std::size_t>(n_rep));
-    for (int n = 0; n < n_rep; ++n) {
-        double const e_n = e_min + (static_cast<double>(n) * d_e);
-        reps.push_back(std::make_unique<ReplicaT>(
-            base,
-            FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
-            ReplicaT::Spec{
-                .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
-            alg::HmcSpec{.tau = tau, .n_md = n_md}));
+    {
+        auto const quiet = log::quiet();  // silence per-replica ctor announces
+        for (int n = 0; n < n_rep; ++n) {
+            double const e_n = e_min + (static_cast<double>(n) * d_e);
+            reps.push_back(std::make_unique<ReplicaT>(
+                base,
+                FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
+                ReplicaT::Spec{
+                    .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
+                alg::HmcSpec{
+                    .tau = tau, .n_md = n_md, .n_threads = plan.m, .slabs_per_thread = rf.slabs}));
+        }
     }
 
     FastRng exch_rng{cf.seed};
+    bool const resuming = !rf.resume.empty();
+    llr::OrchState resume_state{};
+    if (resuming) {
+        resume_state = llr::load_ensemble(rf.resume, reps, exch_rng);
+        log::info("llr",
+                  "resumed from {}  phase={} iter={}",
+                  rf.resume,
+                  resume_state.phase,
+                  resume_state.iter);
+    }
+
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
-    constexpr double k_hot_sigma   = std::numbers::pi;
-    constexpr int k_warm_batches   = 50;
-    constexpr int k_warm_batch_len = 10;
-    std::size_t const n_rep_u      = static_cast<std::size_t>(n_rep);
+    // Hot start (fresh runs only): randomise each replica's link angles; the
+    // driver's warm-up phase then drives each into its E_n window.
+    if (!resuming) {
+        constexpr double k_hot_sigma = std::numbers::pi;
+        std::size_t const n_rep_u    = static_cast<std::size_t>(n_rep);
 #pragma omp parallel for schedule(dynamic, 1)
-    for (std::size_t n = 0; n < n_rep_u; ++n) {
-        auto _ = log::scope(reps[n]->id());
-        reps[n]->hot_start(k_hot_sigma);
-        reps[n]->warm_into_window(k_warm_batches, k_warm_batch_len, 1.0);
+        for (std::size_t n = 0; n < n_rep_u; ++n) {
+            reps[n]->hot_start(k_hot_sigma);
+        }
     }
 
     llr::smoothed::run(reps,
@@ -116,6 +133,14 @@ int main(int argc, char** argv) {
                                                  .smooth_K          = smooth_K,
                                                  .smooth_degree     = smooth_degree,
                                                  .smooth_lambda0    = smooth_lambda0,
-                                                 .smooth_lambda_exp = smooth_lambda_exp},
+                                                 .smooth_lambda_exp = smooth_lambda_exp,
+                                                 .replica_threads   = plan.m,
+                                                 .slabs             = rf.slabs,
+                                                 .concurrency       = plan.concurrency,
+                                                 .nested            = plan.m > 1,
+                                                 .checkpoint_path   = rf.checkpoint,
+                                                 .checkpoint_every  = rf.checkpoint_every,
+                                                 .start_phase = resuming ? resume_state.phase : 0,
+                                                 .start_iter  = resuming ? resume_state.iter : 0},
                        out);
 }

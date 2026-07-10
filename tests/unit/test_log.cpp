@@ -2,7 +2,7 @@
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
-#include <reticolo/math/gauge_group/su2.hpp>
+#include <reticolo/math/group/su2.hpp>
 
 #include <filesystem>
 #include <fstream>
@@ -73,7 +73,7 @@ std::vector<std::string> lines_of(std::string const& s) {
 // init opens a main log file, which the format-only tests don't want.
 // White-box by design: this is the logger's own test.
 void serial_mode() {
-    rl::detail::cfg().replicas = false;
+    rl::impl::cfg().replicas = false;
 }
 
 }  // namespace
@@ -182,7 +182,7 @@ TEST_CASE("rl::act renders any action's describe() with the act tag", "[log]") {
     StreamCapture cap;
 
     reticolo::action::Phi4<double> phi4{.kappa = 0.137, .lambda = 1.000};
-    reticolo::action::Wilson<reticolo::gauge_group::SU2, double> w{.beta = 2.500};
+    reticolo::action::Wilson<reticolo::math::group::SU2, double> w{.beta = 2.500};
 
     rl::act(phi4);
     rl::act(w);
@@ -220,8 +220,9 @@ TEST_CASE("Scope binds a run-id for the current thread; clears on exit", "[log]"
     REQUIRE(s.substr(0, inside_pos).find("r042") != std::string::npos);
     REQUIRE(s.substr(inside_pos).find("main") != std::string::npos);
 
-    // Per-run file was created; the main log mirrors scoped AND unscoped lines.
-    REQUIRE(std::filesystem::exists(tmp / "run.r042.log"));
+    // No separate per-replica files: the single main log mirrors BOTH scoped
+    // and unscoped lines.
+    REQUIRE(!std::filesystem::exists(tmp / "run.r042.log"));
     REQUIRE(std::filesystem::exists(tmp / "run.log"));
     {
         std::ifstream mf{tmp / "run.log"};
@@ -246,10 +247,11 @@ TEST_CASE("start(ws, out) creates the workspace and stems files by the out name"
         rl::info("hmc", "scoped line");
     }
 
-    // Concurrent sims sharing a workspace must not collide on <stem>.log.
+    // Concurrent sims sharing a workspace must not collide on <stem>.log; the
+    // main log is stemmed by the out name, and no per-replica files are written.
     REQUIRE(std::filesystem::exists(tmp / "llr_mu0.9_s43.log"));
-    REQUIRE(std::filesystem::exists(tmp / "llr_mu0.9_s43.r007.log"));
-    REQUIRE(!std::filesystem::exists(tmp / "run.r007.log"));
+    REQUIRE(!std::filesystem::exists(tmp / "llr_mu0.9_s43.r007.log"));
+    REQUIRE(!std::filesystem::exists(tmp / "run.log"));
     std::filesystem::remove_all(tmp);
 
     serial_mode();

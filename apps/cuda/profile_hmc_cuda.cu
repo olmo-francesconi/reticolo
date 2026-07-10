@@ -18,13 +18,13 @@
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/log.hpp>
-#include <reticolo/cuda/actions/site/phi4.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
+#include <reticolo/cuda/actions/site/phi4.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_field.hpp>
+#include <reticolo/cuda/gauge/gauge_sun.cuh>
 #include <reticolo/cuda/gauge/su3_device.cuh>
-#include <reticolo/cuda/gauge_sun.cuh>
 #include <reticolo/cuda/hmc.cuh>
 
 #include <chrono>
@@ -304,7 +304,7 @@ int main(int argc, char** argv) {
                                          static_cast<std::size_t>(L));
 
     if (lb_sweep) {
-        using G = reticolo::gauge_group::SU3;
+        using G = reticolo::math::group::SU3;
         su3_lb_sweep<DeviceField<double, MatrixLayout<G>>>(shape, iters);
         return 0;
     }
@@ -316,7 +316,7 @@ int main(int argc, char** argv) {
         run_config<act::Phi4<float>, DeviceField<float>>(
             "phi4f32", shape, {.kappa = 0.18F, .lambda = 1.0F}, n_md, iters, force_only);
     } else if (action == "su3") {
-        using G = reticolo::gauge_group::SU3;
+        using G = reticolo::math::group::SU3;
         run_config<act::Wilson<G, double>, DeviceField<double, MatrixLayout<G>>>(
             "su3", shape, {.beta = 6.0}, n_md, iters, force_only);
     } else {

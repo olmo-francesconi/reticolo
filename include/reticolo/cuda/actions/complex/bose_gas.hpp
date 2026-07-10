@@ -46,7 +46,7 @@ public:
         staple_ += (mu == last_) ? (ch_ * nbr) : nbr;  // time dir ×cosh(μ)
     }
     [[nodiscard]] RETICOLO_HD cplx<T> finalize() const {
-        return action::detail::bose_gas_force_site<T>(phi_, staple_, coef_mass_, lambda_);
+        return action::formula::bose_gas_force_site<T>(phi_, staple_, coef_mass_, lambda_);
     }
 
 private:
@@ -74,7 +74,7 @@ public:
     }
     [[nodiscard]] RETICOLO_HD double finalize() const {
         return static_cast<double>(
-            action::detail::bose_gas_action_site<T>(phi_, fwd_, coef_mass_, lambda_));
+            action::formula::bose_gas_action_site<T>(phi_, fwd_, coef_mass_, lambda_));
     }
 
 private:
@@ -101,12 +101,11 @@ struct device_functors<action::BoseGas<T>> {
                               cplx<T>* force,
                               DeviceTopology const& topo,
                               cudaStream_t s) {
-        detail::site_force(
-            BoseGasForceFunctor<T>{coef_mass(a, topo), a.lambda, ch(a), topo.ndim - 1},
-            field,
-            force,
-            topo,
-            s);
+        impl::site_force(BoseGasForceFunctor<T>{coef_mass(a, topo), a.lambda, ch(a), topo.ndim - 1},
+                         field,
+                         force,
+                         topo,
+                         s);
     }
 
     [[nodiscard]] static double s_full(action::BoseGas<T> const& a,
@@ -114,7 +113,7 @@ struct device_functors<action::BoseGas<T>> {
                                        double* scratch,
                                        DeviceTopology const& topo,
                                        cudaStream_t s) {
-        return detail::site_s_full(
+        return impl::site_s_full(
             BoseGasEnergyFunctor<T>{coef_mass(a, topo), a.lambda, ch(a), topo.ndim - 1},
             field,
             scratch,
@@ -129,7 +128,7 @@ struct device_functors<action::BoseGas<T>> {
                             double* partials,
                             DeviceTopology const& topo,
                             cudaStream_t s) {
-        detail::site_s_full_into(
+        impl::site_s_full_into(
             out,
             BoseGasEnergyFunctor<T>{coef_mass(a, topo), a.lambda, ch(a), topo.ndim - 1},
             field,

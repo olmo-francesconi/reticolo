@@ -103,7 +103,7 @@ int main() {
     std::printf("%-14s %-9s %12s %10s %10s %10s\n", "---", "----", "-----", "----", "---", "---");
     bench_rng<FastRng>("FastRng");
     bench_rng<PhiloxRng>("Philox4x32");
-    bench_rng<RanluxRng>("Ranlux48");
+    bench_rng<RanlxdRng>("Ranlxd");
     bench_rng<Mt19937Rng>("Mt19937_64");
 
     std::printf("\n\ncompute_force — throughput [M dof-updates/s]\n\n");
@@ -115,9 +115,9 @@ int main() {
         bench_phi4(L);
     }
     for (int L : k_sizes) {
-        bench_wilson<gauge_group::SU2>("Wilson<SU2>", L, 2.4);
+        bench_wilson<math::group::SU2>("Wilson<SU2>", L, 2.4);
     }
     for (int L : k_sizes) {
-        bench_wilson<gauge_group::SU3>("Wilson<SU3>", L, 6.0);
+        bench_wilson<math::group::SU3>("Wilson<SU3>", L, 6.0);
     }
 }

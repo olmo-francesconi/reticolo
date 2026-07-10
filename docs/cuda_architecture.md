@@ -65,27 +65,28 @@ U·V + TA), revised up from an earlier under-count.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ Indexing  (immutable, pooled by shape via process-wide weak_ptr map)       │
-│   next_[nsites·ndims]  prev_[nsites·ndims]   (Site indices, layout s·d+μ)   │
-│   parity_[nsites]      even_[] / odd_[]                                     │
-│   ── ONE per shape; shared by all sibling lattices via shared_ptr ──        │
+│ Indexing  (immutable, pooled by shape via process-wide weak_ptr map)     │
+│   shape_[ndims] + strides_[ndims]                                        │
+│   next(s,μ) / prev(s,μ) computed from strides — no stored table          │
+│   (periodic wrap, closed-form; d ≤ 4; no parity / even-odd arrays)       │
+│   ── ONE per shape; shared by all sibling lattices via shared_ptr ──     │
 └──────────────────────────────────────────────────────────────────────────┘
-        ▲ shared_ptr                  ▲                        ▲
-┌───────┴────────┐         ┌──────────┴─────────┐   ┌──────────┴─────────────┐
-│ Lattice<T>     │         │ MatrixLinkLattice<U1><T>     │   │ MatrixMatrixLinkLattice<U1><G,T> │
-│ scalar field   │         │ U(1) links         │   │ SU(N) links            │
-│ data: vector<T>│         │ data: vector<T>    │   │ data: vector<T>        │
-│  one T / site  │         │ [ndim][nsites]     │   │ [ndim][2N²][nsites]    │
-│  AoS-of-scalar │         │ direction-major    │   │  SoA per-component slab │
-│  T∈{double,    │         │  (θ per link)      │   │  flat=((μ·2N²+k)·ns)+s │
-│   float,       │         └────────────────────┘   │  stride-1 over sites ◄──┼ coalescing-ready
-│   array<,N>,   │                                   └────────────────────────┘
-│   complex}     │
-└────────────────┘
+         ▲ shared_ptr              ▲                                     ▲
+┌─────────────────┐   ┌─────────────────────────┐   ┌────────────────────────────────────────┐
+│ Lattice<T>      │   │ MatrixLinkLattice<U1,T> │   │ MatrixLinkLattice<G,T>                 │
+│ scalar field    │   │ U(1) links              │   │ SU(N) links                            │
+│ data: vector<T> │   │ data: vector<T>         │   │ data: vector<T>                        │
+│ one T / site    │   │ [ndim][nsites]          │   │ [ndim][2N²][nsites]                    │
+│ AoS-of-scalar   │   │ direction-major         │   │ SoA per-component slab                 │
+│ T∈{double,      │   │ (θ per link)            │   │ flat=((μ·2N²+k)·ns)+s                  │
+│   float,        │   └─────────────────────────┘   │ stride-1 over sites (coalescing-ready) │
+│   array<,N>,    │                                 └────────────────────────────────────────┘
+│   complex}      │
+└─────────────────┘
 
 HMC sibling buffers (share ONE Indexing, separate data arrays):
    field U ── momentum P ── force F ── old_field (rollback snapshot)
-   (mom/force/old built from field.indexing(); no neighbour-table rebuild)
+   (mom/force/old built from field.indexing(); reuse the pooled Indexing, no rebuild)
 ```
 
 Layout facts that matter for CUDA:
@@ -97,24 +98,22 @@ Layout facts that matter for CUDA:
 - **SU(N) links are already SoA** (`[μ][2N²][nsites]`, each real component
   a contiguous nsites slab). This is the GPU-ideal layout — straight
   `cudaMemcpy` + coalesced access, no repacking.
-- **Neighbour table is explicit** (`next_/prev_` index arrays), not
-  computed. On device, either ship the arrays (gather) or recompute the
-  periodic wrap arithmetically per thread (no indirection, cheaper) — BCs
-  are periodic-only and unbranched, so the index math is closed-form.
-  Caveat: arithmetic wrap saves the index-array bandwidth but does **not**
-  fix coalescing — neighbour reads along the fastest axis are contiguous,
+- **Neighbours are computed, not stored.** `Indexing::next/prev` derive the
+  periodic wrap from the shape strides on both CPU and device — no index
+  arrays to ship (BCs are periodic-only and unbranched, so the math is
+  closed-form). Caveat: computing the wrap costs nothing in bandwidth but does
+  **not** fix coalescing — neighbour reads along the fastest axis are contiguous,
   but slow-axis neighbours are strided by the sub-volume regardless. Lean on
   L2 reuse (adjacent sites share neighbours) and, for SU(N), shared-memory
   staging of staple sub-products.
-- **U(1) has two distinct field layouts.** `Wilson<U1>` runs on
-  `MatrixLinkLattice<U1><T>` (direction-major, one angle per link); `Wilson<U1>` runs
-  on `MatrixMatrixLinkLattice<U1><U1,T>` with `n_real_components = 1`. A device backend
-  must pick one path per app.
+- **U(1) is the degenerate matrix group.** `Wilson<gauge_group::U1>` runs on
+  `MatrixLinkLattice<gauge_group::U1, T>` with `n_real_components = 1`
+  (direction-major, one angle per link) — no matrix exponential.
 - **Force kernels must be gather, not scatter.** For HMC reversibility the
   force must be a deterministic function of `U`; `atomicAdd` scatter makes it
-  order-dependent and silently breaks detailed balance. The explicit
-  `next_/prev_` layout already lets each output site/link sum its own
-  contributions with zero atomics.
+  order-dependent and silently breaks detailed balance. Computing `next/prev`
+  per output site/link already lets each one sum its own contributions with
+  zero atomics.
 - The CPU stencils split each sweep into **bulk (stride-1, fixed offsets)
   \+ peeled wrap slab**. On GPU this is one kernel with modulo wrap, or a
   bulk kernel + a boundary kernel.

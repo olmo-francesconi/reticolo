@@ -163,27 +163,27 @@ void run_all() {
         }
         // Wilson<U1>
         {
-            using F = MatrixLinkLattice<gauge_group::U1, double>;
+            using F = MatrixLinkLattice<math::group::U1, double>;
             F::SizeVec const shape_m(nd, L_);
             F theta{shape_m};
             hot_init(theta, rng);
-            bench_wilson<gauge_group::U1>("Wilson<U1>", c.ndim, c.L, 1.0, theta);
+            bench_wilson<math::group::U1>("Wilson<U1>", c.ndim, c.L, 1.0, theta);
         }
         // Wilson<SU2>
         {
-            using F = MatrixLinkLattice<gauge_group::SU2, double>;
+            using F = MatrixLinkLattice<math::group::SU2, double>;
             F::SizeVec const shape_m(nd, L_);
             F theta{shape_m};
             hot_init(theta, rng);
-            bench_wilson<gauge_group::SU2>("Wilson<SU2>", c.ndim, c.L, 2.4, theta);
+            bench_wilson<math::group::SU2>("Wilson<SU2>", c.ndim, c.L, 2.4, theta);
         }
         // Wilson<SU3>
         {
-            using F = MatrixLinkLattice<gauge_group::SU3, double>;
+            using F = MatrixLinkLattice<math::group::SU3, double>;
             F::SizeVec const shape_m(nd, L_);
             F theta{shape_m};
             hot_init(theta, rng);
-            bench_wilson<gauge_group::SU3>("Wilson<SU3>", c.ndim, c.L, 6.0, theta);
+            bench_wilson<math::group::SU3>("Wilson<SU3>", c.ndim, c.L, 6.0, theta);
         }
 
         std::printf("\n");

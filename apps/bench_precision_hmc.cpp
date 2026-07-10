@@ -44,9 +44,8 @@ Result measure(Case c, double kappa, double lambda, double tau) {
     typename Lattice<T>::SizeVec shape(static_cast<std::size_t>(c.ndim),
                                        static_cast<std::size_t>(c.L));
     Lattice<T> phi{shape};
-    FastRng rng{1234};
     act::Phi4<T> const action{.kappa = static_cast<T>(kappa), .lambda = static_cast<T>(lambda)};
-    alg::Hmc hmc{action, phi, rng, {.tau = tau, .n_md = n_md}};
+    alg::Hmc hmc{action, phi, FastRng{1234}, {.tau = tau, .n_md = n_md}};
 
     for (int i = 0; i < 200; ++i) {
         (void)hmc.step(log::Mode::silent);  // thermalise

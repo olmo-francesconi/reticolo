@@ -24,7 +24,7 @@
 //   S_I(x) = 2·Im(conj(φ_x)·φ_{x+τ})           (forward τ neighbour only)
 //   F_I(x) = 2i·(φ_{x+τ} − φ_{x−τ})            (both τ neighbours)
 
-namespace reticolo::action::detail {
+namespace reticolo::action::formula {
 
 template <class T>
 [[nodiscard]] RETICOLO_HD T
@@ -54,4 +54,4 @@ template <class T>
     return cplx<T>{T{0}, T{2}} * (phi_fwd_tau - phi_bwd_tau);
 }
 
-}  // namespace reticolo::action::detail
+}  // namespace reticolo::action::formula

@@ -6,6 +6,7 @@
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
+#include <reticolo/llr/update_a.hpp>
 #include <reticolo/llr/windowed_action.hpp>
 
 #include <cmath>
@@ -39,15 +40,15 @@ struct ReplicaStats {
 
 template <class Base,
           class Rng,
-          class Integrator = alg::integ::Leapfrog,
-          class T          = typename Base::value_type,
+          class Integrator = alg::integ::Omelyan2,
+          class T          = Base::value_type,
           class Field      = Lattice<T>>
 class Replica {
 public:
     using value_type           = T;
     using field_type           = Field;
     using scalar_t             = scalar_of_t<T>;
-    using SizeVec              = typename Field::SizeVec;
+    using SizeVec              = Field::SizeVec;
     using windowed_action_type = WindowedAction<Base, T, Field>;
 
     static constexpr std::string_view log_tag = "repl";
@@ -61,17 +62,15 @@ public:
     };
 
     Replica(Base const& base, Rng rng_init, Spec spec, alg::HmcSpec const& hmc_spec)
-        : id_{std::move(spec.id)}, phi_{std::move(spec.shape)}, rng_{std::move(rng_init)},
+        : id_{std::move(spec.id)}, phi_{std::move(spec.shape)},
           windowed_{.base = base, .a = spec.a_init, .E_n = spec.e_n, .delta = spec.delta},
-          hmc_{windowed_, phi_, rng_, hmc_spec, Integrator{}, log::Mode::silent} {
-        // Self-announce with our run id bound as scope so the line carries
-        // `r0NN` automatically — apps don't have to wrap construction in
-        // `log::scope` themselves. Announce the nested HMC too so its tau /
-        // n_md params land under the same scope.
-        auto _ = log::scope(id_);
-        log::algo(*this);
-        log::algo(hmc_);
-    }
+          hmc_{windowed_, phi_, std::move(rng_init), hmc_spec, Integrator{}, log::Mode::silent} {}
+
+    // Announce the nested HMC sampler (integrator / τ / n_md). The LLR driver
+    // calls this once, on a representative replica, so the ensemble's shared
+    // sampler config shows exactly once instead of N× — replica construction is
+    // otherwise wrapped in `log::quiet()` by the app.
+    void announce_sampler() const { log::algo(hmc_); }
 
     Replica(Replica const&)            = delete;
     Replica& operator=(Replica const&) = delete;
@@ -129,8 +128,8 @@ public:
         }
         scalar_t const dE = sum / static_cast<scalar_t>(n);
         if (log_mode == log::Mode::normal) {
-            double const dE_d  = static_cast<double>(dE);
-            double const delta = static_cast<double>(windowed_.delta);
+            auto const dE_d    = static_cast<double>(dE);
+            auto const delta   = static_cast<double>(windowed_.delta);
             double const ratio = (delta != 0.0) ? (dE_d / delta) : 0.0;
             log::info("repl", "sample n={}  ⟨dE⟩={:+.3e}  ⟨dE⟩/δ={:+.3f}", n, dE_d, ratio);
         }
@@ -181,7 +180,9 @@ public:
 
     [[nodiscard]] Field& phi() noexcept { return phi_; }
     [[nodiscard]] Field const& phi() const noexcept { return phi_; }
-    [[nodiscard]] Rng& rng() noexcept { return rng_; }
+    // The replica's randomness is owned by its Hmc (one site stream per slab —
+    // one stream inside the replica team — plus a driver for serial draws).
+    [[nodiscard]] StreamSet<Rng>& rng() noexcept { return hmc_.rng(); }
     [[nodiscard]] windowed_action_type const& windowed_action() const noexcept { return windowed_; }
 
     // Random Gaussian-shift seed of the field, sigma per real component.
@@ -189,52 +190,98 @@ public:
     void hot_start(scalar_t sigma) noexcept {
         T* const data       = phi_.data();
         std::size_t const n = phi_.nsites();
+        Rng& drv            = hmc_.rng().driver();  // serial draw → driver stream
         if constexpr (std::is_same_v<T, std::complex<double>> ||
                       std::is_same_v<T, std::complex<float>>) {
-            using R = typename T::value_type;
+            using R = T::value_type;
             for (std::size_t i = 0; i < n; ++i) {
-                data[i] = T{static_cast<R>(static_cast<scalar_t>(rng_.normal()) * sigma),
-                            static_cast<R>(static_cast<scalar_t>(rng_.normal()) * sigma)};
+                data[i] = T{static_cast<R>(static_cast<scalar_t>(drv.normal()) * sigma),
+                            static_cast<R>(static_cast<scalar_t>(drv.normal()) * sigma)};
             }
         } else {
             for (std::size_t i = 0; i < n; ++i) {
-                data[i] = static_cast<T>(static_cast<scalar_t>(rng_.normal()) * sigma);
+                data[i] = static_cast<T>(static_cast<scalar_t>(drv.normal()) * sigma);
             }
         }
     }
 
-    // Drive this replica's own windowed HMC in batches until
-    // |S_constraint − E_n| < threshold_sigmas·δ or `max_batches` × `batch_size`
-    // trajectories have been taken. The windowed force pins trajectories toward
-    // E_n; deep in the S tail a stiffer integrator (more MD steps) may be needed
-    // for the leapfrog to stay stable — tune via the replica's HmcSpec.
+    // Two-stage warm-up for this replica, returning the total trajectories used.
     //
-    // Returns the number of batches consumed. `== max_batches` means budget
-    // exhausted without convergence.
-    int warm_into_window(int max_batches,
-                         int batch_size          = 10,
+    // Stage 1 — thermalize on the BASE action to statistical equilibrium. The
+    // window is neutralised (δ inflated so (S−E_n)²/2δ² ≈ 0, tilt held at 0) so
+    // the HMC samples the plain base action; `n_therm` trajectories take the
+    // field from its cold/hot start to a representative equilibrium config.
+    //
+    // Stage 2 — from that equilibrium, seat the constraint (S_base in mode A,
+    // S_I in mode B) in its E_n window by coarse Newton adaptation of the tilt:
+    // each batch of k_batch trajectories yields a ⟨S − E_n⟩ estimate and the
+    // Newton step a ← a + ⟨dE⟩/δ² shifts the equilibrium toward E_n. Starting
+    // from equilibrium (not a cold transient) makes the ⟨dE⟩ estimates unbiased
+    // and the adaptation converges in a few batches. Adapting `a` reaches ANY
+    // window with support at E_n; the warmed `a` is left in place for NR to
+    // resume from. `max_traj` bounds stage 2 (a warning if hit).
+    int warm_into_window(int n_therm,
+                         int max_traj            = 2000,
                          double threshold_sigmas = 1.0,
                          log::Mode log_mode      = log::Mode::normal) {
-        auto _ = log::scope(id_);
-        for (int b = 0; b < max_batches; ++b) {
-            for (int i = 0; i < batch_size; ++i) {
+        // ---- Stage 1: base-action thermalization (window off) ----
+        scalar_t const saved_delta = windowed_.delta;
+        scalar_t const saved_a     = windowed_.a;
+        windowed_.a                = scalar_t{0};
+        windowed_.delta            = saved_delta * static_cast<scalar_t>(1e8);
+        for (int i = 0; i < n_therm; ++i) {
+            (void)hmc_.step(log::Mode::silent);
+            ++stats_.n_traj;
+        }
+        windowed_.delta = saved_delta;
+        windowed_.a     = saved_a;
+
+        // ---- Stage 2: Newton a-adaptation into the window ----
+        auto _                = log::scope(id_);
+        constexpr int k_batch = 20;  // trajectories per a-update / ⟨dE⟩ estimate
+        int traj              = 0;
+        double ratio          = 0.0;
+        bool reached          = false;
+        while (traj < max_traj) {
+            scalar_t sum = scalar_t{0};
+            int cnt      = 0;
+            for (; cnt < k_batch && traj < max_traj; ++cnt) {
                 (void)hmc_.step(log::Mode::silent);
+                ++traj;
+                ++stats_.n_traj;
+                if constexpr (Windowed::k_complex) {
+                    sum += windowed_.last_s_imag() - windowed_.E_n;
+                } else {
+                    sum += windowed_.last_s_full() - windowed_.E_n;
+                }
             }
-            scalar_t const q   = windowed_.constraint_value(phi_);
-            scalar_t const dev = std::abs(q - windowed_.E_n);
-            scalar_t const ratio =
-                (windowed_.delta != scalar_t{0}) ? (dev / windowed_.delta) : scalar_t{0};
-            if (log_mode == log::Mode::normal) {
+            scalar_t const mean_dE = sum / static_cast<scalar_t>(cnt);
+            ratio                  = static_cast<double>((windowed_.delta != scalar_t{0})
+                                                             ? (std::abs(mean_dE) / windowed_.delta)
+                                                             : scalar_t{0});
+            if (ratio < threshold_sigmas) {
+                reached = true;
+                break;
+            }
+            windowed_.a = nr_update(windowed_.a, mean_dE, windowed_.delta);
+        }
+        if (log_mode == log::Mode::normal) {
+            if (reached) {
                 log::info("repl",
-                          "warm  batch {:>4}  |S-E_n|/δ={:+.3f}",
-                          b + 1,
-                          static_cast<double>(ratio));
-            }
-            if (static_cast<double>(ratio) < threshold_sigmas) {
-                return b + 1;
+                          "warm  therm {} + seat {} traj  |⟨S⟩-E_n|/δ={:.3f}  a={:+.3f}",
+                          n_therm,
+                          traj,
+                          ratio,
+                          static_cast<double>(windowed_.a));
+            } else {
+                log::warn("repl",
+                          "warm  therm {} + {} traj, |⟨S⟩-E_n|/δ={:.3f} (not seated; NR continues)",
+                          n_therm,
+                          max_traj,
+                          ratio);
             }
         }
-        return max_batches;
+        return n_therm + traj;
     }
 
     [[nodiscard]] ReplicaStats const& stats() const noexcept { return stats_; }
@@ -244,7 +291,6 @@ private:
 
     std::string id_;
     Field phi_;
-    Rng rng_;
     Windowed windowed_;
     alg::Hmc<Windowed, Rng, Integrator, Field, T> hmc_;
     ReplicaStats stats_{};

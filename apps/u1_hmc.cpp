@@ -7,7 +7,7 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action = action::Wilson<gauge_group::U1, double>;
+    using Action = action::Wilson<math::group::U1, double>;
 
     // ---- CLI ----
     cli::Parser p{"u1_hmc", "Compact U(1) Wilson action, HMC (link-field)"};
@@ -27,10 +27,9 @@ int main(int argc, char** argv) {
     io::Writer out = app::open_writer(p, cf, argc, argv);
 
     // ---- State: links, RNG, action ----
-    MatrixLinkLattice<gauge_group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
+    MatrixLinkLattice<math::group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
                                                               static_cast<std::size_t>(cf.L));
-    MatrixLinkLattice<gauge_group::U1, double> links{shape};
-    FastRng rng{cf.seed};
+    MatrixLinkLattice<math::group::U1, double> links{shape};
     Action const action{.beta = beta};
     log::act(action);
 
@@ -44,7 +43,7 @@ int main(int argc, char** argv) {
     auto plaq     = out.series<double>("/prod/obs/plaq");
 
     // ---- Updater ----
-    alg::Hmc hmc{action, links, rng, {.tau = tau, .n_md = n_md}, alg::integ::omelyan2};
+    alg::Hmc hmc{action, links, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     std::size_t const v_sites = links.nsites();
     std::size_t const n_plaq =

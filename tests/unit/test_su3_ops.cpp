@@ -3,7 +3,7 @@
 // smoke test. Numerical tolerances ~1e-10 reflect the Cayley-Hamilton
 // formula's conditioning (looser than SU(2)'s closed form).
 
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/math/su3_ops.hpp>
 
 #include <array>

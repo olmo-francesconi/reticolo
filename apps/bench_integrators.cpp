@@ -128,7 +128,7 @@ void run_all() {
         std::size_t const nd = static_cast<std::size_t>(c.ndim);
         std::size_t const L_ = static_cast<std::size_t>(c.L);
         Lattice<double>::SizeVec const shape_s(nd, L_);
-        MatrixLinkLattice<gauge_group::U1, double>::SizeVec const shape_l(nd, L_);
+        MatrixLinkLattice<math::group::U1, double>::SizeVec const shape_l(nd, L_);
 
         FastRng init_rng{42};
 
@@ -160,29 +160,29 @@ void run_all() {
             act::BoseGas<double> const action{.mass = 1.0, .lambda = 1.0, .mu = 0.9};
             bench_one(c.ndim, c.L, "BoseGas", action, phi, phi.nsites());
         }
-        // CompactU1 (MatrixLinkLattice<gauge_group::U1, double>)
+        // CompactU1 (MatrixLinkLattice<math::group::U1, double>)
         {
-            MatrixLinkLattice<gauge_group::U1, double> theta{shape_l};
+            MatrixLinkLattice<math::group::U1, double> theta{shape_l};
             hot_init(theta, init_rng);
-            action::Wilson<gauge_group::U1, double> const action{.beta = 1.0};
+            action::Wilson<math::group::U1, double> const action{.beta = 1.0};
             bench_one(c.ndim, c.L, "Wilson<U1>", action, theta, theta.nlinks());
         }
         // Wilson<SU2>
         {
-            using F = MatrixLinkLattice<gauge_group::SU2, double>;
+            using F = MatrixLinkLattice<math::group::SU2, double>;
             F::SizeVec const shape_m(nd, L_);
             F theta{shape_m};
             hot_init(theta, init_rng);
-            action::Wilson<gauge_group::SU2, double> const action{.beta = 2.4};
+            action::Wilson<math::group::SU2, double> const action{.beta = 2.4};
             bench_one(c.ndim, c.L, "Wilson<SU2>", action, theta, theta.ndims() * theta.nsites());
         }
         // Wilson<SU3>
         {
-            using F = MatrixLinkLattice<gauge_group::SU3, double>;
+            using F = MatrixLinkLattice<math::group::SU3, double>;
             F::SizeVec const shape_m(nd, L_);
             F theta{shape_m};
             hot_init(theta, init_rng);
-            action::Wilson<gauge_group::SU3, double> const action{.beta = 6.0};
+            action::Wilson<math::group::SU3, double> const action{.beta = 6.0};
             bench_one(c.ndim, c.L, "Wilson<SU3>", action, theta, theta.ndims() * theta.nsites());
         }
         std::printf("\n");

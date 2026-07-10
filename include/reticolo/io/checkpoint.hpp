@@ -1,6 +1,7 @@
 #pragma once
 
-#include <reticolo/core/rng.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
+#include <reticolo/core/rng/stream_set.hpp>
 #include <reticolo/io/reader.hpp>
 #include <reticolo/io/writer.hpp>
 
@@ -55,8 +56,40 @@ template <class Field>
     return r.attr<long long>("/traj@i");
 }
 
-[[nodiscard]] inline std::vector<std::size_t> load_field_shape(std::filesystem::path const& path) {
+// Multi-stream variant: a StreamSet checkpoint saves every stream (driver
+// first) as one flat uint64 dataset under /rng, attributed with the family
+// kind and the stream count. The resume side constructs its StreamSet with
+// the SAME family and n_streams (recorded in /vars@rng_streams when the flag
+// goes through the Parser) — the loader validates both and throws otherwise,
+// so a mismatched resume fails loudly instead of silently forking the chain.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): each arg is distinctly named.
+template <class Field, class R>
+void save_config(std::filesystem::path const& path,
+                 Field const& lat,
+                 StreamSet<R> const& rng,
+                 long long traj_i,
+                 int argc                = 0,
+                 char const* const* argv = nullptr,
+                 cli::Parser const* p    = nullptr) {
+    Writer w{path, argc, argv, p};
+    w.field("/field", lat);
+    w.rng_streams(
+        "/rng", R::name, rng.state_words(), rng.n_streams(), StreamSet<R>::words_per_stream);
+    w.attr<long long>("/traj@i", traj_i);
+}
+
+template <class Field, class R>
+[[nodiscard]] long long
+load_config(std::filesystem::path const& path, Field& lat, StreamSet<R>& rng) {
     Reader r{path};
+    r.field("/field", lat);
+    rng.restore_state_words(
+        r.rng_streams("/rng", R::name, rng.n_streams(), StreamSet<R>::words_per_stream));
+    return r.attr<long long>("/traj@i");
+}
+
+[[nodiscard]] inline std::vector<std::size_t> load_field_shape(std::filesystem::path const& path) {
+    Reader const r{path};
     return r.field_shape("/field");
 }
 
