@@ -562,11 +562,14 @@ inline void sample_algebra_philox_range(T* p,
     }
 }
 
-// Raw Σ_{s ∈ [base, base+cnt)} (h₁² + h₂² + h₃²)  over the algebra coords of
-// P. Pure per-range reduction worker — the cross-range fold is applied by the
-// caller. Blocked: T-precision lane accumulators over k_b sites folded into the
-// double total once per block, so a fixed k_b-block partition (see
-// reduce_blocks) is thread-invariant.
+// Σ_{s ∈ [base, base+cnt)} Tr(P† P) = 2·(h₁² + h₂² + h₃²)  over the algebra
+// coords of P (the factor 2 is Tr(σ_a σ_b) = 2 δ_ab, i.e. summing the 8 stored
+// reals of P: {0,h₃,h₂,h₁,−h₂,h₁,0,−h₃} squared). Matches the SU(3) convention
+// so the shared HMC kinetic — K = 0.5·Σ kinetic_range = ‖h‖² — is consistent
+// with the variance-½ momentum sampling. Pure per-range reduction worker — the
+// cross-range fold is applied by the caller. Blocked: T-precision lane
+// accumulators over k_b sites folded into the double total once per block, so a
+// fixed k_b-block partition (see reduce_blocks) is thread-invariant.
 template <class T>
 [[gnu::always_inline]] inline double
 kinetic_range(T const* p, std::size_t stride, std::size_t base, std::size_t cnt) noexcept {
@@ -596,21 +599,21 @@ kinetic_range(T const* p, std::size_t stride, std::size_t base, std::size_t cnt)
         T const sq = (h1 * h1) + (h2 * h2) + (h3 * h3);
         k += static_cast<double>(sq);
     }
-    return k;
+    return 2.0 * k;  // Tr(P†P) = 2‖h‖²
 }
 
-// K_per_link = ||h||² where (h_1, h_2, h_3) are the algebra coords of P.
-// Returns the total kinetic energy summed over n links — accumulated in double
-// regardless of the field precision T (the reduction-returns-double invariant).
+// K_per_link = ‖h‖² = (1/2) Tr(P† P), summed over the links — accumulated in
+// double regardless of the field precision T (the reduction-returns-double
+// invariant). The ½ mirrors SU(3) so kinetic_range alone stays Tr(P†P).
 template <class T>
 [[gnu::always_inline]] inline double kinetic_slab(T const* p, std::size_t n) noexcept {
-    return kinetic_range(p, n, 0, n);
+    return 0.5 * kinetic_range(p, n, 0, n);
 }
 
 template <class T>
 [[gnu::always_inline]] inline double
 kinetic_slab(T const* p, std::size_t stride, std::size_t count) noexcept {
-    return kinetic_range(p, stride, 0, count);
+    return 0.5 * kinetic_range(p, stride, 0, count);
 }
 
 }  // namespace reticolo::math::su2
