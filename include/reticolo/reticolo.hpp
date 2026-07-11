@@ -9,6 +9,7 @@
 #include <reticolo/action/gauge.hpp>
 #include <reticolo/action/nn.hpp>
 #include <reticolo/action/sweep/site.hpp>
+#include <reticolo/action/windowed_action.hpp>
 #include <reticolo/app/setup.hpp>
 #include <reticolo/cli/parser.hpp>
 #include <reticolo/core/field_traits.hpp>
@@ -42,7 +43,6 @@
 #include <reticolo/orch/llr/replica.hpp>
 #include <reticolo/orch/llr/smoothed_driver.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
-#include <reticolo/orch/llr/windowed_action.hpp>
 #include <reticolo/orch/span.hpp>
 #include <reticolo/orch/thread_plan.hpp>
 #include <reticolo/updater/concepts.hpp>

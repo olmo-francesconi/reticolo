@@ -1,11 +1,11 @@
 #pragma once
 
+#include <reticolo/action/windowed_action.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
-#include <reticolo/orch/llr/windowed_action.hpp>
 #include <reticolo/updater/concepts.hpp>
 #include <reticolo/updater/hmc/hmc.hpp>
 #include <reticolo/updater/hmc/integrators.hpp>
@@ -48,9 +48,9 @@ class Replica {
 public:
     using value_type           = T;
     using field_type           = Field;
-    using scalar_t             = scalar_of_t<T>;
+    using scalar_t             = action::scalar_of_t<T>;
     using SizeVec              = Field::SizeVec;
-    using windowed_action_type = WindowedAction<Base, T, Field>;
+    using windowed_action_type = action::WindowedAction<Base, T, Field>;
 
     static constexpr std::string_view log_tag = "repl";
 
@@ -121,11 +121,7 @@ public:
             if (step.accepted) {
                 ++stats_.n_accepted;
             }
-            if constexpr (Windowed::k_complex) {
-                sum += windowed_.base.last_s_imag() - windowed_.E_n;
-            } else {
-                sum += windowed_.base.last_s_full() - windowed_.E_n;
-            }
+            sum += windowed_.last_constraint() - windowed_.E_n;
         }
         scalar_t const dE = sum / static_cast<scalar_t>(n);
         if (log_mode == log::Mode::normal) {
@@ -146,25 +142,22 @@ public:
     // trajectory has run, which the drivers guarantee (exchange only happens
     // after `sample`).
     [[nodiscard]] scalar_t energy() const noexcept {
-        if constexpr (Windowed::k_complex) {
-            return static_cast<scalar_t>(windowed_.base.last_s_imag());
-        } else {
-            return static_cast<scalar_t>(windowed_.base.last_s_full());
-        }
+        return static_cast<scalar_t>(windowed_.last_constraint());
     }
 
-    // After an accepted exchange swaps the two fields, each base action's
-    // raw-scalar cache must follow the config it described.
+    // After an accepted exchange swaps the two fields, each caches must follow
+    // the config it now describes: the base action cache always, and the
+    // separate constraint-value cache when there is one (mode B / custom Q).
     void swap_energy_cache(Replica& other) noexcept {
         auto const mine    = windowed_.base.last_s_full();
         auto const other_s = other.windowed_.base.last_s_full();
         windowed_.base.restore_last_s_full(other_s);
         other.windowed_.base.restore_last_s_full(mine);
         if constexpr (Windowed::k_complex) {
-            auto const mine_i  = windowed_.base.last_s_imag();
-            auto const other_i = other.windowed_.base.last_s_imag();
-            windowed_.base.restore_last_s_imag(other_i);
-            other.windowed_.base.restore_last_s_imag(mine_i);
+            auto const mine_i  = windowed_.last_s_imag();
+            auto const other_i = other.windowed_.last_s_imag();
+            windowed_.restore_last_s_imag(other_i);
+            other.windowed_.restore_last_s_imag(mine_i);
         }
     }
 

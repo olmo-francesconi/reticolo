@@ -3,14 +3,14 @@
 #include <reticolo/core/hd.hpp>
 
 // LLR window formula — the single source of truth shared by the CPU
-// `orch::llr::WindowedAction` and the CUDA device kernels (cuda/llr/windowed_action.cuh).
+// `action::WindowedAction` and the CUDA device kernels (cuda/llr/windowed_action.cuh).
 // Annotated RETICOLO_HD so the SAME expression compiles for both backends; the
 // CPU/device windowed math cannot silently diverge (same discipline as the
 // per-site action formulas). Mode A constrains the base action S directly; mode B
 // (complex actions, e.g. BoseGas) samples the real part S_R and constrains the
 // imaginary observable q = S_I.
 
-namespace reticolo::orch::llr::formula {
+namespace reticolo::action::formula {
 
 // --- mode A (real LLR): the window constrains the base action S ---------------
 
@@ -62,4 +62,4 @@ exchange_log_p(R a_i, R a_j, R e_n_i, R e_n_j, R q_i, R q_j, R delta_i, R delta_
     return lin + win;
 }
 
-}  // namespace reticolo::orch::llr::formula
+}  // namespace reticolo::action::formula

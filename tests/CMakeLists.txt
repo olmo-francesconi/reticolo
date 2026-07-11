@@ -48,6 +48,7 @@ reticolo_add_test(test_phi6_force_consistency       physics/test_phi6_force_cons
 reticolo_add_test(test_sine_gordon_force_consistency physics/test_sine_gordon_force_consistency.cpp)
 reticolo_add_test(test_xy_force_consistency         physics/test_xy_force_consistency.cpp)
 reticolo_add_test(test_bose_gas_force_consistency   physics/test_bose_gas_force_consistency.cpp)
+reticolo_add_test(test_windowed_observable          physics/test_windowed_observable.cpp)
 reticolo_add_test(test_hmc_reversibility            physics/test_hmc_reversibility.cpp)
 reticolo_add_test(test_hmc_integrator_order         physics/test_hmc_integrator_order.cpp)
 reticolo_add_test(test_phi4_hmc_mixed_precision      physics/test_phi4_hmc_mixed_precision.cpp)

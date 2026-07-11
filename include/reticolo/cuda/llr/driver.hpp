@@ -13,9 +13,9 @@
 // and a slot-relabeled state, so the ensemble matches the CPU config-swap up to
 // the (E_n-grouped) relabeling.
 
+#include <reticolo/action/formula/window_formula.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/io/writer.hpp>
-#include <reticolo/orch/llr/formula/window_formula.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
 
 #include <cmath>
@@ -170,14 +170,14 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
                 // cross-term) — the SAME shared formula the CPU config-swap uses,
                 // so the two backends cannot drift on this subtle acceptance.
                 double const log_p =
-                    reticolo::orch::llr::formula::exchange_log_p(reps[i]->a(),
-                                                                 reps[i + 1]->a(),
-                                                                 reps[i]->e_n(),
-                                                                 reps[i + 1]->e_n(),
-                                                                 e_i,
-                                                                 e_j,
-                                                                 reps[i]->delta(),
-                                                                 reps[i + 1]->delta());
+                    reticolo::action::formula::exchange_log_p(reps[i]->a(),
+                                                              reps[i + 1]->a(),
+                                                              reps[i]->e_n(),
+                                                              reps[i + 1]->e_n(),
+                                                              e_i,
+                                                              e_j,
+                                                              reps[i]->delta(),
+                                                              reps[i + 1]->delta());
                 if (log_p >= 0.0 || exch_rng.uniform() < std::exp(log_p)) {
                     reps[i]->swap_window(*reps[i + 1]);
                     ++accepted;

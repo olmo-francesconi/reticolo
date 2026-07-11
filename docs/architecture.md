@@ -159,7 +159,7 @@ in `action/sweep/`.
 - **`HasImagPart<A, Field>`** — refines `HmcAction` for complex actions with a
   sign problem: `s_imag(l)` is the imaginary part (the LLR constraint
   observable in the phase-quenched ensemble) and `compute_force_imag(l, force)`
-  its gradient. Only `BoseGas` uses it today; `orch::llr::WindowedAction` switches to
+  its gradient. Only `BoseGas` uses it today; `action::WindowedAction` switches to
   its complex mode when the base satisfies it.
 
 Earlier revisions carried a `LocalAction` Metropolis baseline
@@ -408,10 +408,15 @@ LLR reconstructs the density of states ρ(S) by running N replicas, each pinned 
 a Gaussian-window penalty to a different region of action space, each sampled by
 its own HMC. A Newton-Raphson + Robbins-Monro loop adapts a per-replica
 reweighting parameter `a`; periodic even/odd replica exchange improves mixing.
-`orch::llr::Replica` wraps a `Base` action in `orch::llr::WindowedAction` (the
-`a·S + (S − E_n)²/2δ²` shift) and is an `orch::Worker`; `orch::llr::run` /
-`smoothed::run` are clients of the spine (they drive `parallel_workers` and add
-exchange as a serial coupling between waves).
+`orch::llr::Replica` wraps a `Base` action in `action::WindowedAction` and is an
+`orch::Worker`; `orch::llr::run` / `smoothed::run` are clients of the spine (they
+drive `parallel_workers` and add exchange as a serial coupling between waves).
+`WindowedAction` itself is a general **decorator action** (in `action/`, not
+LLR): `S_win = S_base + a·Q + (Q−E_n)²/2δ²` where the constrained observable `Q`
+is a `Constraint` policy — `SelfConstraint` (Q = the action, real LLR),
+`ImagConstraint` (Q = `s_imag`, sign-problem LLR), or `ObservableConstraint<Obs>`
+for any custom observable (window on magnetization, plaquette, topological
+charge…). The self/imag defaults reproduce the previous hardcoded modes exactly.
 
 Two convention watch-outs:
 

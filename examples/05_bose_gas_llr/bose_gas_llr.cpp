@@ -2,7 +2,7 @@
 // Bose gas at finite chemical potential. Phase-quenched HMC samples
 // `S_R = base.s_full(phi)`; the LLR window constrains the imaginary action
 // observable `S_I = base.s_imag(phi)` via the `HasImagPart` dispatch in
-// orch::llr::WindowedAction.
+// action::WindowedAction.
 //
 // Output schema (HDF5):
 //  /cfg@n_rep, /cfg@delta, /cfg@E_min, /cfg@E_max, /cfg@dE, /cfg@mu
