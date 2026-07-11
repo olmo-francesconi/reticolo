@@ -89,7 +89,7 @@ if(RETICOLO_ENABLE_CUDA)
 
     # Lint gate: no integrator reimplemented as a CUDA kernel. Scans the device
     # kernel headers (hmc.cuh excepted — it legitimately names the reused
-    # alg::integ::* type parameter).
+    # updater::integ::* type parameter).
     add_test(NAME cuda_no_integrator_kernels
              COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${PROJECT_SOURCE_DIR}/include/reticolo/cuda
                      -P ${CMAKE_CURRENT_SOURCE_DIR}/cuda/check_no_integrator_kernels.cmake)

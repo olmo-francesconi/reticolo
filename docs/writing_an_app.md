@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
 }
 ```
 
-One include gets you `Lattice`, `FastRng`, `act::Phi4`, `alg::Hmc`,
+One include gets you `Lattice`, `FastRng`, `act::Phi4`, `updater::Hmc`,
 `io::Writer`, `cli::Parser`, `obs::*`.
 
 ## Step 2 — declare the CLI flags
@@ -116,13 +116,13 @@ for physics observables.
 ## Step 6 — the updater
 
 ```cpp
-alg::Hmc hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
+updater::Hmc hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
 ```
 
 Action, RNG, and field types deduce (CTAD); the default integrator is
-Omelyan2. A trailing tag value selects another — `alg::integ::leapfrog`
-or `alg::integ::omelyan4`, e.g.
-`alg::Hmc hmc{phi4, phi, rng, spec, alg::integ::leapfrog}`. The tag's
+Omelyan2. A trailing tag value selects another — `updater::integ::leapfrog`
+or `updater::integ::omelyan4`, e.g.
+`updater::Hmc hmc{phi4, phi, rng, spec, updater::integ::leapfrog}`. The tag's
 type is what picks the integrator at compile time — it's a type, not a
 runtime flag. The `Hmc` ctor pre-allocates momentum, force, and rollback
 as sibling lattices of `phi`.
@@ -257,7 +257,7 @@ the couplings, and `describe`.
    `imag_*` kernels (copy `site/bose_gas.hpp`).
 
 3. **Register** — add `#include <reticolo/action/site/<name>.hpp>` to
-   `include/reticolo/action/site.hpp`. `alg::Hmc<MyAction<double>, FastRng>`
+   `include/reticolo/action/site.hpp`. `updater::Hmc<MyAction<double>, FastRng>`
    now compiles.
 
 4. **App + test** — copy `apps/phi4_hmc.cpp`; add a force-vs-FD test (pattern
@@ -301,7 +301,7 @@ genuinely new gauge *action* — improved, rectangle — derives from
 
 2. **HMC algebra** — `include/reticolo/math/<g>_ops.hpp`, exposed as static
    members on `G`. The HMC integrator's momentum sample / kinetic / drift route
-   through these for matrix links (see `algorithm/integ_ops.hpp`,
+   through these for matrix links (see `updater/hmc/integ_ops.hpp`,
    `core/matrix_link_lattice.hpp`):
 
    ```cpp
@@ -419,7 +419,7 @@ round-off). The integrator's symplectic contract:
 
 ```cpp
 auto phi = phi0;                          // deep copy
-alg::Hmc hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
+updater::Hmc hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
 
 hmc.integrate_only(/*tau=*/+1.0, /*n_md=*/20);
 /* flip momentum sign on hmc.momentum() */

@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
     using namespace reticolo;
     using DField = cuda::DeviceField<double, cuda::LinkLayout>;
     using ReplicaT =
-        cuda::llr::Replica<act::Wilson<math::group::U1, double>, alg::integ::Omelyan2, DField>;
+        cuda::llr::Replica<act::Wilson<math::group::U1, double>, updater::integ::Omelyan2, DField>;
 
     // ---- CLI (mirrors u1_llr.cpp) ----
     cli::Parser p{"u1_llr_cuda",

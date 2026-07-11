@@ -2,12 +2,12 @@
 
 #include <concepts>
 
-namespace reticolo::alg {
+namespace reticolo::updater {
 
 // The contract every update algorithm satisfies — the surface that apps and the
 // orchestration layer (orch::llr::Replica, orch::span::Chain) depend on. It is
 // the updater-level analogue of action::HmcAction: duck-typed, no base class,
-// checked at the use site. `alg::Hmc` is the sole implementation today; a new
+// checked at the use site. `updater::Hmc` is the sole implementation today; a new
 // updater is a class modelling this concept (reusing the same integrator
 // type-parameters), and the orchestrators pick it up unchanged.
 //
@@ -24,4 +24,4 @@ concept Updater = requires(U& u, U const& cu) {
     u.rng();
 };
 
-}  // namespace reticolo::alg
+}  // namespace reticolo::updater

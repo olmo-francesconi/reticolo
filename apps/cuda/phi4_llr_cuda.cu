@@ -31,7 +31,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using DField   = cuda::DeviceField<double>;
-    using ReplicaT = cuda::llr::Replica<act::Phi4<double>, alg::integ::Omelyan2, DField>;
+    using ReplicaT = cuda::llr::Replica<act::Phi4<double>, updater::integ::Omelyan2, DField>;
 
     // ---- CLI (mirrors phi4_llr.cpp) ----
     cli::Parser p{"phi4_llr_cuda", "LLR (Gaussian-penalty) + replica exchange for phi^4 (CUDA)"};

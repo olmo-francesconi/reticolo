@@ -26,7 +26,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using DField   = cuda::DeviceField<cplx<double>>;
-    using ReplicaT = cuda::llr::Replica<act::BoseGas<double>, alg::integ::Omelyan2, DField>;
+    using ReplicaT = cuda::llr::Replica<act::BoseGas<double>, updater::integ::Omelyan2, DField>;
 
     // ---- CLI (mirrors bose_gas_llr.cpp) ----
     cli::Parser p{"bose_gas_llr_cuda", "Complex-LLR + replica exchange for the 4D Bose gas (CUDA)"};

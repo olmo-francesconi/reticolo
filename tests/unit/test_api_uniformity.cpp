@@ -121,10 +121,10 @@ TEST_CASE("BoseGas fused kick equals force-then-kick", "[api][kick][bose]") {
 
 // ---- HmcResult exposes acceptance() as the blessed accessor. ----
 TEST_CASE("HmcResult exposes acceptance()", "[api][hmc]") {
-    alg::HmcResult const h{.dH = -0.1, .accepted = true};
+    updater::HmcResult const h{.dH = -0.1, .accepted = true};
     REQUIRE(h.acceptance() == 1.0);
 
-    alg::HmcResult const rej{.dH = 2.0, .accepted = false};
+    updater::HmcResult const rej{.dH = 2.0, .accepted = false};
     REQUIRE(rej.acceptance() == 0.0);
 }
 

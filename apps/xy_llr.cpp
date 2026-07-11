@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
                 FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
                 ReplicaT::Spec{
                     .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
-                alg::HmcSpec{
+                updater::HmcSpec{
                     .tau = tau, .n_md = n_md, .n_threads = plan.m, .slabs_per_thread = rf.slabs}));
         }
     }

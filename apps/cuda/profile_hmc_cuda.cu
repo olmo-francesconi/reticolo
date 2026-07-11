@@ -16,7 +16,6 @@
 
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/action/site/phi4.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
 #include <reticolo/cuda/actions/site/phi4.hpp>
@@ -26,6 +25,7 @@
 #include <reticolo/cuda/gauge/gauge_sun.cuh>
 #include <reticolo/cuda/gauge/su3_device.cuh>
 #include <reticolo/cuda/hmc.cuh>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -151,8 +151,8 @@ void run_config(char const* label,
     double const us_sample =
         time_us([&] { dact.sample_momenta(mom.data(), n, 1234ULL, traj.data(), nullptr); });
 
-    reticolo::cuda::Hmc<DeviceAction<HostAction, Field>, reticolo::alg::integ::Leapfrog, Field> hmc{
-        std::move(dact), field, 1.0, n_md};
+    reticolo::cuda::Hmc<DeviceAction<HostAction, Field>, reticolo::updater::integ::Leapfrog, Field>
+        hmc{std::move(dact), field, 1.0, n_md};
     hmc.run(3);  // capture the trajectory graph
     hmc.sync();
     auto const t0 = clock_type::now();

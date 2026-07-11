@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
     auto plaq     = out.series<double>("/prod/obs/plaq");
 
     // Precision deduced from the float link field + action.
-    alg::Hmc hmc{action, links, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
+    updater::Hmc hmc{action, links, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     std::size_t const n_plaq =
         (static_cast<std::size_t>(ndim) * static_cast<std::size_t>(ndim - 1) / 2U) * ns;

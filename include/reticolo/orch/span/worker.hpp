@@ -1,11 +1,11 @@
 #pragma once
 
-#include <reticolo/algorithm/concepts.hpp>
-#include <reticolo/algorithm/hmc.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
+#include <reticolo/updater/concepts.hpp>
+#include <reticolo/updater/hmc/hmc.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <string>
 #include <string_view>
@@ -26,7 +26,7 @@ namespace reticolo::orch::span {
 
 template <class Action,
           class Rng,
-          class Integrator = alg::integ::Omelyan2,
+          class Integrator = updater::integ::Omelyan2,
           class T          = Action::value_type,
           class Field      = Lattice<T>>
 class Chain {
@@ -41,7 +41,7 @@ public:
           Field::SizeVec const& shape,
           Action action,
           Rng rng,
-          alg::HmcSpec const& spec)
+          updater::HmcSpec const& spec)
         : id_{std::move(id)}, field_{shape}, action_{std::move(action)},
           hmc_{action_, field_, std::move(rng), spec, {}, log::Mode::silent} {}
 
@@ -82,13 +82,13 @@ public:
     [[nodiscard]] StreamSet<Rng>& rng() noexcept { return hmc_.rng(); }
 
 private:
-    static_assert(alg::Updater<alg::Hmc<Action, Rng, Integrator, Field, T>>,
-                  "the span sampler must model alg::Updater");
+    static_assert(updater::Updater<updater::Hmc<Action, Rng, Integrator, Field, T>>,
+                  "the span sampler must model updater::Updater");
 
     std::string id_;
     Field field_;
     Action action_;
-    alg::Hmc<Action, Rng, Integrator, Field, T> hmc_;
+    updater::Hmc<Action, Rng, Integrator, Field, T> hmc_;
     double last_dh_ = 0.0;
     bool last_acc_  = false;
 };

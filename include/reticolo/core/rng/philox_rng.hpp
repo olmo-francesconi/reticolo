@@ -127,7 +127,7 @@ public:
     // Classical Box-Muller in pairs — the same algorithm as `normal()`, so the
     // two paths share statistics. Drains the cached spare first, fills cos/sin
     // pairs, and tops off an odd tail via `normal()`. Lets PhiloxRng drive the
-    // scalar/complex HMC momentum-sampling path (`alg::Hmc` calls normal_fill
+    // scalar/complex HMC momentum-sampling path (`updater::Hmc` calls normal_fill
     // for double and float fields), not just the matrix-group path.
     void normal_fill(double* out, std::size_t n) noexcept {
         constexpr double k_two_pi = 2.0 * std::numbers::pi;

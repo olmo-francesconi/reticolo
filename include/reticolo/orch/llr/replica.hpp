@@ -1,14 +1,14 @@
 #pragma once
 
-#include <reticolo/algorithm/concepts.hpp>
-#include <reticolo/algorithm/hmc.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
 #include <reticolo/orch/llr/windowed_action.hpp>
+#include <reticolo/updater/concepts.hpp>
+#include <reticolo/updater/hmc/hmc.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cmath>
 #include <complex>
@@ -41,7 +41,7 @@ struct ReplicaStats {
 
 template <class Base,
           class Rng,
-          class Integrator = alg::integ::Omelyan2,
+          class Integrator = updater::integ::Omelyan2,
           class T          = Base::value_type,
           class Field      = Lattice<T>>
 class Replica {
@@ -62,7 +62,7 @@ public:
         scalar_t a_init = scalar_t{0};
     };
 
-    Replica(Base const& base, Rng rng_init, Spec spec, alg::HmcSpec const& hmc_spec)
+    Replica(Base const& base, Rng rng_init, Spec spec, updater::HmcSpec const& hmc_spec)
         : id_{std::move(spec.id)}, field_{std::move(spec.shape)},
           windowed_{.base = base, .a = spec.a_init, .E_n = spec.e_n, .delta = spec.delta},
           hmc_{windowed_, field_, std::move(rng_init), hmc_spec, Integrator{}, log::Mode::silent} {}
@@ -301,13 +301,13 @@ public:
 
 private:
     using Windowed = windowed_action_type;
-    static_assert(alg::Updater<alg::Hmc<Windowed, Rng, Integrator, Field, T>>,
-                  "the LLR sampler must model alg::Updater");
+    static_assert(updater::Updater<updater::Hmc<Windowed, Rng, Integrator, Field, T>>,
+                  "the LLR sampler must model updater::Updater");
 
     std::string id_;
     Field field_;
     Windowed windowed_;
-    alg::Hmc<Windowed, Rng, Integrator, Field, T> hmc_;
+    updater::Hmc<Windowed, Rng, Integrator, Field, T> hmc_;
     ReplicaStats stats_{};
 };
 

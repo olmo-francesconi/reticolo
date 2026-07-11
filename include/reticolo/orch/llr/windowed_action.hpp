@@ -1,10 +1,10 @@
 #pragma once
 
 #include <reticolo/action/concepts.hpp>
-#include <reticolo/algorithm/integ_ops.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/orch/llr/formula/window_formula.hpp>
+#include <reticolo/updater/hmc/integ_ops.hpp>
 
 #include <complex>
 #include <cstddef>
@@ -100,7 +100,7 @@ struct WindowedAction {
             scalar_t const scale = formula::force_scale_imag(s, a, E_n, delta);
             Field& imag_force    = scratch_(force.indexing());
             base.compute_force_imag(l, imag_force);
-            alg::integ::kick_add(force, imag_force, scale);  // force += scale·F_I
+            updater::integ::kick_add(force, imag_force, scale);  // force += scale·F_I
         } else {
             // Fused base kernel when available: one neighbour pass yields
             // both S_base and the force, dropping the separate full-lattice
@@ -140,7 +140,7 @@ struct WindowedAction {
                 base.compute_force_and_kick(l, mom, k_dt);
                 Field& imag_force = scratch_(mom.indexing());
                 base.compute_force_imag(l, imag_force);
-                alg::integ::kick_add(mom, imag_force, k_dt * scale);
+                updater::integ::kick_add(mom, imag_force, k_dt * scale);
             }
         } else {
             if constexpr (requires(Field& f) { base.s_full_and_force(l, f); }) {
@@ -151,7 +151,7 @@ struct WindowedAction {
                 Field& f             = scratch_(mom.indexing());
                 auto const s         = static_cast<scalar_t>(base.s_full_and_force(l, f));
                 scalar_t const scale = formula::force_scale(s, a, E_n, delta);
-                alg::integ::kick_add(mom, f, k_dt * scale);
+                updater::integ::kick_add(mom, f, k_dt * scale);
             } else {
                 scalar_t const s     = base.s_full(l);
                 scalar_t const scale = formula::force_scale(s, a, E_n, delta);

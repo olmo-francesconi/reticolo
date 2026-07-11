@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
                 shape,
                 act::Phi4<double>{.kappa = kappa_at(n), .lambda = lambda},
                 FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
-                alg::HmcSpec{
+                updater::HmcSpec{
                     .tau = tau, .n_md = n_md, .n_threads = plan.m, .slabs_per_thread = slabs}));
         }
     }

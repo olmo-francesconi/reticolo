@@ -1,7 +1,6 @@
 #pragma once
 
 #include <reticolo/action/concepts.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
@@ -11,6 +10,7 @@
 #include <reticolo/core/rng/stream_set.hpp>
 #include <reticolo/core/site.hpp>
 #include <reticolo/math/vec_libm.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -27,7 +27,7 @@
 #include <utility>
 #include <vector>
 
-namespace reticolo::alg {
+namespace reticolo::updater {
 
 struct HmcSpec {
     double tau = 1.0;
@@ -483,4 +483,4 @@ private:
     std::size_t step_count_ = 0;
 };
 
-}  // namespace reticolo::alg
+}  // namespace reticolo::updater

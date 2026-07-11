@@ -5,8 +5,6 @@
 // properties the multi-stream checkpoint layout and Hmc's owned RNG depend on.
 
 #include <reticolo/action/site/phi4.hpp>
-#include <reticolo/algorithm/hmc.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
@@ -14,6 +12,8 @@
 #include <reticolo/core/rng/philox_rng.hpp>
 #include <reticolo/core/rng/ranlxd_rng.hpp>
 #include <reticolo/core/rng/stream_set.hpp>
+#include <reticolo/updater/hmc/hmc.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -53,7 +53,7 @@ constexpr std::size_t k_streams = 4;
 
 // StreamSet no longer holds a fill-splitting helper (normal_fill_sites /
 // block() / visit_blocks() were removed — that's the owner's job now, see
-// alg::Hmc::sample_momenta_). Mirror the same even/remainder split here so
+// updater::Hmc::sample_momenta_). Mirror the same even/remainder split here so
 // the round-trip test still exercises every site stream, in a fixed,
 // reproducible order.
 template <class R>
@@ -148,8 +148,8 @@ TEMPLATE_TEST_CASE("StreamSet rejects a wrong-length state restore",
 TEST_CASE("Hmc constructed twice with the same seed is bit-identical", "[rng][stream][hmc]") {
     using reticolo::Lattice;
     using reticolo::action::Phi4;
-    using reticolo::alg::Hmc;
-    using reticolo::alg::HmcSpec;
+    using reticolo::updater::Hmc;
+    using reticolo::updater::HmcSpec;
 
     auto run = [] {
         Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
@@ -162,7 +162,7 @@ TEST_CASE("Hmc constructed twice with the same seed is bit-identical", "[rng][st
                 phi,
                 FastRng{99},
                 HmcSpec{.tau = 0.3, .n_md = 4},
-                reticolo::alg::integ::leapfrog,
+                reticolo::updater::integ::leapfrog,
                 reticolo::log::Mode::silent};
         for (int t = 0; t < 3; ++t) {
             hmc.step(reticolo::log::Mode::silent);
@@ -178,8 +178,8 @@ TEST_CASE("Hmc constructed twice with the same seed is bit-identical", "[rng][st
 TEST_CASE("Hmc::set_spec throws on a threading change but not on tau/n_md", "[rng][stream][hmc]") {
     using reticolo::Lattice;
     using reticolo::action::Phi4;
-    using reticolo::alg::Hmc;
-    using reticolo::alg::HmcSpec;
+    using reticolo::updater::Hmc;
+    using reticolo::updater::HmcSpec;
 
     Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
     Lattice<double> phi{{4, 4, 4}};
@@ -187,7 +187,7 @@ TEST_CASE("Hmc::set_spec throws on a threading change but not on tau/n_md", "[rn
             phi,
             FastRng{7},
             HmcSpec{.tau = 0.3, .n_md = 4, .n_threads = 1, .slabs_per_thread = 1},
-            reticolo::alg::integ::leapfrog,
+            reticolo::updater::integ::leapfrog,
             reticolo::log::Mode::silent};
 
     REQUIRE_NOTHROW(hmc.set_spec({.tau = 0.7, .n_md = 8, .n_threads = 1, .slabs_per_thread = 1}));

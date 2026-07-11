@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
     using Action   = action::Wilson<math::group::U1, double>;
     using ReplicaT = orch::llr::Replica<Action,
                                         FastRng,
-                                        alg::integ::Omelyan2,
+                                        updater::integ::Omelyan2,
                                         double,
                                         MatrixLinkLattice<math::group::U1, double>>;
 
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
                 FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
                 ReplicaT::Spec{
                     .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
-                alg::HmcSpec{
+                updater::HmcSpec{
                     .tau = tau, .n_md = n_md, .n_threads = plan.m, .slabs_per_thread = rf.slabs}));
         }
     }

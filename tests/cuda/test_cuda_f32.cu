@@ -1,5 +1,4 @@
 #include <reticolo/action/site/phi4.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/cuda/actions/site/phi4.hpp>
@@ -8,6 +7,7 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.cuh>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -105,7 +105,7 @@ bool hmc_f32_reversibility_ok() {
     field.copy_to_host(f0);
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
-    using Integ          = alg::integ::Leapfrog;
+    using Integ          = updater::integ::Leapfrog;
     constexpr double tau = 1.0;
     constexpr int n_md   = 12;
 

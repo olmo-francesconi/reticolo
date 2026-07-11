@@ -14,7 +14,7 @@ using reticolo::FastRng;
 using reticolo::Lattice;
 using reticolo::action::Phi4;
 
-namespace alg  = reticolo::alg;
+namespace alg  = reticolo::updater;
 namespace orch = reticolo::orch;
 
 using ReplicaT = orch::llr::Replica<Phi4<double>, FastRng>;

@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
     using Group    = math::group::SU3;
     using Action   = action::Wilson<Group, double>;
     using DField   = cuda::DeviceField<double, cuda::MatrixLayout<Group>>;
-    using ReplicaT = cuda::llr::Replica<Action, alg::integ::Omelyan2, DField>;
+    using ReplicaT = cuda::llr::Replica<Action, updater::integ::Omelyan2, DField>;
 
     // ---- CLI (mirrors su2_llr_cuda.cu) ----
     cli::Parser p{"su3_llr_cuda",

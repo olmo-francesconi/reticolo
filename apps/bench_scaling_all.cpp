@@ -50,12 +50,12 @@ void bench_one(
         // value — reusing the lvalue as-is would hand every action an identical
         // stream since the by-value copy's own draws never advance the caller's
         // object.
-        alg::Hmc hmc{a,
-                     fld,
-                     FastRng{rng.uniform_u64()},
-                     {.tau = 1.0, .n_md = 8},
-                     alg::integ::leapfrog,
-                     log::Mode::silent};
+        updater::Hmc hmc{a,
+                         fld,
+                         FastRng{rng.uniform_u64()},
+                         {.tau = 1.0, .n_md = 8},
+                         updater::integ::leapfrog,
+                         log::Mode::silent};
         trms = time_ms([&] { (void)hmc.step(log::Mode::silent); }, g_rt);
     }
     // Working-set MB of one field pass and the thread count the policy actually

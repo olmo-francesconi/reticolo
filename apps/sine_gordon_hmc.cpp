@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
     auto cos_phi  = out.series<double>("/prod/obs/cos_phi");
 
     // ---- Updater ----
-    alg::Hmc hmc{sg, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
+    updater::Hmc hmc{sg, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     auto cos_avg = [&phi]() {
         double sum = 0.0;

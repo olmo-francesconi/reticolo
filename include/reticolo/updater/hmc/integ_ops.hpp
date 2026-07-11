@@ -6,7 +6,7 @@
 
 #include <cstddef>
 
-namespace reticolo::alg::integ {
+namespace reticolo::updater::integ {
 
 // Field-generic integrator atoms — the elementwise drift `field += c·mom`
 // and the additive kick `mom += k·force`. Factored out of the integrator
@@ -113,4 +113,4 @@ kick_add(MatrixLinkLattice<G, T>& mom, MatrixLinkLattice<G, T> const& force, dou
     });
 }
 
-}  // namespace reticolo::alg::integ
+}  // namespace reticolo::updater::integ

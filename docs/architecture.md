@@ -5,7 +5,7 @@ the way it is.
 
 ## Three CMake targets
 
-- `reticolo::core` — INTERFACE, header-only. Actions, algorithms, observers,
+- `reticolo::core` — INTERFACE, header-only. Actions, updaters, observers,
   lattice, RNG, LLR.
 - `reticolo::io` — STATIC. The only TU that `#include <hdf5.h>`; HDF5's
   `hid_t` never leaves `src/io/writer.cpp` thanks to a PIMPL'd `io::Writer`
@@ -33,7 +33,7 @@ balloon every TU touching IO. The split keeps both.
 ```
 
 re-exports every public header. The library uses short namespaces directly
-(`reticolo::alg`, `reticolo::obs`, `reticolo::io`, `reticolo::cli`) and the
+(`reticolo::updater`, `reticolo::obs`, `reticolo::io`, `reticolo::cli`) and the
 umbrella adds one alias inside `namespace reticolo`:
 
 ```cpp
@@ -41,7 +41,7 @@ namespace act = action;
 ```
 
 so `using namespace reticolo;` in an app yields `Lattice<double>`, `FastRng`,
-`act::Phi4`, `alg::Hmc`, `io::Writer`, `cli::Parser`, `obs::magnetization`
+`act::Phi4`, `updater::Hmc`, `io::Writer`, `cli::Parser`, `obs::magnetization`
 all in scope.
 
 ## Core types
@@ -107,7 +107,7 @@ The pool
 holds **no geometry** — who draws from which stream is the owning
 algorithm's contract.
 
-`alg::Hmc` **owns** its randomness: the ctor takes a freshly-seeded family
+`updater::Hmc` **owns** its randomness: the ctor takes a freshly-seeded family
 generator **by value**, draws one `uniform_u64()` from it, and builds a
 `StreamSet` with exactly one site stream per item of the canonical field
 partition (`exec::partition` under the Hmc's frozen thread/slab config).
@@ -149,7 +149,7 @@ traversal engine lives once in `action/sweep/`.
 - **`HmcAction<A, Field>`** — the baseline. `s_full(l)` returns total S (for
   ΔH and any diagnostic series logging S); `compute_force(l, force)` writes
   `-dS/dfield` into `force`, called once per MD step. `HmcAction + Rng` is the
-  entire `alg::Hmc` requirement.
+  entire `updater::Hmc` requirement.
 - **`HasFusedKick<A, Field>`** — refines `HmcAction` with
   `compute_force_and_kick(l, mom, k)`, which computes the force and applies
   `mom += k·F` in a single pass without materialising the force lattice. The
@@ -212,34 +212,34 @@ struct Phi4 : SiteAction<Phi4<T>, T> {   // base supplies s_full / compute_force
 Deriving from `SiteAction` still leaves `Phi4` an aggregate (the base is
 stateless-by-designated-init), so `act::Phi4<double>{.kappa=…, .lambda=…}` is
 unchanged. It satisfies `HmcAction` + `HasFusedKick` and drives
-`alg::Hmc<Phi4<double>, FastRng>` directly. A new action is a formula file plus
+`updater::Hmc<Phi4<double>, FastRng>` directly. A new action is a formula file plus
 this ~10-line struct, added to the family aggregator (`action/site.hpp` /
 `action/gauge.hpp`); nothing else changes.
 
-Concept failures at the `alg::Hmc` instantiation site point at the missing
+Concept failures at the `updater::Hmc` instantiation site point at the missing
 member — read the compiler error.
 
 ## Updaters
 
 | updater                | models                | needs                                     |
 | ---------------------- | --------------------- | ----------------------------------------- |
-| `alg::Hmc<A,R,Integ>`  | `alg::Updater`        | `HmcAction` (+ optionally `HasFusedKick`) |
+| `updater::Hmc<A,R,Integ>`  | `updater::Updater`        | `HmcAction` (+ optionally `HasFusedKick`) |
 
-`alg::Hmc` is the only update algorithm. The **`alg::Updater`** concept
-([`algorithm/concepts.hpp`](../include/reticolo/algorithm/concepts.hpp)) is the
+`updater::Hmc` is the only update algorithm. The **`updater::Updater`** concept
+([`updater/concepts.hpp`](../include/reticolo/updater/concepts.hpp)) is the
 updater-level analogue of `action::HmcAction` — the contract apps and the
 orchestration layer rely on: `step()` (returns `{dH, accepted}`),
 `last_s_full()`, `rng()`. It is duck-typed and checked at the use site (both
 orchestration workers `static_assert` their sampler against it), so a new
 updater is just a class modelling it — no base class, reuse the same
-`alg::integ::*` type-parameters. `orch::llr::Replica` and `orch::span::Chain`
-each own an `alg::Hmc` and drive it through this surface.
+`updater::integ::*` type-parameters. `orch::llr::Replica` and `orch::span::Chain`
+each own an `updater::Hmc` and drive it through this surface.
 
 The HMC integrator is a **type parameter**, not a runtime switch. Three
-ship: `alg::integ::Omelyan2` (2nd-order minimum-norm, ~1.4× speedup at the
-same acceptance — the **default**), `alg::integ::Leapfrog` (2nd-order,
-cheapest per MD step), `alg::integ::Omelyan4` (4th-order, large τ). Select
-one at the `Hmc` ctor with a brace-free tag value (`alg::integ::leapfrog`, CTAD
+ship: `updater::integ::Omelyan2` (2nd-order minimum-norm, ~1.4× speedup at the
+same acceptance — the **default**), `updater::integ::Leapfrog` (2nd-order,
+cheapest per MD step), `updater::integ::Omelyan4` (4th-order, large τ). Select
+one at the `Hmc` ctor with a brace-free tag value (`updater::integ::leapfrog`, CTAD
 deduces the type) or the explicit `Hmc<A, R, Omelyan2>` form. Adding one =
 struct with a static `run(...)`; the matching `inline constexpr` tag is a
 one-liner.
@@ -352,7 +352,7 @@ own `<workspace>/<stem>.<rNNN>.log`.
 drivers only bind a scope when they run their own logging code inside a
 parallel region; transitively-called code picks the tag up automatically.
 
-`Lattice`, `FastRng`, `Writer`, action, algorithm, and `orch::llr::Replica`
+`Lattice`, `FastRng`, `Writer`, action, updater, and `orch::llr::Replica`
 constructors auto-announce, so most apps don't call `log::info` at all.
 `log::off()` short-circuits before any formatting — tests link a shared
 `tests/test_main.cpp` that calls it; benches and `tune_*` apps too.
@@ -457,8 +457,8 @@ The seam is a four-hop chain (Phi4 shown):
 3. `cuda/actions/site/phi4.hpp` — the `device_functors<action::Phi4<T>>` trait adapts
    a *host* action struct into device launchers (force / s_full / sample_momenta).
 4. `cuda::DeviceAction<HostAction, Field>` + `cuda::Hmc<DAct, Integ, Field>` — the
-   generic device HMC, reusing the *same* `alg::integ::*` integrator tags as the
-   CPU `alg::Hmc`. No virtual dispatch, no `switch(action)` — the trait resolves
+   generic device HMC, reusing the *same* `updater::integ::*` integrator tags as the
+   CPU `updater::Hmc`. No virtual dispatch, no `switch(action)` — the trait resolves
    at compile time (a lint gate forbids integrator-specific kernel code).
 
 The *loop structure* may legitimately differ CPU↔device (U(1) scatter→gather;

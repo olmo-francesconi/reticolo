@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
     auto m_sq     = out.series<double>("/prod/obs/m2");
 
     // ---- Updater: owns the RNG (one site stream per canonical slab) ----
-    alg::Hmc hmc{phi4, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
+    updater::Hmc hmc{phi4, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
     long long start_i = 0;
     if (resuming) {
         auto const file_shape = io::load_field_shape(resume_path);

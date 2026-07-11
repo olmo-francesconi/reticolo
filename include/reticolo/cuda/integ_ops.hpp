@@ -9,7 +9,7 @@
 
 // Device integrator atoms — the elementwise drift `field += c·mom` and the
 // additive kick `mom += k·force`, for DeviceField. These are the device
-// overloads of the CPU `alg::integ::drift_field` / `kick_add`
+// overloads of the CPU `updater::integ::drift_field` / `kick_add`
 // (integ_ops.hpp); they live in `reticolo::cuda` so ADL finds them when the
 // unchanged Leapfrog/Omelyan2/Omelyan4::run instantiate on a DeviceField, and
 // partial ordering prefers them over the generic host loops (which would

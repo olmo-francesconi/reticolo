@@ -1,11 +1,11 @@
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/action/site/sine_gordon.hpp>
 #include <reticolo/action/sweep/site.hpp>
-#include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/parallel.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
+#include <reticolo/updater/hmc/hmc.hpp>
 
 #include "nn_reference.hpp"
 
@@ -158,12 +158,12 @@ TEST_CASE("full hmc.step is deterministic for a fixed team", "[hot_loop][paralle
         auto phi = hot_lattice({20, 20, 20, 20});
         Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
         FastRng rng{2026};
-        reticolo::alg::Hmc hmc{action,
-                               phi,
-                               rng,
-                               {.tau = 0.5, .n_md = 6},
-                               reticolo::alg::integ::leapfrog,
-                               reticolo::log::Mode::silent};
+        reticolo::updater::Hmc hmc{action,
+                                   phi,
+                                   rng,
+                                   {.tau = 0.5, .n_md = 6},
+                                   reticolo::updater::integ::leapfrog,
+                                   reticolo::log::Mode::silent};
         double dh_sum = 0.0;
         for (int t = 0; t < 2; ++t) {
             dh_sum += hmc.step(reticolo::log::Mode::silent).dH;

@@ -1,14 +1,14 @@
 #pragma once
 
 #include <reticolo/action/concepts.hpp>
-#include <reticolo/algorithm/integ_ops.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
+#include <reticolo/updater/hmc/integ_ops.hpp>
 
 #include <cstddef>
 #include <string_view>
 
-namespace reticolo::alg::integ {
+namespace reticolo::updater::integ {
 
 // Symplectic integrators for HMC.
 //
@@ -176,11 +176,11 @@ struct Omelyan4 {
 };
 
 // Brace-free tag values for the HMC constructor's integrator selector:
-//   alg::Hmc hmc{action, field, rng, spec, alg::integ::omelyan2};
+//   updater::Hmc hmc{action, field, rng, spec, updater::integ::omelyan2};
 // CTAD deduces the integrator type from the tag. The explicit forms
 // `Hmc<A, R, Omelyan2>` and `Omelyan2::run(...)` stay available.
 inline constexpr Leapfrog leapfrog{};
 inline constexpr Omelyan2 omelyan2{};
 inline constexpr Omelyan4 omelyan4{};
 
-}  // namespace reticolo::alg::integ
+}  // namespace reticolo::updater::integ

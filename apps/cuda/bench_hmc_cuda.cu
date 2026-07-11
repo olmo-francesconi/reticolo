@@ -13,7 +13,6 @@
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/action/site/phi6.hpp>
 #include <reticolo/action/site/sine_gordon.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/cuda/actions/bond/xy.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
@@ -25,6 +24,7 @@
 #include <reticolo/cuda/gauge/su2_device.cuh>
 #include <reticolo/cuda/gauge/su3_device.cuh>
 #include <reticolo/cuda/hmc.cuh>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -60,8 +60,8 @@ void bench(char const* label, std::vector<std::size_t> const& shape, HostAction 
     cudaDeviceSynchronize();
 
     DeviceAction<HostAction, Field> dact{action, field.topology()};
-    reticolo::cuda::Hmc<DeviceAction<HostAction, Field>, reticolo::alg::integ::Leapfrog, Field> hmc{
-        std::move(dact), field, kTau, kNmd};
+    reticolo::cuda::Hmc<DeviceAction<HostAction, Field>, reticolo::updater::integ::Leapfrog, Field>
+        hmc{std::move(dact), field, kTau, kNmd};
 
     hmc.run(kWarmup);  // first replay captures the full-trajectory graph
     hmc.sync();

@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
     auto s_i      = out.series<double>("/prod/obs/s_i");
 
     // ---- Updater (precision deduced from the float complex lattice + action) ----
-    alg::Hmc hmc{action, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
+    updater::Hmc hmc{action, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     // ---- Thermalisation ----
     log::info("hmc", "therm  {} trajectories", n_therm);

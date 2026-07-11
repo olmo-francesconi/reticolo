@@ -4,12 +4,12 @@
 // value to ~1e-9. Exercises Cayley-Hamilton drift + link-centric force.
 
 #include <reticolo/action/gauge/wilson.hpp>
-#include <reticolo/algorithm/hmc.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/math/group/su3.hpp>
 #include <reticolo/math/su3_ops.hpp>
+#include <reticolo/updater/hmc/hmc.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -21,11 +21,11 @@
 using reticolo::FastRng;
 using reticolo::MatrixLinkLattice;
 using reticolo::action::Wilson;
-using reticolo::alg::Hmc;
-using reticolo::alg::integ::Leapfrog;
-using reticolo::alg::integ::Omelyan2;
-using reticolo::alg::integ::Omelyan4;
 using reticolo::math::group::SU3;
+using reticolo::updater::Hmc;
+using reticolo::updater::integ::Leapfrog;
+using reticolo::updater::integ::Omelyan2;
+using reticolo::updater::integ::Omelyan4;
 
 namespace {
 

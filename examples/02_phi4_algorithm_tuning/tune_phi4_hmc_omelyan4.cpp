@@ -13,7 +13,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using bench_clock = std::chrono::steady_clock;
-    using Integrator  = alg::integ::Omelyan4;
+    using Integrator  = updater::integ::Omelyan4;
 
     log::off();
 
@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
     out.start_phase("prod");
 
     // ---- Updater ----
-    alg::Hmc hmc{phi4, phi, FastRng{seed}, {.tau = tau, .n_md = n_md}, Integrator{}};
+    updater::Hmc hmc{phi4, phi, FastRng{seed}, {.tau = tau, .n_md = n_md}, Integrator{}};
 
     // ---- Thermalisation ----
     for (int i = 0; i < n_therm; ++i) {

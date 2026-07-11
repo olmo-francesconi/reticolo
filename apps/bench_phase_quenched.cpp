@@ -33,7 +33,7 @@ struct Case {
 int main() {
     using namespace reticolo;
     log::off();
-    using Integ = alg::integ::Omelyan2;
+    using Integ = updater::integ::Omelyan2;
 
     std::vector<Case> const cases = {
         {.ndim = 3, .L = 8, .n_traj = 400},
@@ -78,7 +78,7 @@ int main() {
         std::size_t const L_ = static_cast<std::size_t>(c.L);
         Lattice<double>::SizeVec shape(nd, L_);
         Lattice<double> phi{shape};
-        alg::Hmc hmc{phi4, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
+        updater::Hmc hmc{phi4, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
         for (int i = 0; i < k_warmup; ++i) {
             (void)hmc.step();
         }
@@ -96,7 +96,7 @@ int main() {
         std::size_t const L_ = static_cast<std::size_t>(c.L);
         Lattice<std::complex<double>>::SizeVec shape(nd, L_);
         Lattice<std::complex<double>> phi{shape};
-        alg::Hmc hmc{bg, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
+        updater::Hmc hmc{bg, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
         for (int i = 0; i < k_warmup; ++i) {
             (void)hmc.step();
         }

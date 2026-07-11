@@ -10,9 +10,6 @@
 #include <reticolo/action/gauge.hpp>
 #include <reticolo/action/site.hpp>
 #include <reticolo/action/sweep/site.hpp>
-#include <reticolo/algorithm/concepts.hpp>
-#include <reticolo/algorithm/hmc.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/app/setup.hpp>
 #include <reticolo/cli/parser.hpp>
 #include <reticolo/core/field_traits.hpp>
@@ -49,10 +46,13 @@
 #include <reticolo/orch/llr/windowed_action.hpp>
 #include <reticolo/orch/span.hpp>
 #include <reticolo/orch/thread_plan.hpp>
+#include <reticolo/updater/concepts.hpp>
+#include <reticolo/updater/hmc/hmc.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 // NOLINTEND(misc-include-cleaner)
 
 // Short namespace aliases. One `using namespace reticolo;` per app then gives
-// terse `act::Phi4`, `alg::Hmc`, `obs::mean`, `io::Writer`, `cli::Parser`.
+// terse `act::Phi4`, `updater::Hmc`, `obs::mean`, `io::Writer`, `cli::Parser`.
 namespace reticolo {
 namespace act = action;
 }  // namespace reticolo

@@ -11,7 +11,6 @@
 // enqueued before any sync). The replica exposes the per-trajectory primitives
 // launch_trajectory() (async) + read_dE() (gather) instead.
 
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/check.hpp>
@@ -19,6 +18,7 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/llr/windowed_action.cuh>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -29,7 +29,9 @@
 
 namespace reticolo::cuda::llr {
 
-template <class HostAction, class Integ = alg::integ::Omelyan2, class Field = DeviceField<double>>
+template <class HostAction,
+          class Integ = updater::integ::Omelyan2,
+          class Field = DeviceField<double>>
 class Replica {
 public:
     using value_type = typename Field::value_type;

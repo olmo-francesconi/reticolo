@@ -15,7 +15,7 @@
 // A pool of independent streams over one Rng family: one dedicated DRIVER
 // stream (the serial draws — Metropolis accept, LLR exchange, hot starts) + n
 // SITE streams. The pool holds NO geometry: which sites a stream serves is the
-// owner's contract — alg::Hmc sizes the pool from the canonical field
+// owner's contract — updater::Hmc sizes the pool from the canonical field
 // partition (exec::partition) and binds site stream i to partition item i via
 // exec::field_visit_indexed, one-to-one, checked every fill. Serial draws
 // never touch a site stream, so per-slab draw sequences stay shape-determined

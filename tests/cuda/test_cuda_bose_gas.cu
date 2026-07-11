@@ -1,5 +1,4 @@
 #include <reticolo/action/complex/bose_gas.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng/rng.hpp>
@@ -13,6 +12,7 @@
 #include <reticolo/cuda/llr/windowed_action.cuh>
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/orch/llr/windowed_action.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cmath>
 #include <complex>
@@ -28,7 +28,7 @@
 // reinterpret (layout-compatible). device_functors<BoseGas<T>> shares the S_R/F_R
 // per-site formula with the CPU action; the complex HMC atoms (drift/kick/kinetic
 // over 2·n reals) live in cuda/actions/complex/bose_gas.hpp. (Excluded from the
-// no-integrator-kernels lint gate: it names alg::integ::Leapfrog.)
+// no-integrator-kernels lint gate: it names updater::integ::Leapfrog.)
 
 namespace reticolo::cuda {
 
@@ -122,7 +122,7 @@ bool hmc_runs_impl() {
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
     DAct dact{make_action<T>(), field.topology()};
-    Hmc<DAct, alg::integ::Leapfrog, DField> hmc{std::move(dact), field, 0.5, 10};
+    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 0.5, 10};
     hmc.run(8);
     double const acc = hmc.acceptance();
     hmc.sync();
@@ -175,7 +175,7 @@ bool bose_gas_hmc_reversibility_ok() {
     field.copy_to_host(as_dev(f0.data()));
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
-    using Integ          = alg::integ::Leapfrog;
+    using Integ          = updater::integ::Leapfrog;
     constexpr double tau = 0.5;
     constexpr int n_md   = 10;
 
