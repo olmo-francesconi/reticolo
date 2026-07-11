@@ -134,15 +134,16 @@ right member functions; the HMC updater concept-checks at the call site.
 the updater. It is not a blanket ban: `cli::Parser`'s `VarSlotBase` type-erasure
 is one small virtual hierarchy off the hot path, in the CLI layer, and that's
 fine. A bare `grep virtual` will hit it; that's not an invariant break.)
-Actions split into four families by interaction shape, one folder each:
-`action/site/` (scalar `Lattice<T>`, self + NN-sum: Phi4/Phi6/SineGordon),
-`action/bond/` (scalar `Lattice<T>`, endpoint-difference: XY), `action/complex/`
-(`Lattice<complex<T>>` sign problem: BoseGas), and `action/gauge/`
-(`MatrixLinkLattice<G,T>`: Wilson). All satisfy the
-**same** field-agnostic concepts; only the `Field` they name differs. Each family
-folder holds its leaf structs and its family base (`<family>_action.hpp`) at the
-top and its per-action physics in `formula/`; the shared dimension-generic
-traversal engine lives once in `action/sweep/`.
+Actions split into three families by interaction shape, one folder each:
+`action/nn/` (scalar `Lattice<T>` nearest-neighbour — both the self+NN-sum
+Phi4/Phi6/SineGordon and the endpoint-difference XY, unified under one
+`NNAction`), `action/complex/` (`Lattice<complex<T>>` sign problem: BoseGas'
+real part, with the imaginary part bolted on as a mixin), and `action/gauge/`
+(`MatrixLinkLattice<G,T>`: Wilson). All satisfy the **same** field-agnostic
+concepts; only the `Field` they name differs. Each family folder holds its leaf
+structs and its family base (`<family>_action.hpp`) at the top and its per-action
+physics in `formula/`; the shared dimension-generic traversal engine lives once
+in `action/sweep/`.
 
 ### The concepts
 
@@ -177,13 +178,23 @@ into the leaf's coupling-hoisting kernels:
 
 | base | field | leaf kernels (bind the shared `<family>/formula/*`) |
 | ---- | ----- | ---------------------------------------------------- |
-| `SiteAction<D,T>`    | `Lattice<T>`              | `action_kernel()`, `force_kernel()` (NN-local: Phi4/Phi6/SineGordon) |
-| `BondAction<D,T>`    | `Lattice<T>`              | `action_bond_kernel()`, `force_bond_kernel()`, `bond_scale()` (XY)   |
-| `ComplexAction<D,T>` | `Lattice<complex<T>>`     | real + `imag_*` kernels (`HasImagPart`: BoseGas) |
+| `NNAction<D,T>`      | `Lattice<T>`              | finalizers `action_kernel()`/`force_kernel()` + optional per-bond `action_combine`/`force_combine` (default identity) + `action_scale` (Phi4/Phi6/SineGordon: identity combine; XY: cos/sin bond combine + `−β`) |
+| `ComplexAction<D,T>` + `ImagPart<D,T>` mixin | `Lattice<complex<T>>`     | real `action_kernel`/`force_kernel` (split-last) + `imag_action_kernel`/`imag_force_kernel` (`HasImagPart`: BoseGas) |
 | `GaugeAction<D>`     | link field               | `s_full_uncached()`, `force_into()` (Wilson`<G>`) |
 
-The scalar kernels return a lambda that captures the couplings by value, so the
-base hoists them into the hot loop exactly as a hand-written action would — the
+**One NN traversal, two knobs.** `NNAction` unifies the former SiteAction and
+BondAction: every scalar NN action is the same sweep — fold a per-bond COMBINE
+over the neighbours into `agg`, then FINALIZE `(self, agg)`. A site action's
+combine is the identity (`agg = Σ neighbours`, the finalize does the physics); a
+bond action's combine is the per-bond function (`cos(self−nbr)`) with a passthrough
+finalize and an overall `action_scale` applied post-reduce (so `s_full` is
+bit-identical to the old BondAction). Complex actions decompose the other way: the
+real (phase-quenched) part is `ComplexAction` and the imaginary observable is the
+orthogonal `ImagPart` mixin the leaf *also* derives — the decorator spirit of
+`WindowedAction`, so `struct BoseGas : ComplexAction<…>, ImagPart<…>`.
+
+The kernels return a lambda that captures the couplings by value, so the base
+hoists them into the hot loop exactly as a hand-written action would — the
 vectorised inner loop is unchanged. The gauge family is the odd one out: the
 plaquette *traversal* can't be shared (U(1) batches four signed angles through a
 Sleef cos/sin scratch on a `MatrixLinkLattice<U1,T>`; SU(N) batches complex matrix
@@ -195,7 +206,7 @@ cache + the concept surface and the leaf provides `s_full_uncached`/`force_into`
 
 ```cpp
 template <class T = double>
-struct Phi4 : SiteAction<Phi4<T>, T> {   // base supplies s_full / compute_force /
+struct Phi4 : NNAction<Phi4<T>, T> {   // base supplies s_full / compute_force /
     using value_type = T;                        //   compute_force_and_kick / caches
     T kappa  = 0;
     T lambda = 0;
@@ -209,11 +220,11 @@ struct Phi4 : SiteAction<Phi4<T>, T> {   // base supplies s_full / compute_force
 };
 ```
 
-Deriving from `SiteAction` still leaves `Phi4` an aggregate (the base is
+Deriving from `NNAction` still leaves `Phi4` an aggregate (the base is
 stateless-by-designated-init), so `act::Phi4<double>{.kappa=…, .lambda=…}` is
 unchanged. It satisfies `HmcAction` + `HasFusedKick` and drives
 `updater::Hmc<Phi4<double>, FastRng>` directly. A new action is a formula file plus
-this ~10-line struct, added to the family aggregator (`action/site.hpp` /
+this ~10-line struct, added to the family aggregator (`action/nn.hpp` /
 `action/gauge.hpp`); nothing else changes.
 
 Concept failures at the `updater::Hmc` instantiation site point at the missing
@@ -450,7 +461,7 @@ neither is includable from a pure-host TU.
 
 The seam is a four-hop chain (Phi4 shown):
 
-1. `action/site/formula/phi4_formula.hpp` — the per-site formula, `RETICOLO_HD`,
+1. `action/nn/formula/phi4_formula.hpp` — the per-site formula, `RETICOLO_HD`,
    the single source of truth.
 2. `action::Phi4` (CPU) and `cuda::Phi4ForceFunctor` (GPU) **both call that same
    formula** — they cannot silently diverge.

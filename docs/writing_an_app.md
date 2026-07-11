@@ -201,14 +201,13 @@ Pick the family base by the shape of the interaction:
 
 | family | base / handle | field | when |
 | ------ | ------------- | ----- | ---- |
-| site   | `SiteAction<D,T>`    | `Lattice<T>`          | self + nearest-neighbour sum (Phi4/Phi6/SineGordon) |
-| bond   | `BondAction<D,T>`    | `Lattice<T>`          | transcendental of the endpoint *difference* (XY) |
-| complex| `ComplexAction<D,T>` | `Lattice<complex<T>>` | S = S_R + i·S_I sign problem (BoseGas) |
+| nn     | `NNAction<D,T>`      | `Lattice<T>`          | any scalar nearest-neighbour action — self+neighbour-sum (Phi4/Phi6/SineGordon) *or* endpoint-difference bond (XY) |
+| complex| `ComplexAction<D,T>` + `ImagPart<D,T>` | `Lattice<complex<T>>` | S = S_R + i·S_I sign problem: real base + imaginary-part mixin (BoseGas) |
 | gauge  | `GaugeAction<D>`     | link field            | plaquette gauge theory — usually just write a group model (see below) |
 
-## A new site action
+## A new NN action
 
-Copy `site/phi4.hpp` + `site/formula/phi4_formula.hpp` and swap the formula body,
+Copy `nn/phi4.hpp` + `nn/formula/phi4_formula.hpp` and swap the formula body,
 the couplings, and `describe`.
 
 1. **Formula** — `include/reticolo/action/<family>/formula/<name>_formula.hpp`. Two
@@ -225,13 +224,13 @@ the couplings, and `describe`.
    //   `nbrs` = sum over all 2·ndim neighbours; returns the force -dS/dphi(x)
    ```
 
-2. **Struct** — `include/reticolo/action/site/<name>.hpp`. Derive from the base
+2. **Struct** — `include/reticolo/action/nn/<name>.hpp`. Derive from the base
    and bind the couplings into the formula with two kernels. It stays a
    designated-init aggregate:
 
    ```cpp
    template <class T = double>
-   struct MyAction : SiteAction<MyAction<T>, T> {
+   struct MyAction : NNAction<MyAction<T>, T> {
        using value_type = T;
        T c1 = T{0};                       // couplings
        void describe(log::Entry& e) const { e.line("MyAction<{}>", scalar_name<T>()); e.param("c1={:.3f}", c1); }
@@ -251,13 +250,14 @@ the couplings, and `describe`.
    and an LLR fast-path `s_full_and_force` built from `this->staged_force_energy`
    (see `phi4.hpp`).
 
-   Other shapes: for a bond action derive `BondAction` and provide
-   `action_bond_kernel` / `force_bond_kernel` / `bond_scale` (copy `site/xy.hpp`);
-   for a complex sign-problem action derive `ComplexAction` and add the
-   `imag_*` kernels (copy `site/bose_gas.hpp`).
+   Other shapes: for an endpoint-difference **bond** model, add per-bond
+   `action_combine` / `force_combine` (the NN operation) + passthrough finalizers
+   + `action_scale` (copy `nn/xy.hpp`). For a **complex** sign-problem action,
+   derive `ComplexAction` (real split-last part) *and* the `ImagPart` mixin, and
+   supply `imag_action_kernel` / `imag_force_kernel` (copy `complex/bose_gas.hpp`).
 
-3. **Register** — add `#include <reticolo/action/site/<name>.hpp>` to
-   `include/reticolo/action/site.hpp`. `updater::Hmc<MyAction<double>, FastRng>`
+3. **Register** — add `#include <reticolo/action/nn/<name>.hpp>` to
+   `include/reticolo/action/nn.hpp`. `updater::Hmc<MyAction<double>, FastRng>`
    now compiles.
 
 4. **App + test** — copy `apps/phi4_hmc.cpp`; add a force-vs-FD test (pattern
