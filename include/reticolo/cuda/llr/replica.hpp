@@ -1,7 +1,7 @@
 #pragma once
 
 // One device LLR replica: owns its DeviceField config and a cuda::Hmc whose
-// action is the device WindowedAction. The GPU twin of llr::Replica. Non-movable
+// action is the device WindowedAction. The GPU twin of orch::llr::Replica. Non-movable
 // (the Hmc holds field_ by reference and bakes device pointers into its graph),
 // so drivers hold `vector<unique_ptr<Replica>>` — same as the CPU side.
 //
@@ -11,7 +11,6 @@
 // enqueued before any sync). The replica exposes the per-trajectory primitives
 // launch_trajectory() (async) + read_dE() (gather) instead.
 
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/check.hpp>
@@ -19,6 +18,7 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/llr/windowed_action.cuh>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -29,7 +29,9 @@
 
 namespace reticolo::cuda::llr {
 
-template <class HostAction, class Integ = alg::integ::Omelyan2, class Field = DeviceField<double>>
+template <class HostAction,
+          class Integ = updater::integ::Omelyan2,
+          class Field = DeviceField<double>>
 class Replica {
 public:
     using value_type = typename Field::value_type;
@@ -75,7 +77,7 @@ public:
     }
 
     // LLR hot-start: disorder the config before warm-in, mirroring the CPU
-    // llr::Replica::hot_start. Opt-in — only actions whose device trait provides
+    // orch::llr::Replica::hot_start. Opt-in — only actions whose device trait provides
     // hot_start (the gauge families) do anything; scalar actions cold-start fine
     // and this is a no-op for them. The RNG stream uses the replica's seed with a
     // dedicated counter, disjoint from the per-trajectory momentum stream.

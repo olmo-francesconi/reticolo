@@ -1,5 +1,4 @@
 #include <reticolo/action/gauge/wilson.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
 #include <reticolo/cuda/check.hpp>
@@ -9,6 +8,7 @@
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.cuh>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -22,7 +22,7 @@
 // reduction. This TU runs the CPU action and the device path and compares,
 // validates the gather force against a finite difference, and checks MD
 // reversibility. (Excluded from the no-integrator-kernels lint gate: it names
-// alg::integ::Leapfrog to instantiate the generic integrator over the link
+// updater::integ::Leapfrog to instantiate the generic integrator over the link
 // field, the same as hmc_probe.cu / f32_probe.cu.)
 
 namespace reticolo::cuda {
@@ -186,7 +186,7 @@ bool u1_hmc_reversibility_ok() {
     field.copy_to_host(f0.data());
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
-    using Integ          = alg::integ::Leapfrog;
+    using Integ          = updater::integ::Leapfrog;
     constexpr double tau = 1.0;
     constexpr int n_md   = 12;
 
@@ -215,7 +215,7 @@ bool u1_hmc_runs() {
     act.beta = kBeta;
     DAct dact{act, field.topology()};
 
-    Hmc<DAct, alg::integ::Leapfrog, DField> hmc{std::move(dact), field, 1.0, 10};
+    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 1.0, 10};
     hmc.run(8);  // host-free: 8 gauge trajectories over the link field
     double const acc = hmc.acceptance();
     hmc.sync();

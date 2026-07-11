@@ -1,5 +1,4 @@
 #include <reticolo/action/gauge/wilson.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
@@ -13,6 +12,7 @@
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/math/group/su2.hpp>
 #include <reticolo/math/su2_ops.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -29,7 +29,7 @@
 // validates the device matrix ops against math::su2, the device action/force against
 // the CPU Wilson<SU2>, MD energy conservation + reversibility, the Gell-Mann
 // momentum moments, and the generic host-free Hmc instantiation. (Excluded from the
-// no-integrator-kernels lint gate: it names alg::integ::Leapfrog to instantiate the
+// no-integrator-kernels lint gate: it names updater::integ::Leapfrog to instantiate the
 // generic integrator over the matrix field, as hmc_probe.cu / u1_probe.cu.)
 
 namespace reticolo::cuda {
@@ -238,7 +238,7 @@ bool su2_energy_conserved_ok() {
 
         auto const n    = static_cast<long>(mom.size());
         double const h0 = (0.5 * reduce_sumsq_f64(mom.data(), n)) + act.s_full(field);
-        alg::integ::Leapfrog::run(act, field, mom, force, 0.8, n_md);
+        updater::integ::Leapfrog::run(act, field, mom, force, 0.8, n_md);
         double const h1 = (0.5 * reduce_sumsq_f64(mom.data(), n)) + act.s_full(field);
         RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
         return std::abs(h1 - h0);
@@ -286,7 +286,7 @@ bool su2_hmc_reversibility_ok() {
     field.copy_to_host(f0.data());
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
-    using Integ          = alg::integ::Leapfrog;
+    using Integ          = updater::integ::Leapfrog;
     constexpr double tau = 0.6;
     constexpr int n_md   = 12;
 
@@ -358,7 +358,7 @@ bool su2_hmc_runs() {
     w.beta = kBeta;
     DAct dact{w, field.topology()};
 
-    Hmc<DAct, alg::integ::Leapfrog, DField> hmc{std::move(dact), field, 0.4, 10};
+    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 0.4, 10};
     hmc.run(8);  // host-free: 8 SU(2) trajectories over the matrix link field
     double const acc = hmc.acceptance();
     hmc.sync();

@@ -88,7 +88,7 @@ void bench_one(
         rng.normal_fill(reinterpret_cast<double*>(mom.data()), 2 * flat_size(mom));
     }
 
-    using namespace reticolo::alg::integ;
+    using namespace reticolo::updater::integ;
     {
         double const t =
             time_per_call([&] { Leapfrog::run(action, phi, mom, force, k_tau, k_n_md); });

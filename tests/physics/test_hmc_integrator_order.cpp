@@ -1,9 +1,9 @@
-#include <reticolo/action/site/phi4.hpp>
-#include <reticolo/algorithm/hmc.hpp>
-#include <reticolo/algorithm/integrators.hpp>
+#include <reticolo/action/nn/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/core/site.hpp>
+#include <reticolo/updater/hmc/hmc.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <array>
 #include <cmath>
@@ -15,10 +15,10 @@ using reticolo::FastRng;
 using reticolo::Lattice;
 using reticolo::Site;
 using reticolo::action::Phi4;
-using reticolo::alg::Hmc;
-using reticolo::alg::integ::Leapfrog;
-using reticolo::alg::integ::Omelyan2;
-using reticolo::alg::integ::Omelyan4;
+using reticolo::updater::Hmc;
+using reticolo::updater::integ::Leapfrog;
+using reticolo::updater::integ::Omelyan2;
+using reticolo::updater::integ::Omelyan4;
 
 // Returns ensemble-mean |dH| over `n_traj` trajectories of (tau, n_md).
 // Each trajectory uses fresh Gaussian momenta drawn from `rng`.

@@ -22,7 +22,7 @@ TEST_CASE("real_scalar_t strips complex and passes real through", "[api][traits]
     STATIC_REQUIRE(std::is_same_v<real_scalar_t<std::complex<double>>, double>);
     STATIC_REQUIRE(std::is_same_v<real_scalar_t<std::complex<float>>, float>);
     // The LLR alias is the same trait.
-    STATIC_REQUIRE(std::is_same_v<llr::scalar_of_t<std::complex<double>>, double>);
+    STATIC_REQUIRE(std::is_same_v<action::scalar_of_t<std::complex<double>>, double>);
 }
 
 // ---- #1: s_full / s_imag and their caches return `double` for every action,
@@ -121,10 +121,10 @@ TEST_CASE("BoseGas fused kick equals force-then-kick", "[api][kick][bose]") {
 
 // ---- HmcResult exposes acceptance() as the blessed accessor. ----
 TEST_CASE("HmcResult exposes acceptance()", "[api][hmc]") {
-    alg::HmcResult const h{.dH = -0.1, .accepted = true};
+    updater::HmcResult const h{.dH = -0.1, .accepted = true};
     REQUIRE(h.acceptance() == 1.0);
 
-    alg::HmcResult const rej{.dH = 2.0, .accepted = false};
+    updater::HmcResult const rej{.dH = 2.0, .accepted = false};
     REQUIRE(rej.acceptance() == 0.0);
 }
 

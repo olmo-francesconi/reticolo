@@ -113,8 +113,8 @@ void print_row(Row const& r, int ndim, int L, int n_md) {
 int main() {
     using namespace reticolo;
     log::off();
-    using Integ      = alg::integ::Omelyan2;
-    using GaugeInteg = alg::integ::Omelyan2;
+    using Integ      = updater::integ::Omelyan2;
+    using GaugeInteg = updater::integ::Omelyan2;
 
     std::vector<Case> const cases = {
         {.ndim = 3, .L = 8, .n_traj = 200},
@@ -156,7 +156,7 @@ int main() {
         // Phi4.
         {
             Lattice<double> phi{shape_s};
-            alg::Hmc hmc{phi4, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
+            updater::Hmc hmc{phi4, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.step();
             }
@@ -178,7 +178,7 @@ int main() {
         // SineGordon.
         {
             Lattice<double> phi{shape_s};
-            alg::Hmc hmc{sg, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
+            updater::Hmc hmc{sg, phi, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, Integ{}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.step();
             }
@@ -200,7 +200,7 @@ int main() {
         // CompactU1 (gauge).
         {
             MatrixLinkLattice<math::group::U1, double> theta{shape_g};
-            alg::Hmc hmc{u1, theta, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, GaugeInteg{}};
+            updater::Hmc hmc{u1, theta, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, GaugeInteg{}};
             for (int i = 0; i < k_warmup; ++i) {
                 (void)hmc.step();
             }

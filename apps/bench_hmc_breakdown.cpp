@@ -16,7 +16,7 @@
 // (momentum refresh, rollback snapshot, kinetic, s_full, fused force+kick,
 // drift) for one action + shape + ambient OMP_NUM_THREADS, and report an
 // effective memory throughput per pass. Each pass is reconstructed from the
-// SAME public primitives alg::Hmc uses, so the numbers reflect the real hot
+// SAME public primitives updater::Hmc uses, so the numbers reflect the real hot
 // loop. A STREAM-triad probe gives the machine's achievable bandwidth ceiling.
 //
 // Effective bandwidth = (compulsory bytes) / time, counting each array the pass
@@ -200,7 +200,7 @@ void run_action(char const* name,
     }
     {  // drift
         double const t = time_per_call([&] {
-            alg::integ::drift_field(field, mom, dt);
+            updater::integ::drift_field(field, mom, dt);
             consume(field.data()[0]);
         });
         emit("drift", t, 3.0, n_md);

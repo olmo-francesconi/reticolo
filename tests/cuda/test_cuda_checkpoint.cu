@@ -1,6 +1,6 @@
-#include <reticolo/action/site/phi4.hpp>
+#include <reticolo/action/nn/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/cuda/actions/site/phi4.hpp>
+#include <reticolo/cuda/actions/nn/phi4.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
@@ -66,7 +66,7 @@ TEST_CASE("cuda checkpoint round-trip reproduces an uninterrupted run", "[cuda][
     std::vector<double> straight;
     {
         DField field = make_cold_field();
-        cuda::Hmc<DAct, alg::integ::Leapfrog, DField> hmc{
+        cuda::Hmc<DAct, updater::integ::Leapfrog, DField> hmc{
             DAct{phi4, field.topology()}, field, 1.0, 10, k_seed};
         hmc.run(k_n_first);
         hmc.run(k_n_second);
@@ -80,7 +80,7 @@ TEST_CASE("cuda checkpoint round-trip reproduces an uninterrupted run", "[cuda][
     std::filesystem::remove(ckpt, ec);
     {
         DField field = make_cold_field();
-        cuda::Hmc<DAct, alg::integ::Leapfrog, DField> hmc{
+        cuda::Hmc<DAct, updater::integ::Leapfrog, DField> hmc{
             DAct{phi4, field.topology()}, field, 1.0, 10, k_seed};
         hmc.run(k_n_first);
         hmc.sync();
@@ -102,7 +102,7 @@ TEST_CASE("cuda checkpoint round-trip reproduces an uninterrupted run", "[cuda][
         DField field{k_shape};
         field.copy_from_host(host.data());
         RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
-        cuda::Hmc<DAct, alg::integ::Leapfrog, DField> hmc{
+        cuda::Hmc<DAct, updater::integ::Leapfrog, DField> hmc{
             DAct{phi4, field.topology()}, field, 1.0, 10, seed};
         hmc.set_rng_counter(counter);
         hmc.run(k_n_second);

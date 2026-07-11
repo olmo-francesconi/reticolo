@@ -1,5 +1,4 @@
 #include <reticolo/action/gauge/wilson.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/matrix_link_lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
@@ -10,6 +9,7 @@
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/math/group/u1.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -24,7 +24,7 @@
 // (n_color=1). The host MatrixLinkLattice<U1> stores ndim·nsites angles in the
 // same [ndim][nsites] order as LinkLayout, so a flat copy round-trips — no
 // matrix conversion. (Excluded from the no-integrator-kernels lint gate: it names
-// alg::integ::Leapfrog to instantiate the generic integrator over the link field.)
+// updater::integ::Leapfrog to instantiate the generic integrator over the link field.)
 
 namespace reticolo::cuda {
 
@@ -109,7 +109,7 @@ bool wilson_u1_hmc_reversibility_ok() {
     field.copy_to_host(f0.data());
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
-    using Integ          = alg::integ::Leapfrog;
+    using Integ          = updater::integ::Leapfrog;
     constexpr double tau = 1.0;
     constexpr int n_md   = 12;
 
@@ -138,7 +138,7 @@ bool wilson_u1_hmc_runs() {
     act.beta = kBeta;
     DAct dact{act, field.topology()};
 
-    Hmc<DAct, alg::integ::Leapfrog, DField> hmc{std::move(dact), field, 1.0, 10};
+    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 1.0, 10};
     hmc.run(8);
     double const acc = hmc.acceptance();
     hmc.sync();

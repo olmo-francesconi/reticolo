@@ -1,8 +1,8 @@
 #include <reticolo/action/gauge/wilson.hpp>
-#include <reticolo/algorithm/hmc.hpp>
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/core/site.hpp>
+#include <reticolo/updater/hmc/hmc.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -15,10 +15,10 @@ using reticolo::FastRng;
 using reticolo::MatrixLinkLattice;
 using reticolo::Site;
 using reticolo::action::Wilson;
-using reticolo::alg::Hmc;
-using reticolo::alg::integ::Leapfrog;
-using reticolo::alg::integ::Omelyan2;
-using reticolo::alg::integ::Omelyan4;
+using reticolo::updater::Hmc;
+using reticolo::updater::integ::Leapfrog;
+using reticolo::updater::integ::Omelyan2;
+using reticolo::updater::integ::Omelyan4;
 
 template <class Integrator>
 static void check_reversibility() {

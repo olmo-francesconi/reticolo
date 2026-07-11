@@ -1,6 +1,6 @@
 // Nightly GPU physics harness (app-level, NOT a ctest gate — it runs full
 // simulations, which the deterministic suite must never do). It links the
-// umbrella, so it runs the CPU alg::Hmc and the GPU cuda::Hmc side-by-side in
+// umbrella, so it runs the CPU updater::Hmc and the GPU cuda::Hmc side-by-side in
 // ONE process and asserts the physics identities:
 //
 //   * <exp(-dH)> = 1  (Kennedy-Pendleton) — joint check of momentum
@@ -126,7 +126,7 @@ void phi4_block() {
         f.copy_from_host(zero.data());
         RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
         DAct meas{a, f.topology()};
-        cuda::Hmc<DAct, alg::integ::Leapfrog, DField> hmc{
+        cuda::Hmc<DAct, updater::integ::Leapfrog, DField> hmc{
             DAct{a, f.topology()}, f, k_tau, k_n_md, 0x9114ULL};
         hmc.run(k_n_therm);
         hmc.sync();
@@ -147,7 +147,7 @@ void phi4_block() {
         std::fill(phi.data(), phi.data() + phi.nsites(), 0.0);
         FastRng rng{0xC0DEULL};
         action::Phi4<double> ac{.kappa = 0.18, .lambda = 1.0};
-        alg::Hmc hmc{ac, phi, rng, {.tau = k_tau, .n_md = k_n_md}, alg::integ::leapfrog};
+        updater::Hmc hmc{ac, phi, rng, {.tau = k_tau, .n_md = k_n_md}, updater::integ::leapfrog};
         for (int i = 0; i < k_n_therm; ++i) {
             (void)hmc.step(log::Mode::silent);
         }
@@ -192,7 +192,7 @@ void su2_block() {
         DAct meas{a, f.topology()};
         // Omelyan2 (as in the canonical su2_hmc app): Leapfrog at this dt is past
         // the SU(2) stability edge from a cold start and rejects every trajectory.
-        cuda::Hmc<DAct, alg::integ::Omelyan2, DField> hmc{
+        cuda::Hmc<DAct, updater::integ::Omelyan2, DField> hmc{
             DAct{a, f.topology()}, f, k_tau, k_n_md, 0x5202ULL};
         hmc.run(k_n_therm);
         hmc.sync();
@@ -210,7 +210,7 @@ void su2_block() {
         cold_identity_su2(u, ndim);
         FastRng rng{0xBEEFULL};
         A ac{.beta = beta};
-        alg::Hmc hmc{ac, u, rng, {.tau = k_tau, .n_md = k_n_md}, alg::integ::omelyan2};
+        updater::Hmc hmc{ac, u, rng, {.tau = k_tau, .n_md = k_n_md}, updater::integ::omelyan2};
         for (int i = 0; i < k_n_therm; ++i) {
             (void)hmc.step(log::Mode::silent);
         }
@@ -246,7 +246,7 @@ void bose_gas_block() {
         DAct meas{a, f.topology()};
         // Omelyan2 (as in the canonical bose_gas_hmc app): leapfrog at this
         // trajectory length is past the BoseGas stability edge from a cold start.
-        cuda::Hmc<DAct, alg::integ::Omelyan2, DField> hmc{
+        cuda::Hmc<DAct, updater::integ::Omelyan2, DField> hmc{
             DAct{a, f.topology()}, f, k_tau, k_n_md, 0xB05EULL};
         hmc.run(k_n_therm);
         hmc.sync();
@@ -268,7 +268,7 @@ void bose_gas_block() {
         std::fill(phi.data(), phi.data() + phi.nsites(), std::complex<double>{0.0, 0.0});
         FastRng rng{0xB1A5ULL};
         action::BoseGas<double> ac{.mass = 1.0, .lambda = 0.5, .mu = 0.3};
-        alg::Hmc hmc{ac, phi, rng, {.tau = k_tau, .n_md = k_n_md}, alg::integ::omelyan2};
+        updater::Hmc hmc{ac, phi, rng, {.tau = k_tau, .n_md = k_n_md}, updater::integ::omelyan2};
         auto const v = static_cast<double>(phi.nsites());
         for (int i = 0; i < k_n_therm; ++i) {
             (void)hmc.step(log::Mode::silent);

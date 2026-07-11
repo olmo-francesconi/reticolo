@@ -1,5 +1,5 @@
 #include <reticolo/action/complex/bose_gas.hpp>
-#include <reticolo/algorithm/integrators.hpp>
+#include <reticolo/action/windowed_action.hpp>
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng/rng.hpp>
@@ -12,7 +12,7 @@
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/llr/windowed_action.cuh>
 #include <reticolo/cuda/reduce.cuh>
-#include <reticolo/llr/windowed_action.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cmath>
 #include <complex>
@@ -28,7 +28,7 @@
 // reinterpret (layout-compatible). device_functors<BoseGas<T>> shares the S_R/F_R
 // per-site formula with the CPU action; the complex HMC atoms (drift/kick/kinetic
 // over 2·n reals) live in cuda/actions/complex/bose_gas.hpp. (Excluded from the
-// no-integrator-kernels lint gate: it names alg::integ::Leapfrog.)
+// no-integrator-kernels lint gate: it names updater::integ::Leapfrog.)
 
 namespace reticolo::cuda {
 
@@ -122,7 +122,7 @@ bool hmc_runs_impl() {
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
     DAct dact{make_action<T>(), field.topology()};
-    Hmc<DAct, alg::integ::Leapfrog, DField> hmc{std::move(dact), field, 0.5, 10};
+    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 0.5, 10};
     hmc.run(8);
     double const acc = hmc.acceptance();
     hmc.sync();
@@ -175,7 +175,7 @@ bool bose_gas_hmc_reversibility_ok() {
     field.copy_to_host(as_dev(f0.data()));
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
-    using Integ          = alg::integ::Leapfrog;
+    using Integ          = updater::integ::Leapfrog;
     constexpr double tau = 0.5;
     constexpr int n_md   = 10;
 
@@ -254,7 +254,7 @@ bool bose_gas_force_imag_matches_cpu() {
 }
 
 // The whole mode-B windowed path: device cuda::llr::WindowedAction<BoseGas> must
-// reproduce the CPU llr::WindowedAction<BoseGas> for both the windowed action
+// reproduce the CPU action::WindowedAction<BoseGas> for both the windowed action
 // S_LLR = S_R + a·S_I + (S_I−E_n)²/2δ² and the combined force F_R + scale·F_I.
 // Templated so the same check runs in f64 (roundoff) and f32 (device sin/cos +
 // the f32 field precision, looser tolerance).
@@ -267,7 +267,7 @@ bool bose_gas_windowed_modeB_matches_cpu_impl(double s_tol, double f_tol) {
     constexpr double delta              = 4.0;
 
     // CPU windowed (mode B via HasImagPart).
-    reticolo::llr::WindowedAction<action::BoseGas<T>> w{
+    reticolo::action::WindowedAction<action::BoseGas<T>> w{
         a, static_cast<T>(a_slope), static_cast<T>(e_n), static_cast<T>(delta)};
     static_assert(decltype(w)::k_complex, "BoseGas CPU WindowedAction must be mode B");
     double const s_cpu = w.s_full(host);
@@ -278,7 +278,8 @@ bool bose_gas_windowed_modeB_matches_cpu_impl(double s_tol, double f_tol) {
     using DField = DeviceField<cplx<T>>;
     DField dfield{kShape};
     dfield.copy_from_host(as_dev(host.data()));
-    llr::WindowedAction<action::BoseGas<T>, DField> dw{a, dfield.topology(), a_slope, e_n, delta};
+    cuda::llr::WindowedAction<action::BoseGas<T>, DField> dw{
+        a, dfield.topology(), a_slope, e_n, delta};
     static_assert(decltype(dw)::k_complex, "BoseGas device WindowedAction must be mode B");
 
     DeviceBuffer<double> s_dev_buf{1};

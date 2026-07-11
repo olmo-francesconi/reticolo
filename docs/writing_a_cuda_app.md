@@ -67,12 +67,12 @@ field.copy_from_host(host.data());
 RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
 
 DAct meas{phi4, field.topology()};                      // measurement action (own scratch)
-cuda::Hmc<DAct, alg::integ::Leapfrog, DField> hmc{
+cuda::Hmc<DAct, updater::integ::Leapfrog, DField> hmc{
     DAct{phi4, field.topology()}, field, tau, n_md, seed};
 ```
 
-`alg::integ::Leapfrog` is the *same* type the CPU `alg::Hmc` uses — swap it for
-`alg::integ::Omelyan2` / `Omelyan4` to change integrator.
+`updater::integ::Leapfrog` is the *same* type the CPU `updater::Hmc` uses — swap it for
+`updater::integ::Omelyan2` / `Omelyan4` to change integrator.
 
 ## Step 4 — own the for loop (host-free blocks)
 

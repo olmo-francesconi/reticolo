@@ -124,7 +124,7 @@ Layout facts that matter for CUDA:
                          APP main()  (owns the for loop)
         ┌───────────────────────┴───────────────────────┐
    SINGLE-REPLICA                                     LLR ENSEMBLE
-   for traj in 1..N:                          llr::Driver
+   for traj in 1..N:                          orch::llr::Driver
      updater.step()                            #pragma omp parallel for (replicas) ◄ REPLICA-PARALLEL
      obs → Series → HDF5                         each Replica: phi, rng, HMC,
         │                                          WindowedAction(base, a, E_n, δ)

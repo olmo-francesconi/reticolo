@@ -22,7 +22,7 @@ using namespace reticolo;
 namespace {
 // StreamSet no longer splits a fill across its site streams itself
 // (normal_fill_sites / block() / visit_blocks() were removed — that split is
-// now the owner's job, see alg::Hmc::sample_momenta_). Draw the same total
+// now the owner's job, see updater::Hmc::sample_momenta_). Draw the same total
 // count across every site stream plus one driver draw, in a fixed order, so
 // the round-trip below still exercises the full stream set.
 template <class R>

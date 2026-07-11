@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
     RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
 
     DAct meas{action, field.topology()};  // measurement action (own scratch)
-    cuda::Hmc<DAct, alg::integ::Omelyan2, DField> hmc{
+    cuda::Hmc<DAct, updater::integ::Omelyan2, DField> hmc{
         DAct{action, field.topology()}, field, tau, n_md, cf.seed};
 
     io::Writer out{outpath, argc, argv, &p};

@@ -46,7 +46,8 @@ Result measure(Field const& thermalised,
                double tau,
                int n_meas) {
     Field phi = thermalised;  // start each point from the same equilibrium config
-    alg::Hmc hmc{action, phi, FastRng{9001}, {.tau = tau, .n_md = n_md}, integ, log::Mode::silent};
+    updater::Hmc hmc{
+        action, phi, FastRng{9001}, {.tau = tau, .n_md = n_md}, integ, log::Mode::silent};
 
     long accepted = 0;
     double sum_dh = 0.0, sum_dh2 = 0.0;
@@ -76,12 +77,12 @@ struct Sweep {
 
 template <class Field, class Action>
 void run_action(char const* label, Field& phi, Action const& action, double tau, int n_meas) {
-    using namespace reticolo::alg::integ;
+    using namespace reticolo::updater::integ;
 
     // Thermalise once with a reliable integrator; every point starts from a
     // copy of this equilibrium config (HMC targets exp(-S) for all integrators).
     {
-        alg::Hmc warm{
+        updater::Hmc warm{
             action, phi, FastRng{42}, {.tau = tau, .n_md = 24}, omelyan2, log::Mode::silent};
         for (int i = 0; i < 400; ++i) {
             (void)warm.step(log::Mode::silent);

@@ -18,6 +18,7 @@ endfunction()
 
 reticolo_add_app(phi4_hmc            phi4_hmc.cpp)
 reticolo_add_app(phi4_hmc_f32        phi4_hmc_f32.cpp)
+reticolo_add_app(param_span_hmc      param_span_hmc.cpp)
 reticolo_add_app(phi4_llr            phi4_llr.cpp)
 reticolo_add_app(bose_gas_hmc        bose_gas_hmc.cpp)
 reticolo_add_app(bose_gas_hmc_f32    bose_gas_hmc_f32.cpp)
@@ -104,7 +105,7 @@ if(RETICOLO_ENABLE_CUDA)
     reticolo_add_cuda_app(su3_llr_cuda      cuda/su3_llr_cuda.cu)
     reticolo_add_cuda_app(bose_gas_hmc_cuda cuda/bose_gas_hmc_cuda.cu)
     reticolo_add_cuda_app(bose_gas_llr_cuda cuda/bose_gas_llr_cuda.cu)
-    # Nightly physics harness: runs CPU alg::Hmc and GPU cuda::Hmc side-by-side
+    # Nightly physics harness: runs CPU updater::Hmc and GPU cuda::Hmc side-by-side
     # and asserts the [nightly] identities (<exp(-dH)>=1, CPU-vs-GPU equivalence,
     # plaquette at beta). App-level, not a ctest gate (it runs full simulations).
     reticolo_add_cuda_app(nightly_cuda      cuda/nightly_cuda.cu)

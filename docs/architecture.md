@@ -5,7 +5,7 @@ the way it is.
 
 ## Three CMake targets
 
-- `reticolo::core` — INTERFACE, header-only. Actions, algorithms, observers,
+- `reticolo::core` — INTERFACE, header-only. Actions, updaters, observers,
   lattice, RNG, LLR.
 - `reticolo::io` — STATIC. The only TU that `#include <hdf5.h>`; HDF5's
   `hid_t` never leaves `src/io/writer.cpp` thanks to a PIMPL'd `io::Writer`
@@ -33,7 +33,7 @@ balloon every TU touching IO. The split keeps both.
 ```
 
 re-exports every public header. The library uses short namespaces directly
-(`reticolo::alg`, `reticolo::obs`, `reticolo::io`, `reticolo::cli`) and the
+(`reticolo::updater`, `reticolo::obs`, `reticolo::io`, `reticolo::cli`) and the
 umbrella adds one alias inside `namespace reticolo`:
 
 ```cpp
@@ -41,7 +41,7 @@ namespace act = action;
 ```
 
 so `using namespace reticolo;` in an app yields `Lattice<double>`, `FastRng`,
-`act::Phi4`, `alg::Hmc`, `io::Writer`, `cli::Parser`, `obs::magnetization`
+`act::Phi4`, `updater::Hmc`, `io::Writer`, `cli::Parser`, `obs::magnetization`
 all in scope.
 
 ## Core types
@@ -107,7 +107,7 @@ The pool
 holds **no geometry** — who draws from which stream is the owning
 algorithm's contract.
 
-`alg::Hmc` **owns** its randomness: the ctor takes a freshly-seeded family
+`updater::Hmc` **owns** its randomness: the ctor takes a freshly-seeded family
 generator **by value**, draws one `uniform_u64()` from it, and builds a
 `StreamSet` with exactly one site stream per item of the canonical field
 partition (`exec::partition` under the Hmc's frozen thread/slab config).
@@ -134,22 +134,23 @@ right member functions; the HMC updater concept-checks at the call site.
 the updater. It is not a blanket ban: `cli::Parser`'s `VarSlotBase` type-erasure
 is one small virtual hierarchy off the hot path, in the CLI layer, and that's
 fine. A bare `grep virtual` will hit it; that's not an invariant break.)
-Actions split into four families by interaction shape, one folder each:
-`action/site/` (scalar `Lattice<T>`, self + NN-sum: Phi4/Phi6/SineGordon),
-`action/bond/` (scalar `Lattice<T>`, endpoint-difference: XY), `action/complex/`
-(`Lattice<complex<T>>` sign problem: BoseGas), and `action/gauge/`
-(`MatrixLinkLattice<G,T>`: Wilson). All satisfy the
-**same** field-agnostic concepts; only the `Field` they name differs. Each family
-folder holds its leaf structs and its family base (`<family>_action.hpp`) at the
-top and its per-action physics in `formula/`; the shared dimension-generic
-traversal engine lives once in `action/sweep/`.
+Actions split into three families by interaction shape, one folder each:
+`action/nn/` (scalar `Lattice<T>` nearest-neighbour — both the self+NN-sum
+Phi4/Phi6/SineGordon and the endpoint-difference XY, unified under one
+`NNAction`), `action/complex/` (`Lattice<complex<T>>` sign problem: BoseGas'
+real part, with the imaginary part bolted on as a mixin), and `action/gauge/`
+(`MatrixLinkLattice<G,T>`: Wilson). All satisfy the **same** field-agnostic
+concepts; only the `Field` they name differs. Each family folder holds its leaf
+structs and its family base (`<family>_action.hpp`) at the top and its per-action
+physics in `formula/`; the shared dimension-generic traversal engine lives once
+in `action/sweep/`.
 
 ### The concepts
 
 - **`HmcAction<A, Field>`** — the baseline. `s_full(l)` returns total S (for
   ΔH and any diagnostic series logging S); `compute_force(l, force)` writes
   `-dS/dfield` into `force`, called once per MD step. `HmcAction + Rng` is the
-  entire `alg::Hmc` requirement.
+  entire `updater::Hmc` requirement.
 - **`HasFusedKick<A, Field>`** — refines `HmcAction` with
   `compute_force_and_kick(l, mom, k)`, which computes the force and applies
   `mom += k·F` in a single pass without materialising the force lattice. The
@@ -158,7 +159,7 @@ traversal engine lives once in `action/sweep/`.
 - **`HasImagPart<A, Field>`** — refines `HmcAction` for complex actions with a
   sign problem: `s_imag(l)` is the imaginary part (the LLR constraint
   observable in the phase-quenched ensemble) and `compute_force_imag(l, force)`
-  its gradient. Only `BoseGas` uses it today; `llr::WindowedAction` switches to
+  its gradient. Only `BoseGas` uses it today; `action::WindowedAction` switches to
   its complex mode when the base satisfies it.
 
 Earlier revisions carried a `LocalAction` Metropolis baseline
@@ -177,13 +178,23 @@ into the leaf's coupling-hoisting kernels:
 
 | base | field | leaf kernels (bind the shared `<family>/formula/*`) |
 | ---- | ----- | ---------------------------------------------------- |
-| `SiteAction<D,T>`    | `Lattice<T>`              | `action_kernel()`, `force_kernel()` (NN-local: Phi4/Phi6/SineGordon) |
-| `BondAction<D,T>`    | `Lattice<T>`              | `action_bond_kernel()`, `force_bond_kernel()`, `bond_scale()` (XY)   |
-| `ComplexAction<D,T>` | `Lattice<complex<T>>`     | real + `imag_*` kernels (`HasImagPart`: BoseGas) |
+| `NNAction<D,T>`      | `Lattice<T>`              | finalizers `action_kernel()`/`force_kernel()` + optional per-bond `action_combine`/`force_combine` (default identity) + `action_scale` (Phi4/Phi6/SineGordon: identity combine; XY: cos/sin bond combine + `−β`) |
+| `ComplexAction<D,T>` + `ImagPart<D,T>` mixin | `Lattice<complex<T>>`     | real `action_kernel`/`force_kernel` (split-last) + `imag_action_kernel`/`imag_force_kernel` (`HasImagPart`: BoseGas) |
 | `GaugeAction<D>`     | link field               | `s_full_uncached()`, `force_into()` (Wilson`<G>`) |
 
-The scalar kernels return a lambda that captures the couplings by value, so the
-base hoists them into the hot loop exactly as a hand-written action would — the
+**One NN traversal, two knobs.** `NNAction` unifies the former SiteAction and
+BondAction: every scalar NN action is the same sweep — fold a per-bond COMBINE
+over the neighbours into `agg`, then FINALIZE `(self, agg)`. A site action's
+combine is the identity (`agg = Σ neighbours`, the finalize does the physics); a
+bond action's combine is the per-bond function (`cos(self−nbr)`) with a passthrough
+finalize and an overall `action_scale` applied post-reduce (so `s_full` is
+bit-identical to the old BondAction). Complex actions decompose the other way: the
+real (phase-quenched) part is `ComplexAction` and the imaginary observable is the
+orthogonal `ImagPart` mixin the leaf *also* derives — the decorator spirit of
+`WindowedAction`, so `struct BoseGas : ComplexAction<…>, ImagPart<…>`.
+
+The kernels return a lambda that captures the couplings by value, so the base
+hoists them into the hot loop exactly as a hand-written action would — the
 vectorised inner loop is unchanged. The gauge family is the odd one out: the
 plaquette *traversal* can't be shared (U(1) batches four signed angles through a
 Sleef cos/sin scratch on a `MatrixLinkLattice<U1,T>`; SU(N) batches complex matrix
@@ -195,7 +206,7 @@ cache + the concept surface and the leaf provides `s_full_uncached`/`force_into`
 
 ```cpp
 template <class T = double>
-struct Phi4 : SiteAction<Phi4<T>, T> {   // base supplies s_full / compute_force /
+struct Phi4 : NNAction<Phi4<T>, T> {   // base supplies s_full / compute_force /
     using value_type = T;                        //   compute_force_and_kick / caches
     T kappa  = 0;
     T lambda = 0;
@@ -209,30 +220,37 @@ struct Phi4 : SiteAction<Phi4<T>, T> {   // base supplies s_full / compute_force
 };
 ```
 
-Deriving from `SiteAction` still leaves `Phi4` an aggregate (the base is
+Deriving from `NNAction` still leaves `Phi4` an aggregate (the base is
 stateless-by-designated-init), so `act::Phi4<double>{.kappa=…, .lambda=…}` is
 unchanged. It satisfies `HmcAction` + `HasFusedKick` and drives
-`alg::Hmc<Phi4<double>, FastRng>` directly. A new action is a formula file plus
-this ~10-line struct, added to the family aggregator (`action/site.hpp` /
+`updater::Hmc<Phi4<double>, FastRng>` directly. A new action is a formula file plus
+this ~10-line struct, added to the family aggregator (`action/nn.hpp` /
 `action/gauge.hpp`); nothing else changes.
 
-Concept failures at the `alg::Hmc` instantiation site point at the missing
+Concept failures at the `updater::Hmc` instantiation site point at the missing
 member — read the compiler error.
 
 ## Updaters
 
-| updater                | needs                                       |
-| ---------------------- | ------------------------------------------- |
-| `alg::Hmc<A,R,Integ>`  | `HmcAction` (+ optionally `HasFusedKick`)   |
+| updater                | models                | needs                                     |
+| ---------------------- | --------------------- | ----------------------------------------- |
+| `updater::Hmc<A,R,Integ>`  | `updater::Updater`        | `HmcAction` (+ optionally `HasFusedKick`) |
 
-`alg::Hmc` is the only update algorithm; `llr::Replica` orchestrates an
-ensemble of windowed HMC chains on top of it (see the LLR section).
+`updater::Hmc` is the only update algorithm. The **`updater::Updater`** concept
+([`updater/concepts.hpp`](../include/reticolo/updater/concepts.hpp)) is the
+updater-level analogue of `action::HmcAction` — the contract apps and the
+orchestration layer rely on: `step()` (returns `{dH, accepted}`),
+`last_s_full()`, `rng()`. It is duck-typed and checked at the use site (both
+orchestration workers `static_assert` their sampler against it), so a new
+updater is just a class modelling it — no base class, reuse the same
+`updater::integ::*` type-parameters. `orch::llr::Replica` and `orch::span::Chain`
+each own an `updater::Hmc` and drive it through this surface.
 
 The HMC integrator is a **type parameter**, not a runtime switch. Three
-ship: `alg::integ::Omelyan2` (2nd-order minimum-norm, ~1.4× speedup at the
-same acceptance — the **default**), `alg::integ::Leapfrog` (2nd-order,
-cheapest per MD step), `alg::integ::Omelyan4` (4th-order, large τ). Select
-one at the `Hmc` ctor with a brace-free tag value (`alg::integ::leapfrog`, CTAD
+ship: `updater::integ::Omelyan2` (2nd-order minimum-norm, ~1.4× speedup at the
+same acceptance — the **default**), `updater::integ::Leapfrog` (2nd-order,
+cheapest per MD step), `updater::integ::Omelyan4` (4th-order, large τ). Select
+one at the `Hmc` ctor with a brace-free tag value (`updater::integ::leapfrog`, CTAD
 deduces the type) or the explicit `Hmc<A, R, Omelyan2>` form. Adding one =
 struct with a static `run(...)`; the matching `inline constexpr` tag is a
 one-liner.
@@ -341,26 +359,71 @@ prints the banner. With `replicas = true` each scoped run id also gets its
 own `<workspace>/<stem>.<rNNN>.log`.
 
 `log::scope("rNNN")` (RAII) binds a thread-local replica tag —
-`llr::Replica` binds its own id inside its public methods, so apps and
+`orch::llr::Replica` binds its own id inside its public methods, so apps and
 drivers only bind a scope when they run their own logging code inside a
 parallel region; transitively-called code picks the tag up automatically.
 
-`Lattice`, `FastRng`, `Writer`, action, algorithm, and `llr::Replica`
+`Lattice`, `FastRng`, `Writer`, action, updater, and `orch::llr::Replica`
 constructors auto-announce, so most apps don't call `log::info` at all.
 `log::off()` short-circuits before any formatting — tests link a shared
 `tests/test_main.cpp` that calls it; benches and `tune_*` apps too.
 
-## LLR replicas
+## Orchestration
 
-LLR reconstructs the density of states ρ(S) by running N replicas, each
-pinned by a Gaussian-window penalty to a different region of action space.
-Replicas sample in parallel (OpenMP), each by its own HMC. A
-Newton-Raphson + Robbins-Monro loop adapts a per-replica reweighting
-parameter `a`. Periodic even/odd replica exchange improves mixing.
+An orchestration runs **many concurrent simulations** and reduces their output.
+`orch/` is that subsystem: a physics-free **spine** at the top, with concrete
+orchestrators in subfolders (`orch/span/`, `orch/llr/`). The dependency is
+one-way `orch/<name> → orch → core` — the spine never mentions a window, a tilt,
+or an exchange.
 
-`llr::Replica` wraps a `Base` action in `llr::WindowedAction` (adds the
-`a·S + (S − E_n)²/2δ²` shift) and holds its own RNG / lattice / HMC. LLR
-is the one place in the library where OpenMP shows up.
+The spine (`reticolo::orch`) is four small pieces:
+
+- **`Worker`** concept ([`orch/concepts.hpp`](../include/reticolo/orch/concepts.hpp))
+  — a self-contained simulation unit; just `id()`. The `Checkpointable`
+  refinement adds `field()` + `rng()`.
+- **`ThreadPlan` / `plan_threads`** ([`orch/thread_plan.hpp`](../include/reticolo/orch/thread_plan.hpp))
+  — split the ambient OpenMP budget into an outer worker team (`concurrency`)
+  and inner per-worker HMC teams (`m`); saturate workers first.
+- **`parallel_workers(workers, plan, body)`** ([`orch/ensemble.hpp`](../include/reticolo/orch/ensemble.hpp))
+  — the one concurrent primitive: run `body(i, worker)` over every worker at
+  once under the plan. Concurrent-only — the thread-unsafe drain (HDF5, logging)
+  stays a serial loop in the caller, so *the orchestration owns its loop*.
+- **`save_ensemble` / `load_ensemble`** ([`orch/checkpoint.hpp`](../include/reticolo/orch/checkpoint.hpp))
+  — snapshot every `Checkpointable` worker's field + rng + `OrchState`; opt-in
+  `save_extra`/`load_extra` per worker and an orchestrator-level extra hook keep
+  it physics-free.
+
+Two orchestrators ship as clients:
+
+### Parameter span (`orch::span`)
+
+`orch::span::Chain<Action,…>` is a generic HMC worker (any scalar/gauge action);
+the app builds one per point of a parameter grid (the grid is the app's reason to
+exist) and hands them to `orch::span::Orchestrator` by move. `setup(out)` opens
+the `/worker_NNN/…` series; `run(Schedule)` runs the workers concurrently and
+records their time series. `apps/param_span_hmc` sweeps `kappa` in one binary —
+an in-process replacement for an outer bash sweep.
+
+### LLR (`orch::llr`)
+
+LLR reconstructs the density of states ρ(S) by running N replicas, each pinned by
+a Gaussian-window penalty to a different region of action space, each sampled by
+its own HMC. A Newton-Raphson + Robbins-Monro loop adapts a per-replica
+reweighting parameter `a`; periodic even/odd replica exchange improves mixing.
+`orch::llr::Replica` wraps a `Base` action in `action::WindowedAction` and is an
+`orch::Worker`; `orch::llr::Orchestrator` is the client of the spine — a two-phase
+object where `setup(out)` plans threads, builds the replica ladder (a uniform E_n
+sweep the orchestrator synthesises from `Spec`), resumes, and opens the series,
+and `run()` / `run_smoothed(SmoothConfig)` drive `parallel_workers` and add
+exchange as a serial coupling between waves. App-specific field initialisation
+(cold-to-identity for gauge, hot-start for U(1)/complex) happens between `setup()`
+and `run()` via `replicas()`, guarded by `resuming()`.
+`WindowedAction` itself is a general **decorator action** (in `action/`, not
+LLR): `S_win = S_base + a·Q + (Q−E_n)²/2δ²` where the constrained observable `Q`
+is a `Constraint` policy — `SelfConstraint` (Q = the action, real LLR),
+`ImagConstraint` (Q = `s_imag`, sign-problem LLR), or `ObservableConstraint<Obs>`
+for any custom observable (window on magnetization, plaquette, topological
+charge…). The self/imag defaults reproduce the previous hardcoded modes exactly.
 
 Two convention watch-outs:
 
@@ -410,15 +473,15 @@ neither is includable from a pure-host TU.
 
 The seam is a four-hop chain (Phi4 shown):
 
-1. `action/site/formula/phi4_formula.hpp` — the per-site formula, `RETICOLO_HD`,
+1. `action/nn/formula/phi4_formula.hpp` — the per-site formula, `RETICOLO_HD`,
    the single source of truth.
 2. `action::Phi4` (CPU) and `cuda::Phi4ForceFunctor` (GPU) **both call that same
    formula** — they cannot silently diverge.
 3. `cuda/actions/site/phi4.hpp` — the `device_functors<action::Phi4<T>>` trait adapts
    a *host* action struct into device launchers (force / s_full / sample_momenta).
 4. `cuda::DeviceAction<HostAction, Field>` + `cuda::Hmc<DAct, Integ, Field>` — the
-   generic device HMC, reusing the *same* `alg::integ::*` integrator tags as the
-   CPU `alg::Hmc`. No virtual dispatch, no `switch(action)` — the trait resolves
+   generic device HMC, reusing the *same* `updater::integ::*` integrator tags as the
+   CPU `updater::Hmc`. No virtual dispatch, no `switch(action)` — the trait resolves
    at compile time (a lint gate forbids integrator-specific kernel code).
 
 The *loop structure* may legitimately differ CPU↔device (U(1) scatter→gather;

@@ -7,21 +7,15 @@
 
 #include <reticolo/reticolo.hpp>
 
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <filesystem>
-#include <format>
-#include <memory>
 #include <string>
-#include <vector>
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Group    = math::group::SU2;
-    using Action   = action::Wilson<Group, double>;
-    using Field    = MatrixLinkLattice<Group, double>;
-    using ReplicaT = llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, Field>;
+    using Group  = math::group::SU2;
+    using Action = action::Wilson<Group, double>;
+    using Field  = MatrixLinkLattice<Group, double>;
 
     // ---- CLI ----
     cli::Parser p{"su2_llr", "LLR with replica exchange for SU(2) Wilson action"};
@@ -59,25 +53,32 @@ int main(int argc, char** argv) {
     Action const base{.beta = beta};
     log::act(base);
 
-    // ---- Replica geometry ----
-    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e = delta;
-    double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
+    // ---- Orchestrator: owns geometry, the replica ladder, threading ----
+    orch::llr::Orchestrator<Action, FastRng, updater::integ::Omelyan2, double, Field> llr{
+        base,
+        orch::llr::Spec{.shape      = shape,
+                        .seed       = seed,
+                        .e_min      = e_min,
+                        .e_max      = e_max,
+                        .delta      = delta,
+                        .tau        = tau,
+                        .n_md       = n_md,
+                        .n_nr       = n_nr,
+                        .n_therm_nr = n_therm_nr,
+                        .n_meas_nr  = n_meas_nr,
+                        .n_rm       = n_rm,
+                        .n_therm_rm = n_therm_rm,
+                        .n_meas_rm  = n_meas_rm}};
 
-    // ---- Replicas (each cold-started to SU(2) identity) ----
-    std::vector<std::unique_ptr<ReplicaT>> reps;
-    reps.reserve(static_cast<std::size_t>(n_rep));
-    for (int n = 0; n < n_rep; ++n) {
-        double const e_n = e_min + (static_cast<double>(n) * d_e);
-        reps.push_back(std::make_unique<ReplicaT>(
-            base,
-            FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
-            ReplicaT::Spec{
-                .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
-            alg::HmcSpec{.tau = tau, .n_md = n_md}));
-        // Cold-start each replica's field to SU(2) identity (Re U_{00} =
-        // Re U_{11} = 1, all else 0).
-        Field& phi           = reps.back()->phi();
+    // ---- Output ----
+    io::Writer out{outpath, argc, argv, &p};
+    out.start_phase("llr");
+    llr.setup(out);
+
+    // ---- Cold-start each replica's field to SU(2) identity (Re U_{00} =
+    //      Re U_{11} = 1, all else 0); the default ctor leaves invalid zeros. ----
+    for (auto& r : llr.replicas()) {
+        Field& phi           = r->field();
         std::size_t const ns = phi.nsites();
         for (std::size_t mu = 0; mu < static_cast<std::size_t>(ndim); ++mu) {
             double* const blk = phi.mu_block_data(mu);
@@ -88,23 +89,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // ---- Output ----
-    FastRng exch_rng{seed};
-    io::Writer out{outpath, argc, argv, &p};
-    out.start_phase("llr");
-
     // ---- Drive: NR warm-up + RM + exchange ----
-    llr::run(reps,
-             exch_rng,
-             llr::DriverSpec{.n_nr       = n_nr,
-                             .n_therm_nr = n_therm_nr,
-                             .n_meas_nr  = n_meas_nr,
-                             .n_rm       = n_rm,
-                             .n_therm_rm = n_therm_rm,
-                             .n_meas_rm  = n_meas_rm,
-                             .delta      = delta,
-                             .e_min      = e_min,
-                             .E_max      = e_max_snapped,
-                             .d_e        = d_e},
-             out);
+    llr.run();
 }

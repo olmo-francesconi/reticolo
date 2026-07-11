@@ -2,8 +2,8 @@
 
 // Generic device HMC — nvcc-only (.cuh; transitively launches kernels).
 //
-// Mirrors alg::Hmc::step() once. There is NO action or integrator switch: the
-// integrator is the type parameter Integ (an unchanged alg::integ::* tag), and
+// Mirrors updater::Hmc::step() once. There is NO action or integrator switch: the
+// integrator is the type parameter Integ (an unchanged updater::integ::* tag), and
 // the action is any type exposing s_full(Field) / compute_force(Field, Field)
 // — here cuda::DeviceAction. The MD loop reuses Leapfrog/Omelyan2/Omelyan4
 // verbatim through the device drift_field/kick_add atoms (cuda/integ_ops.hpp,
@@ -25,7 +25,6 @@
 // is device-resident and bumped by bump_counter_kernel inside the captured body,
 // so every replay reads a fresh counter and the chain is ergodic.
 
-#include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/rng/philox.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
@@ -35,6 +34,7 @@
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/stream.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <array>
 #include <cmath>
@@ -104,7 +104,7 @@ struct HmcResult {
     bool accepted = false;
 };
 
-template <class A, class Integ = alg::integ::Omelyan2, class Field = DeviceField<double>>
+template <class A, class Integ = updater::integ::Omelyan2, class Field = DeviceField<double>>
 class Hmc {
 public:
     Hmc(A action, Field& field, double tau, int n_md, std::uint64_t seed = 0xC0FFEEULL)

@@ -1,21 +1,22 @@
 #pragma once
 
-// Device LLR driver (host-callable, no kernels). The GPU analog of llr::run,
+// Device LLR driver (host-callable, no kernels). The GPU analog of orch::llr::run,
 // model B: replicas overlap because every replica's trajectory is enqueued on
 // its own stream BEFORE any sync (the measurement loop is trajectory-outer /
 // replica-inner, unlike the CPU driver's replica-outer omp loop).
 //
-// Reuses the CPU host math verbatim — llr::nr_update / rm_update. Exchange is
+// Reuses the CPU host math verbatim — orch::llr::nr_update / rm_update. Exchange is
 // param-swap (see Replica::swap_window): windows migrate across slots, so E_n is
 // written as a per-slot series and analysis groups by E_n. The acceptance is the
 // same Gaussian-window form the CPU uses (linear tilt + window quadratic
-// cross-term, see llr::try_exchange); param-swap gives the identical acceptance
+// cross-term, see orch::llr::try_exchange); param-swap gives the identical acceptance
 // and a slot-relabeled state, so the ensemble matches the CPU config-swap up to
 // the (E_n-grouped) relabeling.
 
+#include <reticolo/action/formula/window_formula.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/io/writer.hpp>
-#include <reticolo/llr/update_a.hpp>
+#include <reticolo/orch/llr/update_a.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -143,7 +144,7 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     for (int k = 0; k < spec.n_nr; ++k) {
         auto const de = measure(spec.n_therm_nr, spec.n_meas_nr);
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            reps[n]->set_a(reticolo::llr::nr_update(reps[n]->a(), de[n], spec.delta));
+            reps[n]->set_a(reticolo::orch::llr::nr_update(reps[n]->a(), de[n], spec.delta));
         }
         drain(de);
         log::info("llr", "NR iter  {:>3}/{}  done", k + 1, spec.n_nr);
@@ -153,7 +154,7 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     for (int s = 0; s < spec.n_rm; ++s) {
         auto const de = measure(spec.n_therm_rm, spec.n_meas_rm);
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            reps[n]->set_a(reticolo::llr::rm_update(reps[n]->a(), de[n], spec.delta, s));
+            reps[n]->set_a(reticolo::orch::llr::rm_update(reps[n]->a(), de[n], spec.delta, s));
         }
         drain(de);
 
@@ -165,18 +166,18 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
                 ++attempts;
                 double const e_i = reps[i]->energy();
                 double const e_j = reps[i + 1]->energy();
-                // Gaussian-window acceptance: linear tilt + the window quadratic
-                // cross-term (exact for the Gaussian window; vanishes only when
-                // the two windows share E_n and δ). Mirrors CPU llr::try_exchange.
-                double const dq   = e_i - e_j;
-                double const qsum = e_i + e_j;
-                double const d_i  = reps[i]->delta();
-                double const d_j  = reps[i + 1]->delta();
-                double const lin  = (reps[i]->a() - reps[i + 1]->a()) * dq;
-                double const win =
-                    (dq / 2.0) * (((qsum - (2.0 * reps[i]->e_n())) / (d_i * d_i)) -
-                                  ((qsum - (2.0 * reps[i + 1]->e_n())) / (d_j * d_j)));
-                double const log_p = lin + win;
+                // Gaussian-window acceptance (linear tilt + window quadratic
+                // cross-term) — the SAME shared formula the CPU config-swap uses,
+                // so the two backends cannot drift on this subtle acceptance.
+                double const log_p =
+                    reticolo::action::formula::exchange_log_p(reps[i]->a(),
+                                                              reps[i + 1]->a(),
+                                                              reps[i]->e_n(),
+                                                              reps[i + 1]->e_n(),
+                                                              e_i,
+                                                              e_j,
+                                                              reps[i]->delta(),
+                                                              reps[i + 1]->delta());
                 if (log_p >= 0.0 || exch_rng.uniform() < std::exp(log_p)) {
                     reps[i]->swap_window(*reps[i + 1]);
                     ++accepted;

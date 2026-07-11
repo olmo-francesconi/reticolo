@@ -40,7 +40,7 @@ self-describing HDF5.
 - A C++20 compiler (GCC, Clang or Apple Clang)
 - CMake ≥ 3.25 and Ninja
 - HDF5
-- OpenMP — optional, for LLR replica parallelism
+- OpenMP — optional, for CPU parallelism (site, trajectory and replica levels)
 - CUDA — optional, for the GPU backend
 
 ## Building
@@ -88,6 +88,81 @@ with h5py.File("phi4.h5", "r") as f:
     s = np.asarray(f["/prod/obs/s"])
     print(f["/run"].attrs["commit"], s.mean())
 ```
+
+## Parallelism
+
+On the CPU, OpenMP threads three composable layers, all off by default (serial
+without `-fopenmp`):
+
+- **Site level** — the lattice-traverse passes (force, action sweep) inside one
+  trajectory.
+- **Trajectory level** — each HMC trajectory runs its drift/kick/force passes on
+  a fixed thread team.
+- **Replica level** — LLR runs its windowed HMC chains in parallel over the
+  replica ensemble.
+
+For a single-replica HMC app the ambient team is used — just set the
+environment:
+
+```sh
+OMP_NUM_THREADS=8 ./build/linux-gcc/apps/phi4_hmc --L 32 --ndim 4
+```
+
+To pin a trajectory to a fixed team regardless of the global (so replica- and
+site-level threads don't fight), set it on the spec — resolved once at
+construction and frozen. Chains stay bit-identical for fixed
+`n_threads` + `slabs_per_thread`:
+
+```cpp
+alg::Hmc hmc{action, phi, FastRng{42},
+             {.tau = 1.0, .n_md = 20, .n_threads = 4}};
+```
+
+LLR apps saturate replicas first, then spill leftover threads into per-replica
+site teams automatically — `OMP_NUM_THREADS` is the only knob most runs need.
+
+## GPU
+
+With `RETICOLO_ENABLE_CUDA`, the same actions run on the GPU. A CUDA app is the
+umbrella header plus the CUDA header; it uses `cuda::DeviceField` and `cuda::Hmc`
+directly, and the trajectory loop mirrors the CPU version one-for-one:
+
+```cpp
+#include <reticolo/reticolo.hpp>
+#include <reticolo/cuda/cuda.hpp>
+
+int main() {
+    using namespace reticolo;
+    using Field  = cuda::DeviceField<double>;
+    using Action = cuda::DeviceAction<act::Phi4<double>, Field>;
+
+    Field             phi{{8, 8, 8, 8}};
+    act::Phi4<double> phi4{.kappa = 0.18, .lambda = 1.0};
+    Action            meas{phi4, phi.topology()};                  // measures S
+    cuda::Hmc         hmc{Action{phi4, phi.topology()}, phi, 1.0, 20, 42};
+
+    io::Writer writer{"phi4_cuda.h5"};
+    auto       s = writer.series<double>("/prod/obs/s");
+
+    for (int i = 0; i < 1000; ++i) {
+        hmc.step();
+        s.append(meas.s_full(phi));
+    }
+}
+```
+
+The action is wrapped in a `cuda::DeviceAction` (move-only, so the measurement
+keeps its own instance while `hmc` consumes the other). CPU and GPU share one
+per-site formula, so the two backends sample the same ensemble. Build and run
+with the CUDA preset:
+
+```sh
+cmake --preset linux-nvcc && cmake --build --preset linux-nvcc
+```
+
+`apps/cuda/` has HMC and LLR reference apps for φ⁴, Bose gas and U(1)/SU(2)/SU(3).
+With no local GPU, the `tools/modal/` runner builds and runs on a cloud GPU —
+see [`docs/cuda_architecture.md`](docs/cuda_architecture.md).
 
 ## Documentation
 

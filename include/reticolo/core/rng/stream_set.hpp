@@ -15,7 +15,7 @@
 // A pool of independent streams over one Rng family: one dedicated DRIVER
 // stream (the serial draws — Metropolis accept, LLR exchange, hot starts) + n
 // SITE streams. The pool holds NO geometry: which sites a stream serves is the
-// owner's contract — alg::Hmc sizes the pool from the canonical field
+// owner's contract — updater::Hmc sizes the pool from the canonical field
 // partition (exec::partition) and binds site stream i to partition item i via
 // exec::field_visit_indexed, one-to-one, checked every fill. Serial draws
 // never touch a site stream, so per-slab draw sequences stay shape-determined
@@ -78,7 +78,7 @@ public:
     [[nodiscard]] R const& site_stream(std::size_t k) const noexcept { return streams_[k + 1].r; }
 
     // Rng concept — serial draws delegate to the driver stream, so a StreamSet
-    // serves every templated call site (Hmc accept, llr::try_exchange, …).
+    // serves every templated call site (Hmc accept, orch::llr::try_exchange, …).
     [[nodiscard]] std::uint64_t uniform_u64() noexcept { return driver().uniform_u64(); }
     [[nodiscard]] double uniform() noexcept { return driver().uniform(); }
     [[nodiscard]] double normal() noexcept { return driver().normal(); }

@@ -1,8 +1,7 @@
-#include <reticolo/action/site/phi4.hpp>
-#include <reticolo/algorithm/integrators.hpp>
+#include <reticolo/action/nn/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
-#include <reticolo/cuda/actions/site/phi4.hpp>
+#include <reticolo/cuda/actions/nn/phi4.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_field.hpp>
@@ -11,6 +10,7 @@
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/stream.hpp>
+#include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -23,7 +23,7 @@
 // Eager device HMC end-to-end on Phi4 (f64).
 //
 // NOTE on the "zero integrator-specific CUDA code" lint gate: this is the one
-// TU that NAMES the integrator tags (alg::integ::Leapfrog / Omelyan2 /
+// TU that NAMES the integrator tags (updater::integ::Leapfrog / Omelyan2 /
 // Omelyan4) — to instantiate the GENERIC integrator over DeviceField and prove
 // reuse. That is the opposite of integrator-specific kernel code. The gate
 // (tests/cuda/check_no_integrator_kernels.cmake) greps the kernel sources and
@@ -84,7 +84,7 @@ bool hmc_reversibility_ok() {
     field.copy_to_host(f0);
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
-    using Integ          = alg::integ::Leapfrog;
+    using Integ          = updater::integ::Leapfrog;
     constexpr double tau = 1.0;
     constexpr int n_md   = 12;
 
@@ -150,9 +150,9 @@ bool integrator_order_ok() {
     constexpr int samples = 16;
     constexpr unsigned sd = 2026;
 
-    double const p_lf = observed_order<alg::integ::Leapfrog>(tau, n_md, samples, sd);
-    double const p_o2 = observed_order<alg::integ::Omelyan2>(tau, n_md, samples, sd);
-    double const p_o4 = observed_order<alg::integ::Omelyan4>(tau, n_md, samples, sd);
+    double const p_lf = observed_order<updater::integ::Leapfrog>(tau, n_md, samples, sd);
+    double const p_o2 = observed_order<updater::integ::Omelyan2>(tau, n_md, samples, sd);
+    double const p_o4 = observed_order<updater::integ::Omelyan4>(tau, n_md, samples, sd);
 
     return (std::abs(p_lf - 2.0) < 0.4) && (std::abs(p_o2 - 2.0) < 0.4) &&
            (std::abs(p_o4 - 4.0) < 0.6);
@@ -234,7 +234,7 @@ bool graph_replay_matches_eager() {
 
     constexpr double tau = 1.0;
     constexpr int n_md   = 12;
-    using Integ          = alg::integ::Leapfrog;
+    using Integ          = updater::integ::Leapfrog;
 
     // Eager reference MD from (q0, p0), on the default stream.
     Lattice<double> eager_out{shape};
@@ -293,7 +293,7 @@ TEST_CASE("cuda HMC trajectory is reversible", "[cuda]") {
     REQUIRE(reticolo::cuda::hmc_reversibility_ok());
 }
 
-// The reused alg::integ tags give |dH| ~ dt^p with p = 2/2/4 on the device.
+// The reused updater::integ tags give |dH| ~ dt^p with p = 2/2/4 on the device.
 TEST_CASE("cuda integrator order is 2/2/4", "[cuda]") {
     REQUIRE(reticolo::cuda::integrator_order_ok());
 }

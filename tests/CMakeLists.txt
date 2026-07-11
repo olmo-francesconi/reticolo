@@ -48,6 +48,7 @@ reticolo_add_test(test_phi6_force_consistency       physics/test_phi6_force_cons
 reticolo_add_test(test_sine_gordon_force_consistency physics/test_sine_gordon_force_consistency.cpp)
 reticolo_add_test(test_xy_force_consistency         physics/test_xy_force_consistency.cpp)
 reticolo_add_test(test_bose_gas_force_consistency   physics/test_bose_gas_force_consistency.cpp)
+reticolo_add_test(test_windowed_observable          physics/test_windowed_observable.cpp)
 reticolo_add_test(test_hmc_reversibility            physics/test_hmc_reversibility.cpp)
 reticolo_add_test(test_hmc_integrator_order         physics/test_hmc_integrator_order.cpp)
 reticolo_add_test(test_phi4_hmc_mixed_precision      physics/test_phi4_hmc_mixed_precision.cpp)
@@ -89,7 +90,7 @@ if(RETICOLO_ENABLE_CUDA)
 
     # Lint gate: no integrator reimplemented as a CUDA kernel. Scans the device
     # kernel headers (hmc.cuh excepted — it legitimately names the reused
-    # alg::integ::* type parameter).
+    # updater::integ::* type parameter).
     add_test(NAME cuda_no_integrator_kernels
              COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${PROJECT_SOURCE_DIR}/include/reticolo/cuda
                      -P ${CMAKE_CURRENT_SOURCE_DIR}/cuda/check_no_integrator_kernels.cmake)
@@ -116,6 +117,7 @@ if(RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS)
     endfunction()
 
     reticolo_add_app_smoke(test_phi4_hmc_smoke             phi4_hmc             apps/test_phi4_hmc_smoke.cpp)
+    reticolo_add_app_smoke(test_param_span_smoke           param_span_hmc       apps/test_param_span_smoke.cpp)
     reticolo_add_app_smoke(test_phi4_hmc_resume_equivalence phi4_hmc            apps/test_phi4_hmc_resume_equivalence.cpp)
     reticolo_add_app_smoke(test_phi6_hmc_smoke             phi6_hmc             apps/test_phi6_hmc_smoke.cpp)
     reticolo_add_app_smoke(test_sine_gordon_hmc_smoke      sine_gordon_hmc      apps/test_sine_gordon_hmc_smoke.cpp)

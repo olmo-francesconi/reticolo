@@ -43,7 +43,7 @@ int main(int argc, char** argv) {
     auto plaq     = out.series<double>("/prod/obs/plaq");
 
     // ---- Updater ----
-    alg::Hmc hmc{action, links, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
+    updater::Hmc hmc{action, links, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     std::size_t const v_sites = links.nsites();
     std::size_t const n_plaq =

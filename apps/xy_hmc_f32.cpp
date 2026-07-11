@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
     auto mag      = out.series<double>("/prod/obs/mag");
 
     // ---- Updater (precision deduced from the float lattice + action) ----
-    alg::Hmc hmc{xy, theta, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
+    updater::Hmc hmc{xy, theta, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     // |<(cos θ, sin θ)>| — the XY order parameter (0 disordered, 1 aligned).
     auto xy_mag = [&theta]() {
