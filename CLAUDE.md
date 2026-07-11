@@ -46,6 +46,7 @@ apps/                  builtin reference simulations + benchmarks (built in-tree
 examples/              numbered standalone consumer studies: own source + CMake (find-or-fetch reticolo) + bash sweep + python analyze
 tests/                 unit / physics / io / apps smoke tests (Catch2)
 tools/                 local CI-gate runner (check.sh) + CPU scaling benches (bench/) + GPU cloud runners (modal/kaggle/runpod) + validate/profile
+templates/             copy-and-fill scaffolds (action / updater / orchestrator) — un-built `// FILL IN` stubs, see templates/README.md
 docs/                  architecture + app/test how-to
 ```
 

@@ -5,6 +5,12 @@ scalar field driven by HMC, full reproducibility metadata in the HDF5
 output, susceptibility + magnetisation observers recorded as time series.
 The completed app is ~55 LOC.
 
+> **Templates.** For the *component* extension points — a new action, a new
+> updater, a new orchestrator — `templates/` has copy-and-fill scaffolds with
+> the boilerplate in place and the physics marked `// FILL IN`. See
+> `templates/README.md`. This doc is the prose companion; the templates are the
+> files to start from.
+
 ## Builtin apps vs standalone examples
 
 **Builtin app** (`apps/`): one canonical sim per action/algorithm variant,
