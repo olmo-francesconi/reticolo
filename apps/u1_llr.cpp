@@ -8,23 +8,14 @@
 
 #include <reticolo/reticolo.hpp>
 
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
-#include <format>
-#include <memory>
 #include <numbers>
 #include <string>
-#include <vector>
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action   = action::Wilson<math::group::U1, double>;
-    using ReplicaT = orch::llr::Replica<Action,
-                                        FastRng,
-                                        updater::integ::Omelyan2,
-                                        double,
-                                        MatrixLinkLattice<math::group::U1, double>>;
+    using Action = action::Wilson<math::group::U1, double>;
+    using Field  = MatrixLinkLattice<math::group::U1, double>;
 
     // ---- CLI ----
     cli::Parser p{"u1_llr", "LLR with replica exchange for compact U(1) Wilson action"};
@@ -58,56 +49,47 @@ int main(int argc, char** argv) {
     std::string const outpath = app::out_path(cf);
 
     // ---- Base action ----
-    MatrixLinkLattice<math::group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
-                                                              static_cast<std::size_t>(cf.L));
+    Field::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
     Action const base{.beta = beta};
     log::act(base);
 
-    // ---- Replica geometry ----
-    double const d_e = spacing > 0.0 ? spacing : delta;
-    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
-    double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
-    auto const plan            = orch::plan_threads(n_rep, rf.replica_threads);
-
-    // ---- Replicas ----
-    std::vector<std::unique_ptr<ReplicaT>> reps;
-    reps.reserve(static_cast<std::size_t>(n_rep));
-    {
-        auto const quiet = log::quiet();  // silence per-replica ctor announces
-        for (int n = 0; n < n_rep; ++n) {
-            double const e_n = e_min + (static_cast<double>(n) * d_e);
-            reps.push_back(std::make_unique<ReplicaT>(
-                base,
-                FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
-                ReplicaT::Spec{
-                    .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
-                updater::HmcSpec{
-                    .tau = tau, .n_md = n_md, .n_threads = plan.m, .slabs_per_thread = rf.slabs}));
-        }
-    }
-
-    // ---- Resume or fresh warm-up ----
-    FastRng exch_rng{cf.seed};
-    bool const resuming = !rf.resume.empty();
-    orch::llr::OrchState resume_state{};
-    if (resuming) {
-        resume_state = orch::llr::load_ensemble(rf.resume, reps, exch_rng);
-        log::info("llr",
-                  "resumed from {}  phase={} iter={}",
-                  rf.resume,
-                  resume_state.phase,
-                  resume_state.iter);
-    }
+    // ---- Orchestrator: owns geometry, the replica ladder, threading, resume ----
+    orch::llr::Orchestrator<Action, FastRng, updater::integ::Omelyan2, double, Field> llr{
+        base,
+        orch::llr::Spec{.shape            = shape,
+                        .seed             = cf.seed,
+                        .e_min            = e_min,
+                        .e_max            = e_max,
+                        .delta            = delta,
+                        .spacing          = spacing,
+                        .tau              = tau,
+                        .n_md             = n_md,
+                        .n_nr             = n_nr,
+                        .n_therm_nr       = n_therm_nr,
+                        .n_meas_nr        = n_meas_nr,
+                        .n_rm             = n_rm,
+                        .n_therm_rm       = n_therm_rm,
+                        .n_meas_rm        = n_meas_rm,
+                        .exchange         = (exchange != 0),
+                        .replica_threads  = rf.replica_threads,
+                        .slabs            = rf.slabs,
+                        .checkpoint_path  = rf.checkpoint,
+                        .resume           = rf.resume,
+                        .checkpoint_every = rf.checkpoint_every}};
 
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
+    // ---- Build replicas + resume ----
+    llr.setup(out);
+
     // ---- Hot start (fresh runs only): randomise each replica's link angles;
-    //      the LLR driver's warm-up phase then drives each into its E_n window.
-    //      A resume restores already-warmed fields from the checkpoint. ----
-    if (!resuming) {
+    //      the warm-up phase then drives each into its E_n window. A resume
+    //      restores already-warmed fields from the checkpoint. ----
+    if (!llr.resuming()) {
         constexpr double k_hot_sigma = std::numbers::pi;  // ~uniform theta
-        std::size_t const n_rep_u    = static_cast<std::size_t>(n_rep);
+        auto& reps                   = llr.replicas();
+        std::size_t const n_rep_u    = reps.size();
 #pragma omp parallel for schedule(dynamic, 1)
         for (std::size_t n = 0; n < n_rep_u; ++n) {
             reps[n]->hot_start(k_hot_sigma);
@@ -115,24 +97,5 @@ int main(int argc, char** argv) {
     }
 
     // ---- Drive: NR warm-up + RM + (optional) exchange ----
-    orch::llr::run(reps,
-                   exch_rng,
-                   orch::llr::DriverSpec{.n_nr             = n_nr,
-                                         .n_therm_nr       = n_therm_nr,
-                                         .n_meas_nr        = n_meas_nr,
-                                         .n_rm             = n_rm,
-                                         .n_therm_rm       = n_therm_rm,
-                                         .n_meas_rm        = n_meas_rm,
-                                         .delta            = delta,
-                                         .e_min            = e_min,
-                                         .E_max            = e_max_snapped,
-                                         .d_e              = d_e,
-                                         .exchange         = (exchange != 0),
-                                         .plan             = plan,
-                                         .slabs            = rf.slabs,
-                                         .checkpoint_path  = rf.checkpoint,
-                                         .checkpoint_every = rf.checkpoint_every,
-                                         .start_phase      = resuming ? resume_state.phase : 0,
-                                         .start_iter       = resuming ? resume_state.iter : 0},
-                   out);
+    llr.run();
 }

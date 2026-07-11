@@ -8,24 +8,15 @@
 
 #include <reticolo/reticolo.hpp>
 
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <filesystem>
-#include <format>
-#include <memory>
 #include <numbers>
 #include <string>
-#include <vector>
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action   = action::Wilson<math::group::U1, double>;
-    using ReplicaT = orch::llr::Replica<Action,
-                                        FastRng,
-                                        updater::integ::Omelyan2,
-                                        double,
-                                        MatrixLinkLattice<math::group::U1, double>>;
+    using Action = action::Wilson<math::group::U1, double>;
+    using Field  = MatrixLinkLattice<math::group::U1, double>;
 
     // ---- CLI ----
     cli::Parser p{"u1_llr", "LLR with replica exchange for compact U(1) Wilson action"};
@@ -64,57 +55,46 @@ int main(int argc, char** argv) {
     std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
 
     // ---- Base action ----
-    MatrixLinkLattice<math::group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
-                                                              static_cast<std::size_t>(L));
+    Field::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Action const base{.beta = beta};
     log::act(base);
 
-    // ---- Replica geometry ----
-    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e = delta;
-    double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
-
-    // ---- Replicas ----
-    std::vector<std::unique_ptr<ReplicaT>> reps;
-    reps.reserve(static_cast<std::size_t>(n_rep));
-    for (int n = 0; n < n_rep; ++n) {
-        double const e_n = e_min + (static_cast<double>(n) * d_e);
-        reps.push_back(std::make_unique<ReplicaT>(
-            base,
-            FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
-            ReplicaT::Spec{
-                .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
-            updater::HmcSpec{.tau = tau, .n_md = n_md}));
-    }
+    // ---- Orchestrator: owns geometry, the replica ladder, threading ----
+    orch::llr::Orchestrator<Action, FastRng, updater::integ::Omelyan2, double, Field> llr{
+        base,
+        orch::llr::Spec{.shape      = shape,
+                        .seed       = seed,
+                        .e_min      = e_min,
+                        .e_max      = e_max,
+                        .delta      = delta,
+                        .tau        = tau,
+                        .n_md       = n_md,
+                        .n_nr       = n_nr,
+                        .n_therm_nr = n_therm_nr,
+                        .n_meas_nr  = n_meas_nr,
+                        .n_rm       = n_rm,
+                        .n_therm_rm = n_therm_rm,
+                        .n_meas_rm  = n_meas_rm,
+                        .exchange   = (exchange != 0)}};
 
     // ---- Output ----
-    FastRng exch_rng{seed};
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
+    llr.setup(out);
 
-    // ---- Hot start: randomise each replica's link angles; the LLR driver's
-    //      warm-up phase then drives each into its E_n window. ----
-    constexpr double k_hot_sigma = std::numbers::pi;  // ~uniform theta
-    std::size_t const n_rep_u    = static_cast<std::size_t>(n_rep);
+    // ---- Hot start: randomise each replica's link angles; the warm-up phase
+    //      then drives each into its E_n window. ----
+    {
+        constexpr double k_hot_sigma = std::numbers::pi;  // ~uniform theta
+        auto& reps                   = llr.replicas();
+        std::size_t const n_rep_u    = reps.size();
 #pragma omp parallel for schedule(dynamic, 1)
-    for (std::size_t n = 0; n < n_rep_u; ++n) {
-        auto _ = log::scope(reps[n]->id());
-        reps[n]->hot_start(k_hot_sigma);
+        for (std::size_t n = 0; n < n_rep_u; ++n) {
+            auto _ = log::scope(reps[n]->id());
+            reps[n]->hot_start(k_hot_sigma);
+        }
     }
 
     // ---- Drive: NR warm-up + RM + (optional) exchange ----
-    orch::llr::run(reps,
-                   exch_rng,
-                   orch::llr::DriverSpec{.n_nr       = n_nr,
-                                         .n_therm_nr = n_therm_nr,
-                                         .n_meas_nr  = n_meas_nr,
-                                         .n_rm       = n_rm,
-                                         .n_therm_rm = n_therm_rm,
-                                         .n_meas_rm  = n_meas_rm,
-                                         .delta      = delta,
-                                         .e_min      = e_min,
-                                         .E_max      = e_max_snapped,
-                                         .d_e        = d_e,
-                                         .exchange   = (exchange != 0)},
-                   out);
+    llr.run();
 }

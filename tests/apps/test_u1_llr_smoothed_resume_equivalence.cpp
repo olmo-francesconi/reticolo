@@ -1,6 +1,6 @@
 // LLR checkpoint / --resume regression for the smoothed driver (compact U(1)
 // Wilson). Complements the standard-driver tests: this exercises
-// orch::llr::smoothed::run's resume path (NR skip, RM restart, per-sweep snapshot).
+// Orchestrator::run_smoothed's resume path (NR skip, RM restart, per-sweep snapshot).
 // The cross-replica smoother carries no state beyond each replica's a, so the
 // same ensemble snapshot suffices; the resume tail must be bit-identical.
 

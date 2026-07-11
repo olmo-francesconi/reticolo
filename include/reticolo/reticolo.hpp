@@ -37,11 +37,10 @@
 #include <reticolo/orch/checkpoint.hpp>
 #include <reticolo/orch/concepts.hpp>
 #include <reticolo/orch/ensemble.hpp>
-#include <reticolo/orch/llr/driver.hpp>
 #include <reticolo/orch/llr/exchange.hpp>
 #include <reticolo/orch/llr/log.hpp>
+#include <reticolo/orch/llr/orchestrator.hpp>
 #include <reticolo/orch/llr/replica.hpp>
-#include <reticolo/orch/llr/smoothed_driver.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
 #include <reticolo/orch/span.hpp>
 #include <reticolo/orch/thread_plan.hpp>

@@ -398,9 +398,11 @@ Two orchestrators ship as clients:
 ### Parameter span (`orch::span`)
 
 `orch::span::Chain<Action,…>` is a generic HMC worker (any scalar/gauge action);
-`orch::span::run` builds one per point of a parameter grid, runs them
-concurrently, and records `/worker_NNN/…` time series. `apps/param_span_hmc`
-sweeps `kappa` in one binary — an in-process replacement for an outer bash sweep.
+the app builds one per point of a parameter grid (the grid is the app's reason to
+exist) and hands them to `orch::span::Orchestrator` by move. `setup(out)` opens
+the `/worker_NNN/…` series; `run(Schedule)` runs the workers concurrently and
+records their time series. `apps/param_span_hmc` sweeps `kappa` in one binary —
+an in-process replacement for an outer bash sweep.
 
 ### LLR (`orch::llr`)
 
@@ -409,8 +411,13 @@ a Gaussian-window penalty to a different region of action space, each sampled by
 its own HMC. A Newton-Raphson + Robbins-Monro loop adapts a per-replica
 reweighting parameter `a`; periodic even/odd replica exchange improves mixing.
 `orch::llr::Replica` wraps a `Base` action in `action::WindowedAction` and is an
-`orch::Worker`; `orch::llr::run` / `smoothed::run` are clients of the spine (they
-drive `parallel_workers` and add exchange as a serial coupling between waves).
+`orch::Worker`; `orch::llr::Orchestrator` is the client of the spine — a two-phase
+object where `setup(out)` plans threads, builds the replica ladder (a uniform E_n
+sweep the orchestrator synthesises from `Spec`), resumes, and opens the series,
+and `run()` / `run_smoothed(SmoothConfig)` drive `parallel_workers` and add
+exchange as a serial coupling between waves. App-specific field initialisation
+(cold-to-identity for gauge, hot-start for U(1)/complex) happens between `setup()`
+and `run()` via `replicas()`, guarded by `resuming()`.
 `WindowedAction` itself is a general **decorator action** (in `action/`, not
 LLR): `S_win = S_base + a·Q + (Q−E_n)²/2δ²` where the constrained observable `Q`
 is a `Constraint` policy — `SelfConstraint` (Q = the action, real LLR),

@@ -13,18 +13,12 @@
 
 #include <reticolo/reticolo.hpp>
 
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
-#include <format>
-#include <memory>
 #include <string>
-#include <vector>
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action   = act::Phi6<double>;
-    using ReplicaT = orch::llr::Replica<Action, FastRng>;
+    using Action = act::Phi6<double>;
 
     // ---- CLI ----
     cli::Parser p{"phi6_llr", "LLR (Gaussian-penalty) with replica exchange for phi^6"};
@@ -62,64 +56,34 @@ int main(int argc, char** argv) {
     Action const base{.kappa = kappa, .lambda = lambda, .g6 = g6};
     log::act(base);
 
-    // ---- Replica geometry ----
-    double const d_e = spacing > 0.0 ? spacing : delta;
-    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
-    double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
-    auto const plan            = orch::plan_threads(n_rep, rf.replica_threads);
-
-    // ---- Replicas ----
-    std::vector<std::unique_ptr<ReplicaT>> reps;
-    reps.reserve(static_cast<std::size_t>(n_rep));
-    {
-        auto const quiet = log::quiet();  // silence per-replica ctor announces
-        for (int n = 0; n < n_rep; ++n) {
-            double const e_n = e_min + (static_cast<double>(n) * d_e);
-            reps.push_back(std::make_unique<ReplicaT>(
-                base,
-                FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
-                ReplicaT::Spec{
-                    .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
-                updater::HmcSpec{
-                    .tau = tau, .n_md = n_md, .n_threads = plan.m, .slabs_per_thread = rf.slabs}));
-        }
-    }
-
-    // ---- Resume ----
-    FastRng exch_rng{cf.seed};
-    bool const resuming = !rf.resume.empty();
-    orch::llr::OrchState resume_state{};
-    if (resuming) {
-        resume_state = orch::llr::load_ensemble(rf.resume, reps, exch_rng);
-        log::info("llr",
-                  "resumed from {}  phase={} iter={}",
-                  rf.resume,
-                  resume_state.phase,
-                  resume_state.iter);
-    }
+    // ---- Orchestrator: owns geometry, the replica ladder, threading, resume ----
+    orch::llr::Orchestrator<Action, FastRng> llr{
+        base,
+        orch::llr::Spec{.shape            = shape,
+                        .seed             = cf.seed,
+                        .e_min            = e_min,
+                        .e_max            = e_max,
+                        .delta            = delta,
+                        .spacing          = spacing,
+                        .tau              = tau,
+                        .n_md             = n_md,
+                        .n_nr             = n_nr,
+                        .n_therm_nr       = n_therm_nr,
+                        .n_meas_nr        = n_meas_nr,
+                        .n_rm             = n_rm,
+                        .n_therm_rm       = n_therm_rm,
+                        .n_meas_rm        = n_meas_rm,
+                        .replica_threads  = rf.replica_threads,
+                        .slabs            = rf.slabs,
+                        .checkpoint_path  = rf.checkpoint,
+                        .resume           = rf.resume,
+                        .checkpoint_every = rf.checkpoint_every}};
 
     // ---- Output ----
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
-    // ---- Drive: NR warm-up + RM + exchange ----
-    orch::llr::run(reps,
-                   exch_rng,
-                   orch::llr::DriverSpec{.n_nr             = n_nr,
-                                         .n_therm_nr       = n_therm_nr,
-                                         .n_meas_nr        = n_meas_nr,
-                                         .n_rm             = n_rm,
-                                         .n_therm_rm       = n_therm_rm,
-                                         .n_meas_rm        = n_meas_rm,
-                                         .delta            = delta,
-                                         .e_min            = e_min,
-                                         .E_max            = e_max_snapped,
-                                         .d_e              = d_e,
-                                         .plan             = plan,
-                                         .slabs            = rf.slabs,
-                                         .checkpoint_path  = rf.checkpoint,
-                                         .checkpoint_every = rf.checkpoint_every,
-                                         .start_phase      = resuming ? resume_state.phase : 0,
-                                         .start_iter       = resuming ? resume_state.iter : 0},
-                   out);
+    // ---- Drive: setup (build + resume) then NR warm-up + RM + exchange ----
+    llr.setup(out);
+    llr.run();
 }

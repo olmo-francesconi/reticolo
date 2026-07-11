@@ -94,10 +94,8 @@ int main(int argc, char** argv) {
         {.name = "mag", .measure = [](Field const& f) { return obs::mag::abs(f); }},
         {.name = "mag_sq", .measure = [](Field const& f) { return obs::sq_of_mean(f); }},
         {.name = "m2", .measure = [](Field const& f) { return obs::sq(f); }}};
-    orch::span::run(
-        workers,
-        orch::span::Schedule{.n_therm = n_therm, .n_prod = n_prod, .meas_every = meas_every},
-        plan,
-        obs,
-        out);
+    orch::span::Orchestrator<Chain> runner{std::move(workers), plan, std::move(obs)};
+    runner.setup(out);
+    runner.run(
+        orch::span::Schedule{.n_therm = n_therm, .n_prod = n_prod, .meas_every = meas_every});
 }

@@ -1,32 +1,22 @@
 // Smoothed LLR variant for compact U(1): per-replica Robbins-Monro with a
 // cross-replica local-quadratic smoother shrunk into each iterate. See
-// include/reticolo/orch/llr/smoothed_driver.hpp.
+// orch::llr::Orchestrator::run_smoothed.
 //
 // Mirrors apps/u1_llr.cpp: same action, sampler, geometry, exchange and
-// HDF5 schema; the only differences are the driver call and four extra
+// HDF5 schema; the only differences are run_smoothed (vs run) and four extra
 // CLI knobs controlling the smoother and shrinkage schedule.
 
-#include <reticolo/orch/llr/smoothed_driver.hpp>
 #include <reticolo/reticolo.hpp>
 
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <filesystem>
-#include <format>
-#include <memory>
 #include <numbers>
 #include <string>
-#include <vector>
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Action   = action::Wilson<math::group::U1, double>;
-    using ReplicaT = orch::llr::Replica<Action,
-                                        FastRng,
-                                        updater::integ::Omelyan2,
-                                        double,
-                                        MatrixLinkLattice<math::group::U1, double>>;
+    using Action = action::Wilson<math::group::U1, double>;
+    using Field  = MatrixLinkLattice<math::group::U1, double>;
 
     cli::Parser p{"u1_llr_smoothed", "Smoothed LLR for compact U(1) Wilson action"};
     auto const& L     = p.opt<int>("L,size", 4, "linear lattice extent");
@@ -71,56 +61,46 @@ int main(int argc, char** argv) {
     log::start(workspace, outfile, /*replicas=*/true);
     std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
 
-    MatrixLinkLattice<math::group::U1, double>::SizeVec shape(static_cast<std::size_t>(ndim),
-                                                              static_cast<std::size_t>(L));
+    Field::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(L));
     Action const base{.beta = beta};
     log::act(base);
 
-    int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / delta)) + 1);
-    double const d_e = delta;
-    double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
+    // ---- Orchestrator: owns geometry, the replica ladder, threading ----
+    orch::llr::Orchestrator<Action, FastRng, updater::integ::Omelyan2, double, Field> llr{
+        base,
+        orch::llr::Spec{.shape      = shape,
+                        .seed       = seed,
+                        .e_min      = e_min,
+                        .e_max      = e_max,
+                        .delta      = delta,
+                        .tau        = tau,
+                        .n_md       = n_md,
+                        .n_nr       = n_nr,
+                        .n_therm_nr = n_therm_nr,
+                        .n_meas_nr  = n_meas_nr,
+                        .n_rm       = n_rm,
+                        .n_therm_rm = n_therm_rm,
+                        .n_meas_rm  = n_meas_rm,
+                        .exchange   = (exchange != 0)}};
 
-    std::vector<std::unique_ptr<ReplicaT>> reps;
-    reps.reserve(static_cast<std::size_t>(n_rep));
-    for (int n = 0; n < n_rep; ++n) {
-        double const e_n = e_min + (static_cast<double>(n) * d_e);
-        reps.push_back(std::make_unique<ReplicaT>(
-            base,
-            FastRng{seed + 1ULL + static_cast<unsigned long long>(n)},
-            ReplicaT::Spec{
-                .id = std::format("r{:03}", n), .shape = shape, .e_n = e_n, .delta = delta},
-            updater::HmcSpec{.tau = tau, .n_md = n_md}));
-    }
-
-    FastRng exch_rng{seed};
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
+    llr.setup(out);
 
-    constexpr double k_hot_sigma = std::numbers::pi;
-    std::size_t const n_rep_u    = static_cast<std::size_t>(n_rep);
+    {
+        constexpr double k_hot_sigma = std::numbers::pi;
+        auto& reps                   = llr.replicas();
+        std::size_t const n_rep_u    = reps.size();
 #pragma omp parallel for schedule(dynamic, 1)
-    for (std::size_t n = 0; n < n_rep_u; ++n) {
-        auto _ = log::scope(reps[n]->id());
-        reps[n]->hot_start(k_hot_sigma);
+        for (std::size_t n = 0; n < n_rep_u; ++n) {
+            auto _ = log::scope(reps[n]->id());
+            reps[n]->hot_start(k_hot_sigma);
+        }
     }
 
-    orch::llr::smoothed::run(
-        reps,
-        exch_rng,
-        orch::llr::smoothed::DriverSpec{.n_nr              = n_nr,
-                                        .n_therm_nr        = n_therm_nr,
-                                        .n_meas_nr         = n_meas_nr,
-                                        .n_rm              = n_rm,
-                                        .n_therm_rm        = n_therm_rm,
-                                        .n_meas_rm         = n_meas_rm,
-                                        .delta             = delta,
-                                        .e_min             = e_min,
-                                        .E_max             = e_max_snapped,
-                                        .d_e               = d_e,
-                                        .exchange          = (exchange != 0),
-                                        .smooth_K          = smooth_K,
-                                        .smooth_degree     = smooth_degree,
-                                        .smooth_lambda0    = smooth_lambda0,
-                                        .smooth_lambda_exp = smooth_lambda_exp},
-        out);
+    // ---- Drive: NR warm-up + smoothed RM + (optional) exchange ----
+    llr.run_smoothed(orch::llr::SmoothConfig{.smooth_K          = smooth_K,
+                                             .smooth_degree     = smooth_degree,
+                                             .smooth_lambda0    = smooth_lambda0,
+                                             .smooth_lambda_exp = smooth_lambda_exp});
 }
