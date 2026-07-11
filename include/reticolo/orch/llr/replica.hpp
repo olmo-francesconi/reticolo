@@ -43,14 +43,20 @@ template <class Base,
           class Rng,
           class Integrator = updater::integ::Omelyan2,
           class T          = Base::value_type,
-          class Field      = Lattice<T>>
+          class Field      = Lattice<T>,
+          class Constraint = void>
 class Replica {
 public:
     using value_type           = T;
     using field_type           = Field;
     using scalar_t             = action::scalar_of_t<T>;
     using SizeVec              = Field::SizeVec;
-    using windowed_action_type = action::WindowedAction<Base, T, Field>;
+    using windowed_action_type = action::WindowedAction<Base, T, Field, Constraint>;
+    // The resolved constraint policy: SelfConstraint / ImagConstraint by default
+    // (empty), or a caller-supplied ObservableConstraint<Obs> for a window on an
+    // arbitrary observable. Passed to the ctor; `{}` (the default) is the empty
+    // built-in, so existing real/complex LLR callers are unchanged.
+    using constraint_type = windowed_action_type::constraint_type;
 
     static constexpr std::string_view log_tag = "repl";
 
@@ -62,9 +68,17 @@ public:
         scalar_t a_init = scalar_t{0};
     };
 
-    Replica(Base const& base, Rng rng_init, Spec spec, updater::HmcSpec const& hmc_spec)
+    Replica(Base const& base,
+            Rng rng_init,
+            Spec spec,
+            updater::HmcSpec const& hmc_spec,
+            constraint_type constraint = {})
         : id_{std::move(spec.id)}, field_{std::move(spec.shape)},
-          windowed_{.base = base, .a = spec.a_init, .E_n = spec.e_n, .delta = spec.delta},
+          windowed_{.base       = base,
+                    .a          = spec.a_init,
+                    .E_n        = spec.e_n,
+                    .delta      = spec.delta,
+                    .constraint = std::move(constraint)},
           hmc_{windowed_, field_, std::move(rng_init), hmc_spec, Integrator{}, log::Mode::silent} {}
 
     // Announce the nested HMC sampler (integrator / τ / n_md). The LLR driver
@@ -107,11 +121,11 @@ public:
     }
 
     // Running mean of `Q(phi) - E_n` over `n` trajectories, measured at the
-    // end of each trajectory (accepted or not). Q = base.s_full when the
-    // base is a real action, Q = base.s_imag in the complex-LLR case. Reads
-    // the base action's post-trajectory raw-scalar cache instead of a fresh
-    // sweep — HMC's s_full call at h1 already populated it, and a reject
-    // would have rolled it back to the h0 value.
+    // end of each trajectory (accepted or not). Q is the window constraint
+    // observable (`windowed_.last_constraint()`): the base action for real LLR,
+    // its imaginary part for complex, or a custom observable. Reads the
+    // post-trajectory cache HMC already populated (rolled back on reject),
+    // not a fresh O(V) sweep.
     [[nodiscard]] scalar_t sample(int n, log::Mode log_mode = log::Mode::normal) {
         auto _       = log::scope(id_);
         scalar_t sum = scalar_t{0};

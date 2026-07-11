@@ -66,3 +66,32 @@ TEST_CASE("WindowedAction: force matches FD of s_full for a custom-observable wi
         REQUIRE(force.data()[i] == Catch::Approx(fd).epsilon(1e-5).margin(1e-6));
     }
 }
+
+// The custom constraint threads through the full LLR replica: an orch::llr::Replica
+// parameterised on ObservableConstraint<MagSum> samples phi^4 while its window /
+// exchange / adaptation observable is the magnetization. `energy()` must read the
+// custom observable of the current config (not the action).
+TEST_CASE("orch::llr::Replica: window / exchange observable is a custom observable",
+          "[llr][window]") {
+    using Obs = action::ObservableConstraint<MagSum<double>>;
+    using Rep = orch::llr::
+        Replica<act::Phi4<double>, FastRng, updater::integ::Omelyan2, double, Lattice<double>, Obs>;
+
+    act::Phi4<double> const base{.kappa = 0.18, .lambda = 1.0};
+    Rep r{base,
+          FastRng{5},
+          Rep::Spec{.id = "r0", .shape = {4, 4, 4}, .e_n = 0.0, .delta = 10.0},
+          updater::HmcSpec{.tau = 0.5, .n_md = 4}};
+
+    r.thermalize(3, log::Mode::silent);
+    (void)r.sample(1, log::Mode::silent);  // run a trajectory → populates the constraint cache
+
+    // energy() returns the cached custom-observable value; it must equal a fresh
+    // magnetization Σφ of the replica's current config.
+    double q_direct         = 0.0;
+    double const* const fld = r.field().data();
+    for (std::size_t i = 0; i < r.field().nsites(); ++i) {
+        q_direct += fld[i];
+    }
+    REQUIRE(static_cast<double>(r.energy()) == Catch::Approx(q_direct).epsilon(1e-12));
+}
