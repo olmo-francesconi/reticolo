@@ -1,5 +1,7 @@
 #pragma once
 
+#include <reticolo/orch/llr/formula/window_formula.hpp>
+
 #include <cmath>
 #include <utility>
 
@@ -29,16 +31,8 @@ namespace reticolo::orch::llr {
 // The app owns the sweep loop (even/odd alternation, parity choice, etc.).
 template <class Replica, class Rng>
 [[nodiscard]] bool try_exchange(Replica& ri, Replica& rj, Rng& rng) {
-    auto const q_i    = ri.energy();
-    auto const q_j    = rj.energy();
-    auto const dq     = q_i - q_j;
-    auto const q_sum  = q_i + q_j;
-    auto const d_i    = ri.delta();
-    auto const d_j    = rj.delta();
-    auto const linear = (ri.a() - rj.a()) * dq;
-    auto const window = (dq / 2) * (((q_sum - (2 * ri.E_n())) / (d_i * d_i)) -
-                                    ((q_sum - (2 * rj.E_n())) / (d_j * d_j)));
-    auto const log_p  = linear + window;
+    auto const log_p = formula::exchange_log_p(
+        ri.a(), rj.a(), ri.E_n(), rj.E_n(), ri.energy(), rj.energy(), ri.delta(), rj.delta());
     bool const accept = (log_p >= 0.0) || (rng.uniform() < std::exp(log_p));
     if (accept) {
         using std::swap;

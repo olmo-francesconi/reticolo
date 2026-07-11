@@ -42,4 +42,24 @@ template <class R>
     return a + ((q - e_n) / (delta * delta));
 }
 
+// --- replica exchange ---------------------------------------------------------
+
+// Acceptance exponent for swapping two Gaussian-window replicas i, j with tilts
+// a_*, window centres e_n_*, widths delta_*, and constraint values q_* — the
+// swap accepts with min(1, exp(log_p)). Linear-tilt term + the window quadratic
+// cross-term; the latter is exact for the Gaussian window and vanishes only when
+// both replicas share E_n and delta. Shared by the CPU config-swap
+// (orch::llr::try_exchange) and the CUDA param-swap driver so the two backends
+// cannot drift on this subtle acceptance.
+template <class R>
+[[nodiscard]] RETICOLO_HD R
+exchange_log_p(R a_i, R a_j, R e_n_i, R e_n_j, R q_i, R q_j, R delta_i, R delta_j) noexcept {
+    R const dq   = q_i - q_j;
+    R const qsum = q_i + q_j;
+    R const lin  = (a_i - a_j) * dq;
+    R const win  = (dq / R{2}) * (((qsum - (R{2} * e_n_i)) / (delta_i * delta_i)) -
+                                  ((qsum - (R{2} * e_n_j)) / (delta_j * delta_j)));
+    return lin + win;
+}
+
 }  // namespace reticolo::orch::llr::formula

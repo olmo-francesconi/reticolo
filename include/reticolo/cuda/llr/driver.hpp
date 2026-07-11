@@ -15,6 +15,7 @@
 
 #include <reticolo/core/log.hpp>
 #include <reticolo/io/writer.hpp>
+#include <reticolo/orch/llr/formula/window_formula.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
 
 #include <cmath>
@@ -165,18 +166,18 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
                 ++attempts;
                 double const e_i = reps[i]->energy();
                 double const e_j = reps[i + 1]->energy();
-                // Gaussian-window acceptance: linear tilt + the window quadratic
-                // cross-term (exact for the Gaussian window; vanishes only when
-                // the two windows share E_n and δ). Mirrors CPU orch::llr::try_exchange.
-                double const dq   = e_i - e_j;
-                double const qsum = e_i + e_j;
-                double const d_i  = reps[i]->delta();
-                double const d_j  = reps[i + 1]->delta();
-                double const lin  = (reps[i]->a() - reps[i + 1]->a()) * dq;
-                double const win =
-                    (dq / 2.0) * (((qsum - (2.0 * reps[i]->e_n())) / (d_i * d_i)) -
-                                  ((qsum - (2.0 * reps[i + 1]->e_n())) / (d_j * d_j)));
-                double const log_p = lin + win;
+                // Gaussian-window acceptance (linear tilt + window quadratic
+                // cross-term) — the SAME shared formula the CPU config-swap uses,
+                // so the two backends cannot drift on this subtle acceptance.
+                double const log_p =
+                    reticolo::orch::llr::formula::exchange_log_p(reps[i]->a(),
+                                                                 reps[i + 1]->a(),
+                                                                 reps[i]->e_n(),
+                                                                 reps[i + 1]->e_n(),
+                                                                 e_i,
+                                                                 e_j,
+                                                                 reps[i]->delta(),
+                                                                 reps[i + 1]->delta());
                 if (log_p >= 0.0 || exch_rng.uniform() < std::exp(log_p)) {
                     reps[i]->swap_window(*reps[i + 1]);
                     ++accepted;
