@@ -93,5 +93,5 @@ TEST_CASE("orch::llr::Replica: window / exchange observable is a custom observab
     for (std::size_t i = 0; i < r.field().nsites(); ++i) {
         q_direct += fld[i];
     }
-    REQUIRE(static_cast<double>(r.energy()) == Catch::Approx(q_direct).epsilon(1e-12));
+    REQUIRE(r.energy() == Catch::Approx(q_direct).epsilon(1e-12));
 }
