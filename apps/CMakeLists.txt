@@ -18,6 +18,7 @@ endfunction()
 
 reticolo_add_app(phi4_hmc            phi4_hmc.cpp)
 reticolo_add_app(phi4_hmc_f32        phi4_hmc_f32.cpp)
+reticolo_add_app(param_span_hmc      param_span_hmc.cpp)
 reticolo_add_app(phi4_llr            phi4_llr.cpp)
 reticolo_add_app(bose_gas_hmc        bose_gas_hmc.cpp)
 reticolo_add_app(bose_gas_hmc_f32    bose_gas_hmc_f32.cpp)

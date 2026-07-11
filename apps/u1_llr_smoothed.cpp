@@ -1,12 +1,12 @@
 // Smoothed LLR variant for compact U(1): per-replica Robbins-Monro with a
 // cross-replica local-quadratic smoother shrunk into each iterate. See
-// include/reticolo/llr/smoothed_driver.hpp.
+// include/reticolo/orch/llr/smoothed_driver.hpp.
 //
 // Mirrors apps/u1_llr.cpp: same action, sampler, geometry, exchange and
 // HDF5 schema; the only differences are the driver call and four extra
 // CLI knobs controlling the smoother and shrinkage schedule.
 
-#include <reticolo/llr/smoothed_driver.hpp>
+#include <reticolo/orch/llr/smoothed_driver.hpp>
 #include <reticolo/reticolo.hpp>
 
 #include <algorithm>
@@ -21,11 +21,11 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using Action   = action::Wilson<math::group::U1, double>;
-    using ReplicaT = llr::Replica<Action,
-                                  FastRng,
-                                  alg::integ::Omelyan2,
-                                  double,
-                                  MatrixLinkLattice<math::group::U1, double>>;
+    using ReplicaT = orch::llr::Replica<Action,
+                                        FastRng,
+                                        alg::integ::Omelyan2,
+                                        double,
+                                        MatrixLinkLattice<math::group::U1, double>>;
 
     cli::Parser p{"u1_llr_smoothed", "Smoothed LLR for compact U(1) Wilson action"};
     auto const cf     = app::common_flags(p, {.L = 4, .out = "u1_llr_smoothed.h5"});
@@ -73,7 +73,7 @@ int main(int argc, char** argv) {
     double const d_e = spacing > 0.0 ? spacing : delta;
     int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
-    auto const plan            = llr::plan_threads(n_rep, rf.replica_threads);
+    auto const plan            = orch::plan_threads(n_rep, rf.replica_threads);
 
     std::vector<std::unique_ptr<ReplicaT>> reps;
     reps.reserve(static_cast<std::size_t>(n_rep));
@@ -93,9 +93,9 @@ int main(int argc, char** argv) {
 
     FastRng exch_rng{cf.seed};
     bool const resuming = !rf.resume.empty();
-    llr::OrchState resume_state{};
+    orch::llr::OrchState resume_state{};
     if (resuming) {
-        resume_state = llr::load_ensemble(rf.resume, reps, exch_rng);
+        resume_state = orch::llr::load_ensemble(rf.resume, reps, exch_rng);
         log::info("llr",
                   "resumed from {}  phase={} iter={}",
                   rf.resume,
@@ -117,30 +117,29 @@ int main(int argc, char** argv) {
         }
     }
 
-    llr::smoothed::run(reps,
-                       exch_rng,
-                       llr::smoothed::DriverSpec{.n_nr              = n_nr,
-                                                 .n_therm_nr        = n_therm_nr,
-                                                 .n_meas_nr         = n_meas_nr,
-                                                 .n_rm              = n_rm,
-                                                 .n_therm_rm        = n_therm_rm,
-                                                 .n_meas_rm         = n_meas_rm,
-                                                 .delta             = delta,
-                                                 .e_min             = e_min,
-                                                 .E_max             = e_max_snapped,
-                                                 .d_e               = d_e,
-                                                 .exchange          = (exchange != 0),
-                                                 .smooth_K          = smooth_K,
-                                                 .smooth_degree     = smooth_degree,
-                                                 .smooth_lambda0    = smooth_lambda0,
-                                                 .smooth_lambda_exp = smooth_lambda_exp,
-                                                 .replica_threads   = plan.m,
-                                                 .slabs             = rf.slabs,
-                                                 .concurrency       = plan.concurrency,
-                                                 .nested            = plan.m > 1,
-                                                 .checkpoint_path   = rf.checkpoint,
-                                                 .checkpoint_every  = rf.checkpoint_every,
-                                                 .start_phase = resuming ? resume_state.phase : 0,
-                                                 .start_iter  = resuming ? resume_state.iter : 0},
-                       out);
+    orch::llr::smoothed::run(
+        reps,
+        exch_rng,
+        orch::llr::smoothed::DriverSpec{.n_nr              = n_nr,
+                                        .n_therm_nr        = n_therm_nr,
+                                        .n_meas_nr         = n_meas_nr,
+                                        .n_rm              = n_rm,
+                                        .n_therm_rm        = n_therm_rm,
+                                        .n_meas_rm         = n_meas_rm,
+                                        .delta             = delta,
+                                        .e_min             = e_min,
+                                        .E_max             = e_max_snapped,
+                                        .d_e               = d_e,
+                                        .exchange          = (exchange != 0),
+                                        .smooth_K          = smooth_K,
+                                        .smooth_degree     = smooth_degree,
+                                        .smooth_lambda0    = smooth_lambda0,
+                                        .smooth_lambda_exp = smooth_lambda_exp,
+                                        .plan              = plan,
+                                        .slabs             = rf.slabs,
+                                        .checkpoint_path   = rf.checkpoint,
+                                        .checkpoint_every  = rf.checkpoint_every,
+                                        .start_phase       = resuming ? resume_state.phase : 0,
+                                        .start_iter        = resuming ? resume_state.iter : 0},
+        out);
 }

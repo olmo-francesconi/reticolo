@@ -10,6 +10,7 @@
 #include <reticolo/action/gauge.hpp>
 #include <reticolo/action/site.hpp>
 #include <reticolo/action/sweep/site.hpp>
+#include <reticolo/algorithm/concepts.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/app/setup.hpp>
@@ -30,19 +31,24 @@
 #include <reticolo/io/checkpoint.hpp>
 #include <reticolo/io/reader.hpp>
 #include <reticolo/io/writer.hpp>
-#include <reticolo/llr/driver.hpp>
-#include <reticolo/llr/exchange.hpp>
-#include <reticolo/llr/log.hpp>
-#include <reticolo/llr/replica.hpp>
-#include <reticolo/llr/smoothed_driver.hpp>
-#include <reticolo/llr/update_a.hpp>
-#include <reticolo/llr/windowed_action.hpp>
 #include <reticolo/math/group/su2.hpp>
 #include <reticolo/math/group/su3.hpp>
 #include <reticolo/math/group/u1.hpp>
 #include <reticolo/obs/analysis.hpp>
 #include <reticolo/obs/catalog.hpp>
 #include <reticolo/obs/concepts.hpp>
+#include <reticolo/orch/checkpoint.hpp>
+#include <reticolo/orch/concepts.hpp>
+#include <reticolo/orch/ensemble.hpp>
+#include <reticolo/orch/llr/driver.hpp>
+#include <reticolo/orch/llr/exchange.hpp>
+#include <reticolo/orch/llr/log.hpp>
+#include <reticolo/orch/llr/replica.hpp>
+#include <reticolo/orch/llr/smoothed_driver.hpp>
+#include <reticolo/orch/llr/update_a.hpp>
+#include <reticolo/orch/llr/windowed_action.hpp>
+#include <reticolo/orch/span.hpp>
+#include <reticolo/orch/thread_plan.hpp>
 // NOLINTEND(misc-include-cleaner)
 
 // Short namespace aliases. One `using namespace reticolo;` per app then gives

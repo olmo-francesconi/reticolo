@@ -25,7 +25,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using Action   = act::Xy<double>;
-    using ReplicaT = llr::Replica<Action, FastRng>;
+    using ReplicaT = orch::llr::Replica<Action, FastRng>;
 
     // ---- CLI ----
     cli::Parser p{"xy_llr", "LLR (Gaussian-penalty) with replica exchange for the XY model"};
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
     double const d_e = spacing > 0.0 ? spacing : delta;
     int const n_rep  = std::max(2, static_cast<int>(std::lround((e_max - e_min) / d_e)) + 1);
     double const e_max_snapped = e_min + (static_cast<double>(n_rep - 1) * d_e);
-    auto const plan            = llr::plan_threads(n_rep, rf.replica_threads);
+    auto const plan            = orch::plan_threads(n_rep, rf.replica_threads);
 
     // ---- Replicas ----
     std::vector<std::unique_ptr<ReplicaT>> reps;
@@ -87,9 +87,9 @@ int main(int argc, char** argv) {
     // ---- Resume ----
     FastRng exch_rng{cf.seed};
     bool const resuming = !rf.resume.empty();
-    llr::OrchState resume_state{};
+    orch::llr::OrchState resume_state{};
     if (resuming) {
-        resume_state = llr::load_ensemble(rf.resume, reps, exch_rng);
+        resume_state = orch::llr::load_ensemble(rf.resume, reps, exch_rng);
         log::info("llr",
                   "resumed from {}  phase={} iter={}",
                   rf.resume,
@@ -102,25 +102,23 @@ int main(int argc, char** argv) {
     out.start_phase("llr");
 
     // ---- Drive: NR warm-up + RM + exchange ----
-    llr::run(reps,
-             exch_rng,
-             llr::DriverSpec{.n_nr             = n_nr,
-                             .n_therm_nr       = n_therm_nr,
-                             .n_meas_nr        = n_meas_nr,
-                             .n_rm             = n_rm,
-                             .n_therm_rm       = n_therm_rm,
-                             .n_meas_rm        = n_meas_rm,
-                             .delta            = delta,
-                             .e_min            = e_min,
-                             .E_max            = e_max_snapped,
-                             .d_e              = d_e,
-                             .replica_threads  = plan.m,
-                             .slabs            = rf.slabs,
-                             .concurrency      = plan.concurrency,
-                             .nested           = plan.m > 1,
-                             .checkpoint_path  = rf.checkpoint,
-                             .checkpoint_every = rf.checkpoint_every,
-                             .start_phase      = resuming ? resume_state.phase : 0,
-                             .start_iter       = resuming ? resume_state.iter : 0},
-             out);
+    orch::llr::run(reps,
+                   exch_rng,
+                   orch::llr::DriverSpec{.n_nr             = n_nr,
+                                         .n_therm_nr       = n_therm_nr,
+                                         .n_meas_nr        = n_meas_nr,
+                                         .n_rm             = n_rm,
+                                         .n_therm_rm       = n_therm_rm,
+                                         .n_meas_rm        = n_meas_rm,
+                                         .delta            = delta,
+                                         .e_min            = e_min,
+                                         .E_max            = e_max_snapped,
+                                         .d_e              = d_e,
+                                         .plan             = plan,
+                                         .slabs            = rf.slabs,
+                                         .checkpoint_path  = rf.checkpoint,
+                                         .checkpoint_every = rf.checkpoint_every,
+                                         .start_phase      = resuming ? resume_state.phase : 0,
+                                         .start_iter       = resuming ? resume_state.iter : 0},
+                   out);
 }

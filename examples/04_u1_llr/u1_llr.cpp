@@ -21,11 +21,11 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using Action   = action::Wilson<math::group::U1, double>;
-    using ReplicaT = llr::Replica<Action,
-                                  FastRng,
-                                  alg::integ::Omelyan2,
-                                  double,
-                                  MatrixLinkLattice<math::group::U1, double>>;
+    using ReplicaT = orch::llr::Replica<Action,
+                                        FastRng,
+                                        alg::integ::Omelyan2,
+                                        double,
+                                        MatrixLinkLattice<math::group::U1, double>>;
 
     // ---- CLI ----
     cli::Parser p{"u1_llr", "LLR with replica exchange for compact U(1) Wilson action"};
@@ -103,18 +103,18 @@ int main(int argc, char** argv) {
     }
 
     // ---- Drive: NR warm-up + RM + (optional) exchange ----
-    llr::run(reps,
-             exch_rng,
-             llr::DriverSpec{.n_nr       = n_nr,
-                             .n_therm_nr = n_therm_nr,
-                             .n_meas_nr  = n_meas_nr,
-                             .n_rm       = n_rm,
-                             .n_therm_rm = n_therm_rm,
-                             .n_meas_rm  = n_meas_rm,
-                             .delta      = delta,
-                             .e_min      = e_min,
-                             .E_max      = e_max_snapped,
-                             .d_e        = d_e,
-                             .exchange   = (exchange != 0)},
-             out);
+    orch::llr::run(reps,
+                   exch_rng,
+                   orch::llr::DriverSpec{.n_nr       = n_nr,
+                                         .n_therm_nr = n_therm_nr,
+                                         .n_meas_nr  = n_meas_nr,
+                                         .n_rm       = n_rm,
+                                         .n_therm_rm = n_therm_rm,
+                                         .n_meas_rm  = n_meas_rm,
+                                         .delta      = delta,
+                                         .e_min      = e_min,
+                                         .E_max      = e_max_snapped,
+                                         .d_e        = d_e,
+                                         .exchange   = (exchange != 0)},
+                   out);
 }

@@ -22,7 +22,7 @@ TEST_CASE("real_scalar_t strips complex and passes real through", "[api][traits]
     STATIC_REQUIRE(std::is_same_v<real_scalar_t<std::complex<double>>, double>);
     STATIC_REQUIRE(std::is_same_v<real_scalar_t<std::complex<float>>, float>);
     // The LLR alias is the same trait.
-    STATIC_REQUIRE(std::is_same_v<llr::scalar_of_t<std::complex<double>>, double>);
+    STATIC_REQUIRE(std::is_same_v<orch::llr::scalar_of_t<std::complex<double>>, double>);
 }
 
 // ---- #1: s_full / s_imag and their caches return `double` for every action,

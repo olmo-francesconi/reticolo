@@ -158,7 +158,7 @@ traversal engine lives once in `action/sweep/`.
 - **`HasImagPart<A, Field>`** — refines `HmcAction` for complex actions with a
   sign problem: `s_imag(l)` is the imaginary part (the LLR constraint
   observable in the phase-quenched ensemble) and `compute_force_imag(l, force)`
-  its gradient. Only `BoseGas` uses it today; `llr::WindowedAction` switches to
+  its gradient. Only `BoseGas` uses it today; `orch::llr::WindowedAction` switches to
   its complex mode when the base satisfies it.
 
 Earlier revisions carried a `LocalAction` Metropolis baseline
@@ -221,12 +221,19 @@ member — read the compiler error.
 
 ## Updaters
 
-| updater                | needs                                       |
-| ---------------------- | ------------------------------------------- |
-| `alg::Hmc<A,R,Integ>`  | `HmcAction` (+ optionally `HasFusedKick`)   |
+| updater                | models                | needs                                     |
+| ---------------------- | --------------------- | ----------------------------------------- |
+| `alg::Hmc<A,R,Integ>`  | `alg::Updater`        | `HmcAction` (+ optionally `HasFusedKick`) |
 
-`alg::Hmc` is the only update algorithm; `llr::Replica` orchestrates an
-ensemble of windowed HMC chains on top of it (see the LLR section).
+`alg::Hmc` is the only update algorithm. The **`alg::Updater`** concept
+([`algorithm/concepts.hpp`](../include/reticolo/algorithm/concepts.hpp)) is the
+updater-level analogue of `action::HmcAction` — the contract apps and the
+orchestration layer rely on: `step()` (returns `{dH, accepted}`),
+`last_s_full()`, `rng()`. It is duck-typed and checked at the use site (both
+orchestration workers `static_assert` their sampler against it), so a new
+updater is just a class modelling it — no base class, reuse the same
+`alg::integ::*` type-parameters. `orch::llr::Replica` and `orch::span::Chain`
+each own an `alg::Hmc` and drive it through this surface.
 
 The HMC integrator is a **type parameter**, not a runtime switch. Three
 ship: `alg::integ::Omelyan2` (2nd-order minimum-norm, ~1.4× speedup at the
@@ -341,26 +348,59 @@ prints the banner. With `replicas = true` each scoped run id also gets its
 own `<workspace>/<stem>.<rNNN>.log`.
 
 `log::scope("rNNN")` (RAII) binds a thread-local replica tag —
-`llr::Replica` binds its own id inside its public methods, so apps and
+`orch::llr::Replica` binds its own id inside its public methods, so apps and
 drivers only bind a scope when they run their own logging code inside a
 parallel region; transitively-called code picks the tag up automatically.
 
-`Lattice`, `FastRng`, `Writer`, action, algorithm, and `llr::Replica`
+`Lattice`, `FastRng`, `Writer`, action, algorithm, and `orch::llr::Replica`
 constructors auto-announce, so most apps don't call `log::info` at all.
 `log::off()` short-circuits before any formatting — tests link a shared
 `tests/test_main.cpp` that calls it; benches and `tune_*` apps too.
 
-## LLR replicas
+## Orchestration
 
-LLR reconstructs the density of states ρ(S) by running N replicas, each
-pinned by a Gaussian-window penalty to a different region of action space.
-Replicas sample in parallel (OpenMP), each by its own HMC. A
-Newton-Raphson + Robbins-Monro loop adapts a per-replica reweighting
-parameter `a`. Periodic even/odd replica exchange improves mixing.
+An orchestration runs **many concurrent simulations** and reduces their output.
+`orch/` is that subsystem: a physics-free **spine** at the top, with concrete
+orchestrators in subfolders (`orch/span/`, `orch/llr/`). The dependency is
+one-way `orch/<name> → orch → core` — the spine never mentions a window, a tilt,
+or an exchange.
 
-`llr::Replica` wraps a `Base` action in `llr::WindowedAction` (adds the
-`a·S + (S − E_n)²/2δ²` shift) and holds its own RNG / lattice / HMC. LLR
-is the one place in the library where OpenMP shows up.
+The spine (`reticolo::orch`) is four small pieces:
+
+- **`Worker`** concept ([`orch/concepts.hpp`](../include/reticolo/orch/concepts.hpp))
+  — a self-contained simulation unit; just `id()`. The `Checkpointable`
+  refinement adds `field()` + `rng()`.
+- **`ThreadPlan` / `plan_threads`** ([`orch/thread_plan.hpp`](../include/reticolo/orch/thread_plan.hpp))
+  — split the ambient OpenMP budget into an outer worker team (`concurrency`)
+  and inner per-worker HMC teams (`m`); saturate workers first.
+- **`parallel_workers(workers, plan, body)`** ([`orch/ensemble.hpp`](../include/reticolo/orch/ensemble.hpp))
+  — the one concurrent primitive: run `body(i, worker)` over every worker at
+  once under the plan. Concurrent-only — the thread-unsafe drain (HDF5, logging)
+  stays a serial loop in the caller, so *the orchestration owns its loop*.
+- **`save_ensemble` / `load_ensemble`** ([`orch/checkpoint.hpp`](../include/reticolo/orch/checkpoint.hpp))
+  — snapshot every `Checkpointable` worker's field + rng + `OrchState`; opt-in
+  `save_extra`/`load_extra` per worker and an orchestrator-level extra hook keep
+  it physics-free.
+
+Two orchestrators ship as clients:
+
+### Parameter span (`orch::span`)
+
+`orch::span::Chain<Action,…>` is a generic HMC worker (any scalar/gauge action);
+`orch::span::run` builds one per point of a parameter grid, runs them
+concurrently, and records `/worker_NNN/…` time series. `apps/param_span_hmc`
+sweeps `kappa` in one binary — an in-process replacement for an outer bash sweep.
+
+### LLR (`orch::llr`)
+
+LLR reconstructs the density of states ρ(S) by running N replicas, each pinned by
+a Gaussian-window penalty to a different region of action space, each sampled by
+its own HMC. A Newton-Raphson + Robbins-Monro loop adapts a per-replica
+reweighting parameter `a`; periodic even/odd replica exchange improves mixing.
+`orch::llr::Replica` wraps a `Base` action in `orch::llr::WindowedAction` (the
+`a·S + (S − E_n)²/2δ²` shift) and is an `orch::Worker`; `orch::llr::run` /
+`smoothed::run` are clients of the spine (they drive `parallel_workers` and add
+exchange as a serial coupling between waves).
 
 Two convention watch-outs:
 

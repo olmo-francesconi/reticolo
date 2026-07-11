@@ -1,13 +1,14 @@
 #pragma once
 
+#include <reticolo/algorithm/concepts.hpp>
 #include <reticolo/algorithm/hmc.hpp>
 #include <reticolo/algorithm/integrators.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/log_helpers.hpp>
-#include <reticolo/llr/update_a.hpp>
-#include <reticolo/llr/windowed_action.hpp>
+#include <reticolo/orch/llr/update_a.hpp>
+#include <reticolo/orch/llr/windowed_action.hpp>
 
 #include <cmath>
 #include <complex>
@@ -17,7 +18,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace reticolo::llr {
+namespace reticolo::orch::llr {
 
 struct ReplicaStats {
     long n_traj     = 0;
@@ -62,9 +63,9 @@ public:
     };
 
     Replica(Base const& base, Rng rng_init, Spec spec, alg::HmcSpec const& hmc_spec)
-        : id_{std::move(spec.id)}, phi_{std::move(spec.shape)},
+        : id_{std::move(spec.id)}, field_{std::move(spec.shape)},
           windowed_{.base = base, .a = spec.a_init, .E_n = spec.e_n, .delta = spec.delta},
-          hmc_{windowed_, phi_, std::move(rng_init), hmc_spec, Integrator{}, log::Mode::silent} {}
+          hmc_{windowed_, field_, std::move(rng_init), hmc_spec, Integrator{}, log::Mode::silent} {}
 
     // Announce the nested HMC sampler (integrator / τ / n_md). The LLR driver
     // calls this once, on a representative replica, so the ensemble's shared
@@ -178,18 +179,30 @@ public:
     void set_E_n(scalar_t v) noexcept { windowed_.E_n = v; }
     void set_delta(scalar_t v) noexcept { windowed_.delta = v; }
 
-    [[nodiscard]] Field& phi() noexcept { return phi_; }
-    [[nodiscard]] Field const& phi() const noexcept { return phi_; }
+    [[nodiscard]] Field& field() noexcept { return field_; }
+    [[nodiscard]] Field const& field() const noexcept { return field_; }
     // The replica's randomness is owned by its Hmc (one site stream per slab —
     // one stream inside the replica team — plus a driver for serial draws).
     [[nodiscard]] StreamSet<Rng>& rng() noexcept { return hmc_.rng(); }
     [[nodiscard]] windowed_action_type const& windowed_action() const noexcept { return windowed_; }
 
+    // Per-replica checkpoint payload beyond field + rng: the adapted tilt `a`
+    // (orch::HasCheckpointExtra). Templated on the writer/reader so replica.hpp
+    // stays free of the io headers.
+    template <class Writer>
+    void save_extra(Writer& w, std::string const& group) const {
+        w.template attr<double>(group + "@a", static_cast<double>(a()));
+    }
+    template <class Reader>
+    void load_extra(Reader& r, std::string const& group) {
+        set_a(static_cast<scalar_t>(r.template attr<double>(group + "@a")));
+    }
+
     // Random Gaussian-shift seed of the field, sigma per real component.
     // Complex fields get independent N(0, sigma²) on Re and Im.
     void hot_start(scalar_t sigma) noexcept {
-        T* const data       = phi_.data();
-        std::size_t const n = phi_.nsites();
+        T* const data       = field_.data();
+        std::size_t const n = field_.nsites();
         Rng& drv            = hmc_.rng().driver();  // serial draw → driver stream
         if constexpr (std::is_same_v<T, std::complex<double>> ||
                       std::is_same_v<T, std::complex<float>>) {
@@ -288,12 +301,14 @@ public:
 
 private:
     using Windowed = windowed_action_type;
+    static_assert(alg::Updater<alg::Hmc<Windowed, Rng, Integrator, Field, T>>,
+                  "the LLR sampler must model alg::Updater");
 
     std::string id_;
-    Field phi_;
+    Field field_;
     Windowed windowed_;
     alg::Hmc<Windowed, Rng, Integrator, Field, T> hmc_;
     ReplicaStats stats_{};
 };
 
-}  // namespace reticolo::llr
+}  // namespace reticolo::orch::llr

@@ -2,7 +2,7 @@
 // Bose gas at finite chemical potential. Phase-quenched HMC samples
 // `S_R = base.s_full(phi)`; the LLR window constrains the imaginary action
 // observable `S_I = base.s_imag(phi)` via the `HasImagPart` dispatch in
-// llr::WindowedAction.
+// orch::llr::WindowedAction.
 //
 // Output schema (HDF5):
 //  /cfg@n_rep, /cfg@delta, /cfg@E_min, /cfg@E_max, /cfg@dE, /cfg@mu
@@ -29,7 +29,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using Action   = act::BoseGas<double>;
-    using ReplicaT = llr::Replica<Action, FastRng>;
+    using ReplicaT = orch::llr::Replica<Action, FastRng>;
 
     // ---- CLI ----
     cli::Parser p{"bose_gas_llr", "LLR for the 4D Bose gas at finite chemical potential"};
@@ -114,17 +114,17 @@ int main(int argc, char** argv) {
     }
 
     // ---- Drive: NR warm-up + RM + exchange ----
-    llr::run(reps,
-             exch_rng,
-             llr::DriverSpec{.n_nr       = n_nr,
-                             .n_therm_nr = n_therm_nr,
-                             .n_meas_nr  = n_meas_nr,
-                             .n_rm       = n_rm,
-                             .n_therm_rm = n_therm_rm,
-                             .n_meas_rm  = n_meas_rm,
-                             .delta      = delta,
-                             .e_min      = e_min,
-                             .E_max      = e_max_snapped,
-                             .d_e        = d_e},
-             out);
+    orch::llr::run(reps,
+                   exch_rng,
+                   orch::llr::DriverSpec{.n_nr       = n_nr,
+                                         .n_therm_nr = n_therm_nr,
+                                         .n_meas_nr  = n_meas_nr,
+                                         .n_rm       = n_rm,
+                                         .n_therm_rm = n_therm_rm,
+                                         .n_meas_rm  = n_meas_rm,
+                                         .delta      = delta,
+                                         .e_min      = e_min,
+                                         .E_max      = e_max_snapped,
+                                         .d_e        = d_e},
+                   out);
 }

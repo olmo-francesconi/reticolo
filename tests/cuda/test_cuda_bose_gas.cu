@@ -12,7 +12,7 @@
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/llr/windowed_action.cuh>
 #include <reticolo/cuda/reduce.cuh>
-#include <reticolo/llr/windowed_action.hpp>
+#include <reticolo/orch/llr/windowed_action.hpp>
 
 #include <cmath>
 #include <complex>
@@ -254,7 +254,7 @@ bool bose_gas_force_imag_matches_cpu() {
 }
 
 // The whole mode-B windowed path: device cuda::llr::WindowedAction<BoseGas> must
-// reproduce the CPU llr::WindowedAction<BoseGas> for both the windowed action
+// reproduce the CPU orch::llr::WindowedAction<BoseGas> for both the windowed action
 // S_LLR = S_R + a·S_I + (S_I−E_n)²/2δ² and the combined force F_R + scale·F_I.
 // Templated so the same check runs in f64 (roundoff) and f32 (device sin/cos +
 // the f32 field precision, looser tolerance).
@@ -267,7 +267,7 @@ bool bose_gas_windowed_modeB_matches_cpu_impl(double s_tol, double f_tol) {
     constexpr double delta              = 4.0;
 
     // CPU windowed (mode B via HasImagPart).
-    reticolo::llr::WindowedAction<action::BoseGas<T>> w{
+    reticolo::orch::llr::WindowedAction<action::BoseGas<T>> w{
         a, static_cast<T>(a_slope), static_cast<T>(e_n), static_cast<T>(delta)};
     static_assert(decltype(w)::k_complex, "BoseGas CPU WindowedAction must be mode B");
     double const s_cpu = w.s_full(host);
@@ -278,7 +278,8 @@ bool bose_gas_windowed_modeB_matches_cpu_impl(double s_tol, double f_tol) {
     using DField = DeviceField<cplx<T>>;
     DField dfield{kShape};
     dfield.copy_from_host(as_dev(host.data()));
-    llr::WindowedAction<action::BoseGas<T>, DField> dw{a, dfield.topology(), a_slope, e_n, delta};
+    orch::llr::WindowedAction<action::BoseGas<T>, DField> dw{
+        a, dfield.topology(), a_slope, e_n, delta};
     static_assert(decltype(dw)::k_complex, "BoseGas device WindowedAction must be mode B");
 
     DeviceBuffer<double> s_dev_buf{1};

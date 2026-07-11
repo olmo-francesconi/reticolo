@@ -59,11 +59,11 @@ inline CommonFlags common_flags(cli::Parser& p, CommonDefaults const& d) {
 }
 
 // Stable references to the LLR run-control flags: per-replica HMC threading and
-// checkpoint/resume. The total CPU budget is NOT a flag — `llr::plan_threads`
+// checkpoint/resume. The total CPU budget is NOT a flag — `orch::plan_threads`
 // reads it from the OpenMP environment (OMP_NUM_THREADS) and splits it into an
 // outer replica team and inner per-replica HMC teams. Single-sourced because
 // every LLR app takes the same five with the same wording; the app feeds
-// `replica_threads` to `llr::plan_threads` and the rest into its DriverSpec.
+// `replica_threads` to `orch::plan_threads` and the rest into its DriverSpec.
 struct LlrRunFlags {
     int const& replica_threads;
     int const& slabs;

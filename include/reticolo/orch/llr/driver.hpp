@@ -1,10 +1,13 @@
 #pragma once
 
 #include <reticolo/io/writer.hpp>
-#include <reticolo/llr/checkpoint.hpp>
-#include <reticolo/llr/exchange.hpp>
-#include <reticolo/llr/log.hpp>
-#include <reticolo/llr/update_a.hpp>
+#include <reticolo/orch/checkpoint.hpp>
+#include <reticolo/orch/ensemble.hpp>
+#include <reticolo/orch/llr/checkpoint.hpp>
+#include <reticolo/orch/llr/exchange.hpp>
+#include <reticolo/orch/llr/log.hpp>
+#include <reticolo/orch/llr/update_a.hpp>
+#include <reticolo/orch/thread_plan.hpp>
 
 #include <cstddef>
 #include <format>
@@ -12,11 +15,7 @@
 #include <string>
 #include <vector>
 
-#ifdef _OPENMP
-    #include <omp.h>
-#endif
-
-namespace reticolo::llr {
+namespace reticolo::orch::llr {
 
 // Shared LLR driver: stamps /cfg metadata, opens the per-replica /a /dE
 // series + /exchange/accepted, then runs the full schedule — a windowed-HMC
@@ -59,16 +58,13 @@ struct DriverSpec {
     int warm_max_traj  = 2000;
     double warm_thresh = 1.0;
 
-    // ---- threading (see llr::plan_threads) ----
-    // Per-replica HMC thread count `m` and slab granularity, recorded in the
-    // checkpoint so a resume reconstructs the same partition. `concurrency` is
-    // the outer replica-team size (num_threads on the replica loop); 0 = ambient
-    // = today's flat model. `nested` (set when m>1) enables OpenMP's second
-    // active level so a replica's HMC traverse can spawn its inner team.
-    int replica_threads = 1;
-    int slabs           = 0;
-    int concurrency     = 0;
-    bool nested         = false;
+    // ---- threading (see orch::plan_threads) ----
+    // The replica ensemble's thread split — outer replica concurrency + inner
+    // per-replica HMC team `m` + the nested-level flag — plus the HMC slab
+    // granularity. Recorded in the checkpoint so a resume reconstructs the same
+    // partition. Built by the app via orch::plan_threads.
+    orch::ThreadPlan plan{};
+    int slabs = 0;
 
     // ---- checkpoint / resume ----
     // `checkpoint_path` empty ⇒ no checkpointing. `checkpoint_every` sweeps
@@ -126,19 +122,6 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     std::vector<double> de_buf(n_rep_u);
     std::vector<double> a_buf(n_rep_u);
 
-    // Outer replica-team size + nested-region enable. num_threads(outer_nt)
-    // pins the replica loop to `concurrency` lanes so `concurrency × m` inner
-    // HMC threads don't oversubscribe; at m=1 (concurrency=0) outer_nt is the
-    // ambient count and the clause is a no-op — today's flat behaviour.
-#ifdef _OPENMP
-    if (spec.nested) {
-        omp_set_max_active_levels(2);
-    }
-    int const outer_nt = spec.concurrency > 0 ? spec.concurrency : omp_get_max_threads();
-#else
-    [[maybe_unused]] int const outer_nt = spec.concurrency > 0 ? spec.concurrency : 1;
-#endif
-
     // One-shot run summary: ensemble geometry, the shared HMC sampler (announced
     // once via a representative replica — all share the same integrator / τ /
     // n_md), and the schedule + thread split. Per-replica construction is logged
@@ -162,17 +145,16 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
               spec.n_therm_rm,
               spec.n_meas_rm,
               spec.exchange ? " · exchange" : "");
-    log::info("llr", "threads   m={} × {} concurrent", spec.replica_threads, outer_nt);
+    log::info("llr", "threads   m={} × {} concurrent", spec.plan.m, spec.plan.concurrency);
 
     // Warm-up phase: seat every replica in its E_n window by coarse tilt
     // adaptation (group-safe — plain HMC steps + Newton `a` updates, unlike a hot
     // start). Fresh runs only; a resume enters with already-warmed fields + tilt.
     if (spec.start_phase == 0 && spec.start_iter == 0 && spec.warm_max_traj > 0) {
         log::info("llr", "warm phase  seat {} replicas in window (a-adapting)", n_rep_u);
-#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            reps[n]->warm_into_window(spec.warm_therm, spec.warm_max_traj, spec.warm_thresh);
-        }
+        orch::parallel_workers(reps, spec.plan, [&](std::size_t /*n*/, Replica& r) {
+            r.warm_into_window(spec.warm_therm, spec.warm_max_traj, spec.warm_thresh);
+        });
     }
 
     // Rolling atomic snapshot at (phase, next-iter). No-op when no path is set;
@@ -181,26 +163,23 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
         if (spec.checkpoint_path.empty()) {
             return;
         }
-        save_ensemble(spec.checkpoint_path,
-                      reps,
-                      exch_rng,
-                      OrchState{.phase     = phase,
-                                .iter      = next_iter,
-                                .n_threads = spec.replica_threads,
-                                .slabs     = spec.slabs});
+        save_ensemble(
+            spec.checkpoint_path,
+            reps,
+            exch_rng,
+            OrchState{
+                .phase = phase, .iter = next_iter, .n_threads = spec.plan.m, .slabs = spec.slabs});
     };
 
     if (spec.start_phase == 0) {
         log::info("llr", "NR phase  {} iters × {} replicas", spec.n_nr, n_rep_u);
         for (int k = spec.start_iter; k < spec.n_nr; ++k) {
-#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
-            for (std::size_t n = 0; n < n_rep_u; ++n) {
-                auto& r = *reps[n];
+            orch::parallel_workers(reps, spec.plan, [&](std::size_t n, Replica& r) {
                 r.thermalize(spec.n_therm_nr, log::Mode::silent);
                 de_buf[n] = r.sample(spec.n_meas_nr, log::Mode::silent);
                 a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
                 r.set_a(a_buf[n]);
-            }
+            });
             // Drain + per-replica NR row serially (same schema as RM), binding
             // each replica's scope since we're outside the Replica's methods.
             for (std::size_t n = 0; n < n_rep_u; ++n) {
@@ -226,14 +205,12 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     int const rm_start = spec.start_phase == 1 ? spec.start_iter : 0;
     log::info("llr", "RM phase  {} iters × {} replicas", spec.n_rm, n_rep_u);
     for (int s = rm_start; s < spec.n_rm; ++s) {
-#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto& r = *reps[n];
+        orch::parallel_workers(reps, spec.plan, [&](std::size_t n, Replica& r) {
             r.thermalize(spec.n_therm_rm, log::Mode::silent);
             de_buf[n] = r.sample(spec.n_meas_rm, log::Mode::silent);
             a_buf[n]  = rm_update(r.a(), de_buf[n], spec.delta, s);
             r.set_a(a_buf[n]);
-        }
+        });
         // Drain + per-replica progress log serially: the iter() call takes the
         // global sink mutex and flushes two log files, so it must stay out of
         // the parallel region (mirrors smoothed_driver). Bind each replica's
@@ -277,4 +254,4 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     }
 }
 
-}  // namespace reticolo::llr
+}  // namespace reticolo::orch::llr

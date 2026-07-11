@@ -29,7 +29,7 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using Action   = act::Phi4<double>;
-    using ReplicaT = llr::Replica<Action, FastRng>;
+    using ReplicaT = orch::llr::Replica<Action, FastRng>;
 
     // ---- CLI ----
     cli::Parser p{"phi4_llr", "LLR (Gaussian-penalty) with replica exchange for phi^4"};
@@ -95,17 +95,17 @@ int main(int argc, char** argv) {
     out.start_phase("llr");
 
     // ---- Drive: NR warm-up + RM + exchange ----
-    llr::run(reps,
-             exch_rng,
-             llr::DriverSpec{.n_nr       = n_nr,
-                             .n_therm_nr = n_therm_nr,
-                             .n_meas_nr  = n_meas_nr,
-                             .n_rm       = n_rm,
-                             .n_therm_rm = n_therm_rm,
-                             .n_meas_rm  = n_meas_rm,
-                             .delta      = delta,
-                             .e_min      = e_min,
-                             .E_max      = e_max_snapped,
-                             .d_e        = d_e},
-             out);
+    orch::llr::run(reps,
+                   exch_rng,
+                   orch::llr::DriverSpec{.n_nr       = n_nr,
+                                         .n_therm_nr = n_therm_nr,
+                                         .n_meas_nr  = n_meas_nr,
+                                         .n_rm       = n_rm,
+                                         .n_therm_rm = n_therm_rm,
+                                         .n_meas_rm  = n_meas_rm,
+                                         .delta      = delta,
+                                         .e_min      = e_min,
+                                         .E_max      = e_max_snapped,
+                                         .d_e        = d_e},
+                   out);
 }

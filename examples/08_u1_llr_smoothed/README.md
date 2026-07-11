@@ -23,7 +23,7 @@ smoother only collapses the transient — it cannot introduce
 asymptotic bias even if `a*(E)` has a feature the quadratic fit
 misses.
 
-See the driver header `include/reticolo/llr/smoothed_driver.hpp` for the
+See the driver header `include/reticolo/orch/llr/smoothed_driver.hpp` for the
 parameter surface.
 
 ## What this example shows

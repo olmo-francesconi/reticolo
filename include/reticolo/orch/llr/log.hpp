@@ -9,7 +9,7 @@
 // so the core logger stays domain-agnostic — anything that knows about
 // Robbins-Monro / Newton-Raphson sweeps lives here.
 
-namespace reticolo::llr {
+namespace reticolo::orch::llr {
 
 // Per-iteration row for an LLR phase (NR warm-up or RM sweep). Identical
 // 6-field schema across every LLR app — phase is the only non-numeric column.
@@ -27,4 +27,4 @@ inline void iter(
               ratio);
 }
 
-}  // namespace reticolo::llr
+}  // namespace reticolo::orch::llr

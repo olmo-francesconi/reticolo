@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     using Group    = math::group::SU2;
     using Action   = action::Wilson<Group, double>;
     using Field    = MatrixLinkLattice<Group, double>;
-    using ReplicaT = llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, Field>;
+    using ReplicaT = orch::llr::Replica<Action, FastRng, alg::integ::Omelyan2, double, Field>;
 
     // ---- CLI ----
     cli::Parser p{"su2_llr", "LLR with replica exchange for SU(2) Wilson action"};
@@ -77,7 +77,7 @@ int main(int argc, char** argv) {
             alg::HmcSpec{.tau = tau, .n_md = n_md}));
         // Cold-start each replica's field to SU(2) identity (Re U_{00} =
         // Re U_{11} = 1, all else 0).
-        Field& phi           = reps.back()->phi();
+        Field& phi           = reps.back()->field();
         std::size_t const ns = phi.nsites();
         for (std::size_t mu = 0; mu < static_cast<std::size_t>(ndim); ++mu) {
             double* const blk = phi.mu_block_data(mu);
@@ -94,17 +94,17 @@ int main(int argc, char** argv) {
     out.start_phase("llr");
 
     // ---- Drive: NR warm-up + RM + exchange ----
-    llr::run(reps,
-             exch_rng,
-             llr::DriverSpec{.n_nr       = n_nr,
-                             .n_therm_nr = n_therm_nr,
-                             .n_meas_nr  = n_meas_nr,
-                             .n_rm       = n_rm,
-                             .n_therm_rm = n_therm_rm,
-                             .n_meas_rm  = n_meas_rm,
-                             .delta      = delta,
-                             .e_min      = e_min,
-                             .E_max      = e_max_snapped,
-                             .d_e        = d_e},
-             out);
+    orch::llr::run(reps,
+                   exch_rng,
+                   orch::llr::DriverSpec{.n_nr       = n_nr,
+                                         .n_therm_nr = n_therm_nr,
+                                         .n_meas_nr  = n_meas_nr,
+                                         .n_rm       = n_rm,
+                                         .n_therm_rm = n_therm_rm,
+                                         .n_meas_rm  = n_meas_rm,
+                                         .delta      = delta,
+                                         .e_min      = e_min,
+                                         .E_max      = e_max_snapped,
+                                         .d_e        = d_e},
+                   out);
 }

@@ -4,13 +4,13 @@
 #include <reticolo/algorithm/integ_ops.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
-#include <reticolo/llr/formula/window_formula.hpp>
+#include <reticolo/orch/llr/formula/window_formula.hpp>
 
 #include <complex>
 #include <cstddef>
 #include <optional>
 
-namespace reticolo::llr {
+namespace reticolo::orch::llr {
 
 // LLR window parameters (a, E_n, delta) stay real-valued even when the field
 // is complex — `scalar_of_t` is the canonical `reticolo::real_scalar_t`.
@@ -176,4 +176,4 @@ private:
     }
 };
 
-}  // namespace reticolo::llr
+}  // namespace reticolo::orch::llr

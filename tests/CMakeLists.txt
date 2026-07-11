@@ -116,6 +116,7 @@ if(RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS)
     endfunction()
 
     reticolo_add_app_smoke(test_phi4_hmc_smoke             phi4_hmc             apps/test_phi4_hmc_smoke.cpp)
+    reticolo_add_app_smoke(test_param_span_smoke           param_span_hmc       apps/test_param_span_smoke.cpp)
     reticolo_add_app_smoke(test_phi4_hmc_resume_equivalence phi4_hmc            apps/test_phi4_hmc_resume_equivalence.cpp)
     reticolo_add_app_smoke(test_phi6_hmc_smoke             phi6_hmc             apps/test_phi6_hmc_smoke.cpp)
     reticolo_add_app_smoke(test_sine_gordon_hmc_smoke      sine_gordon_hmc      apps/test_sine_gordon_hmc_smoke.cpp)

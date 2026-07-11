@@ -20,7 +20,7 @@
 //    separate per-replica files).
 //  * Run-id is bound per thread via RAII `log::scope(id)` (works with
 //    schedule(dynamic) and N_sims > N_threads — same thread rebinds each
-//    iteration). Library code that owns a run id (llr::Replica) binds it
+//    iteration). Library code that owns a run id (orch::llr::Replica) binds it
 //    internally; an app binds a scope only when it runs its own logging
 //    code inside a parallel region.
 

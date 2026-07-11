@@ -78,7 +78,7 @@ public:
     [[nodiscard]] R const& site_stream(std::size_t k) const noexcept { return streams_[k + 1].r; }
 
     // Rng concept — serial draws delegate to the driver stream, so a StreamSet
-    // serves every templated call site (Hmc accept, llr::try_exchange, …).
+    // serves every templated call site (Hmc accept, orch::llr::try_exchange, …).
     [[nodiscard]] std::uint64_t uniform_u64() noexcept { return driver().uniform_u64(); }
     [[nodiscard]] double uniform() noexcept { return driver().uniform(); }
     [[nodiscard]] double normal() noexcept { return driver().normal(); }

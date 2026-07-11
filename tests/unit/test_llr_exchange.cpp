@@ -1,8 +1,8 @@
 #include <reticolo/action/site/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
-#include <reticolo/llr/exchange.hpp>
-#include <reticolo/llr/replica.hpp>
+#include <reticolo/orch/llr/exchange.hpp>
+#include <reticolo/orch/llr/replica.hpp>
 
 #include <cstddef>
 #include <vector>
@@ -14,10 +14,10 @@ using reticolo::FastRng;
 using reticolo::Lattice;
 using reticolo::action::Phi4;
 
-namespace alg = reticolo::alg;
-namespace llr = reticolo::llr;
+namespace alg  = reticolo::alg;
+namespace orch = reticolo::orch;
 
-using ReplicaT = llr::Replica<Phi4<double>, FastRng>;
+using ReplicaT = orch::llr::Replica<Phi4<double>, FastRng>;
 
 namespace {
 
@@ -36,12 +36,12 @@ std::vector<double> snapshot(Lattice<double> const& phi) {
 // Populate the base action's last_s_full cache the way a trajectory would
 // (HMC's h1 s_full call), without running any MC.
 double prime_energy_cache(ReplicaT const& r) {
-    return r.windowed_action().base.s_full(r.phi());
+    return r.windowed_action().base.s_full(r.field());
 }
 
 }  // namespace
 
-TEST_CASE("llr::try_exchange: accepted swap moves fields and energy caches",
+TEST_CASE("orch::llr::try_exchange: accepted swap moves fields and energy caches",
           "[unit][llr][exchange]") {
     auto r0 = make_replica("r000", 11, 0.0);
     auto r1 = make_replica("r001", 22, 0.0);
@@ -54,8 +54,8 @@ TEST_CASE("llr::try_exchange: accepted swap moves fields and energy caches",
     REQUIRE(r1.energy() == e1);
     REQUIRE(e0 != e1);
 
-    auto const phi0 = snapshot(r0.phi());
-    auto const phi1 = snapshot(r1.phi());
+    auto const phi0 = snapshot(r0.field());
+    auto const phi1 = snapshot(r1.field());
 
     // (a0 - a1) * (e0 - e1) > 0 => log_p > 0 => deterministic accept.
     if (e0 > e1) {
@@ -67,21 +67,21 @@ TEST_CASE("llr::try_exchange: accepted swap moves fields and energy caches",
     }
 
     FastRng rng{3};
-    REQUIRE(llr::try_exchange(r0, r1, rng));
+    REQUIRE(orch::llr::try_exchange(r0, r1, rng));
 
-    REQUIRE(snapshot(r0.phi()) == phi1);
-    REQUIRE(snapshot(r1.phi()) == phi0);
+    REQUIRE(snapshot(r0.field()) == phi1);
+    REQUIRE(snapshot(r1.field()) == phi0);
 
     // The caches followed the configs: energy() must report the energy of
     // the config each replica now holds, and agree with a fresh sweep.
     REQUIRE(r0.energy() == e1);
     REQUIRE(r1.energy() == e0);
     Phi4<double> const probe{.kappa = 0.18, .lambda = 1.0};
-    REQUIRE(probe.s_full(r0.phi()) == Catch::Approx(e1).epsilon(1e-12));
-    REQUIRE(probe.s_full(r1.phi()) == Catch::Approx(e0).epsilon(1e-12));
+    REQUIRE(probe.s_full(r0.field()) == Catch::Approx(e1).epsilon(1e-12));
+    REQUIRE(probe.s_full(r1.field()) == Catch::Approx(e0).epsilon(1e-12));
 }
 
-TEST_CASE("llr::try_exchange: acceptance includes the Gaussian-window term",
+TEST_CASE("orch::llr::try_exchange: acceptance includes the Gaussian-window term",
           "[unit][llr][exchange]") {
     // Engineer a swap whose FULL log_p >= 0 (deterministic accept, no rng draw)
     // while the linear-only part is hugely negative (would essentially always
@@ -106,10 +106,10 @@ TEST_CASE("llr::try_exchange: acceptance includes the Gaussian-window term",
     r1.set_a(0.0);
 
     FastRng rng{9};
-    REQUIRE(llr::try_exchange(r0, r1, rng));
+    REQUIRE(orch::llr::try_exchange(r0, r1, rng));
 }
 
-TEST_CASE("llr::try_exchange: rejected swap leaves fields and energies untouched",
+TEST_CASE("orch::llr::try_exchange: rejected swap leaves fields and energies untouched",
           "[unit][llr][exchange]") {
     auto r0 = make_replica("r000", 33, 0.0);
     auto r1 = make_replica("r001", 44, 0.0);
@@ -120,18 +120,18 @@ TEST_CASE("llr::try_exchange: rejected swap leaves fields and energies untouched
     double const e1 = prime_energy_cache(r1);
     REQUIRE(e0 != e1);
 
-    auto const phi0 = snapshot(r0.phi());
-    auto const phi1 = snapshot(r1.phi());
+    auto const phi0 = snapshot(r0.field());
+    auto const phi1 = snapshot(r1.field());
 
     // log_p = (a0 - a1)(e0 - e1) = -1000 => exp underflows => deterministic reject.
     r0.set_a(-1000.0 / (e0 - e1));
     r1.set_a(0.0);
 
     FastRng rng{5};
-    REQUIRE_FALSE(llr::try_exchange(r0, r1, rng));
+    REQUIRE_FALSE(orch::llr::try_exchange(r0, r1, rng));
 
-    REQUIRE(snapshot(r0.phi()) == phi0);
-    REQUIRE(snapshot(r1.phi()) == phi1);
+    REQUIRE(snapshot(r0.field()) == phi0);
+    REQUIRE(snapshot(r1.field()) == phi1);
     REQUIRE(r0.energy() == e0);
     REQUIRE(r1.energy() == e1);
 }

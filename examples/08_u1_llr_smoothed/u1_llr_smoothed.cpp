@@ -1,12 +1,12 @@
 // Smoothed LLR variant for compact U(1): per-replica Robbins-Monro with a
 // cross-replica local-quadratic smoother shrunk into each iterate. See
-// include/reticolo/llr/smoothed_driver.hpp.
+// include/reticolo/orch/llr/smoothed_driver.hpp.
 //
 // Mirrors apps/u1_llr.cpp: same action, sampler, geometry, exchange and
 // HDF5 schema; the only differences are the driver call and four extra
 // CLI knobs controlling the smoother and shrinkage schedule.
 
-#include <reticolo/llr/smoothed_driver.hpp>
+#include <reticolo/orch/llr/smoothed_driver.hpp>
 #include <reticolo/reticolo.hpp>
 
 #include <algorithm>
@@ -22,11 +22,11 @@
 int main(int argc, char** argv) {
     using namespace reticolo;
     using Action   = action::Wilson<math::group::U1, double>;
-    using ReplicaT = llr::Replica<Action,
-                                  FastRng,
-                                  alg::integ::Omelyan2,
-                                  double,
-                                  MatrixLinkLattice<math::group::U1, double>>;
+    using ReplicaT = orch::llr::Replica<Action,
+                                        FastRng,
+                                        alg::integ::Omelyan2,
+                                        double,
+                                        MatrixLinkLattice<math::group::U1, double>>;
 
     cli::Parser p{"u1_llr_smoothed", "Smoothed LLR for compact U(1) Wilson action"};
     auto const& L     = p.opt<int>("L,size", 4, "linear lattice extent");
@@ -104,22 +104,23 @@ int main(int argc, char** argv) {
         reps[n]->hot_start(k_hot_sigma);
     }
 
-    llr::smoothed::run(reps,
-                       exch_rng,
-                       llr::smoothed::DriverSpec{.n_nr              = n_nr,
-                                                 .n_therm_nr        = n_therm_nr,
-                                                 .n_meas_nr         = n_meas_nr,
-                                                 .n_rm              = n_rm,
-                                                 .n_therm_rm        = n_therm_rm,
-                                                 .n_meas_rm         = n_meas_rm,
-                                                 .delta             = delta,
-                                                 .e_min             = e_min,
-                                                 .E_max             = e_max_snapped,
-                                                 .d_e               = d_e,
-                                                 .exchange          = (exchange != 0),
-                                                 .smooth_K          = smooth_K,
-                                                 .smooth_degree     = smooth_degree,
-                                                 .smooth_lambda0    = smooth_lambda0,
-                                                 .smooth_lambda_exp = smooth_lambda_exp},
-                       out);
+    orch::llr::smoothed::run(
+        reps,
+        exch_rng,
+        orch::llr::smoothed::DriverSpec{.n_nr              = n_nr,
+                                        .n_therm_nr        = n_therm_nr,
+                                        .n_meas_nr         = n_meas_nr,
+                                        .n_rm              = n_rm,
+                                        .n_therm_rm        = n_therm_rm,
+                                        .n_meas_rm         = n_meas_rm,
+                                        .delta             = delta,
+                                        .e_min             = e_min,
+                                        .E_max             = e_max_snapped,
+                                        .d_e               = d_e,
+                                        .exchange          = (exchange != 0),
+                                        .smooth_K          = smooth_K,
+                                        .smooth_degree     = smooth_degree,
+                                        .smooth_lambda0    = smooth_lambda0,
+                                        .smooth_lambda_exp = smooth_lambda_exp},
+        out);
 }

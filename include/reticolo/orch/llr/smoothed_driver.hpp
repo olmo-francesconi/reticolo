@@ -1,10 +1,13 @@
 #pragma once
 
 #include <reticolo/io/writer.hpp>
-#include <reticolo/llr/checkpoint.hpp>
-#include <reticolo/llr/exchange.hpp>
-#include <reticolo/llr/log.hpp>
-#include <reticolo/llr/update_a.hpp>
+#include <reticolo/orch/checkpoint.hpp>
+#include <reticolo/orch/ensemble.hpp>
+#include <reticolo/orch/llr/checkpoint.hpp>
+#include <reticolo/orch/llr/exchange.hpp>
+#include <reticolo/orch/llr/log.hpp>
+#include <reticolo/orch/llr/update_a.hpp>
+#include <reticolo/orch/thread_plan.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -14,11 +17,7 @@
 #include <string>
 #include <vector>
 
-#ifdef _OPENMP
-    #include <omp.h>
-#endif
-
-namespace reticolo::llr::smoothed {
+namespace reticolo::orch::llr::smoothed {
 
 // Smoothed LLR driver: vanilla per-replica NR warm-up, then an RM phase
 // in which a local-polynomial fit â(E) across replicas is shrunk into
@@ -34,7 +33,7 @@ namespace reticolo::llr::smoothed {
 // theorem). The smoother only accelerates the transient and cannot
 // introduce asymptotic bias even if the smoothness assumption fails.
 //
-// Output schema mirrors `llr::run`'s /replica_NNN/a, /dE plus four extra
+// Output schema mirrors `orch::llr::run`'s /replica_NNN/a, /dE plus four extra
 // per-replica series: /a_pre_shrink (a_rm before the convex combination),
 // /a_hat (the smoothed prediction), /da_rm (|a_rm − a_old|) and /da_sm
 // (|λ·(â − a_rm)|, the shrinkage step magnitude). At convergence the
@@ -167,7 +166,7 @@ struct DriverSpec {
     double d_e{};
     bool exchange = true;
     // Two-stage warm-up pre-phase (base-action therm to equilibrium, then Newton
-    // a-adaptation into the window; fresh runs only). Same as llr::run.
+    // a-adaptation into the window; fresh runs only). Same as orch::llr::run.
     int warm_therm     = 200;
     int warm_max_traj  = 2000;
     double warm_thresh = 1.0;
@@ -178,12 +177,10 @@ struct DriverSpec {
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention
     double smooth_lambda_exp = 2.0;
 
-    // Threading + checkpoint/resume — identical semantics to llr::DriverSpec
-    // (see llr::plan_threads and llr/checkpoint.hpp).
-    int replica_threads = 1;
-    int slabs           = 0;
-    int concurrency     = 0;
-    bool nested         = false;
+    // Threading + checkpoint/resume — identical semantics to orch::llr::DriverSpec
+    // (see orch::plan_threads and orch/checkpoint.hpp).
+    orch::ThreadPlan plan{};
+    int slabs = 0;
     // Default member init so a partial DriverSpec{...} omitting it doesn't trip
     // -Wmissing-designated-field-initializers.
     std::string checkpoint_path{};  // NOLINT(readability-redundant-member-init)
@@ -251,17 +248,7 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     std::vector<double> drm_buf(n_rep_u);
     std::vector<double> dsm_buf(n_rep_u);
 
-    // Outer replica-team size + nested enable (see llr::run for the rationale).
-#ifdef _OPENMP
-    if (spec.nested) {
-        omp_set_max_active_levels(2);
-    }
-    int const outer_nt = spec.concurrency > 0 ? spec.concurrency : omp_get_max_threads();
-#else
-    [[maybe_unused]] int const outer_nt = spec.concurrency > 0 ? spec.concurrency : 1;
-#endif
-
-    // One-shot run summary (see llr::run) — ensemble, the shared HMC sampler via
+    // One-shot run summary (see orch::llr::run) — ensemble, the shared HMC sampler via
     // a representative replica, and the smoothed schedule. Per-replica ctors were
     // logged under log::quiet() by the app.
     log::info("llr",
@@ -288,42 +275,38 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
               spec.smooth_degree,
               spec.smooth_lambda0,
               spec.smooth_lambda_exp);
-    log::info("llr", "threads   m={} × {} concurrent", spec.replica_threads, outer_nt);
+    log::info("llr", "threads   m={} × {} concurrent", spec.plan.m, spec.plan.concurrency);
 
-    // Warm-up phase (see llr::run): drive every replica into its E_n window with
+    // Warm-up phase (see orch::llr::run): drive every replica into its E_n window with
     // coarse Newton a-adaptation. Fresh runs only.
     if (spec.start_phase == 0 && spec.start_iter == 0 && spec.warm_max_traj > 0) {
         log::info("llr", "warm phase  seat {} replicas in window (a-adapting)", n_rep_u);
-#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            reps[n]->warm_into_window(spec.warm_therm, spec.warm_max_traj, spec.warm_thresh);
-        }
+        orch::parallel_workers(reps, spec.plan, [&](std::size_t /*n*/, Replica& r) {
+            r.warm_into_window(spec.warm_therm, spec.warm_max_traj, spec.warm_thresh);
+        });
     }
 
     auto checkpoint = [&](int phase, int next_iter) {
         if (spec.checkpoint_path.empty()) {
             return;
         }
-        save_ensemble(spec.checkpoint_path,
-                      reps,
-                      exch_rng,
-                      OrchState{.phase     = phase,
-                                .iter      = next_iter,
-                                .n_threads = spec.replica_threads,
-                                .slabs     = spec.slabs});
+        save_ensemble(
+            spec.checkpoint_path,
+            reps,
+            exch_rng,
+            OrchState{
+                .phase = phase, .iter = next_iter, .n_threads = spec.plan.m, .slabs = spec.slabs});
     };
 
     if (spec.start_phase == 0) {
         log::info("llr", "smoothed NR phase  {} iters × {} replicas", spec.n_nr, n_rep_u);
         for (int k = spec.start_iter; k < spec.n_nr; ++k) {
-#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
-            for (std::size_t n = 0; n < n_rep_u; ++n) {
-                auto& r = *reps[n];
+            orch::parallel_workers(reps, spec.plan, [&](std::size_t n, Replica& r) {
                 r.thermalize(spec.n_therm_nr, log::Mode::silent);
                 de_buf[n] = r.sample(spec.n_meas_nr, log::Mode::silent);
                 a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
                 r.set_a(a_buf[n]);
-            }
+            });
             for (std::size_t n = 0; n < n_rep_u; ++n) {
                 auto _ = log::scope(reps[n]->id());
                 a_series[n].append(a_buf[n]);
@@ -357,13 +340,11 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
               spec.smooth_lambda_exp);
     int const rm_start = spec.start_phase == 1 ? spec.start_iter : 0;
     for (int s = rm_start; s < spec.n_rm; ++s) {
-#pragma omp parallel for schedule(dynamic, 1) num_threads(outer_nt)
-        for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto& r = *reps[n];
+        orch::parallel_workers(reps, spec.plan, [&](std::size_t n, Replica& r) {
             r.thermalize(spec.n_therm_rm, log::Mode::silent);
             de_buf[n] = r.sample(spec.n_meas_rm, log::Mode::silent);
             a_rm[n]   = rm_update(r.a(), de_buf[n], spec.delta, s);
-        }
+        });
 
         impl::local_poly_fit(e_n_vec, a_rm, spec.smooth_K, spec.smooth_degree, a_hat);
         double const lam =
@@ -438,4 +419,4 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     }
 }
 
-}  // namespace reticolo::llr::smoothed
+}  // namespace reticolo::orch::llr::smoothed

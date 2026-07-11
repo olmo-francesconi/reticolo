@@ -3,7 +3,7 @@
 #include <cmath>
 #include <utility>
 
-namespace reticolo::llr {
+namespace reticolo::orch::llr {
 
 // Replica-exchange Metropolis acceptance for the Gaussian-window LLR action
 //     S_n(q) = a_n·q + (q − E_n)² / (2·δ_n²)     (q = constraint observable)
@@ -42,10 +42,10 @@ template <class Replica, class Rng>
     bool const accept = (log_p >= 0.0) || (rng.uniform() < std::exp(log_p));
     if (accept) {
         using std::swap;
-        swap(ri.phi(), rj.phi());
+        swap(ri.field(), rj.field());
         ri.swap_energy_cache(rj);
     }
     return accept;
 }
 
-}  // namespace reticolo::llr
+}  // namespace reticolo::orch::llr

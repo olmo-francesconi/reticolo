@@ -1,6 +1,6 @@
 #pragma once
 
-namespace reticolo::llr {
+namespace reticolo::orch::llr {
 
 // Updates for the LLR slope `a` of a single replica.
 //
@@ -34,4 +34,4 @@ template <class T>
     return a + (mean_dE / (delta * delta * static_cast<T>(k + 1)));
 }
 
-}  // namespace reticolo::llr
+}  // namespace reticolo::orch::llr
