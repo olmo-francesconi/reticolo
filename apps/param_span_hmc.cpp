@@ -55,8 +55,7 @@ int main(int argc, char** argv) {
     // ---- Worker geometry: kappa across the span ----
     Field::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
     auto const kappa_at = [&](std::size_t n) {
-        double const t =
-            n_w == 1 ? 0.0 : static_cast<double>(n) / static_cast<double>(n_w - 1);
+        double const t = n_w == 1 ? 0.0 : static_cast<double>(n) / static_cast<double>(n_w - 1);
         return kappa_min + (t * (kappa_max - kappa_min));
     };
 

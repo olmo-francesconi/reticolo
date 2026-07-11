@@ -174,16 +174,21 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     if (spec.start_phase == 0) {
         log::info("llr", "NR phase  {} iters × {} replicas", spec.n_nr, n_rep_u);
         for (int k = spec.start_iter; k < spec.n_nr; ++k) {
+            // Wave: sampling only — the heavy per-replica compute. Kept free of
+            // any cross-replica coupling or post-sync work so the same body maps
+            // onto a device stream fan-out. Produces ⟨dE⟩ per replica.
             orch::parallel_workers(reps, spec.plan, [&](std::size_t n, Replica& r) {
                 r.thermalize(spec.n_therm_nr, log::Mode::silent);
                 de_buf[n] = r.sample(spec.n_meas_nr, log::Mode::silent);
-                a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
-                r.set_a(a_buf[n]);
             });
-            // Drain + per-replica NR row serially (same schema as RM), binding
-            // each replica's scope since we're outside the Replica's methods.
+            // Drain: the a-update + IO, serial and cheap (per-replica, order-free).
+            // On a device backend this runs after the wave's sync, reading the
+            // device-reduced ⟨dE⟩. Bind each replica's log scope here.
             for (std::size_t n = 0; n < n_rep_u; ++n) {
-                auto _ = log::scope(reps[n]->id());
+                auto& r  = *reps[n];
+                a_buf[n] = nr_update(r.a(), de_buf[n], spec.delta);
+                r.set_a(a_buf[n]);
+                auto _ = log::scope(r.id());
                 a_series[n].append(a_buf[n]);
                 de_series[n].append(de_buf[n]);
                 iter("NR",
@@ -205,18 +210,19 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
     int const rm_start = spec.start_phase == 1 ? spec.start_iter : 0;
     log::info("llr", "RM phase  {} iters × {} replicas", spec.n_rm, n_rep_u);
     for (int s = rm_start; s < spec.n_rm; ++s) {
+        // Wave: sampling only (see the NR phase).
         orch::parallel_workers(reps, spec.plan, [&](std::size_t n, Replica& r) {
             r.thermalize(spec.n_therm_rm, log::Mode::silent);
             de_buf[n] = r.sample(spec.n_meas_rm, log::Mode::silent);
-            a_buf[n]  = rm_update(r.a(), de_buf[n], spec.delta, s);
-            r.set_a(a_buf[n]);
         });
-        // Drain + per-replica progress log serially: the iter() call takes the
-        // global sink mutex and flushes two log files, so it must stay out of
-        // the parallel region (mirrors smoothed_driver). Bind each replica's
-        // scope here since we're no longer inside the Replica's own methods.
+        // Drain: a-update + IO serial. The iter() call also takes the global sink
+        // mutex and flushes two log files, so it must stay out of any parallel
+        // region regardless. Bind each replica's scope here.
         for (std::size_t n = 0; n < n_rep_u; ++n) {
-            auto _ = log::scope(reps[n]->id());
+            auto& r  = *reps[n];
+            a_buf[n] = rm_update(r.a(), de_buf[n], spec.delta, s);
+            r.set_a(a_buf[n]);
+            auto _ = log::scope(r.id());
             a_series[n].append(a_buf[n]);
             de_series[n].append(de_buf[n]);
             iter("RM",

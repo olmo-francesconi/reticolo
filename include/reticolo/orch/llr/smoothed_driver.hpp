@@ -304,11 +304,12 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
             orch::parallel_workers(reps, spec.plan, [&](std::size_t n, Replica& r) {
                 r.thermalize(spec.n_therm_nr, log::Mode::silent);
                 de_buf[n] = r.sample(spec.n_meas_nr, log::Mode::silent);
-                a_buf[n]  = nr_update(r.a(), de_buf[n], spec.delta);
-                r.set_a(a_buf[n]);
             });
             for (std::size_t n = 0; n < n_rep_u; ++n) {
-                auto _ = log::scope(reps[n]->id());
+                auto& r  = *reps[n];
+                a_buf[n] = nr_update(r.a(), de_buf[n], spec.delta);
+                r.set_a(a_buf[n]);
+                auto _ = log::scope(r.id());
                 a_series[n].append(a_buf[n]);
                 de_series[n].append(de_buf[n]);
                 a_pre_series[n].append(a_buf[n]);
@@ -340,11 +341,15 @@ void run(std::vector<std::unique_ptr<Replica>>& reps,
               spec.smooth_lambda_exp);
     int const rm_start = spec.start_phase == 1 ? spec.start_iter : 0;
     for (int s = rm_start; s < spec.n_rm; ++s) {
+        // Wave: sampling only (see the NR phase).
         orch::parallel_workers(reps, spec.plan, [&](std::size_t n, Replica& r) {
             r.thermalize(spec.n_therm_rm, log::Mode::silent);
             de_buf[n] = r.sample(spec.n_meas_rm, log::Mode::silent);
-            a_rm[n]   = rm_update(r.a(), de_buf[n], spec.delta, s);
         });
+        // Per-replica RM step, serial (cheap; runs post-sync on a device backend).
+        for (std::size_t n = 0; n < n_rep_u; ++n) {
+            a_rm[n] = rm_update(reps[n]->a(), de_buf[n], spec.delta, s);
+        }
 
         impl::local_poly_fit(e_n_vec, a_rm, spec.smooth_K, spec.smooth_degree, a_hat);
         double const lam =

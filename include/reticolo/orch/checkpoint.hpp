@@ -47,11 +47,10 @@ struct OrchState {
 
 // Opt-in per-worker checkpoint payload beyond field + rng.
 template <class W>
-concept HasCheckpointExtra =
-    requires(W& w, io::Writer& out, io::Reader& in, std::string const& g) {
-        w.save_extra(out, g);
-        w.load_extra(in, g);
-    };
+concept HasCheckpointExtra = requires(W& w, io::Writer& out, io::Reader& in, std::string const& g) {
+    w.save_extra(out, g);
+    w.load_extra(in, g);
+};
 
 // Atomic overwrite: write to `path`.tmp then rename over `path`, so a crash
 // mid-write never truncates the live checkpoint. `workers` is non-const —
@@ -63,9 +62,9 @@ void save_ensemble(std::filesystem::path const& path,
                    OrchState const& state,
                    std::string_view prefix,
                    OrchExtra&& orch_extra) {
-    namespace fs         = std::filesystem;
-    fs::path tmp         = path;
-    tmp                 += ".tmp";
+    namespace fs = std::filesystem;
+    fs::path tmp = path;
+    tmp += ".tmp";
     auto const n_workers = static_cast<int>(workers.size());
     {
         io::Writer w{tmp};
