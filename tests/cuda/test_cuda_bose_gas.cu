@@ -278,7 +278,7 @@ bool bose_gas_windowed_modeB_matches_cpu_impl(double s_tol, double f_tol) {
     using DField = DeviceField<cplx<T>>;
     DField dfield{kShape};
     dfield.copy_from_host(as_dev(host.data()));
-    orch::llr::WindowedAction<action::BoseGas<T>, DField> dw{
+    cuda::llr::WindowedAction<action::BoseGas<T>, DField> dw{
         a, dfield.topology(), a_slope, e_n, delta};
     static_assert(decltype(dw)::k_complex, "BoseGas device WindowedAction must be mode B");
 

@@ -28,9 +28,9 @@ namespace reticolo::orch {
 // thread-unsafe output pass (HDF5 writes, logging) stays a plain serial loop in
 // the caller, right next to the schedule — the orchestration owns its loop, the
 // spine only owns the fan-out. Without OpenMP the body simply runs serially.
-template <class Worker, class Body>
-    requires orch::Worker<Worker>
-void parallel_workers(std::vector<std::unique_ptr<Worker>>& workers,
+template <class W, class Body>
+    requires Worker<W>
+void parallel_workers(std::vector<std::unique_ptr<W>>& workers,
                       ThreadPlan const& plan,
                       Body&& body) {
     std::size_t const n = workers.size();
