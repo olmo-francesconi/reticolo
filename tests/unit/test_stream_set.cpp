@@ -4,7 +4,7 @@
 // that rest on it (same-seed determinism, frozen threading config) — the
 // properties the multi-stream checkpoint layout and Hmc's owned RNG depend on.
 
-#include <reticolo/action/site/phi4.hpp>
+#include <reticolo/action/nn/phi4.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>

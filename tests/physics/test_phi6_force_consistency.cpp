@@ -1,6 +1,6 @@
 #include <reticolo/action/concepts.hpp>
-#include <reticolo/action/site/phi4.hpp>
-#include <reticolo/action/site/phi6.hpp>
+#include <reticolo/action/nn/phi4.hpp>
+#include <reticolo/action/nn/phi6.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/core/site.hpp>

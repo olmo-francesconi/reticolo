@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/site/formula/phi4_formula.hpp>
-#include <reticolo/action/site/site_action.hpp>
+#include <reticolo/action/nn/formula/phi4_formula.hpp>
+#include <reticolo/action/nn/nn_action.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>
@@ -20,10 +20,10 @@ namespace reticolo::action {
 // Each nearest-neighbour bond appears once in `s_full` (positive-mu
 // convention). All the physics lives in the shared `detail/phi4_formula.hpp`
 // functions (host+device); the loop shells, cache and LLR fast-path come from
-// `SiteAction`. This struct is just the couplings + the kernel binds.
+// `NNAction`. This struct is just the couplings + the kernel binds.
 
 template <class T = double>
-struct Phi4 : SiteAction<Phi4<T>, T> {
+struct Phi4 : NNAction<Phi4<T>, T> {
     using value_type = T;
 
     T kappa  = T{0};

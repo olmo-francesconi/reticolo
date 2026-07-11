@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/site/formula/sine_gordon_formula.hpp>
-#include <reticolo/action/site/site_action.hpp>
+#include <reticolo/action/nn/formula/sine_gordon_formula.hpp>
+#include <reticolo/action/nn/nn_action.hpp>
 #include <reticolo/action/sweep/site.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
@@ -23,12 +23,12 @@ namespace reticolo::action {
 //               - alpha * cos(phi(x)) ]
 //
 // The per-site transcendental is the only reason this doesn't reduce to the
-// plain SiteAction kernels: on the f64 hot path sin(phi) is Sleef-batched into
+// plain NNAction kernels: on the f64 hot path sin(phi) is Sleef-batched into
 // the shared scratch by `prep`, and cos(phi) is batched inside the bespoke
 // `s_full`. The physics still lives entirely in `detail/sine_gordon_formula.hpp`.
 
 template <class T = double>
-struct SineGordon : SiteAction<SineGordon<T>, T> {
+struct SineGordon : NNAction<SineGordon<T>, T> {
     using value_type = T;
 
     T kappa = T{0};
@@ -48,7 +48,7 @@ struct SineGordon : SiteAction<SineGordon<T>, T> {
     }
 
     // Fill the shared scratch with sin(phi) per site — Sleef-batched on f64,
-    // a scalar loop otherwise. Called by SiteAction before each force pass.
+    // a scalar loop otherwise. Called by NNAction before each force pass.
     // Worksplit: each chunk sin-batches its own sub-range (elementwise → bit-
     // identical; the chunk is a multiple of the SIMD width so no chunk-boundary
     // tail changes which lanes take the vector path).

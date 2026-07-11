@@ -1,4 +1,4 @@
-#include <reticolo/cuda/actions/site/phi4.hpp>
+#include <reticolo/cuda/actions/nn/phi4.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>

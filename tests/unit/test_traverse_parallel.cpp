@@ -1,5 +1,5 @@
-#include <reticolo/action/site/phi4.hpp>
-#include <reticolo/action/site/sine_gordon.hpp>
+#include <reticolo/action/nn/phi4.hpp>
+#include <reticolo/action/nn/sine_gordon.hpp>
 #include <reticolo/action/sweep/site.hpp>
 #include <reticolo/core/lattice.hpp>
 #include <reticolo/core/log.hpp>

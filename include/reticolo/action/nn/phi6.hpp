@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/site/formula/phi6_formula.hpp>
-#include <reticolo/action/site/site_action.hpp>
+#include <reticolo/action/nn/formula/phi6_formula.hpp>
+#include <reticolo/action/nn/nn_action.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/log.hpp>
 
@@ -18,10 +18,10 @@ namespace reticolo::action {
 //               + g6     * phi(x)^6 ]
 //
 // At g6 = 0 this reduces exactly to Phi4 — verified by the physics suite. All
-// physics is in `detail/phi6_formula.hpp`; the machinery is `SiteAction`.
+// physics is in `detail/phi6_formula.hpp`; the machinery is `NNAction`.
 
 template <class T = double>
-struct Phi6 : SiteAction<Phi6<T>, T> {
+struct Phi6 : NNAction<Phi6<T>, T> {
     using value_type = T;
 
     T kappa  = T{0};

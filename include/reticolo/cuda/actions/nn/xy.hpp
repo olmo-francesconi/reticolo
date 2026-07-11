@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/action/bond/formula/xy_formula.hpp>
-#include <reticolo/action/bond/xy.hpp>
+#include <reticolo/action/nn/formula/xy_formula.hpp>
+#include <reticolo/action/nn/xy.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/actions/site_launchers.hpp>
 #include <reticolo/cuda/macros.hpp>

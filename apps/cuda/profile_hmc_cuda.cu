@@ -15,10 +15,10 @@
 // [--n_md=10] [--iters=30] [--force-only].
 
 #include <reticolo/action/gauge/wilson.hpp>
-#include <reticolo/action/site/phi4.hpp>
+#include <reticolo/action/nn/phi4.hpp>
 #include <reticolo/core/log.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
-#include <reticolo/cuda/actions/site/phi4.hpp>
+#include <reticolo/cuda/actions/nn/phi4.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_field.hpp>

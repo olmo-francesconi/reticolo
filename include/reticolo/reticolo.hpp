@@ -4,11 +4,10 @@
 // core types (lattice, indexing, site, bc, rng, log).
 
 // NOLINTBEGIN(misc-include-cleaner): re-exports are the whole point of the umbrella.
-#include <reticolo/action/bond.hpp>
 #include <reticolo/action/complex.hpp>
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/gauge.hpp>
-#include <reticolo/action/site.hpp>
+#include <reticolo/action/nn.hpp>
 #include <reticolo/action/sweep/site.hpp>
 #include <reticolo/app/setup.hpp>
 #include <reticolo/cli/parser.hpp>
