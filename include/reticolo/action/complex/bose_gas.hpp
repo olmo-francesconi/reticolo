@@ -2,6 +2,7 @@
 
 #include <reticolo/action/complex/complex_action.hpp>
 #include <reticolo/action/complex/formula/bose_gas_formula.hpp>
+#include <reticolo/action/complex/imag_part.hpp>
 #include <reticolo/core/cplx.hpp>
 #include <reticolo/core/field_traits.hpp>
 #include <reticolo/core/lattice.hpp>
@@ -61,7 +62,8 @@ template <class T>
 // struct is the couplings + the four kernel binds + the cosh(mu) memo.
 
 template <class T = double>
-struct BoseGas : ComplexAction<BoseGas<T>, T> {
+// NOLINTNEXTLINE(fuchsia-multiple-inheritance,misc-multiple-inheritance) — real base + imag mixin
+struct BoseGas : ComplexAction<BoseGas<T>, T>, ImagPart<BoseGas<T>, T> {
     using value_type = std::complex<T>;
     using complex_t  = std::complex<T>;
 
