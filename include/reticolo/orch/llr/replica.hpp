@@ -232,14 +232,17 @@ public:
     // the HMC samples the plain base action; `n_therm` trajectories take the
     // field from its cold/hot start to a representative equilibrium config.
     //
-    // Stage 2 — from that equilibrium, seat the constraint (S_base in mode A,
-    // S_I in mode B) in its E_n window by coarse Newton adaptation of the tilt:
-    // each batch of k_batch trajectories yields a ⟨S − E_n⟩ estimate and the
-    // Newton step a ← a + ⟨dE⟩/δ² shifts the equilibrium toward E_n. Starting
-    // from equilibrium (not a cold transient) makes the ⟨dE⟩ estimates unbiased
-    // and the adaptation converges in a few batches. Adapting `a` reaches ANY
-    // window with support at E_n; the warmed `a` is left in place for NR to
-    // resume from. `max_traj` bounds stage 2 (a warning if hit).
+    // Stage 2 — seat the constraint (S_base in mode A, S_I in mode B, or a custom
+    // observable) into its E_n window by coarse Newton adaptation of the tilt
+    // (a ← a + ⟨dE⟩/δ²). A deep window sits far from the base equilibrium reached
+    // in stage 1, and the fixed-δ quadratic penalty is stiff, so seating it in one
+    // step overflows the integrator (NaN ΔH). Stage 2 therefore RAMPS: it walks the
+    // window centre from the post-thermalization constraint value out to E_n in
+    // steps of ≤ ½δ, adapting `a` each step so the equilibrium follows and the
+    // field never lags the centre by more than a window width — the force stays in
+    // the integrator's stable range. Once the centre reaches E_n a short Newton
+    // seat loop settles the tilt. The warmed `a` is left for NR. `max_traj` bounds
+    // stage 2 (a warning if hit).
     int warm_into_window(int n_therm,
                          int max_traj            = 2000,
                          double threshold_sigmas = 1.0,
@@ -256,12 +259,50 @@ public:
         windowed_.delta = saved_delta;
         windowed_.a     = saved_a;
 
-        // ---- Stage 2: Newton a-adaptation into the window ----
+        // ---- Stage 2: seat into the window ----
         auto _                = log::scope(id_);
         constexpr int k_batch = 20;  // trajectories per a-update / ⟨dE⟩ estimate
         int traj              = 0;
-        double ratio          = 0.0;
-        bool reached          = false;
+
+        // Ramp phase: the fixed-δ window is stiff, so slamming it onto a field
+        // that thermalized far from E_n (deep windows: |E_n − ⟨Q⟩_base| ≫ δ)
+        // produces a force ∝ |Q − E_n|/δ² that overflows the integrator's stable
+        // step and NaNs the trajectory. Instead walk the window CENTRE from the
+        // current constraint value out to E_n in steps of ≤ ½δ, adapting the
+        // tilt each step so the equilibrium follows — the field stays within a
+        // window width of the centre throughout, so the force never spikes.
+        scalar_t const true_e_n = windowed_.E_n;
+        scalar_t const q0       = windowed_.constraint_value(field_);
+        scalar_t const gap      = true_e_n - q0;
+        int const n_ramp =
+            (windowed_.delta > scalar_t{0})
+                ? std::max(
+                      0,
+                      static_cast<int>(std::ceil(std::abs(static_cast<double>(gap)) /
+                                                 (0.5 * static_cast<double>(windowed_.delta)))) -
+                          1)
+                : 0;
+        for (int k = 1; k <= n_ramp && traj < max_traj; ++k) {
+            windowed_.E_n = q0 + ((gap * static_cast<scalar_t>(k)) / static_cast<scalar_t>(n_ramp));
+            scalar_t sum  = scalar_t{0};
+            int cnt       = 0;
+            for (; cnt < k_batch && traj < max_traj; ++cnt) {
+                (void)hmc_.step(log::Mode::silent);
+                ++traj;
+                ++stats_.n_traj;
+                sum += windowed_.last_constraint() - windowed_.E_n;
+            }
+            windowed_.a = nr_update(windowed_.a, sum / static_cast<scalar_t>(cnt), windowed_.delta);
+        }
+        windowed_.E_n = true_e_n;  // restore the real window centre
+
+        // Seat phase: Newton a-adaptation at the true centre. The field is now
+        // within a few δ (the ramp brought it in), so this converges without the
+        // integrator ever seeing a spike. `last_constraint()` is the windowed
+        // observable Q — the action for real LLR, S_I for complex, or a custom
+        // observable — matching sample()/energy().
+        double ratio = 0.0;
+        bool reached = false;
         while (traj < max_traj) {
             scalar_t sum = scalar_t{0};
             int cnt      = 0;
@@ -269,11 +310,7 @@ public:
                 (void)hmc_.step(log::Mode::silent);
                 ++traj;
                 ++stats_.n_traj;
-                if constexpr (Windowed::k_complex) {
-                    sum += windowed_.last_s_imag() - windowed_.E_n;
-                } else {
-                    sum += windowed_.last_s_full() - windowed_.E_n;
-                }
+                sum += windowed_.last_constraint() - windowed_.E_n;
             }
             scalar_t const mean_dE = sum / static_cast<scalar_t>(cnt);
             ratio                  = static_cast<double>((windowed_.delta != scalar_t{0})
