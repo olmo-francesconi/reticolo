@@ -1,9 +1,9 @@
 #pragma once
 
 #include <reticolo/action/gauge/formula/wilson_kernels.hpp>
+#include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/core/field/indexing.hpp>
 #include <reticolo/core/field/matrix_link_lattice.hpp>
-#include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/core/field/site.hpp>
 #include <reticolo/math/group/su2.hpp>
 #include <reticolo/math/su2_ops.hpp>

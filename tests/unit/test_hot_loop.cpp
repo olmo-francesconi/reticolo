@@ -1,7 +1,7 @@
 #include <reticolo/core/exec/nn_site.hpp>
 #include <reticolo/core/field/lattice.hpp>
-#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/core/field/site.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 
 #include "nn_reference.hpp"
 

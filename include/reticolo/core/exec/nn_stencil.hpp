@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/field/site.hpp>
 
 #include <algorithm>
@@ -677,8 +677,7 @@ inline void nn_visit(Lattice<T> const& l, Comb const& comb, Body&& body) noexcep
 // via `comb`). Partition summed in canonical item order → deterministic for a fixed
 // (team, slabs) config; a different team re-folds.
 template <class Policy, class T, class Acc = T, class Comb, class Body>
-[[nodiscard]] inline Acc
-nn_reduce(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
+[[nodiscard]] inline Acc nn_reduce(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
     Body const& b = body;
     return traverse_dispatch_<Acc>(
         l,

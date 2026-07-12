@@ -1,8 +1,8 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/nn/xy.hpp>
 #include <reticolo/core/field/lattice.hpp>
-#include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/core/field/site.hpp>
+#include <reticolo/core/rng/fast_rng.hpp>
 
 #include <cmath>
 #include <cstddef>

@@ -2,8 +2,8 @@
 
 #include <reticolo/action/cache.hpp>
 #include <reticolo/core/exec/nn_stencil.hpp>
-#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/lattice.hpp>
 
 #include <cstddef>
 #include <utility>
@@ -68,10 +68,9 @@ struct NNAction : SFullCache {
         auto comb  = force_combine_();
         auto fin   = derived_().force_kernel();
         T* const m = mom.data();
-        exec::nn_visit<exec::AllDirs, T>(
-            l, comb, [&fin, m, k_dt](std::size_t i, T self, T agg) {
-                m[i] += k_dt * fin(i, self, agg);
-            });
+        exec::nn_visit<exec::AllDirs, T>(l, comb, [&fin, m, k_dt](std::size_t i, T self, T agg) {
+            m[i] += k_dt * fin(i, self, agg);
+        });
     }
 
     // Fused total action + force in ONE AllDirs pass, driven by a leaf's

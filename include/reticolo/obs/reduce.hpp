@@ -1,7 +1,8 @@
 #pragma once
 
-#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/exec/nn_stencil.hpp>
 #include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/lattice.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -80,6 +81,32 @@ template <class T, class... Ks>
                 ((std::get<I>(s.v) += std::get<I>(kt)(self)), ...);
             }(std::index_sequence_for<Ks...>{});
         }
+        return s;
+    });
+    return acc.v;
+}
+
+// Neighbour-aware fused reduction: like `reduce`, but each kernel sees `(self,
+// agg)` where `agg` is the Policy-selected neighbour aggregate — the SAME contract
+// the action leaves' `action_kernel`/`force_kernel` consume, so an action density
+// or a force functional wires straight in and fuses with any other neighbour
+// kernel. Policy picks the aggregate:
+//   * `FwdOnly` (default) — agg = Σ forward-neighbour φ (each bond once) → the
+//     action-density aggregate. A kernel `(self, fwd) -> S_site` sums to `s_full`.
+//   * `AllDirs` — agg = Σ all 2·d neighbours → the force aggregate. A kernel
+//     `(self, all) -> f(F(self,all))` reduces any functional of the site force.
+// Rides `exec::nn_reduce` (IdentityCombine); returns a tuple of sums like `reduce`.
+// Kernels that ignore `agg` (pure per-site) still fuse in, sharing the sweep.
+template <class Policy = exec::FwdOnly, class T, class... Ks>
+[[nodiscard]] inline auto reduce_nn(Lattice<T> const& l, Ks const&... ks) noexcept {
+    static_assert(sizeof...(Ks) > 0, "obs::reduce_nn needs at least one kernel");
+    using Acc     = Lanes<std::decay_t<std::invoke_result_t<Ks const&, T const&, T const&>>...>;
+    auto const kt = std::forward_as_tuple(ks...);
+    Acc const acc = exec::nn_reduce<Policy, T, Acc>(l, exec::IdentityCombine{}, [&](T self, T agg) {
+        Acc s{};
+        [&]<std::size_t... I>(std::index_sequence<I...>) {
+            ((std::get<I>(s.v) += std::get<I>(kt)(self, agg)), ...);
+        }(std::index_sequence_for<Ks...>{});
         return s;
     });
     return acc.v;

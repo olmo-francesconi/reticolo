@@ -2,9 +2,9 @@
 
 #include <reticolo/action/gauge/formula/wilson_kernels.hpp>
 #include <reticolo/action/gauge/formula/wilson_u1_formula.hpp>
+#include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/core/field/indexing.hpp>
 #include <reticolo/core/field/matrix_link_lattice.hpp>
-#include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/core/field/site.hpp>
 #include <reticolo/math/group/u1.hpp>
 #include <reticolo/math/vec_libm.hpp>

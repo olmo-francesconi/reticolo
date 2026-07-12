@@ -2,10 +2,10 @@
 
 #include <reticolo/action/gauge/formula/wilson_kernels.hpp>
 #include <reticolo/action/gauge/gauge_action.hpp>
-#include <reticolo/core/log/log.hpp>
-#include <reticolo/core/field/matrix_link_lattice.hpp>
 #include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/matrix_link_lattice.hpp>
 #include <reticolo/core/field/site.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/math/group/base.hpp>
 
 // The shipped per-group Wilson kernel specializations, so `Wilson<G>` for any

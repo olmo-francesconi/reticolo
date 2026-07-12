@@ -1,8 +1,8 @@
 #pragma once
 
 #include <reticolo/core/exec/nn_stencil.hpp>
-#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/field/site.hpp>
 
 #include <array>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/obs/reduce.hpp>
 
 #include <concepts>

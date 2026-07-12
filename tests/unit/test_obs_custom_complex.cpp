@@ -53,10 +53,10 @@ TEST_CASE("obs::reduce with custom lambdas: complex mean + amplitude on a consta
 TEST_CASE("obs::reduce with custom lambdas: cancelling phases -> zero mean, unit amplitude",
           "[obs][reduce][complex]") {
     Lattice<cd> phi{{2, 2}};
-    phi[Site{0}] = {1.0, 0.0};
-    phi[Site{1}] = {0.0, 1.0};
-    phi[Site{2}] = {-1.0, 0.0};
-    phi[Site{3}] = {0.0, -1.0};
+    phi[Site{0}]           = {1.0, 0.0};
+    phi[Site{1}]           = {0.0, 1.0};
+    phi[Site{2}]           = {-1.0, 0.0};
+    phi[Site{3}]           = {0.0, -1.0};
     auto const [mean, amp] = mean_and_amplitude(phi);
     REQUIRE(mean.real() == Catch::Approx(0.0).margin(1e-15));
     REQUIRE(mean.imag() == Catch::Approx(0.0).margin(1e-15));
@@ -66,6 +66,6 @@ TEST_CASE("obs::reduce with custom lambdas: cancelling phases -> zero mean, unit
 TEST_CASE("obs::reduce still fuses homogeneous double moments into a tuple", "[obs][reduce]") {
     Lattice<double> phi{{4, 4}, 2.0};
     auto const [s1, s2] = obs::reduce(phi, obs::kernel::phi, obs::kernel::phi_sq);
-    REQUIRE(s1 == Catch::Approx(2.0 * 16).margin(1e-13));   // Σφ  = 2·16
-    REQUIRE(s2 == Catch::Approx(4.0 * 16).margin(1e-13));   // Σφ² = 4·16
+    REQUIRE(s1 == Catch::Approx(2.0 * 16).margin(1e-13));  // Σφ  = 2·16
+    REQUIRE(s2 == Catch::Approx(4.0 * 16).margin(1e-13));  // Σφ² = 4·16
 }
