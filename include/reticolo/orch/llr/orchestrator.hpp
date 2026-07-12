@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/io/writer.hpp>
 #include <reticolo/orch/checkpoint.hpp>
 #include <reticolo/orch/ensemble.hpp>

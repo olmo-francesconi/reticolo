@@ -1,9 +1,9 @@
 #pragma once
 
 #include <reticolo/action/cache.hpp>
-#include <reticolo/action/sweep/stencil.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/exec/nn_stencil.hpp>
+#include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/lattice.hpp>
 
 #include <cstddef>
 #include <utility>
@@ -46,7 +46,7 @@ struct NNAction : SFullCache {
     [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
         auto comb        = action_combine_();
         auto fin         = derived_().action_kernel();
-        double const raw = sweep::reduce_stencil<sweep::FwdOnly, T, double>(
+        double const raw = exec::nn_reduce<exec::FwdOnly, T, double>(
             l, comb, [&fin](T self, T agg) { return static_cast<double>(fin(self, agg)); });
         double const s = static_cast<double>(action_scale_()) * raw;
         last_s_full_   = s;
@@ -58,8 +58,8 @@ struct NNAction : SFullCache {
         auto comb    = force_combine_();
         auto fin     = derived_().force_kernel();
         T* const out = force.data();
-        // visit_stencil self-threads via the parallel primitives (write-disjoint).
-        sweep::visit_stencil<sweep::AllDirs, T>(
+        // nn_visit self-threads via the parallel primitives (write-disjoint).
+        exec::nn_visit<exec::AllDirs, T>(
             l, comb, [&fin, out](std::size_t i, T self, T agg) { out[i] = fin(i, self, agg); });
     }
 
@@ -68,10 +68,9 @@ struct NNAction : SFullCache {
         auto comb  = force_combine_();
         auto fin   = derived_().force_kernel();
         T* const m = mom.data();
-        sweep::visit_stencil<sweep::AllDirs, T>(
-            l, comb, [&fin, m, k_dt](std::size_t i, T self, T agg) {
-                m[i] += k_dt * fin(i, self, agg);
-            });
+        exec::nn_visit<exec::AllDirs, T>(l, comb, [&fin, m, k_dt](std::size_t i, T self, T agg) {
+            m[i] += k_dt * fin(i, self, agg);
+        });
     }
 
     // Fused total action + force in ONE AllDirs pass, driven by a leaf's
@@ -87,8 +86,8 @@ struct NNAction : SFullCache {
         std::size_t const n = l.nsites();
         ensure_scratch(n);
         T* const sb = scratch_.data();
-        sweep::visit_stencil<sweep::AllDirs, T>(
-            l, sweep::IdentityCombine{}, [&kern, out, sb](std::size_t i, T self, T agg) {
+        exec::nn_visit<exec::AllDirs, T>(
+            l, exec::IdentityCombine{}, [&kern, out, sb](std::size_t i, T self, T agg) {
                 auto const [f, s] = kern(i, self, agg);
                 out[i]            = f;
                 sb[i]             = s;
@@ -121,14 +120,14 @@ private:
         if constexpr (requires(Derived const& d) { d.action_combine(); }) {
             return derived_().action_combine();
         } else {
-            return sweep::IdentityCombine{};
+            return exec::IdentityCombine{};
         }
     }
     [[nodiscard]] auto force_combine_() const noexcept {
         if constexpr (requires(Derived const& d) { d.force_combine(); }) {
             return derived_().force_combine();
         } else {
-            return sweep::IdentityCombine{};
+            return exec::IdentityCombine{};
         }
     }
     [[nodiscard]] T action_scale_() const noexcept {

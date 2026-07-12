@@ -2,8 +2,8 @@
 
 #include <reticolo/action/nn/formula/xy_formula.hpp>
 #include <reticolo/action/nn/nn_action.hpp>
-#include <reticolo/core/field_traits.hpp>
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/field/field_traits.hpp>
+#include <reticolo/core/log/log.hpp>
 
 #include <cstddef>
 

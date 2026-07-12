@@ -2,11 +2,11 @@
 
 #include <reticolo/action/nn/formula/sine_gordon_formula.hpp>
 #include <reticolo/action/nn/nn_action.hpp>
-#include <reticolo/action/sweep/site.hpp>
-#include <reticolo/core/field_traits.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/log.hpp>
-#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/exec/nn_site.hpp>
+#include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/field_traits.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
 #include <cmath>
@@ -98,13 +98,13 @@ struct SineGordon : NNAction<SineGordon<T>, T> {
                     return reticolo::exec::lane_sum8(
                         base, cnt, [cs](std::size_t i) { return static_cast<double>(cs[i]); });
                 });
-            double const hopping = sweep::reduce_fwd<T, double>(l, [k, alp](T phi, T fwd_sum) {
+            double const hopping = exec::nn_reduce_fwd<T, double>(l, [k, alp](T phi, T fwd_sum) {
                 return static_cast<double>(
                     formula::sine_gordon_action_site<T>(phi, fwd_sum, T{0}, k, alp));
             });
             s                    = hopping - (static_cast<double>(alp) * cos_sum);
         } else {
-            s = sweep::reduce_fwd<T, double>(l, [k, alp](T phi, T fwd_sum) {
+            s = exec::nn_reduce_fwd<T, double>(l, [k, alp](T phi, T fwd_sum) {
                 return static_cast<double>(
                     formula::sine_gordon_action_site<T>(phi, fwd_sum, std::cos(phi), k, alp));
             });

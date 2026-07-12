@@ -1,6 +1,6 @@
 #include <reticolo/action/gauge/wilson.hpp>
+#include <reticolo/core/field/site.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
-#include <reticolo/core/site.hpp>
 #include <reticolo/updater/hmc/hmc.hpp>
 #include <reticolo/updater/hmc/integrators.hpp>
 

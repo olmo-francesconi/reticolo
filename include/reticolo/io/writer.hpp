@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/field/matrix_link_lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 
 #include <complex>

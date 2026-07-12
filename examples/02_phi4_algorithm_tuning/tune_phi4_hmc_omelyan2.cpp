@@ -75,7 +75,8 @@ int main(int argc, char** argv) {
 
         auto const oa = bench_clock::now();
         s_series.append(phi4.s_full(phi));
-        mean_sq_series.append(obs::sq_of_mean(phi));
+        mean_sq_series.append(obs::sq_of_mean_of(std::get<0>(obs::reduce(phi, obs::kernel::phi)),
+                                                 static_cast<double>(phi.nsites())));
         auto const ob = bench_clock::now();
         obs_s += std::chrono::duration<double>(ob - oa).count();
     }

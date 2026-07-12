@@ -108,10 +108,12 @@ int main(int argc, char** argv) {
         d_h.append(step.dH);
         accepted.append(step.accepted ? 1 : 0);
         if (i % meas_every == 0) {
+            auto const V        = static_cast<double>(phi.nsites());
+            auto const [s1, s2] = obs::reduce(phi, obs::kernel::phi, obs::kernel::phi_sq);
             s_prod.append(phi4.s_full(phi));
-            mag.append(obs::mag::abs(phi));
-            mag_sq.append(obs::sq_of_mean(phi));
-            m_sq.append(obs::sq(phi));
+            mag.append(obs::mag_abs_of(s1, V));
+            mag_sq.append(obs::sq_of_mean_of(s1, V));
+            m_sq.append(obs::mean_of(s2, V));
         }
         if (ckpt_every > 0 && (i + 1) % ckpt_every == 0) {
             io::save_config(cfg_path(outpath, i + 1), phi, hmc.rng(), i + 1, argc, argv, &p);

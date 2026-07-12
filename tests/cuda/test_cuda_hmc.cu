@@ -1,5 +1,5 @@
 #include <reticolo/action/nn/phi4.hpp>
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/cuda/actions/nn/phi4.hpp>
 #include <reticolo/cuda/check.hpp>

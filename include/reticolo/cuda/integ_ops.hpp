@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/cplx.hpp>
+#include <reticolo/core/field/cplx.hpp>
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/stream.hpp>

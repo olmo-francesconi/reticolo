@@ -1,4 +1,4 @@
-#include <reticolo/core/indexing.hpp>
+#include <reticolo/core/field/indexing.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 

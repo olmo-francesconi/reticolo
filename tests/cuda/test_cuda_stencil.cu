@@ -75,7 +75,7 @@ bool stencil_force_matches_fd() {
 }  // namespace reticolo::cuda
 
 #include <reticolo/action/gauge/wilson.hpp>
-#include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/field/matrix_link_lattice.hpp>
 #include <reticolo/math/group/su2.hpp>
 #include <reticolo/math/group/su3.hpp>
 #include <reticolo/math/group/u1.hpp>

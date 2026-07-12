@@ -14,7 +14,7 @@
 // deterministic reduce_sum primitive (reduce.cuh) for run-to-run reproducibility.
 
 #include <reticolo/action/complex/formula/bose_gas_formula.hpp>
-#include <reticolo/core/cplx.hpp>
+#include <reticolo/core/field/cplx.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/reduce.cuh>

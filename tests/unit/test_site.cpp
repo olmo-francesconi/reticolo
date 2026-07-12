@@ -1,4 +1,4 @@
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/field/site.hpp>
 
 #include <functional>
 #include <unordered_set>

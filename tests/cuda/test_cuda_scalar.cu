@@ -2,7 +2,7 @@
 #include <reticolo/action/nn/phi6.hpp>
 #include <reticolo/action/nn/sine_gordon.hpp>
 #include <reticolo/action/nn/xy.hpp>
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/cuda/actions/nn/phi4.hpp>
 #include <reticolo/cuda/actions/nn/phi6.hpp>
 #include <reticolo/cuda/actions/nn/sine_gordon.hpp>

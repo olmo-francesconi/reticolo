@@ -1,9 +1,9 @@
 #pragma once
 
-#include <reticolo/core/indexing.hpp>
-#include <reticolo/core/log.hpp>
-#include <reticolo/core/parallel.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/indexing.hpp>
+#include <reticolo/core/field/site.hpp>
+#include <reticolo/core/log/log.hpp>
 
 #include <cstddef>
 #include <memory>

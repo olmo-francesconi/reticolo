@@ -1,7 +1,7 @@
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/action/nn/phi4.hpp>
-#include <reticolo/core/log.hpp>
-#include <reticolo/core/log_helpers.hpp>
+#include <reticolo/core/log/log.hpp>
+#include <reticolo/core/log/log_helpers.hpp>
 #include <reticolo/math/group/su2.hpp>
 
 #include <filesystem>

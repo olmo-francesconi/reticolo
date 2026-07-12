@@ -1,7 +1,7 @@
-#include <reticolo/action/sweep/site.hpp>
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/exec/nn_site.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/field/site.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
-#include <reticolo/core/site.hpp>
 
 #include "nn_reference.hpp"
 
@@ -13,8 +13,8 @@
 
 using reticolo::FastRng;
 using reticolo::Lattice;
-using reticolo::action::sweep::reduce_fwd;
-using reticolo::action::sweep::visit_nn;
+using reticolo::exec::nn_reduce_fwd;
+using reticolo::exec::nn_visit_all;
 
 namespace {
 
@@ -31,7 +31,7 @@ Lattice<double> make_random_lattice(Shape shape, std::uint64_t seed) {
 
 }  // namespace
 
-TEST_CASE("visit_nn dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_loop]") {
+TEST_CASE("nn_visit_all dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_loop]") {
     std::vector<std::vector<std::size_t>> const shapes = {
         {8},           // 1D
         {6, 5},        // 2D
@@ -45,7 +45,7 @@ TEST_CASE("visit_nn dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_loop
         std::vector<double> out_fallback(l.nsites(), 0.0);
 
         // Dispatch (uses the per-ndim specialisation).
-        visit_nn<double>(l, [&out_dispatch](std::size_t i, double phi, double nbrs) {
+        nn_visit_all<double>(l, [&out_dispatch](std::size_t i, double phi, double nbrs) {
             out_dispatch[i] = phi * 7.0 + nbrs;  // arbitrary linear body
         });
         // Reference (gather through the computed Indexing::next/prev).
@@ -61,7 +61,7 @@ TEST_CASE("visit_nn dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_loop
     }
 }
 
-TEST_CASE("reduce_fwd dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_loop]") {
+TEST_CASE("nn_reduce_fwd dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_loop]") {
     std::vector<std::vector<std::size_t>> const shapes = {
         {8},
         {6, 5},
@@ -74,7 +74,7 @@ TEST_CASE("reduce_fwd dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_lo
         // Arbitrary non-trivial body that touches both phi and fwd_sum.
         auto body = [](double phi, double fwd) { return (phi * phi) - phi * fwd; };
 
-        double const a = reduce_fwd<double>(l, body);
+        double const a = nn_reduce_fwd<double>(l, body);
         double const b = reticolo::test::reduce_fwd_ref<double>(l, body);
 
         // Both paths visit every (site, mu) pair with the same body; the
@@ -87,14 +87,14 @@ TEST_CASE("reduce_fwd dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_lo
     }
 }
 
-TEST_CASE("visit_nn nbrs sums all 2*ndims neighbours (3D constant field)", "[hot_loop]") {
+TEST_CASE("nn_visit_all nbrs sums all 2*ndims neighbours (3D constant field)", "[hot_loop]") {
     Lattice<double> l{{4, 4, 4}, /*fill=*/3.5};
     // Write-disjoint capture (the map now threads): assert after the sweep, not
     // from inside the body — Catch2 REQUIRE is not thread-safe in a parallel region.
     std::vector<double> phi_seen(l.nsites(), 0.0);
     std::vector<double> nbr_seen(l.nsites(), 0.0);
 
-    visit_nn<double>(l, [&](std::size_t i, double phi, double nbrs) {
+    nn_visit_all<double>(l, [&](std::size_t i, double phi, double nbrs) {
         phi_seen[i] = phi;
         nbr_seen[i] = nbrs;
     });
@@ -105,9 +105,9 @@ TEST_CASE("visit_nn nbrs sums all 2*ndims neighbours (3D constant field)", "[hot
     }
 }
 
-TEST_CASE("reduce_fwd fwd_sum sums ndims forward neighbours (2D constant field)", "[hot_loop]") {
+TEST_CASE("nn_reduce_fwd fwd_sum sums ndims forward neighbours (2D constant field)", "[hot_loop]") {
     Lattice<double> l{{5, 7}, /*fill=*/2.0};
     // body returns fwd_sum directly => total = sum_x (2 forward nbrs) = nsites * 4.0
-    double const total = reduce_fwd<double>(l, [](double /*phi*/, double fwd) { return fwd; });
+    double const total = nn_reduce_fwd<double>(l, [](double /*phi*/, double fwd) { return fwd; });
     REQUIRE(total == static_cast<double>(l.nsites()) * 4.0);
 }

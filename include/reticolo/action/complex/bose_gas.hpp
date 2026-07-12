@@ -3,10 +3,10 @@
 #include <reticolo/action/complex/complex_action.hpp>
 #include <reticolo/action/complex/formula/bose_gas_formula.hpp>
 #include <reticolo/action/complex/imag_part.hpp>
-#include <reticolo/core/cplx.hpp>
-#include <reticolo/core/field_traits.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/field/cplx.hpp>
+#include <reticolo/core/field/field_traits.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/log/log.hpp>
 
 #include <cmath>
 #include <complex>

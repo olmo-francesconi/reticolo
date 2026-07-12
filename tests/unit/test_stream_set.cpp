@@ -5,8 +5,8 @@
 // properties the multi-stream checkpoint layout and Hmc's owned RNG depend on.
 
 #include <reticolo/action/nn/phi4.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/core/rng/mt19937_rng.hpp>
 #include <reticolo/core/rng/philox_rng.hpp>

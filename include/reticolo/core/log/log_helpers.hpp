@@ -1,10 +1,10 @@
 #pragma once
 
-// Domain-aware logging helpers. Sits on top of <reticolo/core/log.hpp> so
+// Domain-aware logging helpers. Sits on top of <reticolo/core/log/log.hpp> so
 // the core logger stays domain-agnostic — anything that knows about
 // actions, algorithms, integrators, observables, etc. lives here.
 
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/log/log.hpp>
 
 namespace reticolo::log {
 

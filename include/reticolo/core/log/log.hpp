@@ -24,8 +24,8 @@
 //    internally; an app binds a scope only when it runs its own logging
 //    code inside a parallel region.
 
-#include <reticolo/core/build_info.hpp>
-#include <reticolo/core/host_info.hpp>
+#include <reticolo/core/sys/build_info.hpp>
+#include <reticolo/core/sys/host_info.hpp>
 
 #include <array>
 #include <chrono>
@@ -520,8 +520,8 @@ inline bool& banner_shown() {
 // the log sigil — the banner flows visually into the log lines below.
 // ANSI Shadow figlet for "reticolo"; version spliced into the bottom rule.
 // Build metadata (branch/compiler/simd) is compile-time-baked via
-// <reticolo/core/build_info.hpp>; the host/cpu/threads rows are read live via
-// <reticolo/core/host_info.hpp>, and the gpu row is filled by the cuda umbrella
+// <reticolo/core/sys/build_info.hpp>; the host/cpu/threads rows are read live via
+// <reticolo/core/sys/host_info.hpp>, and the gpu row is filled by the cuda umbrella
 // through impl::gpu_banner_hook() when the app links the CUDA backend.
 inline void banner() {
     if (!impl::cfg().enabled || impl::banner_shown()) {

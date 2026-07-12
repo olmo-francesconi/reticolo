@@ -1,7 +1,7 @@
 #include <reticolo/cli/parser.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/log.hpp>
-#include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/field/matrix_link_lattice.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/io/writer.hpp>
 

@@ -62,7 +62,8 @@ Result measure(Case c, double kappa, double lambda, double tau) {
         accepted += st.accepted ? 1 : 0;
         sum_dh += st.dH;
         sum_dh2 += st.dH * st.dH;
-        sum2 += obs::sq(phi);
+        sum2 += obs::mean_of(std::get<0>(obs::reduce(phi, obs::kernel::phi_sq)),
+                             static_cast<double>(phi.nsites()));
     }
     double const n       = static_cast<double>(n_meas);
     double const dh_mean = sum_dh / n;

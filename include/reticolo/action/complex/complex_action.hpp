@@ -1,8 +1,8 @@
 #pragma once
 
 #include <reticolo/action/cache.hpp>
-#include <reticolo/action/sweep/complex.hpp>
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/exec/nn_split.hpp>
+#include <reticolo/core/field/lattice.hpp>
 
 #include <complex>
 #include <cstddef>
@@ -31,7 +31,7 @@ struct ComplexAction : SFullCache {
 
     [[nodiscard]] double s_full(Lattice<complex_t> const& l) const noexcept {
         auto kern             = derived_().action_kernel(l);
-        complex_t const total = sweep::reduce_fwd_split_last<complex_t>(
+        complex_t const total = exec::nn_reduce_fwd_split_last<complex_t>(
             l, [&kern](complex_t phi, complex_t fwd_total, complex_t fwd_last) {
                 return complex_t{kern(phi, fwd_total, fwd_last), T{0}};
             });
@@ -43,7 +43,7 @@ struct ComplexAction : SFullCache {
     void compute_force(Lattice<complex_t> const& l, Lattice<complex_t>& force) const noexcept {
         auto kern            = derived_().force_kernel(l);
         complex_t* const out = force.data();
-        sweep::visit_nn_split_last<complex_t>(
+        exec::nn_visit_split_last<complex_t>(
             l, [&kern, out](std::size_t i, complex_t phi, complex_t nt, complex_t nl) {
                 out[i] = kern(i, phi, nt, nl);
             });
@@ -54,7 +54,7 @@ struct ComplexAction : SFullCache {
                                 T k_dt) const noexcept {
         auto kern          = derived_().force_kernel(l);
         complex_t* const m = mom.data();
-        sweep::visit_nn_split_last<complex_t>(
+        exec::nn_visit_split_last<complex_t>(
             l, [&kern, m, k_dt](std::size_t i, complex_t phi, complex_t nt, complex_t nl) {
                 m[i] += k_dt * kern(i, phi, nt, nl);
             });

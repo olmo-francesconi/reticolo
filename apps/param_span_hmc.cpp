@@ -91,9 +91,22 @@ int main(int argc, char** argv) {
 
     // ---- Drive: concurrent therm + prod, recording phi^4 observables ----
     std::vector<orch::span::Observable<Field>> obs{
-        {.name = "mag", .measure = [](Field const& f) { return obs::mag::abs(f); }},
-        {.name = "mag_sq", .measure = [](Field const& f) { return obs::sq_of_mean(f); }},
-        {.name = "m2", .measure = [](Field const& f) { return obs::sq(f); }}};
+        {.name = "mag",
+         .measure =
+             [](Field const& f) {
+                 return obs::mag_abs_of(std::get<0>(obs::reduce(f, obs::kernel::phi)),
+                                        static_cast<double>(f.nsites()));
+             }},
+        {.name = "mag_sq",
+         .measure =
+             [](Field const& f) {
+                 return obs::sq_of_mean_of(std::get<0>(obs::reduce(f, obs::kernel::phi)),
+                                           static_cast<double>(f.nsites()));
+             }},
+        {.name = "m2", .measure = [](Field const& f) {
+             return obs::mean_of(std::get<0>(obs::reduce(f, obs::kernel::phi_sq)),
+                                 static_cast<double>(f.nsites()));
+         }}};
     orch::span::Orchestrator<Chain> runner{std::move(workers), plan, std::move(obs)};
     runner.setup(out);
     runner.run(

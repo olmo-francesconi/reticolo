@@ -14,7 +14,7 @@
 // the (E_n-grouped) relabeling.
 
 #include <reticolo/action/formula/window_formula.hpp>
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/io/writer.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
 

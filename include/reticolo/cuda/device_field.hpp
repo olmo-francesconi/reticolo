@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 

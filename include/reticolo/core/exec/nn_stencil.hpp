@@ -1,8 +1,8 @@
 #pragma once
 
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/parallel.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/field/site.hpp>
 
 #include <algorithm>
 #include <array>
@@ -11,15 +11,8 @@
 #include <type_traits>
 #include <utility>
 
-// Function-scope FP-reassociation hint for reduction loops. On clang this
-// breaks the strict left-to-right `total += body(i)` dependency chain so
-// independent body evaluations (sin/cos/heavy fma) can overlap. Other
-// compilers still build; they just lose this particular micro-opt.
-#if defined(__clang__)
-    #define RETICOLO_FP_REASSOCIATE _Pragma("clang fp reassociate(on)")
-#else
-    #define RETICOLO_FP_REASSOCIATE
-#endif
+// The FP-reassociation hint for the reduction loops below (RETICOLO_FP_REASSOCIATE)
+// lives in <reticolo/core/exec/parallel.hpp>, included above — shared with obs::reduce.
 
 // Nearest-neighbour traversal engine, shared by every NN scalar family (site,
 // bond, complex). It sweeps the lattice as a stack of innermost-axis rows: dim 0
@@ -32,9 +25,9 @@
 //
 // The two entry points:
 //
-//   visit_stencil<Policy>(l, comb, body):    map. body(i, self, agg) -> void; the
+//   nn_visit<Policy>(l, comb, body):    map. body(i, self, agg) -> void; the
 //                                    body owns the write (out[i]=… or m[i]+=…).
-//   reduce_stencil<Policy>(l, comb, body):   reduce. body(self, agg) -> Acc,
+//   nn_reduce<Policy>(l, comb, body):   reduce. body(self, agg) -> Acc,
 //                                    accumulated into a total that is deterministic
 //                                    for a fixed (team, slabs) config.
 //
@@ -62,7 +55,7 @@
 // D in {1, 2, 3, 4} each have a hand-written vectorised nest; Indexing caps ndims
 // at 4, so there is no D>4 path — the neighbours are always computed from strides.
 
-namespace reticolo::action::sweep {
+namespace reticolo::exec {
 
 // ---------- neighbour policy + combine ---------------------------------------
 
@@ -662,7 +655,7 @@ template <class Policy, class Acc, class T, class Comb, class Body>
 // Map body(i, self, agg) over every site (agg folds the Policy-selected neighbours
 // via `comb`). Write-disjoint → bit-identical for any partition / thread count.
 template <class Policy, class T, class Comb, class Body>
-inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
+inline void nn_visit(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
     Body const& b = body;
     traverse_dispatch_<void>(
         l,
@@ -684,8 +677,7 @@ inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) no
 // via `comb`). Partition summed in canonical item order → deterministic for a fixed
 // (team, slabs) config; a different team re-folds.
 template <class Policy, class T, class Acc = T, class Comb, class Body>
-[[nodiscard]] inline Acc
-reduce_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
+[[nodiscard]] inline Acc nn_reduce(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
     Body const& b = body;
     return traverse_dispatch_<Acc>(
         l,
@@ -703,4 +695,4 @@ reduce_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
         });
 }
 
-}  // namespace reticolo::action::sweep
+}  // namespace reticolo::exec

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/hd.hpp>
+#include <reticolo/core/sys/hd.hpp>
 
 #include <cmath>
 

@@ -1,6 +1,6 @@
-#include <reticolo/core/indexing.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/field/indexing.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/field/site.hpp>
 
 #include <algorithm>
 

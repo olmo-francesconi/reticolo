@@ -1,8 +1,8 @@
 #pragma once
 
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/log.hpp>
-#include <reticolo/core/log_helpers.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/log/log.hpp>
+#include <reticolo/core/log/log_helpers.hpp>
 #include <reticolo/updater/concepts.hpp>
 #include <reticolo/updater/hmc/hmc.hpp>
 #include <reticolo/updater/hmc/integrators.hpp>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/core/log.hpp>
-#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/core/rng/rng.hpp>
 
 #include <algorithm>

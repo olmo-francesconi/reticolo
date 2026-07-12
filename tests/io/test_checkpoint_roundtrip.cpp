@@ -1,8 +1,8 @@
 // Round-trip and resume tests for the config-snapshot surface
 // (io::Writer::field / io::Writer::rng_state / io::Reader / io::checkpoint).
 
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/field/matrix_link_lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/io/checkpoint.hpp>
 #include <reticolo/io/reader.hpp>

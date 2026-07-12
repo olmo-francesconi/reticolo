@@ -75,9 +75,11 @@ int main(int argc, char** argv) {
         d_h.append(step.dH);
         accepted.append(step.accepted ? 1 : 0);
         if (i % meas_every == 0) {
+            auto const V        = static_cast<double>(phi.nsites());
+            auto const [s1, s2] = obs::reduce(phi, obs::kernel::phi, obs::kernel::phi_sq);
             s_prod.append(phi6.s_full(phi));
-            mag.append(obs::mag::abs(phi));
-            m_sq.append(obs::sq(phi));
+            mag.append(obs::mag_abs_of(s1, V));
+            m_sq.append(obs::mean_of(s2, V));
         }
     }
 }

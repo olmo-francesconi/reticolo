@@ -2,8 +2,8 @@
 
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/formula/window_formula.hpp>
-#include <reticolo/core/field_traits.hpp>
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/field/field_traits.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/updater/hmc/integ_ops.hpp>
 
 #include <cstddef>

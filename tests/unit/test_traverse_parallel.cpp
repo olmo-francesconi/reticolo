@@ -1,9 +1,9 @@
 #include <reticolo/action/nn/phi4.hpp>
 #include <reticolo/action/nn/sine_gordon.hpp>
-#include <reticolo/action/sweep/site.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/log.hpp>
-#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/exec/nn_site.hpp>
+#include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/updater/hmc/hmc.hpp>
 
@@ -119,7 +119,7 @@ TEST_CASE("SineGordon force is thread-count invariant; s_full is fixed-team dete
 
     auto force = [&] {
         Lattice<double> f{phi.indexing()};
-        action.compute_force(phi, f);  // triggers prep() sin-batch + visit_nn
+        action.compute_force(phi, f);  // triggers prep() sin-batch + nn_visit_all
         return std::vector<double>{f.data(), f.data() + f.nsites()};
     };
     auto set_threads = [](int nthr) {

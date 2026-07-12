@@ -1,5 +1,5 @@
 #include <reticolo/action/gauge/wilson.hpp>
-#include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/field/matrix_link_lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
 #include <reticolo/cuda/check.hpp>
