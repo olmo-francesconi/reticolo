@@ -14,6 +14,17 @@
     #include <omp.h>
 #endif
 
+// Function-scope FP-reassociation hint for reduction loops. On clang this breaks
+// the strict left-to-right `total += body(i)` dependency chain so independent
+// body evaluations (and per-site accumulations) can overlap and vectorise across
+// iterations. Other compilers still build; they just lose this particular
+// micro-opt. Shared by every reduction loop — the stencil engine and obs::reduce.
+#if defined(__clang__)
+    #define RETICOLO_FP_REASSOCIATE _Pragma("clang fp reassociate(on)")
+#else
+    #define RETICOLO_FP_REASSOCIATE
+#endif
+
 // OpenMP composability + the two parallel primitives for the lattice-traverse
 // stage. A kernel pass must thread correctly in three contexts: standalone (a
 // bench calling `compute_force`), nested inside a per-trajectory region, and

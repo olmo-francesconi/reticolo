@@ -11,15 +11,8 @@
 #include <type_traits>
 #include <utility>
 
-// Function-scope FP-reassociation hint for reduction loops. On clang this
-// breaks the strict left-to-right `total += body(i)` dependency chain so
-// independent body evaluations (sin/cos/heavy fma) can overlap. Other
-// compilers still build; they just lose this particular micro-opt.
-#if defined(__clang__)
-    #define RETICOLO_FP_REASSOCIATE _Pragma("clang fp reassociate(on)")
-#else
-    #define RETICOLO_FP_REASSOCIATE
-#endif
+// The FP-reassociation hint for the reduction loops below (RETICOLO_FP_REASSOCIATE)
+// lives in <reticolo/core/parallel.hpp>, included above — shared with obs::reduce.
 
 // Nearest-neighbour traversal engine, shared by every NN scalar family (site,
 // bond, complex). It sweeps the lattice as a stack of innermost-axis rows: dim 0

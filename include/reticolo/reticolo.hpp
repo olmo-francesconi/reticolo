@@ -34,6 +34,7 @@
 #include <reticolo/obs/analysis.hpp>
 #include <reticolo/obs/catalog.hpp>
 #include <reticolo/obs/concepts.hpp>
+#include <reticolo/obs/reduce.hpp>
 #include <reticolo/orch/checkpoint.hpp>
 #include <reticolo/orch/concepts.hpp>
 #include <reticolo/orch/ensemble.hpp>
@@ -50,7 +51,7 @@
 // NOLINTEND(misc-include-cleaner)
 
 // Short namespace aliases. One `using namespace reticolo;` per app then gives
-// terse `act::Phi4`, `updater::Hmc`, `obs::mean`, `io::Writer`, `cli::Parser`.
+// terse `act::Phi4`, `updater::Hmc`, `obs::reduce`, `io::Writer`, `cli::Parser`.
 namespace reticolo {
 namespace act = action;
 }  // namespace reticolo

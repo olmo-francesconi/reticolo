@@ -57,14 +57,6 @@ int main(int argc, char** argv) {
     // ---- Updater ----
     updater::Hmc hmc{sg, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
-    auto cos_avg = [&phi]() {
-        double sum = 0.0;
-        for (Site const x : phi.sites()) {
-            sum += std::cos(phi[x]);
-        }
-        return sum / static_cast<double>(phi.nsites());
-    };
-
     // ---- Thermalisation ----
     log::info("hmc", "therm  {} trajectories", n_therm);
     for (int i = 0; i < n_therm; ++i) {
@@ -79,9 +71,12 @@ int main(int argc, char** argv) {
         d_h.append(step.dH);
         accepted.append(step.accepted ? 1 : 0);
         if (i % meas_every == 0) {
+            auto const V        = static_cast<double>(phi.nsites());
+            auto const [s1, sc] = obs::reduce(
+                phi, obs::kernel::phi, [](auto z) { return std::cos(static_cast<double>(z)); });
             s_prod.append(sg.s_full(phi));
-            mag.append(obs::mag::abs(phi));
-            cos_phi.append(cos_avg());
+            mag.append(obs::mag_abs_of(s1, V));
+            cos_phi.append(obs::mean_of(sc, V));
         }
     }
 }

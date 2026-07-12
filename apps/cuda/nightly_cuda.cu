@@ -154,7 +154,8 @@ void phi4_block() {
         for (int i = 0; i < k_n_meas; ++i) {
             auto const s = hmc.step(log::Mode::silent);
             c_edh.push_back(std::exp(-s.dH));
-            c_phi2.push_back(obs::sq(phi));
+            c_phi2.push_back(obs::mean_of(std::get<0>(obs::reduce(phi, obs::kernel::phi_sq)),
+                                          static_cast<double>(phi.nsites())));
         }
     }
 
