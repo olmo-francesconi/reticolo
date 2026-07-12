@@ -1,9 +1,9 @@
 #include <reticolo/action/nn/phi4.hpp>
 #include <reticolo/action/nn/sine_gordon.hpp>
 #include <reticolo/action/sweep/site.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/log.hpp>
-#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/log/log.hpp>
+#include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/updater/hmc/hmc.hpp>
 

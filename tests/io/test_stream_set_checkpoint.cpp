@@ -4,7 +4,7 @@
 // mismatched resume (stream count, family kind, old single-rng layout) must
 // throw instead of silently forking the chain.
 
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/rng/philox_rng.hpp>
 #include <reticolo/core/rng/stream_set.hpp>
 #include <reticolo/io/checkpoint.hpp>

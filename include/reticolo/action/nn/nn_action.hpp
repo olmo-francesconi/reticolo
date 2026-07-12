@@ -2,8 +2,8 @@
 
 #include <reticolo/action/cache.hpp>
 #include <reticolo/action/sweep/stencil.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/exec/parallel.hpp>
 
 #include <cstddef>
 #include <utility>

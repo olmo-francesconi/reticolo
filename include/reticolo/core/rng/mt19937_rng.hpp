@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/core/rng/rng.hpp>
 
 #include <array>

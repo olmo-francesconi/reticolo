@@ -1,4 +1,4 @@
-#include <reticolo/core/indexing.hpp>
+#include <reticolo/core/field/indexing.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <reticolo/core/cplx.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/field/cplx.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/field/matrix_link_lattice.hpp>
 
 #include <complex>
 #include <cstddef>

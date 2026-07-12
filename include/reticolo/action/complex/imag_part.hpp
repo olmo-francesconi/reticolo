@@ -2,8 +2,8 @@
 
 #include <reticolo/action/cache.hpp>
 #include <reticolo/action/sweep/complex.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/exec/parallel.hpp>
 
 #include <complex>
 #include <cstddef>

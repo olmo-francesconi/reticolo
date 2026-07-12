@@ -1,7 +1,7 @@
 #pragma once
 
 // Runtime host/environment information for the banner. Unlike
-// <reticolo/core/build_info.hpp> (all compile-time), everything here is read
+// <reticolo/core/sys/build_info.hpp> (all compile-time), everything here is read
 // live from the machine the app is running on — hostname, CPU brand, and the
 // number of logical cores the process can see. Host-only; no device code.
 

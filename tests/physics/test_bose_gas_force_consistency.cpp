@@ -1,8 +1,8 @@
 #include <reticolo/action/complex/bose_gas.hpp>
 #include <reticolo/action/concepts.hpp>
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/field/site.hpp>
 
 #include <complex>
 

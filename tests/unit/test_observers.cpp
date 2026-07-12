@@ -1,5 +1,5 @@
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/field/site.hpp>
 #include <reticolo/obs/catalog.hpp>
 #include <reticolo/obs/concepts.hpp>
 #include <reticolo/obs/reduce.hpp>

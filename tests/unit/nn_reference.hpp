@@ -5,8 +5,8 @@
 // Indexing::next/prev — same values, same fold order as the vectorised nests
 // (per axis mu ascending: +mu then -mu), so the map comparison stays bit-exact.
 
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/field/site.hpp>
 
 #include <cstddef>
 

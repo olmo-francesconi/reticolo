@@ -9,7 +9,7 @@
 // lazily when banner() invokes the hook (at log::start), by which point the
 // CUDA context is up; on any error it returns "" and banner() omits the row.
 
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/log/log.hpp>
 
 #include <format>
 #include <string>

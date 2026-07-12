@@ -1,8 +1,8 @@
 #pragma once
 
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/parallel.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/site.hpp>
 
 #include <algorithm>
 #include <array>
@@ -12,7 +12,7 @@
 #include <utility>
 
 // The FP-reassociation hint for the reduction loops below (RETICOLO_FP_REASSOCIATE)
-// lives in <reticolo/core/parallel.hpp>, included above — shared with obs::reduce.
+// lives in <reticolo/core/exec/parallel.hpp>, included above — shared with obs::reduce.
 
 // Nearest-neighbour traversal engine, shared by every NN scalar family (site,
 // bond, complex). It sweeps the lattice as a stack of innermost-axis rows: dim 0

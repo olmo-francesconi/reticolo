@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/hd.hpp>
+#include <reticolo/core/sys/hd.hpp>
 
 // A minimal host/device complex number. std::complex is not usable in device
 // code (its members are not __device__), so the per-site formulas that must run

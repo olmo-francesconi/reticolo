@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/hd.hpp>
+#include <reticolo/core/sys/hd.hpp>
 
 // Shared Sine-Gordon per-site formulas — single source of truth for the CPU
 // action (action::SineGordon, sine_gordon.hpp) and the CUDA device functors.

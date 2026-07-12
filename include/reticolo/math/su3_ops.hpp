@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/core/rng/philox.hpp>
 #include <reticolo/math/vec_libm.hpp>
 

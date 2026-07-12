@@ -1,7 +1,7 @@
 #include <reticolo/action/complex/bose_gas.hpp>
 #include <reticolo/action/windowed_action.hpp>
-#include <reticolo/core/cplx.hpp>
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/field/cplx.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/rng/rng.hpp>
 #include <reticolo/cuda/actions/complex/bose_gas.hpp>
 #include <reticolo/cuda/check.hpp>

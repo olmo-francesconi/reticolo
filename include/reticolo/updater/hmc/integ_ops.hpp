@@ -1,8 +1,8 @@
 #pragma once
 
-#include <reticolo/core/field_traits.hpp>
-#include <reticolo/core/matrix_link_lattice.hpp>
-#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/field/field_traits.hpp>
+#include <reticolo/core/field/matrix_link_lattice.hpp>
+#include <reticolo/core/exec/parallel.hpp>
 
 #include <cstddef>
 

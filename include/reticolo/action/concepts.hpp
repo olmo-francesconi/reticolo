@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/field_traits.hpp>
+#include <reticolo/core/field/field_traits.hpp>
 
 #include <concepts>
 

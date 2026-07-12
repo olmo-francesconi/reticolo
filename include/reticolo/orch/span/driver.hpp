@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/io/writer.hpp>
 #include <reticolo/orch/ensemble.hpp>
 #include <reticolo/orch/thread_plan.hpp>

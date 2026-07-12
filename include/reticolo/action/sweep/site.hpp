@@ -1,7 +1,7 @@
 #pragma once
 
 #include <reticolo/action/sweep/stencil.hpp>
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/field/lattice.hpp>
 
 #include <cstddef>
 #include <utility>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/log/log.hpp>
 
 #include <algorithm>
 #include <cstddef>

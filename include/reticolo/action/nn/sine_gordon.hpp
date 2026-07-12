@@ -3,10 +3,10 @@
 #include <reticolo/action/nn/formula/sine_gordon_formula.hpp>
 #include <reticolo/action/nn/nn_action.hpp>
 #include <reticolo/action/sweep/site.hpp>
-#include <reticolo/core/field_traits.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/log.hpp>
-#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/field/field_traits.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/log/log.hpp>
+#include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
 #include <cmath>

@@ -1,9 +1,9 @@
 #pragma once
 
 #include <reticolo/action/sweep/stencil.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/parallel.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/site.hpp>
 
 #include <array>
 #include <cstddef>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/hd.hpp>
+#include <reticolo/core/sys/hd.hpp>
 
 // LLR window formula — the single source of truth shared by the CPU
 // `action::WindowedAction` and the CUDA device kernels (cuda/llr/windowed_action.cuh).

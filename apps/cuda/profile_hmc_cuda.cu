@@ -16,7 +16,7 @@
 
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/action/nn/phi4.hpp>
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
 #include <reticolo/cuda/actions/nn/phi4.hpp>
 #include <reticolo/cuda/device_action.cuh>

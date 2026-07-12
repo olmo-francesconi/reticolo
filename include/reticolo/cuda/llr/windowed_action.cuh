@@ -26,7 +26,7 @@
 // (llr/formula/window_formula.hpp), one source of truth with the CPU.
 
 #include <reticolo/action/formula/window_formula.hpp>
-#include <reticolo/core/field_traits.hpp>
+#include <reticolo/core/field/field_traits.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_buffer.hpp>

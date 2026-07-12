@@ -1,14 +1,14 @@
 #pragma once
 
 #include <reticolo/action/concepts.hpp>
-#include <reticolo/core/field_traits.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/log.hpp>
-#include <reticolo/core/log_helpers.hpp>
-#include <reticolo/core/parallel.hpp>
+#include <reticolo/core/field/field_traits.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/log/log.hpp>
+#include <reticolo/core/log/log_helpers.hpp>
+#include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/core/rng/rng.hpp>
 #include <reticolo/core/rng/stream_set.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/field/site.hpp>
 #include <reticolo/math/vec_libm.hpp>
 #include <reticolo/updater/hmc/integrators.hpp>
 

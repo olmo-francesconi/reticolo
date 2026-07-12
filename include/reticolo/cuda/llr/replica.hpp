@@ -11,7 +11,7 @@
 // enqueued before any sync). The replica exposes the per-trajectory primitives
 // launch_trajectory() (async) + read_dE() (gather) instead.
 
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>

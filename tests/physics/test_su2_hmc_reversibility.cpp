@@ -5,9 +5,9 @@
 // additive kick for all three integrators.
 
 #include <reticolo/action/gauge/wilson.hpp>
-#include <reticolo/core/matrix_link_lattice.hpp>
+#include <reticolo/core/field/matrix_link_lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/field/site.hpp>
 #include <reticolo/math/group/su2.hpp>
 #include <reticolo/math/su2_ops.hpp>
 #include <reticolo/updater/hmc/hmc.hpp>

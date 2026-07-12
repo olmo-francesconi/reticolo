@@ -2,7 +2,7 @@
 
 #include <reticolo/action/complex/bose_gas.hpp>
 #include <reticolo/action/complex/formula/bose_gas_formula.hpp>
-#include <reticolo/core/cplx.hpp>
+#include <reticolo/core/field/cplx.hpp>
 #include <reticolo/cuda/actions/device_functors.hpp>
 #include <reticolo/cuda/actions/site_launchers.hpp>
 #include <reticolo/cuda/bose_imag.cuh>

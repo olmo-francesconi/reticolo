@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/hd.hpp>
+#include <reticolo/core/sys/hd.hpp>
 
 // Shared Wilson-U(1) plaquette angle — the one piece of per-plaquette math common
 // to the CPU host kernels (wilson_kernels<U1>) and the CUDA device kernels

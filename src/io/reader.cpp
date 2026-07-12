@@ -1,4 +1,4 @@
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/io/reader.hpp>
 
 #include <algorithm>

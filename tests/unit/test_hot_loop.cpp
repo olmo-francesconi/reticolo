@@ -1,7 +1,7 @@
 #include <reticolo/action/sweep/site.hpp>
-#include <reticolo/core/lattice.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/rng/fast_rng.hpp>
-#include <reticolo/core/site.hpp>
+#include <reticolo/core/field/site.hpp>
 
 #include "nn_reference.hpp"
 

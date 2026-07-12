@@ -1,10 +1,10 @@
 #pragma once
 
 #include <reticolo/action/windowed_action.hpp>
-#include <reticolo/core/field_traits.hpp>
-#include <reticolo/core/lattice.hpp>
-#include <reticolo/core/log.hpp>
-#include <reticolo/core/log_helpers.hpp>
+#include <reticolo/core/field/field_traits.hpp>
+#include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/log/log.hpp>
+#include <reticolo/core/log/log_helpers.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
 #include <reticolo/updater/concepts.hpp>
 #include <reticolo/updater/hmc/hmc.hpp>

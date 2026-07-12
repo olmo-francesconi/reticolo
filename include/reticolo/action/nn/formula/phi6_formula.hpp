@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/hd.hpp>
+#include <reticolo/core/sys/hd.hpp>
 
 // Shared Phi6 per-site formulas — single source of truth for the CPU action
 // (action::Phi6, phi6.hpp) and the CUDA device functors. Same structure as

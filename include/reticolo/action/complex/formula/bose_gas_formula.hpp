@@ -1,7 +1,7 @@
 #pragma once
 
-#include <reticolo/core/cplx.hpp>
-#include <reticolo/core/hd.hpp>
+#include <reticolo/core/field/cplx.hpp>
+#include <reticolo/core/sys/hd.hpp>
 
 // Per-site BoseGas (S_R / F_R) formula — the single source of truth shared by the
 // CPU action::BoseGas and the CUDA device_functors<BoseGas>. Only the

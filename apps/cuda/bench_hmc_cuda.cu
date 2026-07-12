@@ -13,7 +13,7 @@
 #include <reticolo/action/nn/phi6.hpp>
 #include <reticolo/action/nn/sine_gordon.hpp>
 #include <reticolo/action/nn/xy.hpp>
-#include <reticolo/core/log.hpp>
+#include <reticolo/core/log/log.hpp>
 #include <reticolo/cuda/actions/gauge/wilson.hpp>
 #include <reticolo/cuda/actions/nn/phi4.hpp>
 #include <reticolo/cuda/actions/nn/phi6.hpp>
