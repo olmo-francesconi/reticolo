@@ -1,7 +1,7 @@
 #pragma once
 
 #include <reticolo/action/cache.hpp>
-#include <reticolo/action/sweep/complex.hpp>
+#include <reticolo/core/exec/nn_split.hpp>
 #include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/exec/parallel.hpp>
 
@@ -59,7 +59,7 @@ struct ImagPart : SImagCache {
         auto fk            = derived_().force_kernel(l);
         complex_t* const m = mom.data();
         T const k_r        = k_dt * scale_r;
-        sweep::visit_nn_split_last<complex_t>(
+        exec::nn_visit_split_last<complex_t>(
             l, [&fk, m, k_r](std::size_t i, complex_t phi, complex_t nt, complex_t nl) {
                 m[i] += k_r * fk(i, phi, nt, nl);
             });

@@ -143,7 +143,8 @@ real part, with the imaginary part bolted on as a mixin), and `action/gauge/`
 concepts; only the `Field` they name differs. Each family folder holds its leaf
 structs and its family base (`<family>_action.hpp`) at the top and its per-action
 physics in `formula/`; the shared dimension-generic traversal engine lives once
-in `action/sweep/`.
+in `core/exec/` (namespace `exec`, the `nn_*` family — `nn_visit`/`nn_reduce`
+and friends), alongside the per-site `exec` primitives it builds on.
 
 ### The concepts
 

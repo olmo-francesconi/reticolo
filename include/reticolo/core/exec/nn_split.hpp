@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/action/sweep/stencil.hpp>
+#include <reticolo/core/exec/nn_stencil.hpp>
 #include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/core/field/site.hpp>
@@ -13,19 +13,19 @@
 // (BoseGas): the last direction ("time") carries a different weight, so these
 // hand the body the full 2·ndims neighbour sum AND the last-direction sum
 // separately. They mirror the site engine's explicit per-dimension nests
-// (<reticolo/action/sweep/stencil.hpp>) — same hoisted row bases, tiling and
+// (<reticolo/core/exec/nn_stencil.hpp>) — same hoisted row bases, tiling and
 // threading — but emit a second aggregate. The last direction is dim D-1, the
 // OUTERMOST walk axis, so its row bases are the z/w ones already hoisted; the
 // last-dim pair is one extra read per site with no inner-x wrap of its own.
 //
-//  visit_nn_split_last(l, body):    body(i, phi, nbrs_total, nbrs_last) -> void
-//  reduce_fwd_split_last(l, body):  body(phi, fwd_total, fwd_last) -> T
+//  nn_visit_split_last(l, body):    body(i, phi, nbrs_total, nbrs_last) -> void
+//  nn_reduce_fwd_split_last(l, body):  body(phi, fwd_total, fwd_last) -> T
 //
 // The isotropic combine is the identity (the anisotropy weight is applied by the
 // leaf body as nbrs_total + (c_last - 1)·nbrs_last). D in {2,3,4} take the
 // vectorised/threaded path; D==1 and D>4 fall back to the flat gather.
 
-namespace reticolo::action::sweep {
+namespace reticolo::exec {
 
 // ---------- per-dimension split-last item nests -------------------------------
 //
@@ -301,12 +301,12 @@ template <class Acc, class T, class Body>
 
 // ---------- dispatch ---------------------------------------------------------
 
-//  visit_nn_split_last(l, body): body(i, phi, nbrs_total, nbrs_last) -> void.
+//  nn_visit_split_last(l, body): body(i, phi, nbrs_total, nbrs_last) -> void.
 //  Reuses the shared `traverse_dispatch_` (site and split-last share the tiling and
 //  partition); the split item drivers add only the second (last-direction)
 //  aggregate. 1D and D>4 route to the flat split-last gather.
 template <class T, class Body>
-inline void visit_nn_split_last(Lattice<T> const& l, Body&& body) noexcept {
+inline void nn_visit_split_last(Lattice<T> const& l, Body&& body) noexcept {
     Body const& b = body;
     traverse_dispatch_<void>(
         l,
@@ -324,9 +324,9 @@ inline void visit_nn_split_last(Lattice<T> const& l, Body&& body) noexcept {
         });
 }
 
-//  reduce_fwd_split_last(l, body): body(phi, fwd_total, fwd_last) -> T.
+//  nn_reduce_fwd_split_last(l, body): body(phi, fwd_total, fwd_last) -> T.
 template <class T, class Body>
-[[nodiscard]] inline T reduce_fwd_split_last(Lattice<T> const& l, Body&& body) noexcept {
+[[nodiscard]] inline T nn_reduce_fwd_split_last(Lattice<T> const& l, Body&& body) noexcept {
     Body const& b = body;
     return traverse_dispatch_<T>(
         l,
@@ -344,4 +344,4 @@ template <class T, class Body>
         });
 }
 
-}  // namespace reticolo::action::sweep
+}  // namespace reticolo::exec

@@ -8,7 +8,7 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/gauge.hpp>
 #include <reticolo/action/nn.hpp>
-#include <reticolo/action/sweep/site.hpp>
+#include <reticolo/core/exec/nn_site.hpp>
 #include <reticolo/action/windowed_action.hpp>
 #include <reticolo/app/setup.hpp>
 #include <reticolo/cli/parser.hpp>

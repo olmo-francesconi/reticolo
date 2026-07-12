@@ -25,9 +25,9 @@
 //
 // The two entry points:
 //
-//   visit_stencil<Policy>(l, comb, body):    map. body(i, self, agg) -> void; the
+//   nn_visit<Policy>(l, comb, body):    map. body(i, self, agg) -> void; the
 //                                    body owns the write (out[i]=… or m[i]+=…).
-//   reduce_stencil<Policy>(l, comb, body):   reduce. body(self, agg) -> Acc,
+//   nn_reduce<Policy>(l, comb, body):   reduce. body(self, agg) -> Acc,
 //                                    accumulated into a total that is deterministic
 //                                    for a fixed (team, slabs) config.
 //
@@ -55,7 +55,7 @@
 // D in {1, 2, 3, 4} each have a hand-written vectorised nest; Indexing caps ndims
 // at 4, so there is no D>4 path — the neighbours are always computed from strides.
 
-namespace reticolo::action::sweep {
+namespace reticolo::exec {
 
 // ---------- neighbour policy + combine ---------------------------------------
 
@@ -655,7 +655,7 @@ template <class Policy, class Acc, class T, class Comb, class Body>
 // Map body(i, self, agg) over every site (agg folds the Policy-selected neighbours
 // via `comb`). Write-disjoint → bit-identical for any partition / thread count.
 template <class Policy, class T, class Comb, class Body>
-inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
+inline void nn_visit(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
     Body const& b = body;
     traverse_dispatch_<void>(
         l,
@@ -678,7 +678,7 @@ inline void visit_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) no
 // (team, slabs) config; a different team re-folds.
 template <class Policy, class T, class Acc = T, class Comb, class Body>
 [[nodiscard]] inline Acc
-reduce_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
+nn_reduce(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
     Body const& b = body;
     return traverse_dispatch_<Acc>(
         l,
@@ -696,4 +696,4 @@ reduce_stencil(Lattice<T> const& l, Comb const& comb, Body&& body) noexcept {
         });
 }
 
-}  // namespace reticolo::action::sweep
+}  // namespace reticolo::exec
