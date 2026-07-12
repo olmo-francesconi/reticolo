@@ -39,7 +39,7 @@ TEST_CASE("reduce_nn reproduces phi4 s_full (the action as a fused observable)",
     for (Site const x : phi.sites()) {
         phi[x] = 0.1 * std::sin(0.3 * static_cast<double>(x.value()));
     }
-    double const kappa = 0.18;
+    double const kappa  = 0.18;
     double const lambda = 1.0;
     reticolo::action::Phi4<double> phi4{.kappa = kappa, .lambda = lambda};
 
@@ -57,7 +57,7 @@ TEST_CASE("reduce_nn fuses a neighbour kernel with a pure per-site kernel", "[ob
     Lattice<double> phi{{4, 4}, c};
     auto const [s_agg, s_sq] = obs::reduce_nn(
         phi,
-        [](double /*self*/, double agg) { return agg; },        // neighbour lane
+        [](double /*self*/, double agg) { return agg; },           // neighbour lane
         [](double self, double /*agg*/) { return self * self; });  // per-site lane, ignores agg
     auto const n = static_cast<double>(phi.nsites());
     REQUIRE(s_agg == Catch::Approx(n * 2.0 * c).margin(1e-12));  // FwdOnly, 2 dims
