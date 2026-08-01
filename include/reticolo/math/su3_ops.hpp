@@ -918,7 +918,7 @@ inline void expi_lmul_range(
 }
 
 // U ← exp(i·dt·P)·U over a full direction slab of `n` links (serial). The
-// parallel drift partition lives in the integrator op layer (integ_ops.hpp),
+// parallel drift partition lives in the field-op layer (core/exec/field_ops.hpp),
 // which calls `expi_lmul_range` per thread-chunk; this stays pure math.
 template <class T>
 inline void expi_lmul_slab(T* u, T const* p, double dt, std::size_t n) noexcept {

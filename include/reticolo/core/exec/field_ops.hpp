@@ -6,12 +6,16 @@
 
 #include <cstddef>
 
-namespace reticolo::updater::integ {
+namespace reticolo::exec {
 
-// Field-generic integrator atoms — the elementwise drift `field += c·mom`
-// and the additive kick `mom += k·force`. Factored out of the integrator
-// bodies so they can be overloaded on the field type without touching
-// Leapfrog/Omelyan2/Omelyan4 themselves.
+// Elementwise field atoms — the drift `field += c·mom` and the additive kick
+// `mom += k·force`. They carry no integrator, action, or HMC content: each is a
+// pure elementwise map over the canonical field partition, which is why they
+// live beside the other `exec::` traversal primitives rather than under
+// `updater/`. `updater::integ` re-exports both names (see
+// `updater/hmc/integrators.hpp`) so the integrator bodies keep calling them
+// unqualified, and `action/windowed_action.hpp` reaches them here instead of
+// reaching up a layer.
 //
 // The generic templates cover the scalar/complex site field `Lattice<T>`,
 // which is always site-major (`flat_size == nsites`) and so rides the
@@ -20,6 +24,11 @@ namespace reticolo::updater::integ {
 // group-exponential update `U ← exp(i·dt·P)·U`, and `kick_add` walks the
 // per-direction component slabs on the SAME site partition so the momentum
 // buffer keeps the thread↔slab ownership every other pass uses.
+//
+// Device fields are served by same-named overloads in `reticolo::cuda`
+// (`cuda/integ_ops.hpp`), found by ADL at the unqualified call sites — the
+// generic templates here are less specialised, so partial ordering picks the
+// device overload whenever the argument is a `DeviceField`.
 
 // The MD time step is always a real scalar even when the field is complex —
 // using `real_scalar_t<F>` for the coefficient turns `c * p[i]` into a
@@ -37,7 +46,7 @@ inline void drift_field(Field& field, Mom const& mom, double cdt) noexcept {
     // independent → bit-identical for any partition / thread count. __restrict
     // is re-applied inside the worker so the vectoriser keeps the no-alias
     // guarantee (field, mom are distinct sibling lattices).
-    reticolo::exec::field_visit(field, 1, [fd, pd, c](std::size_t base, std::size_t cnt) {
+    field_visit(field, 1, [fd, pd, c](std::size_t base, std::size_t cnt) {
         F* __restrict const f          = fd;
         auto const* __restrict const p = pd;
         std::size_t const end          = base + cnt;
@@ -53,7 +62,7 @@ inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
     auto const c         = static_cast<real_scalar_t<F>>(kdt);
     F* const md          = mom.data();
     auto const* const fd = force.data();
-    reticolo::exec::field_visit(mom, 1, [md, fd, c](std::size_t base, std::size_t cnt) {
+    field_visit(mom, 1, [md, fd, c](std::size_t base, std::size_t cnt) {
         F* __restrict const m           = md;
         auto const* __restrict const fp = fd;
         std::size_t const end           = base + cnt;
@@ -78,7 +87,7 @@ inline void drift_field(MatrixLinkLattice<G, T>& field,
     std::size_t const span = field.link_span();  // padded component stride
     // gran = pass-5 k_b=8 batch, kept for the kernel's tail handling; the field
     // partition itself is row-aligned (whole inner-dim products), not gran-aligned.
-    reticolo::exec::field_visit(field, 8, [&](std::size_t base, std::size_t cnt) {
+    field_visit(field, 8, [&](std::size_t base, std::size_t cnt) {
         for (std::size_t mu = 0; mu < d; ++mu) {
             G::expi_lmul_range(
                 field.mu_block_data(mu), mom.mu_block_data(mu), cdt, span, base, cnt);
@@ -102,7 +111,7 @@ kick_add(MatrixLinkLattice<G, T>& mom, MatrixLinkLattice<G, T> const& force, dou
     T const c                = static_cast<T>(kdt);
     T* const md              = mom.data();
     T const* const fd        = force.data();
-    reticolo::exec::field_visit(mom, 1, [md, fd, c, nblk, span](std::size_t base, std::size_t cnt) {
+    field_visit(mom, 1, [md, fd, c, nblk, span](std::size_t base, std::size_t cnt) {
         for (std::size_t blk = 0; blk < nblk; ++blk) {
             T* __restrict const m        = md + (blk * span) + base;
             T const* __restrict const fp = fd + (blk * span) + base;
@@ -113,4 +122,4 @@ kick_add(MatrixLinkLattice<G, T>& mom, MatrixLinkLattice<G, T> const& force, dou
     });
 }
 
-}  // namespace reticolo::updater::integ
+}  // namespace reticolo::exec

@@ -1,14 +1,22 @@
 #pragma once
 
 #include <reticolo/action/concepts.hpp>
+#include <reticolo/core/exec/field_ops.hpp>
 #include <reticolo/core/field/field_traits.hpp>
 #include <reticolo/core/field/lattice.hpp>
-#include <reticolo/updater/hmc/integ_ops.hpp>
 
 #include <cstddef>
 #include <string_view>
 
 namespace reticolo::updater::integ {
+
+// The elementwise drift/kick atoms live in `exec::` (core/exec/field_ops.hpp):
+// they are pure field maps with no integrator content. Re-exported here so the
+// integrator bodies below call them unqualified, and so a `DeviceField`
+// argument still reaches the `reticolo::cuda` overloads by ADL (the generic
+// `exec::` templates are less specialised, so partial ordering prefers them).
+using exec::drift_field;
+using exec::kick_add;
 
 // Symplectic integrators for HMC.
 //

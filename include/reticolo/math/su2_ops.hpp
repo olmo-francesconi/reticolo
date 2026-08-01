@@ -463,7 +463,7 @@ template <class T>
 }
 
 // U ← exp(dt·P)·U over a full direction slab of `n` links (serial). The
-// parallel drift partition lives in the integrator op layer (integ_ops.hpp),
+// parallel drift partition lives in the field-op layer (core/exec/field_ops.hpp),
 // which calls `expi_lmul_range` per thread-chunk; this stays pure math.
 template <class T>
 [[gnu::always_inline]] inline void
