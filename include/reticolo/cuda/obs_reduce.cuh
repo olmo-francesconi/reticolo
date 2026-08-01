@@ -47,6 +47,7 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/reduce.cuh>
+#include <reticolo/obs/concepts.hpp>
 
 #include <cstddef>
 #include <tuple>
@@ -193,6 +194,7 @@ assemble(double const* host, int grid, std::index_sequence<I...>) {
 // the same shape `obs::reduce` returns, so the `obs::*_of` finalizers apply
 // unchanged.
 template <class T, class Layout, class... Ks>
+    requires(obs::SiteKernel<Ks, T> && ...)
 [[nodiscard]] inline auto reduce(DeviceField<T, Layout> const& f, Ks const&... ks) {
     static_assert(sizeof...(Ks) > 0, "cuda::reduce needs at least one kernel");
     constexpr int width = lane_total_width_v<std::decay_t<std::invoke_result_t<Ks const&, T>>...>;
@@ -215,6 +217,7 @@ template <class T, class Layout, class... Ks>
 // Σ_x k_i(φ(x), agg(x)) per lane, one pass. `Policy` selects the neighbour
 // aggregate exactly as on the host.
 template <class Policy = exec::FwdOnly, class T, class Layout, class... Ks>
+    requires(obs::NnKernel<Ks, T> && ...)
 [[nodiscard]] inline auto reduce_nn(DeviceField<T, Layout> const& f, Ks const&... ks) {
     static_assert(sizeof...(Ks) > 0, "cuda::reduce_nn needs at least one kernel");
     constexpr int width =

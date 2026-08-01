@@ -4,6 +4,7 @@
 #include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/sys/hd.hpp>
+#include <reticolo/obs/concepts.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -68,6 +69,7 @@ struct Lanes {
 //     amplitude sum use `std::sqrt(re*re + im*im)` (lowers to `fsqrt.2d`), or
 //     accumulate |φ|² and take the sqrt once at the end.
 template <class T, class... Ks>
+    requires(SiteKernel<Ks, T> && ...)
 [[nodiscard]] inline auto reduce(Lattice<T> const& l, Ks const&... ks) noexcept {
     static_assert(sizeof...(Ks) > 0, "obs::reduce needs at least one kernel");
     using Acc           = Lanes<std::decay_t<std::invoke_result_t<Ks const&, T const&>>...>;
@@ -99,6 +101,7 @@ template <class T, class... Ks>
 // Rides `exec::nn_reduce` (IdentityCombine); returns a tuple of sums like `reduce`.
 // Kernels that ignore `agg` (pure per-site) still fuse in, sharing the sweep.
 template <class Policy = exec::FwdOnly, class T, class... Ks>
+    requires(NnKernel<Ks, T> && ...)
 [[nodiscard]] inline auto reduce_nn(Lattice<T> const& l, Ks const&... ks) noexcept {
     static_assert(sizeof...(Ks) > 0, "obs::reduce_nn needs at least one kernel");
     using Acc     = Lanes<std::decay_t<std::invoke_result_t<Ks const&, T const&, T const&>>...>;
