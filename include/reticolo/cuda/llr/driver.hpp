@@ -18,6 +18,7 @@
 #include <reticolo/io/writer.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -35,8 +36,52 @@ template <class Replica>
 void warm_all(std::vector<std::unique_ptr<Replica>>& reps,
               int max_batches,
               int batch               = 10,
-              double threshold_sigmas = 1.0) {
+              double threshold_sigmas = 1.0,
+              int n_base              = 0) {
     std::size_t const n_rep = reps.size();
+
+    // ---- Stage 1: thermalize under the base action (window flattened) -------
+    // Skipped when n_base == 0, which keeps the previous behaviour available.
+    if (n_base > 0) {
+        for (auto& r : reps) {
+            r->warm_base_begin();
+            r->thermalize(n_base);  // async
+        }
+        for (auto& r : reps) {
+            r->warm_base_end();  // syncs via the param upload ordering
+        }
+    }
+
+    // ---- Stage 2: walk each window centre in on the shared schedule ---------
+    // The hop count is per-replica (it depends on how far that replica's field
+    // sits from its own centre), so iterate to the deepest and skip replicas
+    // that have already arrived. Every replica's hop k is launched before any
+    // is adapted, so the batches still overlap across streams.
+    std::vector<int> n_ramp(n_rep, 0);
+    int max_ramp = 0;
+    for (std::size_t n = 0; n < n_rep; ++n) {
+        n_ramp[n] = reps[n]->warm_ramp_plan();
+        max_ramp  = std::max(max_ramp, n_ramp[n]);
+    }
+    for (int k = 1; k <= max_ramp; ++k) {
+        for (std::size_t n = 0; n < n_rep; ++n) {
+            if (k <= n_ramp[n]) {
+                reps[n]->warm_ramp_launch(k, n_ramp[n], batch);
+            }
+        }
+        for (std::size_t n = 0; n < n_rep; ++n) {
+            if (k <= n_ramp[n]) {
+                reps[n]->warm_ramp_adapt(batch);
+            }
+        }
+    }
+    for (std::size_t n = 0; n < n_rep; ++n) {
+        if (n_ramp[n] > 0) {
+            reps[n]->warm_ramp_restore();
+        }
+    }
+
+    // ---- Stage 3: seat at the true centre -----------------------------------
     std::vector<char> done(n_rep, 0);
     for (int b = 0; b < max_batches; ++b) {
         for (std::size_t n = 0; n < n_rep; ++n) {
