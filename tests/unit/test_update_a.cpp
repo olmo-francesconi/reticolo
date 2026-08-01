@@ -1,10 +1,15 @@
+#include <reticolo/orch/llr/ramp.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
+
+#include <cmath>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 using Catch::Matchers::WithinRel;
 using reticolo::orch::llr::nr_update;
+using reticolo::orch::llr::ramp_centre;
+using reticolo::orch::llr::ramp_steps;
 using reticolo::orch::llr::rm_update;
 
 // The window coefficient is C = 1, NOT C = 12. The Gaussian penalty
@@ -55,4 +60,48 @@ TEST_CASE("a zero mean deviation leaves the slope unchanged", "[llr]") {
 TEST_CASE("update_a is scalar-generic", "[llr]") {
     REQUIRE_THAT(nr_update(0.0F, 1.0F, 2.0F), WithinRel(0.25F, 1e-6F));
     REQUIRE_THAT(rm_update(0.0F, 1.0F, 2.0F, 1), WithinRel(0.125F, 1e-6F));
+}
+
+// The deep-window ramp schedule (orch/llr/ramp.hpp) is shared by the CPU and
+// CUDA warm-in drivers — a §2.4 category-3 quantity: not per-site math, but its
+// absence is the difference between a seated replica and a NaN trajectory. It
+// went missing on the CUDA side once already because each backend wrote its own
+// warm loop.
+TEST_CASE("ramp: no intermediate centres when the field already sits in the window",
+          "[llr][ramp]") {
+    // |gap| <= delta/2 needs no walk at all.
+    REQUIRE(ramp_steps(0.0, 1.0) == 0);
+    REQUIRE(ramp_steps(0.4, 1.0) == 0);
+    // Degenerate delta must not divide by zero or loop forever.
+    REQUIRE(ramp_steps(5.0, 0.0) == 0);
+    REQUIRE(ramp_steps(5.0, -1.0) == 0);
+}
+
+// Every hop is at most half a window width — the bound that keeps the window
+// force (Q - E_n)/delta^2 inside the integrator's stable step. A field
+// equilibrated at the old centre has spread ~delta, so moving the centre by
+// half a width leaves it well inside the new window.
+TEST_CASE("ramp: every step is at most half a window width", "[llr][ramp]") {
+    for (double gap : {1.0, 2.0, 5.0, 37.5, -12.25}) {
+        for (double delta : {0.5, 2.0, 7.0}) {
+            int const n = ramp_steps(gap, delta);
+            INFO("gap=" << gap << " delta=" << delta << " n=" << n);
+            double prev = 0.0;  // q0 = 0
+            for (int k = 1; k <= n; ++k) {
+                double const c = ramp_centre(0.0, gap, k, n);
+                REQUIRE(std::abs(c - prev) <= (0.5 * delta) + 1e-12);
+                prev = c;
+            }
+            if (n > 0) {
+                REQUIRE_THAT(ramp_centre(0.0, gap, n, n), WithinRel(gap, 1e-15));
+            }
+        }
+    }
+}
+
+// Symmetric in direction, and offset by q0 rather than assuming a zero start.
+TEST_CASE("ramp: centres are anchored at q0 and signed by the gap", "[llr][ramp]") {
+    REQUIRE(ramp_steps(-8.0, 1.0) == ramp_steps(8.0, 1.0));
+    REQUIRE_THAT(ramp_centre(3.0, 4.0, 2, 4), WithinRel(5.0, 1e-15));
+    REQUIRE_THAT(ramp_centre(3.0, -4.0, 2, 4), WithinRel(1.0, 1e-15));
 }
