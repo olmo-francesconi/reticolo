@@ -10,7 +10,7 @@ using reticolo::test::run_and_require_exit;
 using reticolo::test::scratch_path;
 
 // End-to-end: the CUDA phi4 app writes the same HDF5 schema as the host app
-// (measurement is per host-free block, so row counts are n/meas_every). Requires
+// (measurement is per host-free block, so row counts are n/block). Requires
 // a GPU at run time. Mirrors test_phi4_hmc_smoke.cpp.
 TEST_CASE("phi4_hmc_cuda binary writes the expected HDF5 schema", "[app][e2e][cuda][phi4_cuda]") {
     auto const out = scratch_path("phi4_cuda_smoke");
@@ -19,14 +19,14 @@ TEST_CASE("phi4_hmc_cuda binary writes the expected HDF5 schema", "[app][e2e][cu
 
     constexpr int k_n_therm    = 10;
     constexpr int k_n_prod     = 20;
-    constexpr int k_meas_every = 5;
-    constexpr int k_therm_rows = k_n_therm / k_meas_every;  // 2
-    constexpr int k_prod_rows  = k_n_prod / k_meas_every;   // 4
+    constexpr int k_block      = 5;
+    constexpr int k_therm_rows = k_n_therm / k_block;  // 2
+    constexpr int k_prod_rows  = k_n_prod / k_block;   // 4
 
     std::string const cmd =
         std::string{PHI4_HMC_CUDA_BINARY} + " --size=4 --kappa=0.13 --lambda=0.02" +
         " --n_therm=" + std::to_string(k_n_therm) + " --n_prod=" + std::to_string(k_n_prod) +
-        " --meas_every=" + std::to_string(k_meas_every) +
+        " --block=" + std::to_string(k_block) +
         " --seed=20260517 --workspace=" + out.parent_path().string() +
         " --out=" + out.filename().string();
     run_and_require_exit(cmd);

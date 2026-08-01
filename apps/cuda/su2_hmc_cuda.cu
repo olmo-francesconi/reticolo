@@ -1,8 +1,8 @@
 // SU(2) Wilson gauge HMC on the CUDA backend. The GPU twin of su2_hmc.cpp: same
-// CLI + output schema, the trajectory for-loop plainly here in main(). A .cu
+// physics and flags, the trajectory for-loop plainly here in main(). A .cu
 // compiled by nvcc — cuda::Hmc over a MatrixLayout<SU2> field for the device
 // work, io::Writer (HDF5 PIMPL'd, never seen by nvcc) for output. Trajectories
-// run host-free in blocks of `meas_every`; only the scalar action crosses PCIe,
+// run host-free in blocks of `block`; only the scalar action crosses PCIe,
 // and ⟨P⟩ = 1 − S_W/(β·n_plaq) is derived in-app.
 //
 // Output schema:
@@ -11,6 +11,18 @@
 //  /prod/obs/s            — S_full
 //  /prod/obs/plaq         — ⟨P⟩
 //  /prod/stats@acceptance — cumulative production acceptance
+//
+// TWO DELIBERATE DIFFERENCES from the CPU twin, both consequences of host-free
+// execution rather than oversights:
+//   * `--block`, not the CPU's `--meas_every`. Trajectories replay inside one
+//     CUDA graph with no host sync, so this is the count BETWEEN syncs — a loop
+//     stride, not a measurement filter. Measurements happen once per block, so
+//     the series hold n_prod/block rows, not n_prod.
+//   * No per-trajectory `/prod/stats/dH` or `/prod/stats/accepted`. `run(k)`
+//     overwrites a single 4-double energy buffer per trajectory, so only the
+//     block's last trajectory survives; emitting them per trajectory would need
+//     a sync per trajectory — precisely the floor this backend exists to
+//     remove. The cumulative acceptance is written as an attribute instead.
 
 #include <reticolo/cuda/cuda.hpp>
 #include <reticolo/reticolo.hpp>
@@ -46,14 +58,15 @@ int main(int argc, char** argv) {
     using DAct   = cuda::DeviceAction<Action, DField>;
 
     cli::Parser p{"su2_hmc_cuda", "SU(2) Wilson action HMC on the CUDA backend"};
-    auto const cf          = app::common_flags(p, {.L = 4, .out = "su2_cuda.h5"});
-    auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
-    auto const& beta       = p.opt<double>("beta", 2.3, "Wilson coupling");
-    auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
-    auto const& n_md       = p.opt<int>("n_md", 20, "MD steps per trajectory");
-    auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation trajectories");
-    auto const& n_prod     = p.opt<int>("n_prod", 2000, "production trajectories");
-    auto const& meas_every = p.opt<int>("meas_every", 10, "trajectories per host-free block");
+    auto const cf       = app::common_flags(p, {.L = 4, .out = "su2_cuda.h5"});
+    auto const& ndim    = p.opt<int>("ndim", 4, "spatial dimensions");
+    auto const& beta    = p.opt<double>("beta", 2.3, "Wilson coupling");
+    auto const& tau     = p.opt<double>("tau", 1.0, "HMC trajectory length");
+    auto const& n_md    = p.opt<int>("n_md", 20, "MD steps per trajectory");
+    auto const& n_therm = p.opt<int>("n_therm", 200, "thermalisation trajectories");
+    auto const& n_prod  = p.opt<int>("n_prod", 2000, "production trajectories");
+    auto const& block =
+        p.opt<int>("block", 10, "trajectories per host-free block (graph replays between syncs)");
     auto const& ckpt_every =
         p.opt<int>("checkpoint_every", 0, "write a config every N prod trajectories (0 = off)");
     auto const& resume_path =
@@ -113,16 +126,16 @@ int main(int argc, char** argv) {
 
     if (!resuming) {
         log::info("hmc", "therm  {} trajectories", n_therm);
-        for (int i = 0; i < n_therm; i += meas_every) {
-            hmc.run(std::min(meas_every, n_therm - i));
+        for (int i = 0; i < n_therm; i += block) {
+            hmc.run(std::min(block, n_therm - i));
             hmc.sync();
             s_therm.append(meas.s_full(field));
         }
     }
 
     log::info("hmc", "prod   {} trajectories (from {})", n_prod, start_i);
-    for (long long i = start_i; i < n_prod; i += meas_every) {
-        int const k = static_cast<int>(std::min<long long>(meas_every, n_prod - i));
+    for (long long i = start_i; i < n_prod; i += block) {
+        int const k = static_cast<int>(std::min<long long>(block, n_prod - i));
         hmc.run(k);
         hmc.sync();
         double const s = meas.s_full(field);
