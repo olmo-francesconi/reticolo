@@ -147,21 +147,20 @@ TEST_CASE("slab count is monotone in slabs_per_thread", "[exec][partition]") {
 TEST_CASE("better_slabs prefers even team occupancy, then nearest target", "[exec][partition]") {
     REQUIRE(better_slabs(3, 0, 8, 4));  // any candidate beats "none yet"
 
-    REQUIRE(better_slabs(8, 7, 7, 4));       // 8 divides the team, 7 does not
+    REQUIRE(better_slabs(8, 7, 7, 4));        // 8 divides the team, 7 does not
     REQUIRE_FALSE(better_slabs(7, 8, 7, 4));  // exact target loses to even occupancy
 
-    REQUIRE(better_slabs(6, 10, 5, 3));        // both multiples of 3? no — 6 is, 10 is not
-    REQUIRE(better_slabs(6, 4, 5, 2));         // both even: |6-5| == |4-5|, tie rounds up
-    REQUIRE_FALSE(better_slabs(4, 6, 5, 2));   // the same tie, seen from the other side
-    REQUIRE(better_slabs(4, 8, 5, 2));         // both even, 4 is nearer to 5 than 8
+    REQUIRE(better_slabs(6, 10, 5, 3));       // both multiples of 3? no — 6 is, 10 is not
+    REQUIRE(better_slabs(6, 4, 5, 2));        // both even: |6-5| == |4-5|, tie rounds up
+    REQUIRE_FALSE(better_slabs(4, 6, 5, 2));  // the same tie, seen from the other side
+    REQUIRE(better_slabs(4, 8, 5, 2));        // both even, 4 is nearer to 5 than 8
 }
 
 #ifdef _OPENMP
 // The search only accepts counts ≥ team so every thread gets work; when the
 // lattice cannot supply that many slabs it falls back to the finest outer
 // tiling (one item per dim-0 row) rather than under-splitting.
-TEST_CASE("slab count meets the team, or falls back to the finest tiling",
-          "[exec][partition]") {
+TEST_CASE("slab count meets the team, or falls back to the finest tiling", "[exec][partition]") {
     int const saved = omp_get_max_threads();
 
     for (int team : {1, 2, 4, 8}) {
