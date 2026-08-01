@@ -72,6 +72,23 @@ inline void kick_add(Mom& mom, Force const& force, double kdt) noexcept {
     });
 }
 
+// Elementwise scale-in-place `f *= c`. The third atom of the set: like the two
+// above it is a write-disjoint map over the canonical partition, so the result
+// is bit-identical for any thread count. Lives here rather than inline at its
+// call site so every elementwise field op follows one rule.
+template <class Field, class S>
+inline void scale_field(Field& field, S c) noexcept {
+    using F      = Field::value_type;
+    auto const k = static_cast<real_scalar_t<F>>(c);
+    F* const fd  = field.data();
+    field_visit(field, 1, [fd, k](std::size_t base, std::size_t cnt) {
+        std::size_t const end = base + cnt;
+        for (std::size_t i = base; i < end; ++i) {
+            fd[i] *= k;
+        }
+    });
+}
+
 // Matrix-link drift overload: U ← exp(dt·P)·U per direction, dispatched through
 // the group model's `expi_lmul_range` so SU(2)/SU(3)/U(1) all reuse the same
 // per-direction worker. Compute-bound matrix-exponential drift → worksplit through

@@ -189,15 +189,7 @@ struct WindowedAction {
                 s = static_cast<scalar_t>(base.s_full(l));
             }
             scalar_t const scale = formula::force_scale(s, a, E_n, delta);
-            T* const fd          = force.data();
-            // Elementwise scale on the canonical field partition — write-disjoint,
-            // so bit-identical for any thread count (mirrors exec::kick_add).
-            exec::field_visit(force, 1, [fd, scale](std::size_t base, std::size_t cnt) {
-                std::size_t const end = base + cnt;
-                for (std::size_t i = base; i < end; ++i) {
-                    fd[i] *= scale;
-                }
-            });
+            exec::scale_field(force, scale);
         } else {
             // Generic: F = F_base + (a + (Q − E_n)/δ²)·F_Q.
             base.compute_force(l, force);
