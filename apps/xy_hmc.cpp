@@ -58,13 +58,10 @@ int main(int argc, char** argv) {
     updater::Hmc hmc{xy, theta, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
 
     // |<(cos θ, sin θ)>| — the XY order parameter (0 disordered, 1 aligned).
+    // Two lanes fused into one sweep, like every other observable in the tree.
     auto xy_mag = [&theta]() {
-        double cx = 0.0;
-        double cy = 0.0;
-        for (Site const x : theta.sites()) {
-            cx += std::cos(theta[x]);
-            cy += std::sin(theta[x]);
-        }
+        auto const [cx, cy] = obs::reduce(
+            theta, [](double t) { return std::cos(t); }, [](double t) { return std::sin(t); });
         double const inv = 1.0 / static_cast<double>(theta.nsites());
         return std::hypot(cx * inv, cy * inv);
     };
