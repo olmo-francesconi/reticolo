@@ -98,6 +98,14 @@ do_tidy() {
     # full public-header coverage; writer.cpp/reader.cpp/cli are the impl TUs).
     # Globbing here — not a fixed two-file list — is what stops a src/ TU (e.g.
     # reader.cpp) from being tidied by CI but skipped locally.
+    #
+    # SCOPE, deliberately: the LIBRARY is fully tidied — every header via the
+    # amalgamation TU, every impl TU via this glob. CONSUMER code is not:
+    # apps/, tests/ and examples/ are excluded uniformly (the tidy DB is even
+    # configured with BUILD_{APPS,TESTS,EXAMPLES}=OFF, so their TUs are absent
+    # from the compile database). That is one boundary applied to all consumers,
+    # not a per-directory exception. Consumers still get the full warning set
+    # via reticolo_configure_warnings + -Werror at build time.
     local tus=(src/**/*.cpp)
     if [ "${1:-}" = fix ]; then
         say "clang-tidy --fix ($(basename "$ct"))"

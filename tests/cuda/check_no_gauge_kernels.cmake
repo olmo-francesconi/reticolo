@@ -60,6 +60,23 @@ if(su3_content MATCHES "c0_max")
     list(APPEND offenders "su3_device.cuh: re-implemented Cayley-Hamilton coefficients (c0_max) found")
 endif()
 
+# U(1) is abelian — links are scalar phases, so there is no matrix algebra to
+# single-source and no forwarding struct. What it DOES share is the plaquette
+# formula, and nothing else stops a future edit from inlining that back into the
+# device kernels. Same rule, same gate: if the shared surface exists, it is
+# mechanically enforced for every group, not just the matrix ones.
+set(u1_file "${SRC_DIR}/gauge/gauge_u1.cuh")
+if(NOT EXISTS "${u1_file}")
+    message(FATAL_ERROR "check_no_gauge_kernels.cmake: missing ${u1_file}")
+endif()
+file(READ "${u1_file}" u1_content)
+string(REGEX REPLACE "//[^\n]*" "" u1_content "${u1_content}")
+string(FIND "${u1_content}" "action::formula::u1_plaq" pos)
+if(pos EQUAL -1)
+    list(APPEND offenders
+         "gauge_u1.cuh: no call to the shared action::formula::u1_plaq — plaquette re-implemented?")
+endif()
+
 if(offenders)
     message(FATAL_ERROR "gauge matrix algebra re-implemented in CUDA device path: ${offenders}")
 endif()
