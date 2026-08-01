@@ -2,9 +2,11 @@
 
 #include <reticolo/cli/parser.hpp>
 #include <reticolo/core/log/log.hpp>
+#include <reticolo/io/checkpoint.hpp>
 #include <reticolo/io/writer.hpp>
 
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 
 // Setup-only helpers shared by the reference apps under `apps/`. They absorb the
@@ -13,13 +15,17 @@
 // (the resume flag was once added to phi4_hmc only; the shared block keeps the
 // common flag names/descriptions in one place).
 //
-// Deliberately minimal. Only flags that are present with the SAME description in
-// every app live here: `L,size`, `seed`, `workspace`, `out`. Everything else is
-// app-specific and stays in the app — `ndim` (absent for the 2D-only XY model),
-// the physics couplings, and the trajectory counts (whose wording is
-// app-appropriate: "trajectories" for HMC, "sweeps" for Metropolis,
-// "measurements" for Wolff, NR/RM counts for LLR). And the trajectory `for` loop
-// always stays in the app: these helpers never drive it.
+// Two tiers, and nothing else:
+//   * `common_flags` — flags every app shares regardless of algorithm:
+//     `L,size`, `seed`, `workspace`, `out`.
+//   * one helper per ALGORITHM FAMILY, covering the run-control block that
+//     family shares verbatim: `llr_run_flags` for LLR, `hmc_run_flags` for HMC.
+//     A family helper is all-or-nothing — every app in the family uses it, or it
+//     does not exist. (HMC went 18 apps without one, which is how `--resume`
+//     came to work in exactly one of them.)
+// Physics couplings and `ndim` (absent for the 2D-only XY model) stay in the
+// app. And the trajectory `for` loop ALWAYS stays in the app: these helpers set
+// up flags and I/O, they never drive it.
 
 namespace reticolo::app {
 
@@ -87,6 +93,70 @@ inline LlrRunFlags llr_run_flags(cli::Parser& p) {
             .resume           = resume,
             .checkpoint       = checkpoint,
             .checkpoint_every = checkpoint_every};
+}
+
+// Per-app defaults for the HMC run-control block. Only the values vary; the
+// flag names and help text are single-sourced below.
+struct HmcRunDefaults {
+    double tau     = 1.0;
+    int n_md       = 20;
+    int n_therm    = 200;
+    int n_prod     = 1000;
+    int meas_every = 1;
+};
+
+// Stable references to the HMC run-control flags — the block every `*_hmc` app
+// registers identically. `resuming()` is the guard apps branch on for the therm
+// phase and the series they open.
+struct HmcRunFlags {
+    double const& tau;
+    int const& n_md;
+    int const& n_therm;
+    int const& n_prod;
+    int const& meas_every;
+    int const& checkpoint_every;
+    std::string const& resume;
+
+    [[nodiscard]] bool resuming() const noexcept { return !resume.empty(); }
+};
+
+inline HmcRunFlags hmc_run_flags(cli::Parser& p, HmcRunDefaults const& d = {}) {
+    auto const& tau       = p.opt<double>("tau", d.tau, "HMC trajectory length");
+    int const& n_md       = p.opt<int>("n_md", d.n_md, "MD steps per trajectory");
+    int const& n_therm    = p.opt<int>("n_therm", d.n_therm, "thermalisation trajectories");
+    int const& n_prod     = p.opt<int>("n_prod", d.n_prod, "production trajectories");
+    int const& meas_every = p.opt<int>("meas_every", d.meas_every, "measure every N trajectories");
+    int const& ckpt_every =
+        p.opt<int>("checkpoint_every", 0, "write a config every N prod trajectories (0 = off)");
+    auto const& resume =
+        p.opt<std::string>("resume", std::string{}, "resume from a previous config (.h5)");
+    return {.tau              = tau,
+            .n_md             = n_md,
+            .n_therm          = n_therm,
+            .n_prod           = n_prod,
+            .meas_every       = meas_every,
+            .checkpoint_every = ckpt_every,
+            .resume           = resume};
+}
+
+// Resume a single-chain HMC app from a config checkpoint, or start fresh.
+// Returns the trajectory index to continue from (0 when not resuming). Loads the
+// field AND the updater's RNG state, so a resumed chain is bit-identical to the
+// uninterrupted one — which is what the `*_resume_equivalence` tests assert.
+// Shape is validated against the app's own `--L`/`--ndim` before anything is
+// overwritten.
+template <class Field, class Updater, class Shape>
+[[nodiscard]] inline long long
+resume_or_start(HmcRunFlags const& rf, Field& field, Updater& upd, Shape const& shape) {
+    if (!rf.resuming()) {
+        return 0;
+    }
+    if (io::load_field_shape(rf.resume) != shape) {
+        throw std::runtime_error{"--resume shape mismatch with --L/--ndim"};
+    }
+    long long const start_i = io::load_config(rf.resume, field, upd.rng());
+    log::info("hmc", "resumed from {} at traj {}", rf.resume, start_i);
+    return start_i;
 }
 
 // Open the workspace log + HDF5 writer the way every app does:
