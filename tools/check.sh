@@ -48,7 +48,12 @@ resolve_clang_tidy() {
 # --- format ------------------------------------------------------------------
 do_format() {
     local cf; cf="$(resolve_clang_format)"
-    local files; mapfile -t files < <(git ls-files '*.hpp' '*.cpp' '*.cuh' '*.cu')
+    # --cached AND --others: a brand-new file is untracked until its first
+    # commit, so scanning only tracked files lets it pass the gate, land, and
+    # fail CI afterwards. --exclude-standard keeps .gitignore'd trees (build/,
+    # and every fetched dependency under it) out.
+    local files; mapfile -t files < <(
+        git ls-files --cached --others --exclude-standard '*.hpp' '*.cpp' '*.cuh' '*.cu')
     if [ "${1:-}" = fix ]; then
         say "clang-format --i ($(basename "$cf"), ${#files[@]} files)"
         printf '%s\0' "${files[@]}" | xargs -0 "$cf" -i
