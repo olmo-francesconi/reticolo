@@ -86,6 +86,7 @@ if(RETICOLO_ENABLE_CUDA)
     reticolo_add_cuda_test(test_cuda_su2         cuda/test_cuda_su2.cu)
     reticolo_add_cuda_test(test_cuda_su3         cuda/test_cuda_su3.cu)
     reticolo_add_cuda_test(test_cuda_bose_gas    cuda/test_cuda_bose_gas.cu)
+    reticolo_add_cuda_test(test_cuda_obs         cuda/test_cuda_obs.cu)
 
     if(RETICOLO_BUILD_IO)
         # Native .cu test: orchestrates cuda::Hmc + io::checkpoint in one TU.

@@ -28,6 +28,7 @@
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/macros.hpp>
+#include <reticolo/cuda/obs_reduce.cuh>
 #include <reticolo/cuda/pinned.hpp>
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/stream.hpp>

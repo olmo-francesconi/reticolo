@@ -125,11 +125,13 @@ int main(int argc, char** argv) {
         hmc.run(k);
         hmc.sync();
         s_prod.append(meas.s_full(field));
-        auto const n      = static_cast<long>(field.size());
-        double const mean = cuda::reduce_sum_f64(field.data(), n) / v;
+        // One fused pass: Σφ and Σφ² share the single read of the field.
+        auto const [sum_phi, sum_phi_sq] =
+            cuda::reduce(field, obs::kernel::phi, obs::kernel::phi_sq);
+        double const mean = sum_phi / v;
         mag.append(std::abs(mean));
         mag_sq.append(mean * mean);
-        m_sq.append(cuda::reduce_sumsq_f64(field.data(), n) / v);
+        m_sq.append(sum_phi_sq / v);
         long long const done = i + k;
         if (ckpt_every > 0 && done % ckpt_every == 0) {
             field.copy_to_host(host.data());
