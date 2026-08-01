@@ -77,8 +77,12 @@ struct Spec {
     int replica_threads = 1;  // → plan_threads(n_rep, replica_threads)
     int slabs           = 0;
 
-    std::string checkpoint_path;  // NOLINT(readability-redundant-member-init)
-    std::string resume;           // NOLINT(readability-redundant-member-init)
+    // Explicit {} so every Spec member carries a default initializer: a
+    // designated-init caller may then omit any trailing field without tripping
+    // -Wmissing-designated-field-initializers (clang 20+). The NOLINTs suppress
+    // readability-redundant-member-init, which flags the very same {}.
+    std::string checkpoint_path{};  // NOLINT(readability-redundant-member-init)
+    std::string resume{};           // NOLINT(readability-redundant-member-init)
     int checkpoint_every = 0;
 };
 
