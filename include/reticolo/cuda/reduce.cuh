@@ -19,18 +19,27 @@
 
 namespace reticolo::cuda {
 
-namespace {
-
-constexpr int kBlock   = 256;
-constexpr int kMaxGrid = 1024;
+// The ONE launch configuration for every device reduction / elementwise pass in
+// this backend (reduce.cuh, reduce_fwd.cuh, obs_reduce.cuh, bose_imag.cuh). Held
+// at namespace scope with external linkage on purpose: as members of an
+// anonymous namespace they were distinct entities per TU, so the external-linkage
+// `inline` launchers below — whose bodies name them — were technically IFNDR
+// (benign in practice, but not a pattern to keep or copy).
+inline constexpr int kBlock   = 256;
+inline constexpr int kMaxGrid = 1024;
 
 [[nodiscard]] inline int grid_for(long n) {
     long g = (n + kBlock - 1) / kBlock;
     if (g > kMaxGrid) {
         g = kMaxGrid;
     }
+    if (g < 1) {
+        g = 1;
+    }
     return static_cast<int>(g);
 }
+
+namespace {
 
 // axpy in the field type T (f64 or f32): the MD drift/kick runs in field
 // precision, matching the CPU mixed-precision HMC.

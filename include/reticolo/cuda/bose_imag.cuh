@@ -59,8 +59,7 @@ template <class T>
                                                double* site_scratch,
                                                DeviceTopology const& topo,
                                                cudaStream_t stream = nullptr) {
-    constexpr int kBlock = 256;
-    auto const grid      = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
+    auto const grid = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
     bose_s_imag_site_kernel<T>
         <<<grid, kBlock, 0, stream>>>(field, site_scratch, topo, topo.ndim - 1);
     RETICOLO_CUDA_CHECK_LAUNCH();
@@ -77,8 +76,7 @@ inline void bose_s_imag_into(double* out,
                              double* partials,
                              DeviceTopology const& topo,
                              cudaStream_t stream = nullptr) {
-    constexpr int kBlock = 256;
-    auto const grid      = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
+    auto const grid = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
     bose_s_imag_site_kernel<T>
         <<<grid, kBlock, 0, stream>>>(field, site_scratch, topo, topo.ndim - 1);
     RETICOLO_CUDA_CHECK_LAUNCH();
@@ -90,8 +88,7 @@ inline void bose_force_imag_launch(cplx<T> const* field,
                                    cplx<T>* force,
                                    DeviceTopology const& topo,
                                    cudaStream_t stream = nullptr) {
-    constexpr int kBlock = 256;
-    auto const grid      = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
+    auto const grid = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
     bose_force_imag_kernel<T><<<grid, kBlock, 0, stream>>>(field, force, topo, topo.ndim - 1);
     RETICOLO_CUDA_CHECK_LAUNCH();
 }
@@ -127,8 +124,7 @@ inline void bose_force_imag_and_s_imag_into(double* out,
                                             double* partials,
                                             DeviceTopology const& topo,
                                             cudaStream_t stream = nullptr) {
-    constexpr int kBlock = 256;
-    auto const grid      = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
+    auto const grid = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
     bose_force_imag_and_s_imag_kernel<T>
         <<<grid, kBlock, 0, stream>>>(field, force, site_scratch, topo, topo.ndim - 1);
     RETICOLO_CUDA_CHECK_LAUNCH();
