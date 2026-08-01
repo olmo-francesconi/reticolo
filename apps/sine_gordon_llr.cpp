@@ -51,8 +51,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    log::start(cf.workspace, cf.out, /*replicas=*/true);
-    std::string const outpath = app::out_path(cf);
+    io::Writer out = app::open_writer(p, cf, argc, argv, /*replicas=*/true);
 
     // ---- Base action ----
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
@@ -83,7 +82,6 @@ int main(int argc, char** argv) {
                         .checkpoint_every = rf.checkpoint_every}};
 
     // ---- Output ----
-    io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
     // ---- Drive: setup (build + resume) then NR warm-up + RM + exchange ----
