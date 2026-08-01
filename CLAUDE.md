@@ -39,7 +39,7 @@ Each `tests/{unit,physics,io}/*.cpp` is registered via `reticolo_add_test(<name>
 
 ```
 include/reticolo/      header-only core, actions, updaters (HMC), orchestration (spine + span + LLR), observers, CLI shim, app-setup helpers, optional CUDA backend
-src/io/                the ONLY TU that #includes <hdf5.h> (PIMPL'd writer)
+src/io/                the ONLY dir whose TUs #include <hdf5.h> (PIMPL'd writer + reader)
 src/cli/               cli::Parser implementation (wraps cxxopts)
 src/lint/              amalgamation TU so clang-tidy can scan the umbrella header in one pass
 apps/                  builtin reference simulations + benchmarks (built in-tree); apps/cuda/ = .cu ports
@@ -58,7 +58,7 @@ The umbrella include is `<reticolo/reticolo.hpp>` — apps include exactly that.
 
 These are load-bearing design choices, not preferences. Most of them are described at length in `docs/architecture.md`.
 
-- **Three CMake targets, not one.** `reticolo::core` (INTERFACE, header-only), `reticolo::io` (STATIC, the only thing that links HDF5), `reticolo::cli` (INTERFACE). `reticolo::reticolo` is the umbrella. `hid_t` and `<hdf5.h>` must never leak out of `src/io/writer.cpp`.
+- **Three CMake targets, not one.** `reticolo::core` (INTERFACE, header-only), `reticolo::io` (STATIC, the only thing that links HDF5), `reticolo::cli` (INTERFACE). `reticolo::reticolo` is the umbrella. `hid_t` and `<hdf5.h>` must never leak out of `src/io/` (writer.cpp + reader.cpp).
 - **No virtual dispatch in the hot loop.** Actions are plain structs satisfying the field-agnostic HMC concepts in `<reticolo/action/concepts.hpp>` — `HmcAction` (`s_full` + `compute_force`), with opt-in refinements `HasFusedKick` and `HasImagPart`. One concept set covers site (`Lattice<F>`) and gauge (`MatrixLinkLattice<G,F>`) actions alike. The sole updater `updater::Hmc<A,R,Integ>` is a class template constrained by `HmcAction`; `orch::llr::Replica` is the orchestration layer on top. No base class, no `register_action`, no string dispatch.
 - **HMC integrator is a type parameter**, not a runtime switch. `updater::integ::Leapfrog`, `Omelyan2` (the default), `Omelyan4` are structs with a static `run(...)`. A new integrator = new struct + instantiate `Hmc<A, R, NewInteg>`.
 - **CPU thread counts are per-`Hmc` state, not a global.** `HmcSpec.n_threads` / `slabs_per_thread` (0 = ambient, resolved ONCE at construction and frozen; `set_spec` refuses threading changes) are bound each trajectory via `exec::team_scope` / `exec::slab_scope` so an `Hmc` can be pinned to a fixed team regardless of the OpenMP global — the basis for mixing replica-level and site-level parallelism. Results stay bit-identical for fixed `n_threads` + `slabs_per_thread` (deterministic fixed-partition reductions).
@@ -114,7 +114,7 @@ Watch-outs (from prior incidents in this tree):
 - Newton/RM step is `C·<dE>/δ²` where `C=12` for the hard window and `C=1` for the Gaussian window. Mixing them diverges geometrically.
 - In the paper convention (`s_full = -a·S - window`), `a` flips sign at the natural peak, so `a_init = -1` and DoS reconstruction uses `(1+a)`. Energy convention keeps `a_init = 0` and integrates `a` directly.
 
-## CUDA backend (optional, `RETICOLO_ENABLE_CUDA`; branch `feat/cuda-extension`)
+## CUDA backend (optional, `RETICOLO_ENABLE_CUDA`; on `main`)
 
 A 4th target `reticolo::cuda` (INTERFACE / header-only — the device stack lives entirely in `include/reticolo/cuda/*.{hpp,cuh}`; nvcc compiles only the consumers that include it, `apps/cuda/` + `tests/cuda/`). The `<cuda_runtime.h>` quarantine that `reticolo::io` enforces for HDF5 is here automatic: `cuda/` headers are only ever pulled into a `.cu` TU, so a CPU build never sees them. Off by default. Canonical refs: `docs/cuda_architecture.md`, `docs/writing_a_cuda_app.md`, `docs/architecture.md` §CUDA backend.
 
