@@ -81,14 +81,7 @@ int main(int argc, char** argv) {
         log::info("hmc", "resumed from {} at traj {}", resume_path, start_i);
     } else {
         // Cold start: every link = 2×2 identity (Re U_00 = Re U_11 = 1).
-        std::fill(host.data(), host.data() + host.ncomponents(), 0.0);
-        for (std::size_t mu = 0; mu < static_cast<std::size_t>(ndim); ++mu) {
-            double* const blk = host.mu_block_data(mu);
-            for (std::size_t s = 0; s < ns; ++s) {
-                blk[(0 * ns) + s] = 1.0;
-                blk[(6 * ns) + s] = 1.0;
-            }
-        }
+        set_cold_identity(host);
     }
 
     Action const action{.beta = beta};

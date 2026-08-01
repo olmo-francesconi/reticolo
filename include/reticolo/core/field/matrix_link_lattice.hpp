@@ -5,6 +5,7 @@
 #include <reticolo/core/field/site.hpp>
 #include <reticolo/core/log/log.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <utility>
@@ -183,5 +184,33 @@ private:
     std::size_t link_span_;
     std::vector<T> data_;
 };
+
+// Cold start: every link = the group identity. Zero elsewhere, 1 on the real
+// part of each diagonal entry — for the row-major re/im-interleaved layout that
+// is component 2·(n_color·i + i), i.e. {0, 6} for SU(2) and {0, 8, 16} for
+// SU(3). Derived from `G::n_color` rather than written out, so a new group needs
+// no new cold-start code.
+//
+// Uses `link_span()`, NOT `nsites()`. Every gauge app used to open-code this
+// loop with `nsites()` as the component stride; the two coincide only while
+// `g_gauge_link_padding` is off, and the header above tells a production app to
+// turn it on — at which point the hand-rolled version writes the identity into
+// the wrong components. One helper, one stride, no call sites left to get it
+// wrong.
+template <class G, class T>
+inline void set_cold_identity(MatrixLinkLattice<G, T>& links) noexcept {
+    std::size_t const span = links.link_span();
+    std::size_t const ns   = links.nsites();
+    std::fill(links.data(), links.data() + links.ncomponents(), T{0});
+    for (std::size_t mu = 0; mu < links.ndims(); ++mu) {
+        T* const blk = links.mu_block_data(mu);
+        for (std::size_t i = 0; i < G::n_color; ++i) {
+            T* const diag = blk + (2 * ((G::n_color * i) + i) * span);
+            for (std::size_t s = 0; s < ns; ++s) {
+                diag[s] = T{1};
+            }
+        }
+    }
+}
 
 }  // namespace reticolo

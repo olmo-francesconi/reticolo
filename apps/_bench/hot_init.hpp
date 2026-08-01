@@ -69,19 +69,7 @@ template <class Rng>
 void hot_init(MatrixLinkLattice<math::group::SU2, double>& f, Rng& rng) noexcept {
     std::size_t const d  = f.ndims();
     std::size_t const ns = f.nsites();
-    // Zero buffer, write identity per link.
-    std::size_t const total = d * math::group::SU2::n_real_components * ns;
-    double* const data      = f.data();
-    for (std::size_t i = 0; i < total; ++i) {
-        data[i] = 0.0;
-    }
-    for (std::size_t mu = 0; mu < d; ++mu) {
-        double* const blk = f.mu_block_data(mu);
-        for (std::size_t s = 0; s < ns; ++s) {
-            blk[(0 * ns) + s] = 1.0;
-            blk[(6 * ns) + s] = 1.0;
-        }
-    }
+    set_cold_identity(f);
     std::vector<double> scratch(math::group::SU2::n_real_components * ns);
     for (std::size_t mu = 0; mu < d; ++mu) {
         math::su2::sample_algebra_slab(scratch.data(), rng, ns);
@@ -92,21 +80,9 @@ void hot_init(MatrixLinkLattice<math::group::SU2, double>& f, Rng& rng) noexcept
 // ---- MatrixLinkLattice<SU3, double> -----------------------------------------
 template <class Rng>
 void hot_init(MatrixLinkLattice<math::group::SU3, double>& f, Rng& rng) noexcept {
-    std::size_t const d     = f.ndims();
-    std::size_t const ns    = f.nsites();
-    std::size_t const total = d * math::group::SU3::n_real_components * ns;
-    double* const data      = f.data();
-    for (std::size_t i = 0; i < total; ++i) {
-        data[i] = 0.0;
-    }
-    for (std::size_t mu = 0; mu < d; ++mu) {
-        double* const blk = f.mu_block_data(mu);
-        for (std::size_t s = 0; s < ns; ++s) {
-            blk[(0 * ns) + s]  = 1.0;  // Re U_{00}
-            blk[(8 * ns) + s]  = 1.0;  // Re U_{11}
-            blk[(16 * ns) + s] = 1.0;  // Re U_{22}
-        }
-    }
+    std::size_t const d  = f.ndims();
+    std::size_t const ns = f.nsites();
+    set_cold_identity(f);
     std::vector<double> scratch(math::group::SU3::n_real_components * ns);
     for (std::size_t mu = 0; mu < d; ++mu) {
         math::su3::sample_algebra_slab(scratch.data(), rng, ns);
