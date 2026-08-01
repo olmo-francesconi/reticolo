@@ -98,6 +98,13 @@ if(RETICOLO_ENABLE_CUDA)
     add_test(NAME cuda_no_integrator_kernels
              COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${PROJECT_SOURCE_DIR}/include/reticolo/cuda
                      -P ${CMAKE_CURRENT_SOURCE_DIR}/cuda/check_no_integrator_kernels.cmake)
+
+    # Lint gate: no re-implemented SU(2)/SU(3) matrix algebra in the CUDA
+    # device path. su{2,3}_device.cuh must forward to the single-sourced
+    # math::su{2,3}:: formula functions, never re-derive them.
+    add_test(NAME cuda_no_gauge_kernels
+             COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${PROJECT_SOURCE_DIR}/include/reticolo/cuda
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/cuda/check_no_gauge_kernels.cmake)
 endif()
 
 if(RETICOLO_BUILD_IO)
