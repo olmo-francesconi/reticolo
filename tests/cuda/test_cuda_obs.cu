@@ -136,6 +136,84 @@ bool device_reduce_accepts_a_custom_kernel() {
     return cube == Catch::Approx(ref).epsilon(1e-12).margin(1e-12);
 }
 
+// Heterogeneous lanes: a cplx-valued lane next to a double lane must each
+// accumulate in their own type, like the host Lanes tuple.
+struct ComplexMeanKernel {
+    RETICOLO_HD cplx<double> operator()(cplx<double> self) const noexcept { return self; }
+};
+struct AmplitudeSqKernel {
+    RETICOLO_HD double operator()(cplx<double> self) const noexcept {
+        return (self.re * self.re) + (self.im * self.im);
+    }
+};
+
+bool device_reduce_handles_heterogeneous_lanes() {
+    std::vector<std::size_t> const shape{4, 4, 4};
+    auto const topo = make_device_topology(shape);
+    auto const n    = static_cast<std::size_t>(topo.nsites);
+
+    std::vector<cplx<double>> h(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        auto const t = 0.3 * static_cast<double>(i);
+        h[i]         = cplx<double>{0.5 * std::sin(t + 1.0), 0.4 * std::cos(t)};
+    }
+
+    DeviceField<cplx<double>> f{topo};
+    f.copy_from_host(h.data());
+    RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+
+    auto const [mean, amp_sq] = reduce(f, ComplexMeanKernel{}, AmplitudeSqKernel{});
+
+    cplx<double> r_mean{0.0, 0.0};
+    double r_amp = 0.0;
+    for (auto const v : h) {
+        r_mean += v;
+        r_amp += (v.re * v.re) + (v.im * v.im);
+    }
+
+    return mean.re == Catch::Approx(r_mean.re).epsilon(1e-12).margin(1e-12) &&
+           mean.im == Catch::Approx(r_mean.im).epsilon(1e-12).margin(1e-12) &&
+           amp_sq == Catch::Approx(r_amp).epsilon(1e-12).margin(1e-12);
+}
+
+// reduce_nn must fold the same Policy-selected neighbour aggregate the host
+// stencil does: FwdOnly sums the ndim forward neighbours, AllDirs all 2·ndim.
+struct SelfTimesAggKernel {
+    RETICOLO_HD double operator()(double self, double agg) const noexcept { return self * agg; }
+};
+
+bool device_reduce_nn_matches_host_policies() {
+    std::vector<std::size_t> const shape{6, 4, 5};
+    auto const topo = make_device_topology(shape);
+    auto const n    = static_cast<std::size_t>(topo.nsites);
+    auto const h    = host_field(n);
+
+    DeviceField<double> f{topo};
+    f.copy_from_host(h.data());
+    RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
+
+    auto const [fwd] = reduce_nn<exec::FwdOnly>(f, SelfTimesAggKernel{});
+    auto const [all] = reduce_nn<exec::AllDirs>(f, SelfTimesAggKernel{});
+
+    // Host reference through the same topology, so only the reduction differs.
+    double r_fwd = 0.0;
+    double r_all = 0.0;
+    for (long i = 0; i < topo.nsites; ++i) {
+        double agg_f = 0.0;
+        double agg_a = 0.0;
+        for (int mu = 0; mu < topo.ndim; ++mu) {
+            agg_f += h[static_cast<std::size_t>(topo.next(i, mu))];
+            agg_a += h[static_cast<std::size_t>(topo.next(i, mu))] +
+                     h[static_cast<std::size_t>(topo.prev(i, mu))];
+        }
+        r_fwd += h[static_cast<std::size_t>(i)] * agg_f;
+        r_all += h[static_cast<std::size_t>(i)] * agg_a;
+    }
+
+    return fwd == Catch::Approx(r_fwd).epsilon(1e-11).margin(1e-11) &&
+           all == Catch::Approx(r_all).epsilon(1e-11).margin(1e-11);
+}
+
 }  // namespace reticolo::cuda
 
 TEST_CASE("cuda obs::reduce matches the host sums", "[cuda][obs]") {
@@ -152,4 +230,12 @@ TEST_CASE("cuda obs::reduce is run-to-run deterministic", "[cuda][obs]") {
 
 TEST_CASE("cuda obs::reduce fuses a custom kernel", "[cuda][obs]") {
     REQUIRE(reticolo::cuda::device_reduce_accepts_a_custom_kernel());
+}
+
+TEST_CASE("cuda obs::reduce accumulates heterogeneous lanes", "[cuda][obs]") {
+    REQUIRE(reticolo::cuda::device_reduce_handles_heterogeneous_lanes());
+}
+
+TEST_CASE("cuda obs::reduce_nn matches the host neighbour policies", "[cuda][obs]") {
+    REQUIRE(reticolo::cuda::device_reduce_nn_matches_host_policies());
 }
