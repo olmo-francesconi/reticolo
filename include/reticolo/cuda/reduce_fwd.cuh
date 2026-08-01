@@ -49,8 +49,7 @@ template <class F>
                                        double* site_scratch,
                                        DeviceTopology const& topo,
                                        cudaStream_t stream = nullptr) {
-    constexpr int kBlock = 256;
-    auto const grid      = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
+    auto const grid = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
     reduce_fwd_site_kernel<F><<<grid, kBlock, 0, stream>>>(f, field, site_scratch, topo);
     RETICOLO_CUDA_CHECK_LAUNCH();
     return reduce_sum_f64(site_scratch, topo.nsites, stream);
@@ -67,8 +66,7 @@ void reduce_fwd_into(double* out,
                      double* partials,
                      DeviceTopology const& topo,
                      cudaStream_t stream = nullptr) {
-    constexpr int kBlock = 256;
-    auto const grid      = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
+    auto const grid = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
     reduce_fwd_site_kernel<F><<<grid, kBlock, 0, stream>>>(f, field, site_scratch, topo);
     RETICOLO_CUDA_CHECK_LAUNCH();
     reduce_sum_into(out, site_scratch, topo.nsites, partials, stream);

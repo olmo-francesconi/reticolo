@@ -7,9 +7,10 @@ the way it is.
 
 - `reticolo::core` — INTERFACE, header-only. Actions, updaters, observers,
   lattice, RNG, LLR.
-- `reticolo::io` — STATIC. The only TU that `#include <hdf5.h>`; HDF5's
-  `hid_t` never leaves `src/io/writer.cpp` thanks to a PIMPL'd `io::Writer`
-  and `extern template`'d `Series<T>`.
+- `reticolo::io` — STATIC. The only TUs that `#include <hdf5.h>` are
+  `src/io/writer.cpp` and `src/io/reader.cpp`; HDF5's `hid_t` never leaves
+  `src/io/` thanks to a PIMPL'd `io::Writer` and `extern template`'d
+  `Series<T>`.
 - `reticolo::cli` — INTERFACE wrapper around cxxopts.
 - `reticolo::cuda` — INTERFACE, header-only, **optional**
   (`RETICOLO_ENABLE_CUDA=ON`). The device stack lives entirely in
@@ -302,18 +303,32 @@ can't drift between apps:
 
 ```cpp
 cli::Parser p{"u1_hmc", "..."};
-auto const f = app::common_flags(p, {.L = 4, .ndim = 4, .n_prod = 2000, .out = "u1_hmc.h5"});
-auto const& beta = p.opt<double>("beta", 1.0, "Wilson coupling");   // physics flags: app's own
+auto const cf    = app::common_flags(p, {.L = 4, .out = "u1_hmc.h5"});  // every app
+auto const& beta = p.opt<double>("beta", 1.0, "Wilson coupling");       // physics: app's own
+auto const& ndim = p.opt<int>("ndim", 4, "spatial dimensions");         // app's own
+auto const rf    = app::hmc_run_flags(p, {.n_prod = 2000});             // the HMC family
 if (!p.parse(argc, argv)) return 0;
-io::Writer out = app::open_writer(p, f, argc, argv);                // log::start + Writer
+io::Writer out = app::open_writer(p, cf, argc, argv);                   // log::start + Writer
+...
+long long const start_i = app::resume_or_start(rf, field, hmc, shape);  // 0, or the resume point
 ```
 
-`common_flags` single-sources the flag *names / types / help text* (`L,size`,
-`ndim`, `n_therm`, `n_prod`, `meas_every`, `seed`, `workspace`, `out`); the
-per-app *defaults* are passed in, because they legitimately differ (lattice
-extent, trajectory counts). This is setup only — the app still builds its own
-lattice / rng / action / updater and **owns its trajectory `for` loop**; there
-is no generic driver.
+Two tiers, and a family helper is **all-or-nothing**:
+
+- `common_flags` + `open_writer` — the block *every* app shares regardless of
+  algorithm (`L,size`, `seed`, `workspace`, `out`, then the workspace log +
+  Writer).
+- one helper per algorithm family for the run-control block that family shares
+  verbatim: `hmc_run_flags` + `resume_or_start` (`tau`, `n_md`, `n_therm`,
+  `n_prod`, `meas_every`, `checkpoint_every`, `resume`) for the 16 HMC apps,
+  `llr_run_flags` for the 8 LLR apps. Either every app in the family uses it or
+  it does not exist — HMC ran 18 apps without one, which is how `--resume` came
+  to be implemented in exactly one of them.
+
+Only the *defaults* are per-app, because they legitimately differ; the flag
+names, types and help text are single-sourced. This is setup only — the app
+still builds its own lattice / rng / action / updater and **owns its trajectory
+`for` loop**; there is no generic driver.
 
 ### Canonical output schema
 

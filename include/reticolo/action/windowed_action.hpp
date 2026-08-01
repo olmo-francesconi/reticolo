@@ -2,9 +2,9 @@
 
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/formula/window_formula.hpp>
+#include <reticolo/core/exec/field_ops.hpp>
 #include <reticolo/core/field/field_traits.hpp>
 #include <reticolo/core/field/lattice.hpp>
-#include <reticolo/updater/hmc/integ_ops.hpp>
 
 #include <cstddef>
 #include <optional>
@@ -189,11 +189,7 @@ struct WindowedAction {
                 s = static_cast<scalar_t>(base.s_full(l));
             }
             scalar_t const scale = formula::force_scale(s, a, E_n, delta);
-            T* const fp          = force.data();
-            std::size_t const n  = flat_size(force);
-            for (std::size_t i = 0; i < n; ++i) {
-                fp[i] *= scale;
-            }
+            exec::scale_field(force, scale);
         } else {
             // Generic: F = F_base + (a + (Q − E_n)/δ²)·F_Q.
             base.compute_force(l, force);
@@ -201,7 +197,7 @@ struct WindowedAction {
             scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
             Field& q_force       = scratch_(force.indexing());
             constraint.compute_force(base, l, q_force);
-            updater::integ::kick_add(force, q_force, scale);  // force += scale·F_Q
+            exec::kick_add(force, q_force, scale);  // force += scale·F_Q
         }
     }
 
@@ -213,7 +209,7 @@ struct WindowedAction {
                 Field& f             = scratch_(mom.indexing());
                 auto const s         = static_cast<scalar_t>(base.s_full_and_force(l, f));
                 scalar_t const scale = formula::force_scale(s, a, E_n, delta);
-                updater::integ::kick_add(mom, f, k_dt * scale);
+                exec::kick_add(mom, f, k_dt * scale);
             } else {
                 auto const s         = static_cast<scalar_t>(base.s_full(l));
                 scalar_t const scale = formula::force_scale(s, a, E_n, delta);
@@ -233,7 +229,7 @@ struct WindowedAction {
                 base.compute_force_and_kick(l, mom, k_dt);
                 Field& q_force = scratch_(mom.indexing());
                 constraint.compute_force(base, l, q_force);
-                updater::integ::kick_add(mom, q_force, k_dt * scale);
+                exec::kick_add(mom, q_force, k_dt * scale);
             }
         }
     }

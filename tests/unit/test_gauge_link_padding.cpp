@@ -92,3 +92,42 @@ TEST_CASE("gauge link padding relocates storage without changing any value (SU3)
         REQUIRE(padded.force == packed.force);
     }
 }
+
+// `set_cold_identity` must key its component stride off link_span(), not
+// nsites(). Every gauge app used to open-code this loop with nsites, which is
+// correct only while padding is off — exactly the configuration this file
+// exists to test the other side of. With padding ON the two differ, and the
+// nsites version writes 1.0 into the wrong components, so the "identity" is not
+// even a group element. Nothing covered cold start under padding before, which
+// is why the bug stayed latent.
+TEST_CASE("set_cold_identity writes a real identity under link padding", "[gauge][padding]") {
+    reticolo::MatrixLinkLattice<reticolo::math::group::SU3, double>::SizeVec const shape{
+        4, 4, 4, 4};
+
+    auto check_identity = [&](bool padded) {
+        bool const saved               = reticolo::g_gauge_link_padding;
+        reticolo::g_gauge_link_padding = padded;
+        MatrixLinkLattice<reticolo::math::group::SU3, double> u{shape};
+        reticolo::set_cold_identity(u);
+        reticolo::g_gauge_link_padding = saved;
+
+        std::size_t const span = u.link_span();
+        std::size_t const ns   = u.nsites();
+        INFO("padded=" << padded << " span=" << span << " nsites=" << ns);
+        REQUIRE(padded == (span > ns));
+
+        for (std::size_t mu = 0; mu < u.ndims(); ++mu) {
+            double const* const blk = u.mu_block_data(mu);
+            for (std::size_t k = 0; k < u.n_real_components; ++k) {
+                bool const is_diag_re = (k == 0) || (k == 8) || (k == 16);
+                double const want     = is_diag_re ? 1.0 : 0.0;
+                for (std::size_t s = 0; s < ns; ++s) {
+                    REQUIRE(blk[(k * span) + s] == want);
+                }
+            }
+        }
+    };
+
+    check_identity(false);
+    check_identity(true);
+}

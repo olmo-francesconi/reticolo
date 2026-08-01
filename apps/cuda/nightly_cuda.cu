@@ -91,19 +91,6 @@ void check_equiv(char const* tag, std::vector<double> const& cpu, std::vector<do
     check(tag, nd < 5.0, buf);
 }
 
-void cold_identity_su2(reticolo::MatrixLinkLattice<reticolo::math::group::SU2, double>& u,
-                       int ndim) {
-    std::size_t const ns = u.nsites();
-    std::fill(u.data(), u.data() + u.ncomponents(), 0.0);
-    for (std::size_t mu = 0; mu < static_cast<std::size_t>(ndim); ++mu) {
-        double* const blk = u.mu_block_data(mu);
-        for (std::size_t s = 0; s < ns; ++s) {
-            blk[(0 * ns) + s] = 1.0;  // Re U_00
-            blk[(6 * ns) + s] = 1.0;  // Re U_11
-        }
-    }
-}
-
 constexpr int k_n_therm = 1000;
 constexpr int k_n_meas  = 2000;
 constexpr double k_tau  = 1.0;
@@ -179,7 +166,7 @@ void su2_block() {
     A const a{.beta = beta};
 
     HField cold{shape};
-    cold_identity_su2(cold, ndim);
+    set_cold_identity(cold);
     std::size_t const ns = cold.nsites();
     auto const n_plaq    = (static_cast<std::size_t>(ndim) * (ndim - 1) / 2U) * ns;
     double const norm    = beta * static_cast<double>(n_plaq);
@@ -208,7 +195,7 @@ void su2_block() {
     std::vector<double> c_plaq;
     {
         HField u{shape};
-        cold_identity_su2(u, ndim);
+        set_cold_identity(u);
         FastRng rng{0xBEEFULL};
         A ac{.beta = beta};
         updater::Hmc hmc{ac, u, rng, {.tau = k_tau, .n_md = k_n_md}, updater::integ::omelyan2};

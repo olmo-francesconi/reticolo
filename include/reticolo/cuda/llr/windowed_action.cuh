@@ -208,6 +208,13 @@ public:
         e_n_h_ = e_n;
         upload_();
     }
+    // Warm-in stage 1 widens delta so the penalty is effectively flat and the
+    // replica thermalizes under the base action; the ramp then walks the centre
+    // in. Same three-slot upload as the others — params_ stays graph-safe.
+    void set_delta(double delta) {
+        delta_h_ = delta;
+        upload_();
+    }
     [[nodiscard]] double a() const noexcept { return a_h_; }
     [[nodiscard]] double e_n() const noexcept { return e_n_h_; }
     [[nodiscard]] double delta() const noexcept { return delta_h_; }

@@ -18,6 +18,8 @@
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/llr/windowed_action.cuh>
+#include <reticolo/orch/llr/ramp.hpp>
+#include <reticolo/orch/llr/update_a.hpp>
 #include <reticolo/updater/hmc/integrators.hpp>
 
 #include <cmath>
@@ -139,10 +141,61 @@ public:
         return ratio < threshold_sigmas;
     }
 
+    // ---- deep-window ramp (mirrors orch::llr::Replica::warm_into_window) ----
+    // A fixed-delta window is stiff: switching it on at the true centre when the
+    // field thermalized far away gives a force ~|Q-E_n|/delta^2 that overflows
+    // the integrator's stable step and NaNs the trajectory. The centre is walked
+    // in instead, on the schedule shared with the CPU driver (orch/llr/ramp.hpp).
+    // Split launch/adapt so the driver keeps replicas overlapped.
+
+    // Stage 1: flatten the penalty and thermalize under the base action.
+    void warm_base_begin() {
+        saved_a_ = hmc_.action().a();
+        hmc_.action().set_a(0.0);
+        hmc_.action().set_delta(delta_ * 1e8);
+    }
+    void warm_base_end() {
+        hmc_.action().set_delta(delta_);
+        hmc_.action().set_a(saved_a_);
+    }
+
+    // Stage 2: plan the walk from where the field actually is. Syncs (reads Q).
+    [[nodiscard]] int warm_ramp_plan() {
+        q0_  = hmc_.constraint_value();
+        gap_ = e_n_ - q0_;
+        return orch::llr::ramp_steps(gap_, delta_);
+    }
+    // Hop k of n, then a measured batch — all async on this replica's stream.
+    void warm_ramp_launch(int k, int n, int batch) {
+        set_centre_(orch::llr::ramp_centre(q0_, gap_, k, n));
+        begin_measure();
+        for (int i = 0; i < batch; ++i) {
+            measure_trajectory();
+        }
+    }
+    // Sync this replica's stream, read <Q - E_n>, and adapt the tilt so the
+    // equilibrium follows the centre.
+    void warm_ramp_adapt(int batch) {
+        double const mean_de = end_measure(batch);
+        set_a(orch::llr::nr_update(a(), mean_de, delta_));
+    }
+    void warm_ramp_restore() { set_centre_(q0_ + gap_); }
+
     [[nodiscard]] double acceptance() { return hmc_.acceptance(); }
     [[nodiscard]] Field& field() noexcept { return field_; }
 
 private:
+    // Move the window centre, keeping the tilt. `e_n_` tracks it so
+    // measure_trajectory / warm_reached stay consistent during the ramp.
+    void set_centre_(double e_n) {
+        hmc_.action().set_window(hmc_.action().a(), e_n);
+        e_n_ = e_n;
+    }
+
+    double saved_a_ = 0.0;
+    double q0_      = 0.0;
+    double gap_     = 0.0;
+
     // Philox counter for the hot-start draw — a fixed, large offset so it never
     // overlaps the per-trajectory momentum stream (which counts from 0).
     static constexpr std::uint64_t k_hot_counter = 1ULL << 48;

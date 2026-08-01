@@ -42,8 +42,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    log::start(cf.workspace, cf.out, /*replicas=*/true);
-    std::string const outpath = app::out_path(cf);
+    io::Writer out = app::open_writer(p, cf, argc, argv, /*replicas=*/true);
 
     // ---- Base action ----
     Field::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
@@ -74,7 +73,6 @@ int main(int argc, char** argv) {
                         .checkpoint_every = rf.checkpoint_every}};
 
     // ---- Output ----
-    io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
 
     // ---- Build replicas + resume ----
@@ -85,15 +83,8 @@ int main(int argc, char** argv) {
     //      element. A resume restores valid fields instead. ----
     if (!llr.resuming()) {
         for (auto& r : llr.replicas()) {
-            Field& phi           = r->field();
-            std::size_t const ns = phi.nsites();
-            for (std::size_t mu = 0; mu < static_cast<std::size_t>(ndim); ++mu) {
-                double* const blk = phi.mu_block_data(mu);
-                for (std::size_t s = 0; s < ns; ++s) {
-                    blk[(0 * ns) + s] = 1.0;
-                    blk[(6 * ns) + s] = 1.0;
-                }
-            }
+            Field& phi = r->field();
+            set_cold_identity(phi);
         }
     }
 

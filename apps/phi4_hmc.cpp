@@ -39,35 +39,25 @@ int main(int argc, char** argv) {
 
     // ---- CLI ----
     cli::Parser p{"phi4_hmc", "Hybrid Monte Carlo for the phi^4 scalar field"};
-    auto const cf          = app::common_flags(p, {.out = "phi4.h5"});
-    auto const& kappa      = p.opt<double>("kappa", 0.18, "hopping parameter");
-    auto const& lambda     = p.opt<double>("lambda", 1.0, "quartic coupling");
-    auto const& ndim       = p.opt<int>("ndim", 4, "spatial dimensions");
-    auto const& tau        = p.opt<double>("tau", 1.0, "HMC trajectory length");
-    auto const& n_md       = p.opt<int>("n_md", 20, "MD steps per trajectory");
-    auto const& n_therm    = p.opt<int>("n_therm", 200, "thermalisation trajectories");
-    auto const& n_prod     = p.opt<int>("n_prod", 1000, "production trajectories");
-    auto const& meas_every = p.opt<int>("meas_every", 1, "measure every N trajectories");
-    auto const& ckpt_every =
-        p.opt<int>("checkpoint_every", 0, "write a config every N prod trajectories (0 = off)");
-    auto const& resume_path =
-        p.opt<std::string>("resume", std::string{}, "resume from a previous config (.h5)");
+    auto const cf      = app::common_flags(p, {.out = "phi4.h5"});
+    auto const& kappa  = p.opt<double>("kappa", 0.18, "hopping parameter");
+    auto const& lambda = p.opt<double>("lambda", 1.0, "quartic coupling");
+    auto const& ndim   = p.opt<int>("ndim", 4, "spatial dimensions");
+    auto const rf      = app::hmc_run_flags(p);
     if (!p.parse(argc, argv))
         return 0;
-
-    log::start(cf.workspace, cf.out);
-    std::string const outpath = app::out_path(cf);
 
     // ---- State: lattice, action ----
     Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
     Lattice<double> phi{shape};
-    bool const resuming = !resume_path.empty();
+    bool const resuming = rf.resuming();
 
     act::Phi4<double> phi4{.kappa = kappa, .lambda = lambda};
-    log::act(phi4);
 
     // ---- Output: writer + series ----
-    io::Writer out{outpath, argc, argv, &p};
+    io::Writer out            = app::open_writer(p, cf, argc, argv);
+    std::string const outpath = app::out_path(cf);
+    log::act(phi4);
     if (!resuming) {
         out.start_phase("therm");
     }
@@ -81,33 +71,25 @@ int main(int argc, char** argv) {
     auto m_sq     = out.series<double>("/prod/obs/m2");
 
     // ---- Updater: owns the RNG (one site stream per canonical slab) ----
-    updater::Hmc hmc{phi4, phi, FastRng{cf.seed}, {.tau = tau, .n_md = n_md}};
-    long long start_i = 0;
-    if (resuming) {
-        auto const file_shape = io::load_field_shape(resume_path);
-        if (file_shape != shape) {
-            throw std::runtime_error{"--resume shape mismatch with --L/--ndim"};
-        }
-        start_i = io::load_config(resume_path, phi, hmc.rng());
-        log::info("hmc", "resumed from {} at traj {}", resume_path, start_i);
-    }
+    updater::Hmc hmc{phi4, phi, FastRng{cf.seed}, {.tau = rf.tau, .n_md = rf.n_md}};
+    long long const start_i = app::resume_or_start(rf, phi, hmc, shape);
 
     // ---- Thermalisation ----
     if (!resuming) {
-        log::info("hmc", "therm  {} trajectories", n_therm);
-        for (int i = 0; i < n_therm; ++i) {
+        log::info("hmc", "therm  {} trajectories", rf.n_therm);
+        for (int i = 0; i < rf.n_therm; ++i) {
             (void)hmc.step(log::Mode::silent);
             s_therm.append(phi4.s_full(phi));
         }
     }
 
     // ---- Production ----
-    log::info("hmc", "prod   {} trajectories (from {})", n_prod, start_i);
-    for (long long i = start_i; i < n_prod; ++i) {
+    log::info("hmc", "prod   {} trajectories (from {})", rf.n_prod, start_i);
+    for (long long i = start_i; i < rf.n_prod; ++i) {
         auto const step = hmc.step();
         d_h.append(step.dH);
         accepted.append(step.accepted ? 1 : 0);
-        if (i % meas_every == 0) {
+        if (i % rf.meas_every == 0) {
             auto const V        = static_cast<double>(phi.nsites());
             auto const [s1, s2] = obs::reduce(phi, obs::kernel::phi, obs::kernel::phi_sq);
             s_prod.append(phi4.s_full(phi));
@@ -115,7 +97,7 @@ int main(int argc, char** argv) {
             mag_sq.append(obs::sq_of_mean_of(s1, V));
             m_sq.append(obs::mean_of(s2, V));
         }
-        if (ckpt_every > 0 && (i + 1) % ckpt_every == 0) {
+        if (rf.checkpoint_every > 0 && (i + 1) % rf.checkpoint_every == 0) {
             io::save_config(cfg_path(outpath, i + 1), phi, hmc.rng(), i + 1, argc, argv, &p);
         }
     }

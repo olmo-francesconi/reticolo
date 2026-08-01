@@ -5,6 +5,7 @@
 #include <reticolo/core/field/lattice.hpp>
 #include <reticolo/core/log/log.hpp>
 #include <reticolo/core/log/log_helpers.hpp>
+#include <reticolo/orch/llr/ramp.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
 #include <reticolo/updater/concepts.hpp>
 #include <reticolo/updater/hmc/hmc.hpp>
@@ -274,16 +275,9 @@ public:
         scalar_t const true_e_n = windowed_.E_n;
         scalar_t const q0       = windowed_.constraint_value(field_);
         scalar_t const gap      = true_e_n - q0;
-        int const n_ramp =
-            (windowed_.delta > scalar_t{0})
-                ? std::max(
-                      0,
-                      static_cast<int>(std::ceil(std::abs(static_cast<double>(gap)) /
-                                                 (0.5 * static_cast<double>(windowed_.delta)))) -
-                          1)
-                : 0;
+        int const n_ramp        = ramp_steps(gap, windowed_.delta);
         for (int k = 1; k <= n_ramp && traj < max_traj; ++k) {
-            windowed_.E_n = q0 + ((gap * static_cast<scalar_t>(k)) / static_cast<scalar_t>(n_ramp));
+            windowed_.E_n = ramp_centre(q0, gap, k, n_ramp);
             scalar_t sum  = scalar_t{0};
             int cnt       = 0;
             for (; cnt < k_batch && traj < max_traj; ++cnt) {

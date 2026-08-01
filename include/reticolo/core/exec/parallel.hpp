@@ -339,8 +339,14 @@ template <class Field>
     std::size_t const target = team * q;
 
     if (d <= 1) {
-        std::size_t const items = std::clamp<std::size_t>(target, 1, n != 0 ? n : 1);
-        std::size_t const chunk = (n + items - 1) / items;
+        std::size_t const want  = std::clamp<std::size_t>(target, 1, n != 0 ? n : 1);
+        std::size_t const chunk = (n + want - 1) / want;
+        // Re-derive the count from the chunk size: `want` chunks of ceil(n/want)
+        // can overshoot n (n=10, want=7 → chunk=2, so item 6 would start at 12),
+        // and field_visit_indexed's `n_sites - base` would then underflow into a
+        // huge span. ceil(n/chunk) is the largest count with every item non-empty
+        // and in range; it equals `want` whenever the chunking is exact.
+        std::size_t const items = (n != 0 && chunk != 0) ? (n + chunk - 1) / chunk : 1;
         return {
             .n_items = items, .item_sites = chunk, .n_sites = n, .split_dim = 0, .block = chunk};
     }

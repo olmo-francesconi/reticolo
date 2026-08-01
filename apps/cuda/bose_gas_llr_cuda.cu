@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
         r->hot_start(k_hot_sigma);
     }
     log::info("llr", "warm {} replicas into window", n_rep);
-    cuda::llr::warm_all(reps, 50, 10, 1.0);
+    cuda::llr::warm_all(reps, 50, 10, 1.0, n_therm_nr);
 
     // ---- Output ----
     FastRng exch_rng{cf.seed};

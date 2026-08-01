@@ -266,7 +266,7 @@ public:
 
 private:
     // No persistent region around the MD loop: each force/drift/kick opens its
-    // own fork/join region (see integ_ops / SiteAction). Measured on libgomp,
+    // own fork/join region (see exec::field_ops / SiteAction). Measured on libgomp,
     // per-op fork/join scales to ~22x on 32 cores while a persistent region with
     // many internal `omp for` barriers collapses to ~2x — libgomp worksharing
     // barriers are the bottleneck, its fork/join is not.

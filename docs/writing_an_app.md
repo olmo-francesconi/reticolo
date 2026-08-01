@@ -55,34 +55,31 @@ One include gets you `Lattice`, `FastRng`, `act::Phi4`, `updater::Hmc`,
 
 ```cpp
 cli::Parser p{"phi4_hmc", "Hybrid Monte Carlo for the phi^4 scalar field"};
-auto const& L       = p.req<int>("L,size",    "linear lattice extent");
-auto const& kappa   = p.req<double>("kappa",  "hopping parameter");
-auto const& lambda  = p.req<double>("lambda", "quartic coupling");
-auto const& ndim    = p.opt<int>("ndim",      4,    "spatial dimensions");
-auto const& tau     = p.opt<double>("tau",    1.0,  "HMC trajectory length");
-auto const& n_md    = p.opt<int>("n_md",      20,   "MD steps per trajectory");
-auto const& n_therm = p.opt<int>("n_therm",   200,  "thermalisation trajectories");
-auto const& n_prod  = p.opt<int>("n_prod",    1000, "production trajectories");
-auto const& seed    = p.opt<unsigned long long>("seed", 42ULL, "RNG seed");
-auto const& workspace =
-    p.opt<std::string>("workspace", std::string{"."}, "workspace folder (output + logs)");
-auto const& outfile =
-    p.opt<std::string>("out", std::string{"phi4.h5"}, "HDF5 output file name, inside workspace");
+// Tier 1 — every app: L,size / seed / workspace / out.
+auto const cf      = app::common_flags(p, {.out = "phi4.h5"});
+// The app's own physics + geometry.
+auto const& kappa  = p.opt<double>("kappa",  0.18, "hopping parameter");
+auto const& lambda = p.opt<double>("lambda", 1.0,  "quartic coupling");
+auto const& ndim   = p.opt<int>("ndim",      4,    "spatial dimensions");
+// Tier 2 — the HMC family: tau / n_md / n_therm / n_prod / meas_every /
+// checkpoint_every / resume. Pass only the defaults that differ from the
+// struct's ({.tau=1.0, .n_md=20, .n_therm=200, .n_prod=1000, .meas_every=1}).
+auto const rf      = app::hmc_run_flags(p);
 p.parse(argc, argv);
 ```
 
-`req<T>` returns `T const&` to stable parser-owned storage; the reference
-is meaningful only after `parse()` returns. `opt<T>` is the same with a
-default. `"L,size"` is cxxopts' "short + long" spec — `-L 16` and
+`opt<T>` (and `req<T>` for a flag with no default) returns `T const&` to
+stable parser-owned storage; the reference is meaningful only after `parse()`
+returns. The helper structs hold the same kind of references. `"L,size"` is cxxopts' "short + long" spec — `-L 16` and
 `--size=16` both work.
 
 ## Step 3 — field, RNG, action
 
 ```cpp
 Lattice<double>::SizeVec shape(static_cast<std::size_t>(ndim),
-                               static_cast<std::size_t>(L));
+                               static_cast<std::size_t>(cf.L));
 Lattice<double>   phi{shape};
-FastRng           rng{seed};
+FastRng           rng{cf.seed};
 act::Phi4<double> phi4{.kappa = kappa, .lambda = lambda};
 ```
 
@@ -92,12 +89,14 @@ make the construction self-documenting.
 ## Step 4 — open the writer
 
 ```cpp
-std::string const outpath = (std::filesystem::path{workspace} / outfile).string();
-io::Writer out{outpath, argc, argv, &p};
+io::Writer out = app::open_writer(p, cf, argc, argv);  // log::start + Writer
 ```
 
-Truncate-or-fail. The constructor stamps every reproducibility attribute
-in `/run@*` and every resolved CLI flag in `/vars@<name>`.
+`open_writer` starts the workspace logger and returns the Writer for
+`<workspace>/<out>` — every app opens output this way. Truncate-or-fail; the
+constructor stamps every reproducibility attribute in `/run@*` and every
+resolved CLI flag in `/vars@<name>`. `app::out_path(cf)` gives the same path
+directly if the app also needs it (e.g. for per-config checkpoint names).
 
 ## Step 5 — phases and series
 
@@ -122,8 +121,14 @@ for physics observables.
 ## Step 6 — the updater
 
 ```cpp
-updater::Hmc hmc{phi4, phi, rng, {.tau = tau, .n_md = n_md}};
+updater::Hmc hmc{phi4, phi, rng, {.tau = rf.tau, .n_md = rf.n_md}};
+long long const start_i = app::resume_or_start(rf, phi, hmc, shape);
 ```
+
+`resume_or_start` returns 0 for a fresh run, or the trajectory index the
+`--resume` checkpoint stopped at — restoring the field, the updater's RNG
+state, and the counter, so a resumed chain is bit-identical to the
+uninterrupted one.
 
 Action, RNG, and field types deduce (CTAD); the default integrator is
 Omelyan2. A trailing tag value selects another — `updater::integ::leapfrog`
@@ -136,11 +141,13 @@ as sibling lattices of `phi`.
 ## Step 7 — own the for loop
 
 ```cpp
-for (int i = 0; i < n_therm; ++i) {
-    (void)hmc.step();
-    s_therm.append(phi4.s_full(phi));
+if (!rf.resuming()) {                       // a resumed run is already thermalised
+    for (int i = 0; i < rf.n_therm; ++i) {
+        (void)hmc.step();
+        s_therm.append(phi4.s_full(phi));
+    }
 }
-for (int i = 0; i < n_prod; ++i) {
+for (long long i = start_i; i < rf.n_prod; ++i) {
     auto const step = hmc.step();
     d_h.append(step.dH);
     accepted.append(step.accepted ? 1 : 0);
@@ -180,7 +187,7 @@ Action / algorithm / Replica constructors emit their own `init`, `act`,
 `main` enables the file logger:
 
 ```cpp
-log::start(workspace, outfile);   // call once, before constructing anything
+io::Writer out = app::open_writer(p, cf, argc, argv);  // log::start + Writer, once
 ```
 
 `start` creates the workspace folder, opens the main log file

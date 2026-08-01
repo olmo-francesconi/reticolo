@@ -54,8 +54,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    log::start(cf.workspace, cf.out, /*replicas=*/true);
-    std::string const outpath = app::out_path(cf);
+    io::Writer out = app::open_writer(p, cf, argc, argv, /*replicas=*/true);
 
     // ---- Base action ----
     Lattice<std::complex<double>>::SizeVec shape(static_cast<std::size_t>(ndim),
@@ -87,7 +86,6 @@ int main(int argc, char** argv) {
                         .checkpoint_every = rf.checkpoint_every}};
 
     // ---- Output ----
-    io::Writer out{outpath, argc, argv, &p};
     out.start_phase("llr");
     out.attr<double>("/cfg@mu", mu);
 

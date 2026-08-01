@@ -27,6 +27,7 @@ reticolo_add_test(test_indexing_pool   unit/test_indexing_pool.cpp)
 reticolo_add_test(test_lattice         unit/test_lattice.cpp)
 reticolo_add_test(test_hot_loop        unit/test_hot_loop.cpp)
 reticolo_add_test(test_traverse_parallel unit/test_traverse_parallel.cpp)
+reticolo_add_test(test_partition       unit/test_partition.cpp)
 reticolo_add_test(test_rng             unit/test_rng.cpp)
 reticolo_add_test(test_log             unit/test_log.cpp)
 reticolo_add_test(test_observers       unit/test_observers.cpp)
@@ -39,6 +40,7 @@ reticolo_add_test(test_gauge_link_padding unit/test_gauge_link_padding.cpp)
 reticolo_add_test(test_obs_analysis    unit/test_obs_analysis.cpp)
 reticolo_add_test(test_fused_action_force unit/test_fused_action_force.cpp)
 reticolo_add_test(test_llr_exchange    unit/test_llr_exchange.cpp)
+reticolo_add_test(test_update_a        unit/test_update_a.cpp)
 reticolo_add_test(test_phi4_force_consistency       physics/test_phi4_force_consistency.cpp)
 reticolo_add_test(test_u1_hmc_reversibility         physics/test_u1_hmc_reversibility.cpp)
 reticolo_add_test(test_su2_hmc_reversibility        physics/test_su2_hmc_reversibility.cpp)
@@ -84,6 +86,7 @@ if(RETICOLO_ENABLE_CUDA)
     reticolo_add_cuda_test(test_cuda_su2         cuda/test_cuda_su2.cu)
     reticolo_add_cuda_test(test_cuda_su3         cuda/test_cuda_su3.cu)
     reticolo_add_cuda_test(test_cuda_bose_gas    cuda/test_cuda_bose_gas.cu)
+    reticolo_add_cuda_test(test_cuda_obs         cuda/test_cuda_obs.cu)
 
     if(RETICOLO_BUILD_IO)
         # Native .cu test: orchestrates cuda::Hmc + io::checkpoint in one TU.
@@ -96,6 +99,13 @@ if(RETICOLO_ENABLE_CUDA)
     add_test(NAME cuda_no_integrator_kernels
              COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${PROJECT_SOURCE_DIR}/include/reticolo/cuda
                      -P ${CMAKE_CURRENT_SOURCE_DIR}/cuda/check_no_integrator_kernels.cmake)
+
+    # Lint gate: no re-implemented SU(2)/SU(3) matrix algebra in the CUDA
+    # device path. su{2,3}_device.cuh must forward to the single-sourced
+    # math::su{2,3}:: formula functions, never re-derive them.
+    add_test(NAME cuda_no_gauge_kernels
+             COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${PROJECT_SOURCE_DIR}/include/reticolo/cuda
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/cuda/check_no_gauge_kernels.cmake)
 endif()
 
 if(RETICOLO_BUILD_IO)
@@ -123,6 +133,7 @@ if(RETICOLO_BUILD_IO AND RETICOLO_BUILD_APPS)
     reticolo_add_app_smoke(test_phi4_hmc_resume_equivalence phi4_hmc            apps/test_phi4_hmc_resume_equivalence.cpp)
     reticolo_add_app_smoke(test_phi6_hmc_smoke             phi6_hmc             apps/test_phi6_hmc_smoke.cpp)
     reticolo_add_app_smoke(test_sine_gordon_hmc_smoke      sine_gordon_hmc      apps/test_sine_gordon_hmc_smoke.cpp)
+    reticolo_add_app_smoke(test_su2_hmc_resume_equivalence su2_hmc              apps/test_su2_hmc_resume_equivalence.cpp)
     reticolo_add_app_smoke(test_u1_hmc_smoke               u1_hmc               apps/test_u1_hmc_smoke.cpp)
     reticolo_add_app_smoke(test_u1_llr_smoke               u1_llr               apps/test_u1_llr_smoke.cpp)
     reticolo_add_app_smoke(test_su2_llr_smoke              su2_llr              apps/test_su2_llr_smoke.cpp)

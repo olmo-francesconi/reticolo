@@ -3,6 +3,8 @@
 #include <reticolo/core/exec/nn_stencil.hpp>
 #include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/sys/hd.hpp>
+#include <reticolo/obs/concepts.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -67,6 +69,7 @@ struct Lanes {
 //     amplitude sum use `std::sqrt(re*re + im*im)` (lowers to `fsqrt.2d`), or
 //     accumulate |φ|² and take the sqrt once at the end.
 template <class T, class... Ks>
+    requires(SiteKernel<Ks, T> && ...)
 [[nodiscard]] inline auto reduce(Lattice<T> const& l, Ks const&... ks) noexcept {
     static_assert(sizeof...(Ks) > 0, "obs::reduce needs at least one kernel");
     using Acc           = Lanes<std::decay_t<std::invoke_result_t<Ks const&, T const&>>...>;
@@ -98,6 +101,7 @@ template <class T, class... Ks>
 // Rides `exec::nn_reduce` (IdentityCombine); returns a tuple of sums like `reduce`.
 // Kernels that ignore `agg` (pure per-site) still fuse in, sharing the sweep.
 template <class Policy = exec::FwdOnly, class T, class... Ks>
+    requires(NnKernel<Ks, T> && ...)
 [[nodiscard]] inline auto reduce_nn(Lattice<T> const& l, Ks const&... ks) noexcept {
     static_assert(sizeof...(Ks) > 0, "obs::reduce_nn needs at least one kernel");
     using Acc     = Lanes<std::decay_t<std::invoke_result_t<Ks const&, T const&, T const&>>...>;
@@ -118,24 +122,29 @@ template <class Policy = exec::FwdOnly, class T, class... Ks>
 // Templated on the field type so the same kernel serves f32 and f64 lattices —
 // every one casts to double, so measurements are double regardless of field
 // precision. Need something else? Pass a lambda straight into `obs::reduce`.
+//
+// RETICOLO_HD: these are the SAME objects the device path folds
+// (cuda/obs_reduce.cuh), so a moment measured on the GPU and on the CPU comes
+// from one definition — no mirrored kernel to drift. Empty and trivially
+// copyable, so passing one into a __global__ costs nothing.
 namespace kernel {
 
 struct Phi {
     template <class T>
-    [[nodiscard]] double operator()(T self) const noexcept {
+    [[nodiscard]] RETICOLO_HD double operator()(T self) const noexcept {
         return static_cast<double>(self);
     }
 };
 struct PhiSq {
     template <class T>
-    [[nodiscard]] double operator()(T self) const noexcept {
+    [[nodiscard]] RETICOLO_HD double operator()(T self) const noexcept {
         auto const v = static_cast<double>(self);
         return v * v;
     }
 };
 struct PhiQuartic {
     template <class T>
-    [[nodiscard]] double operator()(T self) const noexcept {
+    [[nodiscard]] RETICOLO_HD double operator()(T self) const noexcept {
         auto v = static_cast<double>(self);
         v *= v;
         return v * v;

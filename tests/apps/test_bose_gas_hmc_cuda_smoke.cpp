@@ -10,7 +10,7 @@ using reticolo::test::run_and_require_exit;
 using reticolo::test::scratch_path;
 
 // End-to-end: the CUDA phase-quenched Bose-gas HMC writes the same S_R + S_I
-// schema as the host app (measurement per host-free block → rows = n/meas_every).
+// schema as the host app (measurement per host-free block → rows = n/block).
 // Requires a GPU at run time. Mirrors test_bose_gas_hmc_smoke.cpp.
 TEST_CASE("bose_gas_hmc_cuda binary writes S_R + S_I schema", "[app][e2e][cuda][bose_gas_cuda]") {
     auto const out = scratch_path("bose_gas_hmc_cuda_smoke");
@@ -19,15 +19,15 @@ TEST_CASE("bose_gas_hmc_cuda binary writes S_R + S_I schema", "[app][e2e][cuda][
 
     constexpr int k_n_therm    = 10;
     constexpr int k_n_prod     = 20;
-    constexpr int k_meas_every = 5;
-    constexpr int k_therm_rows = k_n_therm / k_meas_every;  // 2
-    constexpr int k_prod_rows  = k_n_prod / k_meas_every;   // 4
+    constexpr int k_block      = 5;
+    constexpr int k_therm_rows = k_n_therm / k_block;  // 2
+    constexpr int k_prod_rows  = k_n_prod / k_block;   // 4
 
     std::string const cmd = std::string{BOSE_GAS_HMC_CUDA_BINARY} +
                             " --size=4 --ndim=2 --mass=1.0 --lambda=1.0 --mu=0.5" +
                             " --n_therm=" + std::to_string(k_n_therm) +
                             " --n_prod=" + std::to_string(k_n_prod) +
-                            " --meas_every=" + std::to_string(k_meas_every) +
+                            " --block=" + std::to_string(k_block) +
                             " --seed=20260701 --workspace=" + out.parent_path().string() +
                             " --out=" + out.filename().string();
     run_and_require_exit(cmd);

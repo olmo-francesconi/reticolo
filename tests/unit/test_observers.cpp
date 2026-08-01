@@ -125,9 +125,14 @@ TEST_CASE("obs::two_point rejects mu out of range", "[obs][two_point]") {
     REQUIRE_THROWS_AS(obs::two_point(phi, 1, 2), std::out_of_range);
 }
 
-TEST_CASE("obs concepts: builtin kernels and observer lambdas model them", "[obs][concept]") {
+TEST_CASE("obs concepts: the builtin kernels model both entry-point shapes", "[obs][concept]") {
     static_assert(obs::SiteKernel<decltype(obs::kernel::phi), double>);
     static_assert(obs::SiteKernel<decltype(obs::kernel::phi_sq), float>);
-    auto wrap_mean = [](Lattice<double> const& l) { return avg(l, obs::kernel::phi); };
-    static_assert(obs::Observer<decltype(wrap_mean), double>);
+
+    // The neighbour-aware shape reduce_nn constrains — the same (self, agg)
+    // contract an action leaf's kernels use.
+    auto density = [](double self, double fwd) { return self * fwd; };
+    static_assert(obs::NnKernel<decltype(density), double>);
+    static_assert(!obs::NnKernel<decltype(obs::kernel::phi), double>);
+    static_assert(!obs::SiteKernel<decltype(density), double>);
 }
