@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
     reticolo
-    VERSION 0.4.0
-    DESCRIPTION "Lightweight serial C++20 library for lattice quantum field theory MCMC"
+    VERSION 0.5.0
+    DESCRIPTION "C++20 library for lattice quantum field theory MCMC (OpenMP + optional CUDA)"
     LANGUAGES CXX
 )
 
