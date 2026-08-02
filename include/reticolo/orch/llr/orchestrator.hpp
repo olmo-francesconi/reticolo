@@ -299,9 +299,10 @@ public:
 
         de_buf_.assign(n_rep_u, 0.0);
         a_buf_.assign(n_rep_u, 0.0);
+        acc_buf_.assign(n_rep_u, 0.0);
 
         log::info("llr",
-                  "ensemble  {} replicas · E_n ∈ [{:+.1f} … {:+.1f}] · dE={:.1f} · δ={:.1f}",
+                  "ensemble  {} replicas · E_n ∈ [{:+.4g} … {:+.4g}] · dE={:.4g} · δ={:.4g}",
                   n_rep_,
                   spec_.e_min,
                   e_max_snapped_,
@@ -437,12 +438,32 @@ private:
         log::info("llr", "NR phase  {} iters × {} replicas", spec_.n_nr, n_rep_u);
         for (int k = start_iter(); k < spec_.n_nr; ++k) {
             orch::parallel_workers(reps_, plan_, [&](std::size_t n, replica_type& r) {
+                auto const st0 = r.stats();
                 r.thermalize(spec_.n_therm_nr, log::Mode::silent);
-                de_buf_[n] = static_cast<double>(r.sample(spec_.n_meas_nr, log::Mode::silent));
+                de_buf_[n]     = static_cast<double>(r.sample(spec_.n_meas_nr, log::Mode::silent));
+                auto const st1 = r.stats();
+                acc_buf_[n]    = (st1.n_traj > st0.n_traj)
+                                     ? static_cast<double>(st1.n_accepted - st0.n_accepted) /
+                                           static_cast<double>(st1.n_traj - st0.n_traj)
+                                     : 0.0;
+                // The Newton step needs only THIS replica's own (a, ⟨dE⟩), so it
+                // is computed — and reported — the moment the replica finishes,
+                // rather than in the serial drain after the whole wave. The
+                // logger is mutex-guarded, so rows simply interleave in
+                // completion order; the drain below still owns the state
+                // mutation and the (thread-unsafe) HDF5 appends.
+                a_buf_[n] = nr_update(static_cast<double>(r.a()), de_buf_[n], spec_.delta);
+                auto _    = log::scope(r.id());
+                iter("NR",
+                     static_cast<std::size_t>(k) + 1,
+                     static_cast<std::size_t>(spec_.n_nr),
+                     a_buf_[n],
+                     de_buf_[n],
+                     spec_.delta,
+                     acc_buf_[n]);
             });
             for (std::size_t n = 0; n < n_rep_u; ++n) {
-                auto& r   = *reps_[n];
-                a_buf_[n] = nr_update(r.a(), de_buf_[n], spec_.delta);
+                auto& r = *reps_[n];
                 r.set_a(static_cast<scalar_t>(a_buf_[n]));
                 auto _ = log::scope(r.id());
                 a_series_[n].append(a_buf_[n]);
@@ -453,12 +474,6 @@ private:
                     drm_series_[n].append(0.0);
                     dsm_series_[n].append(0.0);
                 }
-                iter("NR",
-                     static_cast<std::size_t>(k) + 1,
-                     static_cast<std::size_t>(spec_.n_nr),
-                     a_buf_[n],
-                     de_buf_[n],
-                     spec_.delta);
             }
             log::info("llr", "NR iter  {:>3}/{}  done", k + 1, spec_.n_nr);
             if (spec_.checkpoint_every > 0 && (k + 1) % spec_.checkpoint_every == 0) {
@@ -474,22 +489,31 @@ private:
         log::info("llr", "RM phase  {} iters × {} replicas", spec_.n_rm, n_rep_u);
         for (int s = rm_start; s < spec_.n_rm; ++s) {
             orch::parallel_workers(reps_, plan_, [&](std::size_t n, replica_type& r) {
+                auto const st0 = r.stats();
                 r.thermalize(spec_.n_therm_rm, log::Mode::silent);
-                de_buf_[n] = static_cast<double>(r.sample(spec_.n_meas_rm, log::Mode::silent));
-            });
-            for (std::size_t n = 0; n < n_rep_u; ++n) {
-                auto& r   = *reps_[n];
-                a_buf_[n] = rm_update(r.a(), de_buf_[n], spec_.delta, s);
-                r.set_a(static_cast<scalar_t>(a_buf_[n]));
-                auto _ = log::scope(r.id());
-                a_series_[n].append(a_buf_[n]);
-                de_series_[n].append(de_buf_[n]);
+                de_buf_[n]     = static_cast<double>(r.sample(spec_.n_meas_rm, log::Mode::silent));
+                auto const st1 = r.stats();
+                acc_buf_[n]    = (st1.n_traj > st0.n_traj)
+                                     ? static_cast<double>(st1.n_accepted - st0.n_accepted) /
+                                           static_cast<double>(st1.n_traj - st0.n_traj)
+                                     : 0.0;
+                // Same as NR: the Robbins-Monro step is per-replica, so it is
+                // taken and reported as this replica finishes, not after the wave.
+                a_buf_[n] = rm_update(static_cast<double>(r.a()), de_buf_[n], spec_.delta, s);
+                auto _    = log::scope(r.id());
                 iter("RM",
                      static_cast<std::size_t>(s) + 1,
                      static_cast<std::size_t>(spec_.n_rm),
                      a_buf_[n],
                      de_buf_[n],
-                     spec_.delta);
+                     spec_.delta,
+                     acc_buf_[n]);
+            });
+            for (std::size_t n = 0; n < n_rep_u; ++n) {
+                reps_[n]->set_a(static_cast<scalar_t>(a_buf_[n]));
+                auto _ = log::scope(reps_[n]->id());
+                a_series_[n].append(a_buf_[n]);
+                de_series_[n].append(de_buf_[n]);
             }
             do_exchange(s);
             log::info("llr", "RM iter  {:>3}/{}  done", s + 1, spec_.n_rm);
@@ -520,6 +544,18 @@ private:
             orch::parallel_workers(reps_, plan_, [&](std::size_t n, replica_type& r) {
                 r.thermalize(spec_.n_therm_rm, log::Mode::silent);
                 de_buf_[n] = static_cast<double>(r.sample(spec_.n_meas_rm, log::Mode::silent));
+                // Unlike vanilla RM the smoothed iterate needs the cross-replica
+                // fit, so the tilt cannot be finalised until the wave completes.
+                // Report the part that IS per-replica — the seating residual —
+                // as each finishes, so progress is still live; the `sRM` row with
+                // the shrunk `a` follows from the drain below.
+                auto _ = log::scope(r.id());
+                log::info("repl",
+                          "sRM  {:>3}/{}  ⟨dE⟩={:+.3e}  ⟨dE⟩/δ={:+.3f}  (awaiting fit)",
+                          s + 1,
+                          spec_.n_rm,
+                          de_buf_[n],
+                          spec_.delta != 0.0 ? de_buf_[n] / spec_.delta : 0.0);
             });
             for (std::size_t n = 0; n < n_rep_u; ++n) {
                 a_rm[n] = rm_update(reps_[n]->a(), de_buf_[n], spec_.delta, s);
@@ -609,6 +645,7 @@ private:
     std::vector<io::Series<double>> dsm_series_;
     std::vector<double> de_buf_;
     std::vector<double> a_buf_;
+    std::vector<double> acc_buf_;
 };
 
 }  // namespace reticolo::orch::llr
