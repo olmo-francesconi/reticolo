@@ -25,6 +25,7 @@ RESULTS = HERE / "results"
 sys.path.insert(0, str(HERE.parent / "_common"))
 from llr_reconstruct import (  # noqa: E402
     load_a_history,
+    log_sampled_density,
     piecewise_log_rho,
     reconstruct_log_rho,
 )
@@ -61,6 +62,7 @@ def main():
     size  = llr["size"]
     ndim  = llr["ndim"]
     n_nr  = llr["n_nr"]
+    sc    = llr["self_constraint"]
 
     n_rep, n_iter = a_hist.shape
     e_n_p = e_n / scale
@@ -72,8 +74,13 @@ def main():
     rhos      = []
     for k in range(n_iter):
         a_k = a_hist[:, k]
-        log_rho = reconstruct_log_rho(e_n, a_k)
-        pw_x_now, pw_log = piecewise_log_rho(e_n, a_k, log_rho, delta)
+        log_rho_dos = reconstruct_log_rho(e_n, a_k, self_constraint=sc)
+        pw_x_now, pw_log_dos = piecewise_log_rho(
+            e_n, a_k, log_rho_dos, delta, self_constraint=sc)
+        # Sampled density P ∝ rho e^{-S} — the coexistence double peak lives
+        # there, not in the bare DoS.
+        log_rho = log_sampled_density(e_n, log_rho_dos, self_constraint=sc)
+        pw_log = log_sampled_density(pw_x_now, pw_log_dos, self_constraint=sc)
         if pw_x is None:
             pw_x = pw_x_now
         offset = float(pw_log.max())
@@ -108,7 +115,7 @@ def main():
     ax.set_xlim(e_n_p.min(), e_n_p.max())
     ax.set_ylim(y_log_min, 1.0)
     ax.set_xlabel(r"$S / (6 V)$")
-    ax.set_ylabel(r"$\ln \rho$  (peak = 0)")
+    ax.set_ylabel(r"$\ln P = \ln\rho - S$  (peak = 0)")
     ax.legend(loc="lower center", fontsize=8)
 
     # ---- rho ----
@@ -117,7 +124,7 @@ def main():
     ax.set_xlim(e_n_p.min(), e_n_p.max())
     ax.set_ylim(0.0, y_rho_max)
     ax.set_xlabel(r"$S / (6 V)$")
-    ax.set_ylabel(r"$\rho$  (unit integral)")
+    ax.set_ylabel(r"$P \propto \rho e^{-S}$  (unit integral)")
 
     # ---- a_n convergence (traces grow with k) ----
     ax = axes[1, 0]
@@ -141,7 +148,7 @@ def main():
     ax.set_xlim(e_n_p.min(), e_n_p.max())
     ax.set_ylim(a_min - a_pad, a_max + a_pad)
     ax.set_xlabel(r"$S / (6 V)$")
-    ax.set_ylabel(r"$a_n = d \ln \rho_{\rm natural} / dS$")
+    ax.set_ylabel(r"$a_n = d \ln \rho_{\rm natural} / dS - 1$")
     ax.legend(loc="best", fontsize=8)
 
     title = fig.suptitle("")

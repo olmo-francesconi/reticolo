@@ -23,6 +23,7 @@ RESULTS = HERE / "results"
 sys.path.insert(0, str(HERE.parent / "_common"))
 from llr_reconstruct import (  # noqa: E402
     load_a_history,
+    log_sampled_density,
     piecewise_log_rho,
     reconstruct_log_rho,
 )
@@ -59,13 +60,19 @@ def precompute_frames(data):
     a_hist = data["a_hist"]
     delta = data["delta"]
     scale = data["scale"]
+    sc = data["self_constraint"]
     n_iter = a_hist.shape[1]
     pw_x = None
     pw_logs, log_centres_list, rhos = [], [], []
     for k in range(n_iter):
         a_k = a_hist[:, k]
-        log_rho = reconstruct_log_rho(e_n, a_k)
-        pw_x_now, pw_log = piecewise_log_rho(e_n, a_k, log_rho, delta)
+        log_rho_dos = reconstruct_log_rho(e_n, a_k, self_constraint=sc)
+        pw_x_now, pw_log_dos = piecewise_log_rho(
+            e_n, a_k, log_rho_dos, delta, self_constraint=sc)
+        # Sampled density P ∝ rho e^{-S} — the coexistence double peak lives there,
+        # not in the bare DoS. See examples/_common/llr_reconstruct.py.
+        log_rho = log_sampled_density(e_n, log_rho_dos, self_constraint=sc)
+        pw_log = log_sampled_density(pw_x_now, pw_log_dos, self_constraint=sc)
         if pw_x is None:
             pw_x = pw_x_now
         offset = float(pw_log.max())

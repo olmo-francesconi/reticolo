@@ -246,7 +246,7 @@ def main():
         inner = log_density_hmc[len(e_n)]  # in e_n_sym, +δ/2 sits here
         lr_shifted, pw_logs = [], []
         for af in a_fin_seeds:
-            lr  = reconstruct_log_rho(e_n, af)
+            lr  = reconstruct_log_rho(e_n, af, self_constraint=llr["self_constraint"])
             lrs = lr + (inner - lr[0])
             pw_x, pw = piecewise_log_rho_symmetric(e_n, af, lrs, spacing)
             lr_shifted.append(lrs)

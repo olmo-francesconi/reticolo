@@ -20,6 +20,7 @@ RESULTS = HERE / "results"
 sys.path.insert(0, str(HERE.parent / "_common"))
 from llr_reconstruct import (  # noqa: E402
     load_a_history,
+    log_sampled_density,
     piecewise_log_rho,
     reconstruct_log_rho,
 )
@@ -62,8 +63,15 @@ def main():
 
     # log_rho at window centres (trapezoid of a_n) -> piecewise-exp segments.
     # These are continuous by construction at the window boundaries.
-    log_rho_centres = reconstruct_log_rho(e_n, a_final)
-    pw_x, pw_log = piecewise_log_rho(e_n, a_final, log_rho_centres, delta)
+    sc = llr["self_constraint"]
+    log_rho_dos = reconstruct_log_rho(e_n, a_final, self_constraint=sc)
+    pw_x, pw_log_dos = piecewise_log_rho(
+        e_n, a_final, log_rho_dos, delta, self_constraint=sc)
+    # Plot the SAMPLED density P(S) ∝ rho(S) e^{-S}, not the bare DoS: the
+    # coexistence double peak at beta_c is a feature of P, not of rho (which
+    # rises monotonically). See examples/_common/llr_reconstruct.py.
+    log_rho_centres = log_sampled_density(e_n, log_rho_dos, self_constraint=sc)
+    pw_log = log_sampled_density(pw_x, pw_log_dos, self_constraint=sc)
 
     # Single offset for centres and piecewise so the `x` markers sit on the
     # line. Use pw_log.max() because the absolute max can lie inside a
@@ -92,18 +100,18 @@ def main():
     ax.plot(e_n_p, log_rho_centres, "x", color="C3", markersize=5,
             markeredgewidth=1.0, label="LLR window centres")
     ax.set_xlabel(r"$S / (6 V)$")
-    ax.set_ylabel(r"$\ln \rho$  (peak = 0)")
+    ax.set_ylabel(r"$\ln P = \ln\rho - S$  (peak = 0)")
     ax.set_title(rf"$L={size}^{{{ndim}}}$, $\beta = {beta:.4f}$")
     ax.legend(loc="best", fontsize=9)
 
     # ---- rho (linear, unit integral) -------------------------------------
     ax = axes[0, 1]
     ax.plot(pw_x_p, rho, "-", color="C3", linewidth=1.0,
-            label=r"$\rho(S)$  (unit integral)")
+            label=r"$P(S) \propto \rho e^{-S}$  (unit integral)")
     ax.plot(e_n_p, rho_centres, "x", color="C3", markersize=5,
             markeredgewidth=1.0)
     ax.set_xlabel(r"$S / (6 V)$")
-    ax.set_ylabel(r"$\rho$")
+    ax.set_ylabel(r"$P$")
     ax.set_title(r"density of states — double peak at $\beta_c$")
     ax.legend(loc="best", fontsize=9)
 

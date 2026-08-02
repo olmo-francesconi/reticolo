@@ -22,6 +22,7 @@ RESULTS = HERE / "results"
 sys.path.insert(0, str(HERE.parent / "_common"))
 from llr_reconstruct import (  # noqa: E402
     load_a_history,
+    log_sampled_density,
     piecewise_log_rho,
     reconstruct_log_rho,
 )
@@ -80,8 +81,14 @@ def plot_doublepeak(data, outpath, title_suffix=""):
     n_nr = data["n_nr"]
 
     a_final = np.median(a_hist[:, -max(1, a_hist.shape[1] // 5):], axis=1)
-    log_rho_centres = reconstruct_log_rho(e_n, a_final)
-    pw_x, pw_log = piecewise_log_rho(e_n, a_final, log_rho_centres, delta)
+    sc = data["self_constraint"]
+    log_rho_dos = reconstruct_log_rho(e_n, a_final, self_constraint=sc)
+    pw_x, pw_log_dos = piecewise_log_rho(
+        e_n, a_final, log_rho_dos, delta, self_constraint=sc)
+    # Sampled density P ∝ rho e^{-S} — the coexistence double peak lives there,
+    # not in the bare DoS. See examples/_common/llr_reconstruct.py.
+    log_rho_centres = log_sampled_density(e_n, log_rho_dos, self_constraint=sc)
+    pw_log = log_sampled_density(pw_x, pw_log_dos, self_constraint=sc)
 
     offset = float(pw_log.max())
     pw_log -= offset
@@ -161,10 +168,17 @@ def plot_compare(van, pol, outpath):
     tail = max(1, n_rm // 5)
     van_a = np.median(van["a_hist"][:, -tail:], axis=1)
     pol_a = np.median(pol["a_hist"][:, -tail:], axis=1)
-    van_log = reconstruct_log_rho(e_n, van_a)
-    pol_log = reconstruct_log_rho(e_n, pol_a)
-    van_x, van_lr = piecewise_log_rho(e_n, van_a, van_log, delta)
-    pol_x, pol_lr = piecewise_log_rho(e_n, pol_a, pol_log, delta)
+    sc = van["self_constraint"]
+    van_log = reconstruct_log_rho(e_n, van_a, self_constraint=sc)
+    pol_log = reconstruct_log_rho(e_n, pol_a, self_constraint=sc)
+    van_x, van_lr_dos = piecewise_log_rho(
+        e_n, van_a, van_log, delta, self_constraint=sc)
+    pol_x, pol_lr_dos = piecewise_log_rho(
+        e_n, pol_a, pol_log, delta, self_constraint=sc)
+    # Sampled density P ∝ rho e^{-S} — the coexistence double peak lives there,
+    # not in the bare DoS. See examples/_common/llr_reconstruct.py.
+    van_lr = log_sampled_density(van_x, van_lr_dos, self_constraint=sc)
+    pol_lr = log_sampled_density(pol_x, pol_lr_dos, self_constraint=sc)
     van_lr -= van_lr.max()
     pol_lr -= pol_lr.max()
 

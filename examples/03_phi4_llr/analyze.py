@@ -25,6 +25,7 @@ sys.path.insert(0, str(HERE.parent / "_common"))
 from llr_reconstruct import (  # noqa: E402
     load_a_history as load_llr,
     load_hmc_action as load_hmc,
+    log_sampled_density,
     piecewise_log_rho,
     reconstruct_log_rho,
 )
@@ -60,7 +61,8 @@ def main():
         e_n = llr["E_n"]
         a_hist = llr["a_hist"]
         a_final = np.median(a_hist[:, -max(1, a_hist.shape[1] // 5):], axis=1)
-        log_rho_llr = reconstruct_log_rho(e_n, a_final)
+        sc = llr["self_constraint"]
+        log_rho_llr = reconstruct_log_rho(e_n, a_final, self_constraint=sc)
 
         # One histogram bin per LLR window, each bin centred on E_n with width
         # delta. Makes the HMC dos directly comparable to the per-window LLR
@@ -83,11 +85,22 @@ def main():
         peak_idx = int(np.nanargmax(log_rho_hmc))
         peak_s = centres[peak_idx]
         peak_log_hmc = log_rho_hmc[peak_idx]
-        # Same grid → no interp; align at the HMC peak index directly.
-        log_rho_llr_shifted = log_rho_llr + (peak_log_hmc - log_rho_llr[peak_idx])
 
-        # Piecewise-exponential reconstruction: one exp per LLR window.
-        pw_x, pw_log = piecewise_log_rho(e_n, a_final, log_rho_llr_shifted, delta)
+        # Piecewise-exponential reconstruction: one exp per LLR window. Done in
+        # DoS space, then converted — the piecewise slope is dln(rho)/dS, not
+        # the slope of the sampled density.
+        pw_x, pw_log_rho = piecewise_log_rho(
+            e_n, a_final, log_rho_llr, delta, self_constraint=sc)
+
+        # The HMC histogram is the SAMPLED density P(S) ∝ rho(S) e^{-S}, so put
+        # the LLR curve in the same space before overlaying (see
+        # examples/_common/llr_reconstruct.py). Both pieces take the same shift.
+        log_p_llr = log_sampled_density(e_n, log_rho_llr, self_constraint=sc)
+        pw_log = log_sampled_density(pw_x, pw_log_rho, self_constraint=sc)
+        # Same grid → no interp; align at the HMC peak index directly.
+        shift = peak_log_hmc - log_p_llr[peak_idx]
+        log_rho_llr_shifted = log_p_llr + shift
+        pw_log = pw_log + shift
 
         # ---------- top: ln rho HMC vs LLR ----------
         ax = axes[0, col]
@@ -102,7 +115,7 @@ def main():
         ax.axvline(peak_s, color="0.7", linewidth=0.8, linestyle="--")
         ax.set_title(rf"$\kappa = {kappa:.3f}$")
         ax.set_xlabel(r"$S$")
-        ax.set_ylabel(r"$\ln \rho(S)$ + const.")
+        ax.set_ylabel(r"$\ln P(S) = \ln \rho(S) - S$ + const.")
         ax.legend(loc="best", fontsize=8)
 
         # ---------- middle: linear-scale rho(S), unit integral ----------
@@ -123,7 +136,7 @@ def main():
                 markeredgewidth=0.8)
         ax.axvline(peak_s, color="0.7", linewidth=0.8, linestyle="--")
         ax.set_xlabel(r"$S$")
-        ax.set_ylabel(r"$\rho(S)$  ($\int \rho\, dS = 1$)")
+        ax.set_ylabel(r"$P(S) \propto \rho(S)e^{-S}$  ($\int P\, dS = 1$)")
         ax.legend(loc="best", fontsize=8)
 
         # ---------- bottom: a_n history per replica ----------

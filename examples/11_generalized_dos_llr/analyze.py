@@ -49,7 +49,9 @@ def main():
     a_hist = llr["a_hist"]
     n_nr = llr["n_nr"]
     a_final = np.median(a_hist[:, -max(1, a_hist.shape[1] // 5):], axis=1)
-    ln_rho = reconstruct_log_rho(e_n, a_final)   # ln ρ(Q) = ∫ a dQ
+    # Observable constraint ⇒ the window tilts by a·Q, so the DoS slope IS a.
+    ln_rho = reconstruct_log_rho(
+        e_n, a_final, self_constraint=llr["self_constraint"])   # ln ρ(Q) = ∫ a dQ
 
     # Direct validation histogram: ⟨φ²⟩ from the unconstrained HMC chain.
     with h5py.File(hmc_path, "r") as f:

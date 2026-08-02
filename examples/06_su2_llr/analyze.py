@@ -22,6 +22,7 @@ sys.path.insert(0, str(HERE.parent / "_common"))
 from llr_reconstruct import (  # noqa: E402
     load_a_history,
     load_hmc_action as load_hmc,
+    log_sampled_density,
     piecewise_log_rho,
     reconstruct_log_rho,
 )
@@ -71,7 +72,8 @@ def main():
         e_n = llr["E_n"]
         a_hist = llr["a_hist"]
         a_final = np.median(a_hist[:, -max(1, a_hist.shape[1] // 5):], axis=1)
-        log_rho_llr = reconstruct_log_rho(e_n, a_final)
+        sc = llr["self_constraint"]
+        log_rho_llr = reconstruct_log_rho(e_n, a_final, self_constraint=sc)
 
         delta = llr["delta"]
         bin_edges = np.concatenate([[e_n[0] - delta / 2.0], e_n + delta / 2.0])
@@ -89,9 +91,18 @@ def main():
         peak_idx = int(np.nanargmax(log_rho_hmc))
         peak_s = centres[peak_idx]
         peak_log_hmc = log_rho_hmc[peak_idx]
-        log_rho_llr_shifted = log_rho_llr + (peak_log_hmc - log_rho_llr[peak_idx])
 
-        pw_x, pw_log = piecewise_log_rho(e_n, a_final, log_rho_llr_shifted, delta)
+        # Piecewise reconstruction in DoS space, then converted: the HMC
+        # histogram is the SAMPLED density P(S) ∝ rho(S) e^{-S}, so the LLR
+        # curve has to be put in that space before overlaying. Both pieces take
+        # the same alignment shift. See examples/_common/llr_reconstruct.py.
+        pw_x, pw_log_rho = piecewise_log_rho(
+            e_n, a_final, log_rho_llr, delta, self_constraint=sc)
+        log_p_llr = log_sampled_density(e_n, log_rho_llr, self_constraint=sc)
+        pw_log = log_sampled_density(pw_x, pw_log_rho, self_constraint=sc)
+        shift = peak_log_hmc - log_p_llr[peak_idx]
+        log_rho_llr_shifted = log_p_llr + shift
+        pw_log = pw_log + shift
 
         # Rescale x to the intensive variable ⟨1 − P⟩ = S / (β·n_plaq).
         scale = llr["scale"]
@@ -115,7 +126,7 @@ def main():
         ax.axvline(peak_s, color="0.7", linewidth=0.8, linestyle="--")
         ax.set_title(rf"$\beta = {beta:.3f}$")
         ax.set_xlabel(r"$\langle 1 - (1/N)\,\mathrm{Re\,Tr}\,U_p\rangle = S / (\beta\, n_p)$")
-        ax.set_ylabel(r"$\ln \rho$ + const.")
+        ax.set_ylabel(r"$\ln P = \ln \rho - S$ + const.")
         ax.legend(loc="best", fontsize=8)
 
         # Linear-scale rho(S), both normalised to unit integral.
@@ -137,7 +148,7 @@ def main():
                 markeredgewidth=0.8)
         ax.axvline(peak_s, color="0.7", linewidth=0.8, linestyle="--")
         ax.set_xlabel(r"$\langle 1 - (1/N)\,\mathrm{Re\,Tr}\,U_p\rangle$")
-        ax.set_ylabel(r"$\rho$  (unit integral)")
+        ax.set_ylabel(r"$P \propto \rho\, e^{-S}$  (unit integral)")
         ax.legend(loc="best", fontsize=8)
 
         ax = axes[2, col]
@@ -167,7 +178,7 @@ def main():
                    label=r"$a = 0$ (natural peak)")
         ax.axvline(peak_s, color="0.7", linewidth=0.8, linestyle="--")
         ax.set_xlabel(r"$\langle 1 - (1/N)\,\mathrm{Re\,Tr}\,U_p\rangle$")
-        ax.set_ylabel(r"$a_n = d \ln \rho_{\rm natural} / dS$")
+        ax.set_ylabel(r"$a_n = d \ln \rho_{\rm natural} / dS - 1$")
         ax.legend(loc="best", fontsize=8)
 
     out = HERE / "rho_hmc_vs_llr.pdf"
