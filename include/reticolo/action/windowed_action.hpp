@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <string_view>
 #include <type_traits>
 
 namespace reticolo::action {
@@ -41,15 +42,23 @@ using scalar_of_t = real_scalar_t<T>;
 
 // --- constraint policies ------------------------------------------------------
 
+// `k_name` is the on-disk tag for the window mode; analysis code needs it to
+// know which reconstruction applies. Mode A (self) tilts by (1+a)·S, so the LLR
+// fixed point is a = dln(rho)/dS − 1 and the DoS slope is (1+a); every other
+// constraint tilts by a·Q, so the slope is a. Getting this wrong shifts ln(rho)
+// by a term linear in the constrained variable.
+
 // Q = the base action (window on S itself). A tag: the force fuses.
 struct SelfConstraint {
-    static constexpr bool k_self = true;
+    static constexpr bool k_self             = true;
+    static constexpr std::string_view k_name = "self";
 };
 
 // Q = the base's imaginary observable S_I (sign-problem LLR). Delegates to the
 // base's `HasImagPart` surface; its cache is the base's `s_imag` cache.
 struct ImagConstraint {
-    static constexpr bool k_self = false;
+    static constexpr bool k_self             = false;
+    static constexpr std::string_view k_name = "imag";
 
     template <class Base, class Field>
     [[nodiscard]] auto value(Base const& b, Field const& l) const noexcept {
@@ -82,7 +91,8 @@ struct ImagConstraint {
 // Its own `SFullCache` is the constraint-value cache HMC rolls back on reject.
 template <class Obs>
 struct ObservableConstraint {
-    static constexpr bool k_self = false;
+    static constexpr bool k_self             = false;
+    static constexpr std::string_view k_name = "observable";
     Obs obs;
 
     template <class Base, class Field>

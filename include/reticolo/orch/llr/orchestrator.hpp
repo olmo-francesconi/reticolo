@@ -276,6 +276,12 @@ public:
         out.attr<double>("/cfg@E_max", e_max_snapped_);
         out.attr<double>("/cfg@dE", d_e_);
 
+        // The window mode, so analysis knows which DoS reconstruction applies:
+        // self tilts by (1+a)·S ⇒ slope (1+a); everything else tilts by a·Q ⇒
+        // slope a. `constraint_self` is the machine-readable discriminator.
+        out.attr<std::string>("/cfg@constraint", std::string{constraint_type::k_name});
+        out.attr<int>("/cfg@constraint_self", constraint_type::k_self ? 1 : 0);
+
         auto e_n_series = out.series<double>("/cfg/E_n");
         e_n_vec_.reserve(n_rep_u);
         for (auto const& r : reps_) {
