@@ -42,7 +42,7 @@ namespace act = action;
 ```
 
 so `using namespace reticolo;` in an app yields `Lattice<double>`, `FastRng`,
-`act::Phi4`, `updater::Hmc`, `io::Writer`, `cli::Parser`, `obs::magnetization`
+`act::Phi4`, `updater::Hmc`, `io::Writer`, `cli::Parser`, `obs::reduce`
 all in scope.
 
 ## Core types
@@ -351,9 +351,12 @@ the action convention, the *stored observable* is the mean plaquette in both.
 
 Two namespaces:
 
-- `obs::` — per-configuration scalars: `mean`, `sq`, `magnetization`, `m2`,
-  `mean_sq`, `m4`, `two_point`, `vector_magnetization_sq<N>`,
-  `xy_magnetization_sq`. All return `double`.
+- `obs::` — per-configuration reductions: `reduce` / `reduce_nn` fold one pass
+  over the lattice through any number of `obs::kernel::*` kernels (`phi`,
+  `phi_sq`, `phi_quartic` — `RETICOLO_HD`, shared with `cuda/obs_reduce.cuh`),
+  and the finalizers `mean_of`, `sq_of_mean_of`, `mag_abs_of` turn a raw lane
+  sum plus `nsites` into the reported quantity. `two_point` is separate. All
+  return `double`.
 - `obs::analysis::` — ensemble reductions over a `std::span<double const>`:
   `mean`, `susceptibility`, `binder`.
 
@@ -588,5 +591,5 @@ sets `RETICOLO_ENABLE_OPENMP=OFF` explicitly.
   binary on tiny inputs, open the HDF5, assert the schema.
 
 CI matrix: `macos-appleclang`, `macos-llvm`, `linux-gcc`, `linux-clang`,
-plus `clang-format` (pinned 20.1.7) and `clang-tidy` (via the amalgamation
+plus `clang-format` (pinned 22.1.5) and `clang-tidy` (pinned 22, via the amalgamation
 pattern in `src/lint/`).

@@ -152,8 +152,11 @@ for (long long i = start_i; i < rf.n_prod; ++i) {
     d_h.append(step.dH);
     accepted.append(step.accepted ? 1 : 0);
     s_prod.append(phi4.s_full(phi));
-    mag.append(obs::magnetization(phi));
-    mag_sq.append(obs::mean_sq(phi));
+
+    auto const [s1, s2] = obs::reduce(phi, obs::kernel::phi, obs::kernel::phi_sq);
+    mag.append(obs::mag_abs_of(s1, V));
+    mag_sq.append(obs::sq_of_mean_of(s1, V));
+    m_sq.append(obs::mean_of(s2, V));
 }
 ```
 

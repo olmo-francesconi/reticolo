@@ -55,7 +55,7 @@ def sample_dE(a: np.ndarray, a_star: np.ndarray, delta: float, sigma: float,
     return delta * delta * (a_star - a) + sigma * rng.standard_normal(size=a.shape)
 
 
-# ---------- local-polynomial smoother (mirrors smoothed_driver.hpp) -----
+# ---------- local-polynomial smoother (mirrors Orchestrator::run_smoothed) -----
 
 def local_poly_fit(e: np.ndarray, a: np.ndarray, K: int, deg: int) -> np.ndarray:
     n = len(e)

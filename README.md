@@ -65,7 +65,7 @@ int main() {
     Lattice<double>   phi{{8, 8, 8, 8}};
     FastRng           rng{42};
     act::Phi4<double> action{.kappa = 0.18, .lambda = 1.0};
-    alg::Hmc          hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
+    updater::Hmc      hmc{action, phi, rng, {.tau = 1.0, .n_md = 20}};
 
     io::Writer writer{"phi4.h5"};
     auto       s = writer.series<double>("/prod/obs/s");
@@ -114,8 +114,8 @@ construction and frozen. Chains stay bit-identical for fixed
 `n_threads` + `slabs_per_thread`:
 
 ```cpp
-alg::Hmc hmc{action, phi, FastRng{42},
-             {.tau = 1.0, .n_md = 20, .n_threads = 4}};
+updater::Hmc hmc{action, phi, FastRng{42},
+                 {.tau = 1.0, .n_md = 20, .n_threads = 4}};
 ```
 
 LLR apps saturate replicas first, then spill leftover threads into per-replica

@@ -8,9 +8,14 @@
 
 namespace reticolo::cuda {
 
-// Page-locked (pinned) host buffer. The per-trajectory ΔH copy-back and the
-// measurement transfers go through pinned memory so cudaMemcpy doesn't stage
-// through a pageable bounce buffer on the critical path. RAII; move-only.
+// Page-locked (pinned) host buffer: cudaMemcpy out of one does not stage
+// through a pageable bounce buffer. RAII; move-only.
+//
+// NOT currently on any transfer path — `DeviceField::copy_to_host` and the
+// ΔH copy-back both go through pageable `Lattice::data()`. Only
+// `tests/cuda/test_cuda_selftest.cu` constructs one. Wiring the measurement
+// copies through this is an open perf item; until then don't read the
+// existence of this header as a claim about how transfers work.
 template <class T>
 class PinnedBuffer {
 public:

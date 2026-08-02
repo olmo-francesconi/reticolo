@@ -2,7 +2,7 @@
 
 **Python-only.** Unlike the other numbered examples this carries no C++ driver
 or `CMakeLists.txt` — it does **not** link `reticolo`. It studies the LLR
-*algorithm* (the smoothing layer behind `llr/smoothed_driver.hpp`) in isolation,
+*algorithm* (the smoothing layer behind `Orchestrator::run_smoothed`) in isolation,
 with no Monte Carlo and no HDF5.
 
 ## What it does
