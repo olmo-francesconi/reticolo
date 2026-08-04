@@ -1,16 +1,5 @@
-include(FetchContent)
-
-set(CATCH2_VERSION v3.5.4)
-
-FetchContent_Declare(
-    Catch2
-    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-    GIT_TAG        ${CATCH2_VERSION}
-    GIT_SHALLOW    TRUE
-    SYSTEM
-)
-FetchContent_MakeAvailable(Catch2)
-list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+# Catch2 is fetched by cmake/ReticoloDependencies.cmake so that every external
+# dependency is resolved and reported in one place; here we only consume it.
 include(CTest)
 include(Catch)
 

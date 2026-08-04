@@ -1,11 +1,26 @@
 cmake_minimum_required(VERSION 3.25)
 
+# Version lives here so the logo can carry it BEFORE project() runs — the logo
+# must be the first thing a cold configure prints, and project() emits the
+# compiler-identification lines.
+set(RETICOLO_VERSION 0.5.0)
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+include(ReticoloBanner)
+reticolo_logo("${RETICOLO_VERSION}")
+
+# Indent project()'s compiler probing under the logo. These lines only appear on
+# a cold configure; every reconfigure has them cached.
+list(APPEND CMAKE_MESSAGE_INDENT "    ")
+
 project(
     reticolo
-    VERSION 0.5.0
+    VERSION ${RETICOLO_VERSION}
     DESCRIPTION "C++20 library for lattice quantum field theory MCMC (OpenMP + optional CUDA)"
     LANGUAGES CXX
 )
+
+list(POP_BACK CMAKE_MESSAGE_INDENT)
 
 # This file is a table of contents. The substance lives in cmake/:
 #   ReticoloOptions.cmake     options, compiler floor, configuration summary
@@ -20,7 +35,6 @@ project(
 #   reticolo::cuda  INTERFACE, header-only device stack (opt-in)
 #   reticolo::reticolo  umbrella over whichever of the above are enabled
 
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(ReticoloOptions)
 include(ReticoloDependencies)
 include(ReticoloWarnings)
@@ -38,18 +52,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 reticolo_require_compiler()
-
-# ---------------------------------------------------------------------------
-# Dependencies
-# ---------------------------------------------------------------------------
-if(RETICOLO_BUILD_IO)
-    reticolo_find_hdf5()
-endif()
-if(RETICOLO_ENABLE_OPENMP)
-    reticolo_find_openmp()  # may switch RETICOLO_ENABLE_OPENMP off
-endif()
-reticolo_fetch_cxxopts()
-reticolo_fetch_sleef()
 
 # ---------------------------------------------------------------------------
 # Build metadata
@@ -74,6 +76,12 @@ endfunction()
 
 _reticolo_git(RETICOLO_GIT_COMMIT rev-parse --short HEAD)
 _reticolo_git(RETICOLO_GIT_BRANCH rev-parse --abbrev-ref HEAD)
+
+# ---------------------------------------------------------------------------
+# 1 · system + options   /   2 · external dependencies
+# ---------------------------------------------------------------------------
+reticolo_report_system()
+reticolo_resolve_dependencies()
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" _reticolo_build_type_upper)
 set(_reticolo_compile_flags "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_reticolo_build_type_upper}}")
@@ -212,4 +220,5 @@ if(RETICOLO_ENABLE_CUDA)
     endif()
 endif()
 
-reticolo_print_summary()
+reticolo_report_components()
+reticolo_report_final()

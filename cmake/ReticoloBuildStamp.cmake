@@ -28,9 +28,13 @@ function(reticolo_attach_build_stamp target)
 
     # Generate once now so the header exists for the very first compile (and for
     # tooling / compile_commands.json consumers that parse before any build).
+    # OUTPUT_QUIET: section 3 reports the stamp, so the script's own line would
+    # be a duplicate landing in the middle of the dependency section. At build
+    # time it is not quiet — there the line is the only notice you get.
     execute_process(COMMAND ${CMAKE_COMMAND}
         -DRETICOLO_SRC=${PROJECT_SOURCE_DIR} -DRETICOLO_OUT=${_hdr}
-        -P ${PROJECT_SOURCE_DIR}/cmake/WriteBuildStamp.cmake)
+        -P ${PROJECT_SOURCE_DIR}/cmake/WriteBuildStamp.cmake
+        OUTPUT_QUIET)
 
     # An always-out-of-date target: the script runs on every build but rewrites
     # the header only when the commit/branch actually differ, so the dependent
