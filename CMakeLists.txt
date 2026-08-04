@@ -7,7 +7,7 @@ set(RETICOLO_VERSION 0.5.0)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 include(ReticoloBanner)
-reticolo_logo("${RETICOLO_VERSION}")
+reticolo_logo("${RETICOLO_VERSION}" "c o n f i g u r e")
 
 # Indent project()'s compiler probing under the logo. These lines only appear on
 # a cold configure; every reconfigure has them cached.

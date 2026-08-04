@@ -32,4 +32,9 @@ target_compile_definitions(reticolo_io PRIVATE
 # that writes the run record, so a commit rebuilds writer.cpp and nothing else.
 reticolo_attach_build_stamp(reticolo_io)
 
+# Everything in the project reaches reticolo::io (apps, tests and examples all
+# link the umbrella), so hanging the build banner here puts the logo at the top
+# of any build without touching every target-creating helper.
+reticolo_attach_build_banner(reticolo_io)
+
 reticolo_configure_warnings(reticolo_io)

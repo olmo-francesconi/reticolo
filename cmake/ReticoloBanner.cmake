@@ -48,7 +48,7 @@ endfunction()
 # The logo. Printed BEFORE project() so it is genuinely the first thing on a
 # cold configure; the compiler-identification lines project() emits are indented
 # underneath it (and vanish on every reconfigure, being cached).
-function(reticolo_logo version)
+function(reticolo_logo version tag)
     set(_figlet
         "██████╗ ███████╗████████╗██╗ ██████╗ ██████╗ ██╗      ██████╗ "
         "██╔══██╗██╔════╝╚══██╔══╝██║██╔════╝██╔═══██╗██║     ██╔═══██╗"
@@ -74,7 +74,7 @@ function(reticolo_logo version)
     message(NOTICE "┃${_blank}┃")
 
     # Bottom rule carries the phase tag + version, like log.hpp splices v<ver>.
-    set(_tag " c o n f i g u r e ━ v${version} ")
+    set(_tag " ${tag} ━ v${version} ")
     # string(LENGTH) counts BYTES. The tag contains exactly one ━ (3 bytes in
     # UTF-8), so its display width is byte length - 2. Everything else is ASCII.
     string(LENGTH "${_tag}" _tag_bytes)
@@ -173,4 +173,28 @@ function(reticolo_dep_recap)
         string(SUBSTRING "${_kind}" 0 10 _kind)
         message(NOTICE "┃   ${_name}${_shown}${_kind}${_use}")
     endforeach()
+endfunction()
+
+# --- build-phase banner -------------------------------------------------------
+# `cmake --build` has no hook for "print this once at the start", so the logo is
+# an always-dirty custom target that everything else reaches through
+# reticolo::io. USES_TERMINAL puts it in Ninja's console pool, so it is
+# serialised rather than interleaved with compile output.
+#
+# The console pool is what makes this work: Ninja gives the target the terminal
+# and suppresses its own status lines while it runs, so the logo can never be
+# interleaved mid-frame with compile output. Verified landing first on both a
+# cold build (where sleef/Catch2 are also ready to run) and an incremental one.
+function(reticolo_attach_build_banner target)
+    if(NOT TARGET reticolo_banner)
+        add_custom_target(reticolo_banner
+            COMMAND ${CMAKE_COMMAND}
+                    -DRETICOLO_LOGO_VERSION=${PROJECT_VERSION}
+                    -P ${PROJECT_SOURCE_DIR}/cmake/PrintBanner.cmake
+            COMMENT "reticolo"   # else Ninja echoes the whole cmake -P command line
+            USES_TERMINAL
+            VERBATIM
+        )
+    endif()
+    add_dependencies(${target} reticolo_banner)
 endfunction()
