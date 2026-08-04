@@ -73,10 +73,14 @@ TEST_CASE("BoseGas s_full / s_imag and caches return double", "[api][sfull][bose
 
 // ---- #3: the fused MD kick takes a REAL scalar coefficient everywhere, so a
 // complex-field action no longer carries a complex k_dt. ----
-TEST_CASE("BoseGas fused kick takes a real coefficient and satisfies HasFusedKick", "[api][kick]") {
+// Per-action `HasFusedKick` assertions live at the top of each action's
+// force-consistency TU (phi4, phi6, sine_gordon, bose_gas), so they are not
+// repeated here. What IS specific to this file: a COMPLEX-field action still
+// takes a REAL kick coefficient — the contract that lets one integrator drive
+// both real and complex fields.
+TEST_CASE("BoseGas fused kick takes a real coefficient", "[api][kick]") {
     using C = std::complex<double>;
-    STATIC_REQUIRE(action::HasFusedKick<act::BoseGas<double>, Lattice<C>>);
-    STATIC_REQUIRE(action::HasFusedKick<act::Phi4<double>, Lattice<double>>);
+    // Gauge is the one family with no force-consistency static_assert of its own.
     STATIC_REQUIRE(action::HasFusedKick<act::Wilson<math::group::U1, double>,
                                         MatrixLinkLattice<math::group::U1, double>>);
 

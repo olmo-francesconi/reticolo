@@ -1,9 +1,8 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/nn/phi4.hpp>
 #include <reticolo/action/nn/sine_gordon.hpp>
-#include <reticolo/core/field/lattice.hpp>
-#include <reticolo/core/field/site.hpp>
-#include <reticolo/core/rng/fast_rng.hpp>
+
+#include "force_fd_helpers.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -18,46 +17,20 @@ using reticolo::action::HasFusedKick;
 using reticolo::action::HmcAction;
 using reticolo::action::Phi4;
 using reticolo::action::SineGordon;
+using reticolo::test::randomize;
+using reticolo::test::require_force_consistent;
 
 static_assert(HmcAction<SineGordon<double>, Lattice<double>>);
 static_assert(HasFusedKick<SineGordon<double>, Lattice<double>>);
-
-namespace {
-
-void randomize(Lattice<double>& phi, FastRng& rng) {
-    for (Site const x : phi.sites()) {
-        phi[x] = 0.5 * rng.normal();
-    }
-}
-
-}  // namespace
 
 TEST_CASE("SineGordon: compute_force matches central FD of s_full", "[physics][sine_gordon]") {
     SineGordon<double> const action{.kappa = 0.17, .alpha = 0.4};
 
     Lattice<double> phi{{6, 6, 6}};
-    Lattice<double> force{phi.indexing()};
     FastRng rng{2718};
     randomize(phi, rng);
 
-    action.compute_force(phi, force);
-
-    constexpr double k_eps = 1e-4;
-    constexpr double k_tol = 1e-6;
-
-    for (std::size_t trial = 0; trial < 25; ++trial) {
-        Site const x     = Site{rng.uniform_int(phi.nsites())};
-        double const old = phi[x];
-
-        phi[x]               = old + k_eps;
-        double const s_plus  = action.s_full(phi);
-        phi[x]               = old - k_eps;
-        double const s_minus = action.s_full(phi);
-        phi[x]               = old;
-
-        double const grad_numeric = (s_plus - s_minus) / (2.0 * k_eps);
-        REQUIRE(force[x] == Catch::Approx((-grad_numeric)).margin(k_tol));
-    }
+    require_force_consistent(action, phi, rng, {.tol = 1e-6});
 }
 
 TEST_CASE("SineGordon at alpha=0 reduces to Phi4 with lambda=0", "[physics][sine_gordon]") {

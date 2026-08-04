@@ -384,12 +384,31 @@ Catch2 v3, vendored via FetchContent. One file per target;
 
 ```cmake
 # tests/CMakeLists.txt
-reticolo_add_test(test_my_thing  unit/test_my_thing.cpp)
+reticolo_add_test(test_my_thing  physics  unit/test_my_thing.cpp)
 ```
 
-`reticolo_add_test()` adds `tests/test_main.cpp` to the sources, links
-`reticolo::reticolo + Catch2::Catch2`, configures warnings, and runs
-`catch_discover_tests`. One file + one line; done.
+`reticolo_add_test(<name> <category> <source>)` adds `tests/test_main.cpp` to the
+sources, links `reticolo::reticolo + Catch2::Catch2`, configures warnings, and
+runs `catch_discover_tests`. One file + one line; done.
+
+The **category** is mandatory and must be one of `core rng physics io app cuda`;
+an unknown value is a configure-time `FATAL_ERROR`, so nothing lands
+uncategorised. It becomes a CTest label, which is what lets the suite be run and
+reported per area — `ctest -L physics`, and the per-category summary that
+`tools/check.sh` prints. Pick by what the test is *about*, not where the file
+lives:
+
+| category  | covers |
+|-----------|--------|
+| `core`    | geometry, indexing, lattice memory/padding, partition, stencil dispatch, cross-cutting API contracts |
+| `rng`     | generators, streams, reproducibility |
+| `physics` | actions, gauge algebra, updaters, orchestration, observables |
+| `io`      | writer/reader, checkpoints, CLI, logging |
+| `app`     | end-to-end tests that exec an app binary |
+| `cuda`    | device tests and the CUDA lint gates |
+
+`tests/apps/` targets go through `reticolo_add_app_smoke()`, which supplies the
+`app` category itself.
 
 ## The four canonical patterns
 

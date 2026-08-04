@@ -1,10 +1,9 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/nn/phi4.hpp>
-#include <reticolo/core/field/lattice.hpp>
-#include <reticolo/core/field/site.hpp>
-#include <reticolo/core/rng/fast_rng.hpp>
 
-#include <cmath>
+#include "force_fd_helpers.hpp"
+
+#include <cstddef>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -15,51 +14,24 @@ using reticolo::Site;
 using reticolo::action::HasFusedKick;
 using reticolo::action::HmcAction;
 using reticolo::action::Phi4;
+using reticolo::test::randomize;
+using reticolo::test::require_force_consistent;
 
 static_assert(HmcAction<Phi4<double>, Lattice<double>>);
 static_assert(HasFusedKick<Phi4<double>, Lattice<double>>);
 
-// Seed a small lattice with iid N(0, 1) values.
-template <class T>
-static void randomize(Lattice<T>& phi, FastRng& rng) {
-    for (Site x : phi.sites()) {
-        phi[x] = static_cast<T>(rng.normal());
-    }
-}
-
 TEST_CASE("Phi4: compute_force matches central finite difference of s_full", "[physics][phi4]") {
     Phi4<double> const action{.kappa = 0.18, .lambda = 0.04};
-
     Lattice<double> phi{{6, 6, 6}};
-    Lattice<double> force{phi.indexing()};
     FastRng rng{56789};
     randomize(phi, rng);
 
-    action.compute_force(phi, force);
-
-    constexpr double k_eps = 1e-4;
-    constexpr double k_tol = 1e-7;  // central diff O(eps^2) ~ 1e-8; allow margin
-
-    for (std::size_t trial = 0; trial < 25; ++trial) {
-        Site const x     = Site{rng.uniform_int(phi.nsites())};
-        double const old = phi[x];
-
-        phi[x]              = old + k_eps;
-        double const s_plus = action.s_full(phi);
-
-        phi[x]               = old - k_eps;
-        double const s_minus = action.s_full(phi);
-
-        phi[x] = old;
-
-        double const grad_numeric    = (s_plus - s_minus) / (2.0 * k_eps);
-        double const force_predicted = force[x];
-        double const force_numeric   = -grad_numeric;
-
-        REQUIRE(force_predicted == Catch::Approx(force_numeric).margin(k_tol));
-    }
+    require_force_consistent(action, phi, rng);
 }
 
+// Closed forms the FD sweep cannot catch: a wrong overall sign or a dropped term
+// still differentiates consistently, so pin the free-theory force and the
+// zero-coupling action against hand-derived expressions.
 TEST_CASE("Phi4: free-theory limit (lambda=0) gives force = 2 kappa sum_nn - 2 phi",
           "[physics][phi4]") {
     Phi4<double> const action{.kappa = 0.15, .lambda = 0.0};
@@ -70,7 +42,7 @@ TEST_CASE("Phi4: free-theory limit (lambda=0) gives force = 2 kappa sum_nn - 2 p
     randomize(phi, rng);
     action.compute_force(phi, force);
 
-    for (Site x : phi.sites()) {
+    for (Site const x : phi.sites()) {
         double nbrs = 0.0;
         for (std::size_t mu = 0; mu < phi.ndims(); ++mu) {
             nbrs += phi[phi.next(x, mu)] + phi[phi.prev(x, mu)];
@@ -88,7 +60,7 @@ TEST_CASE("Phi4: zero coupling (kappa=0, lambda=0) reduces to phi^2 + 1", "[phys
     randomize(phi, rng);
 
     double s = 0.0;
-    for (Site x : phi.sites()) {
+    for (Site const x : phi.sites()) {
         s += phi[x] * phi[x];
     }
     REQUIRE(action.s_full(phi) == Catch::Approx(s).margin(1e-12));
