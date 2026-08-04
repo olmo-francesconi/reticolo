@@ -27,7 +27,98 @@ struct MagSum : action::NNAction<MagSum<T>, T> {
     }
 };
 
+// The same observable, but exposing the fused `s_full_and_force` fast-path.
+// WindowedAction probes for it and, when present, gets Q and −dQ/dφ from ONE
+// sweep instead of two. Exact here because both kernels ignore the neighbour
+// aggregate, so the fused pass evaluates identical per-site expressions.
+template <class T = double>
+struct MagSumFused : action::NNAction<MagSumFused<T>, T> {
+    using value_type = T;
+    [[nodiscard]] auto action_kernel() const noexcept {
+        return [](T self, T /*agg*/) { return self; };
+    }
+    [[nodiscard]] auto force_kernel() const noexcept {
+        return [](std::size_t /*i*/, T /*self*/, T /*agg*/) { return T{-1}; };
+    }
+    [[nodiscard]] double s_full_and_force(Lattice<T> const& l, Lattice<T>& force) const noexcept {
+        return this->staged_force_energy(l, force, [](std::size_t /*i*/, T self, T /*agg*/) {
+            return std::pair<T, T>{T{-1}, self};
+        });
+    }
+};
+
+template <class Obs>
+constexpr bool k_constraint_fuses = requires(action::ObservableConstraint<Obs> const& c,
+                                             act::Phi4<double> const& b,
+                                             Lattice<double> const& l,
+                                             Lattice<double>& f) { c.value_and_force(b, l, f); };
+
 }  // namespace
+
+// The fused path must be selected only when the observable offers it — the
+// branch is compile-time, so a silent mis-detection would route every custom
+// observable through the slow two-sweep form (or worse, the reverse).
+TEST_CASE("ObservableConstraint fuses Q value+gradient only when the observable can",
+          "[action][window][fused]") {
+    STATIC_REQUIRE(k_constraint_fuses<MagSumFused<double>>);
+    STATIC_REQUIRE_FALSE(k_constraint_fuses<MagSum<double>>);
+}
+
+// Fusing must not change the answer: the fused and unfused constraints wrap the
+// same base action and window, so both force paths must agree to roundoff.
+TEST_CASE("WindowedAction: fused observable force equals the two-sweep force",
+          "[action][window][fused]") {
+    Lattice<double> phi{{6, 6}};
+    FastRng rng{31337};
+    double* const d = phi.data();
+    for (std::size_t i = 0; i < phi.nsites(); ++i) {
+        d[i] = 0.3 * rng.normal();
+    }
+
+    act::Phi4<double> const base{.kappa = 0.18, .lambda = 1.0};
+    action::WindowedAction<act::Phi4<double>,
+                           double,
+                           Lattice<double>,
+                           action::ObservableConstraint<MagSumFused<double>>>
+        fused{.base = base, .a = 0.3, .E_n = 2.0, .delta = 5.0};
+    action::WindowedAction<act::Phi4<double>,
+                           double,
+                           Lattice<double>,
+                           action::ObservableConstraint<MagSum<double>>>
+        plain{.base = base, .a = 0.3, .E_n = 2.0, .delta = 5.0};
+
+    Lattice<double> f_fused{phi.indexing()};
+    Lattice<double> f_plain{phi.indexing()};
+    fused.compute_force(phi, f_fused);
+    plain.compute_force(phi, f_plain);
+
+    // The fused kick is the path an LLR MD step actually runs.
+    constexpr double k_dt = 0.05;
+    Lattice<double> m_fused{phi.indexing()};
+    Lattice<double> m_plain{phi.indexing()};
+    fused.compute_force_and_kick(phi, m_fused, k_dt);
+    plain.compute_force_and_kick(phi, m_plain, k_dt);
+
+    for (std::size_t i = 0; i < phi.nsites(); ++i) {
+        INFO("site " << i);
+        REQUIRE(f_fused.data()[i] == Catch::Approx(f_plain.data()[i]).margin(1e-12));
+        REQUIRE(m_fused.data()[i] == Catch::Approx(m_plain.data()[i]).margin(1e-13));
+    }
+
+    // And the fused window still agrees with a central FD of its own s_full.
+    constexpr double eps = 1e-6;
+    for (std::size_t i = 0; i < phi.nsites(); i += 7) {
+        double const saved = d[i];
+        d[i]               = saved + eps;
+        double const sp    = fused.s_full(phi);
+        d[i]               = saved - eps;
+        double const sm    = fused.s_full(phi);
+        d[i]               = saved;
+        INFO("site " << i);
+        REQUIRE(f_fused.data()[i] ==
+                Catch::Approx(-(sp - sm) / (2.0 * eps)).epsilon(1e-5).margin(1e-6));
+    }
+}
 
 // The windowed force must be the analytic −dS_win/dφ, where the window is on an
 // arbitrary observable Q (not the action, not its imaginary part). Checked
