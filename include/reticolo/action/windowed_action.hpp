@@ -37,8 +37,9 @@ using scalar_of_t = real_scalar_t<T>;
 //     charge, … "simulate this action, window on that quantity."
 //
 // The self and imag defaults reproduce the previous two hardcoded modes
-// byte-for-byte (same formula calls, same caches); an arbitrary observable is a
-// new opt-in that runs the generic two-pass force `F_base + scale·F_Q`.
+// byte-for-byte (same formula calls, same caches); an arbitrary observable runs
+// the generic two-pass force `F_base + scale·F_Q`, collapsing Q's value and
+// gradient into ONE sweep when the observable exposes a fused `s_full_and_force`.
 
 // --- constraint policies ------------------------------------------------------
 
@@ -102,6 +103,17 @@ struct ObservableConstraint {
     template <class Base, class Field>
     void compute_force(Base const& /*b*/, Field const& l, Field& out) const noexcept {
         obs.compute_force(l, out);
+    }
+    // Fused Q + (−dQ/dfield) in one neighbour pass, present only when the
+    // observable offers the fast-path (any `NNAction` leaf that declares
+    // `s_full_and_force`, e.g. Phi4, or `Wilson<G>`). Halves the sweeps per MD
+    // force evaluation; like every `s_full_and_force`, it leaves the
+    // observable's `last_s_full` cache alone — HMC's h0/h1 `s_full` calls own it.
+    template <class Base, class Field>
+    [[nodiscard]] auto value_and_force(Base const& /*b*/, Field const& l, Field& out) const noexcept
+        requires requires(Obs const& o, Field const& cl, Field& f) { o.s_full_and_force(cl, f); }
+    {
+        return obs.s_full_and_force(l, out);
     }
     template <class Base>
     [[nodiscard]] double last(Base const& /*b*/) const noexcept {
@@ -203,10 +215,9 @@ struct WindowedAction {
         } else {
             // Generic: F = F_base + (a + (Q − E_n)/δ²)·F_Q.
             base.compute_force(l, force);
-            auto const q         = static_cast<scalar_t>(constraint.value(base, l));
-            scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
             Field& q_force       = scratch_(force.indexing());
-            constraint.compute_force(base, l, q_force);
+            scalar_t const q     = constraint_value_and_force_(l, q_force);
+            scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
             exec::kick_add(force, q_force, scale);  // force += scale·F_Q
         }
     }
@@ -226,19 +237,24 @@ struct WindowedAction {
                 base.compute_force_and_kick(l, mom, k_dt * scale);
             }
         } else {
-            auto const q         = static_cast<scalar_t>(constraint.value(base, l));
-            scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
             // Fused combined kernel (F_R + scale·F_Q in one pass) when the
             // constraint offers it (ImagConstraint over a base that fuses);
-            // else the two-pass form.
+            // else the two-pass form, which still fuses Q's own value+gradient
+            // when the constraint exposes `value_and_force`.
             if constexpr (requires {
-                              constraint.combined_and_kick(base, l, mom, scalar_t{1}, scale, k_dt);
+                              constraint.combined_and_kick(
+                                  base, l, mom, scalar_t{1}, scalar_t{1}, k_dt);
                           }) {
+                auto const q         = static_cast<scalar_t>(constraint.value(base, l));
+                scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
                 constraint.combined_and_kick(base, l, mom, scalar_t{1}, scale, k_dt);
             } else {
+                // Q's pass runs first (it only reads `l`, which no kick touches),
+                // so the two `kick_add`s stay in base-then-Q order regardless.
+                Field& q_force       = scratch_(mom.indexing());
+                scalar_t const q     = constraint_value_and_force_(l, q_force);
+                scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
                 base.compute_force_and_kick(l, mom, k_dt);
-                Field& q_force = scratch_(mom.indexing());
-                constraint.compute_force(base, l, q_force);
                 exec::kick_add(mom, q_force, k_dt * scale);
             }
         }
@@ -250,6 +266,19 @@ struct WindowedAction {
     mutable std::optional<Field> scratch_storage{};
 
 private:
+    // Q and F_Q for the non-self path: one fused sweep when the constraint
+    // offers `value_and_force`, else the value sweep + the force sweep.
+    [[nodiscard]] scalar_t constraint_value_and_force_(Field const& l,
+                                                       Field& q_force) const noexcept {
+        if constexpr (requires { constraint.value_and_force(base, l, q_force); }) {
+            return static_cast<scalar_t>(constraint.value_and_force(base, l, q_force));
+        } else {
+            auto const q = static_cast<scalar_t>(constraint.value(base, l));
+            constraint.compute_force(base, l, q_force);
+            return q;
+        }
+    }
+
     [[nodiscard]] Field& scratch_(std::shared_ptr<Indexing const> idx) const noexcept {
         if (!scratch_storage) {
             scratch_storage.emplace(std::move(idx));
