@@ -70,6 +70,8 @@ int main(int argc, char** argv) {
                         .n_therm_rm       = n_therm_rm,
                         .n_meas_rm        = n_meas_rm,
                         .exchange         = (exchange != 0),
+                        .warm_therm       = rf.warm_therm,
+                        .warm_max_traj    = rf.warm_max_traj,
                         .replica_threads  = rf.replica_threads,
                         .slabs            = rf.slabs,
                         .checkpoint_path  = rf.checkpoint,

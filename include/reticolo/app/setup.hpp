@@ -64,15 +64,18 @@ inline CommonFlags common_flags(cli::Parser& p, CommonDefaults const& d) {
     return (std::filesystem::path{f.workspace} / f.out).string();
 }
 
-// Stable references to the LLR run-control flags: per-replica HMC threading and
-// checkpoint/resume. The total CPU budget is NOT a flag — `orch::plan_threads`
-// reads it from the OpenMP environment (OMP_NUM_THREADS) and splits it into an
-// outer replica team and inner per-replica HMC teams. Single-sourced because
-// every LLR app takes the same five with the same wording; the app feeds
-// `replica_threads` to `orch::plan_threads` and the rest into its DriverSpec.
+// Stable references to the LLR run-control flags: per-replica HMC threading,
+// the warm-seating budget, and checkpoint/resume. The total CPU budget is NOT a
+// flag — `orch::plan_threads` reads it from the OpenMP environment
+// (OMP_NUM_THREADS) and splits it into an outer replica team and inner
+// per-replica HMC teams. Single-sourced because every LLR app takes the same
+// seven with the same wording; the app feeds `replica_threads` to
+// `orch::plan_threads` and the rest into its DriverSpec.
 struct LlrRunFlags {
     int const& replica_threads;
     int const& slabs;
+    int const& warm_therm;
+    int const& warm_max_traj;
     std::string const& resume;
     std::string const& checkpoint;
     int const& checkpoint_every;
@@ -82,6 +85,14 @@ inline LlrRunFlags llr_run_flags(cli::Parser& p) {
     int const& replica_threads = p.opt<int>(
         "replica_threads", 1, "HMC threads per replica (1 = serial default; 0 = auto-balance)");
     int const& slabs = p.opt<int>("slabs_per_thread", 0, "HMC slab granularity per thread (0 = 1)");
+    // The warm phase seats each replica in its window before NR; it dominates
+    // short runs (thousands of trajectories per replica against a handful of NR/RM
+    // sweeps) and is skipped entirely on --resume. Exposed so smoke tests and
+    // tuning runs can bound it; 0 skips it.
+    int const& warm_therm =
+        p.opt<int>("warm_therm", 200, "base-action thermalisation trajectories before seating");
+    int const& warm_max_traj = p.opt<int>(
+        "warm_max_traj", 2000, "max seating trajectories per replica (0 = no warm phase)");
     auto const& resume =
         p.opt<std::string>("resume", std::string{}, "resume from an LLR ensemble checkpoint (.h5)");
     auto const& checkpoint = p.opt<std::string>(
@@ -90,6 +101,8 @@ inline LlrRunFlags llr_run_flags(cli::Parser& p) {
         p.opt<int>("checkpoint_every", 0, "sweeps between checkpoints (0 = only at end)");
     return {.replica_threads  = replica_threads,
             .slabs            = slabs,
+            .warm_therm       = warm_therm,
+            .warm_max_traj    = warm_max_traj,
             .resume           = resume,
             .checkpoint       = checkpoint,
             .checkpoint_every = checkpoint_every};
