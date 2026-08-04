@@ -1,8 +1,7 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/nn/xy.hpp>
-#include <reticolo/core/field/lattice.hpp>
-#include <reticolo/core/field/site.hpp>
-#include <reticolo/core/rng/fast_rng.hpp>
+
+#include "force_fd_helpers.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -15,6 +14,7 @@ using reticolo::Lattice;
 using reticolo::Site;
 using reticolo::action::HmcAction;
 using reticolo::action::Xy;
+using reticolo::test::require_force_consistent;
 
 static_assert(HmcAction<Xy<double>, Lattice<double>>);
 
@@ -33,28 +33,10 @@ TEST_CASE("Xy: compute_force matches central FD of s_full", "[physics][xy]") {
     Xy<double> const action{.beta = 0.9};
 
     Lattice<double> theta{{6, 6}};
-    Lattice<double> force{theta.indexing()};
     FastRng rng{29};
     randomize_angles(theta, rng);
 
-    action.compute_force(theta, force);
-
-    constexpr double k_eps = 1e-4;
-    constexpr double k_tol = 1e-6;
-
-    for (std::size_t trial = 0; trial < 25; ++trial) {
-        Site const x     = Site{rng.uniform_int(theta.nsites())};
-        double const old = theta[x];
-
-        theta[x]             = old + k_eps;
-        double const s_plus  = action.s_full(theta);
-        theta[x]             = old - k_eps;
-        double const s_minus = action.s_full(theta);
-        theta[x]             = old;
-
-        double const grad_numeric = (s_plus - s_minus) / (2.0 * k_eps);
-        REQUIRE(std::abs(force[x] - (-grad_numeric)) < k_tol);
-    }
+    require_force_consistent(action, theta, rng, {.tol = 1e-6});
 }
 
 TEST_CASE("Xy at beta=0 yields zero action and zero force", "[physics][xy]") {
