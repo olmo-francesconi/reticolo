@@ -7,6 +7,27 @@ project(
     LANGUAGES CXX
 )
 
+# This file is a table of contents. The substance lives in cmake/:
+#   ReticoloOptions.cmake     options, compiler floor, configuration summary
+#   ReticoloDependencies.cmake HDF5 / OpenMP / cxxopts / sleef
+#   ReticoloWarnings.cmake    the project warning policy
+#   ReticoloBuildStamp.cmake  build-time git stamping for the run record
+#
+# Four targets, and the dependency direction is one-way:
+#   reticolo::core  INTERFACE, header-only        (never sees <hdf5.h> or CUDA)
+#   reticolo::io    STATIC, the only HDF5 linker
+#   reticolo::cli   INTERFACE, wraps cxxopts
+#   reticolo::cuda  INTERFACE, header-only device stack (opt-in)
+#   reticolo::reticolo  umbrella over whichever of the above are enabled
+
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+include(ReticoloOptions)
+include(ReticoloDependencies)
+include(ReticoloWarnings)
+include(ReticoloBuildStamp)
+
+reticolo_declare_options()
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
@@ -16,93 +37,50 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(RETICOLO_BUILD_APPS         "Build reference apps"                OFF)
-option(RETICOLO_BUILD_BENCHMARKS   "Build the bench_* suite (needs apps)" OFF)
-option(RETICOLO_BUILD_EXAMPLES     "Build standalone example consumers"  OFF)
-option(RETICOLO_BUILD_TESTS        "Build test suite"                    OFF)
-option(RETICOLO_BUILD_IO           "Build the HDF5-backed io subsystem"  ON)
-option(RETICOLO_ENABLE_CUDA        "Build the CUDA backend (experimental)" OFF)
-option(RETICOLO_ENABLE_OPENMP      "Enable OpenMP threading in apps"     ON)
-option(RETICOLO_WARNINGS_AS_ERRORS "Treat warnings as errors"            OFF)
-option(RETICOLO_TUNE_NATIVE        "Build with -march=native"            ON)
-
-# AVX-512 note: compilers default to 256-bit vectors even with -mavx512f
-# (prefer-vector-width=256), so the gauge site-batch defaults to 8 lanes.
-# To use full 512-bit registers on an AVX-512 host, configure with
-#   -DCMAKE_CXX_FLAGS="-mprefer-vector-width=512 -DRETICOLO_GAUGE_K_BATCH_MAX=16"
-# (see include/reticolo/action/detail/gauge_group/base.hpp).
-
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
-include(ReticoloWarnings)
-
-if(RETICOLO_BUILD_IO)
-    find_package(HDF5 REQUIRED COMPONENTS C)
-endif()
-
-# Optional OpenMP. Exposed as an INTERFACE target so apps that opt in just
-# link `reticolo_openmp`. Pragmas in core headers are inert without -fopenmp,
-# so a toolchain that lacks OpenMP (e.g. Apple Clang) degrades to serial rather
-# than failing the configure — important for standalone consumers.
-if(RETICOLO_ENABLE_OPENMP)
-    find_package(OpenMP COMPONENTS CXX)
-    if(OpenMP_CXX_FOUND)
-        add_library(reticolo_openmp INTERFACE)
-        add_library(reticolo::openmp ALIAS reticolo_openmp)
-        target_link_libraries(reticolo_openmp INTERFACE OpenMP::OpenMP_CXX)
-    else()
-        message(STATUS "reticolo: OpenMP not found — building without it (serial)")
-        set(RETICOLO_ENABLE_OPENMP OFF)
-    endif()
-endif()
-
-include(FetchContent)
-FetchContent_Declare(
-    cxxopts
-    GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
-    GIT_TAG        v3.2.1
-    GIT_SHALLOW    TRUE
-    SYSTEM
-)
-set(CXXOPTS_BUILD_EXAMPLES OFF CACHE INTERNAL "")
-set(CXXOPTS_BUILD_TESTS    OFF CACHE INTERNAL "")
-set(CXXOPTS_ENABLE_INSTALL OFF CACHE INTERNAL "")
-FetchContent_MakeAvailable(cxxopts)
-
-# Sleef: portable vector libm (sin/cos/exp). Used by the transcendental action
-# hot loops (SineGordon, XY, CompactU1). We only need the main vector lib —
-# disable DFT, quad, GNU ABI shims, scalar-only lib, and tests.
-FetchContent_Declare(
-    sleef
-    GIT_REPOSITORY https://github.com/shibatch/sleef.git
-    GIT_TAG        3.6.1
-    GIT_SHALLOW    TRUE
-    SYSTEM
-)
-set(SLEEF_BUILD_DFT            OFF CACHE INTERNAL "")
-set(SLEEF_BUILD_QUAD           OFF CACHE INTERNAL "")
-set(SLEEF_BUILD_GNUABI_LIBS    OFF CACHE INTERNAL "")
-set(SLEEF_BUILD_SCALAR_LIB     OFF CACHE INTERNAL "")
-set(SLEEF_BUILD_INLINE_HEADERS OFF CACHE INTERNAL "")
-set(SLEEF_BUILD_TESTS          OFF CACHE INTERNAL "")
-set(SLEEF_BUILD_LIBM           ON  CACHE INTERNAL "")
-set(SLEEF_BUILD_SHARED_LIBS    OFF CACHE INTERNAL "")
-set(BUILD_SHARED_LIBS          OFF CACHE INTERNAL "")
-FetchContent_MakeAvailable(sleef)
-
-execute_process(
-    COMMAND git rev-parse --short HEAD
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    OUTPUT_VARIABLE  RETICOLO_GIT_COMMIT
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    RESULT_VARIABLE  _reticolo_git_rc
-    ERROR_QUIET
-)
-if(NOT _reticolo_git_rc EQUAL 0)
-    set(RETICOLO_GIT_COMMIT "unknown")
-endif()
+reticolo_require_compiler()
 
 # ---------------------------------------------------------------------------
-# reticolo::core  (header-only)
+# Dependencies
+# ---------------------------------------------------------------------------
+if(RETICOLO_BUILD_IO)
+    reticolo_find_hdf5()
+endif()
+if(RETICOLO_ENABLE_OPENMP)
+    reticolo_find_openmp()  # may switch RETICOLO_ENABLE_OPENMP off
+endif()
+reticolo_fetch_cxxopts()
+reticolo_fetch_sleef()
+
+# ---------------------------------------------------------------------------
+# Build metadata
+# ---------------------------------------------------------------------------
+# Configure-time capture, used for the console banner and the compile-flags
+# stamp. The AUTHORITATIVE per-run git stamp is regenerated at build time — see
+# cmake/ReticoloBuildStamp.cmake — because these go stale the moment you commit.
+function(_reticolo_git out_var)
+    execute_process(
+        COMMAND git ${ARGN}
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        OUTPUT_VARIABLE _out
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE _rc
+        ERROR_QUIET
+    )
+    if(NOT _rc EQUAL 0 OR _out STREQUAL "")
+        set(_out "unknown")
+    endif()
+    set(${out_var} "${_out}" PARENT_SCOPE)
+endfunction()
+
+_reticolo_git(RETICOLO_GIT_COMMIT rev-parse --short HEAD)
+_reticolo_git(RETICOLO_GIT_BRANCH rev-parse --abbrev-ref HEAD)
+
+string(TOUPPER "${CMAKE_BUILD_TYPE}" _reticolo_build_type_upper)
+set(_reticolo_compile_flags "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_reticolo_build_type_upper}}")
+string(STRIP "${_reticolo_compile_flags}" _reticolo_compile_flags)
+
+# ---------------------------------------------------------------------------
+# reticolo::core  (INTERFACE, header-only)
 # ---------------------------------------------------------------------------
 add_library(reticolo_core INTERFACE)
 add_library(reticolo::core ALIAS reticolo_core)
@@ -110,7 +88,6 @@ add_library(reticolo::core ALIAS reticolo_core)
 target_compile_features(reticolo_core INTERFACE cxx_std_20)
 target_include_directories(reticolo_core INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
 )
 # Sleef's exported target doesn't propagate its build-tree include dir to
 # consumers (it only sets it on install). Pin the generated <sleef.h> path
@@ -123,21 +100,6 @@ target_link_libraries(reticolo_core INTERFACE sleef)
 # picks up `-fopenmp` and libomp without having to opt in per-app.
 if(RETICOLO_ENABLE_OPENMP)
     target_link_libraries(reticolo_core INTERFACE reticolo::openmp)
-endif()
-
-string(TOUPPER "${CMAKE_BUILD_TYPE}" _reticolo_build_type_upper)
-set(_reticolo_compile_flags "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_reticolo_build_type_upper}}")
-string(STRIP "${_reticolo_compile_flags}" _reticolo_compile_flags)
-
-execute_process(
-    COMMAND git rev-parse --abbrev-ref HEAD
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    OUTPUT_VARIABLE RETICOLO_GIT_BRANCH
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-)
-if(NOT RETICOLO_GIT_BRANCH)
-    set(RETICOLO_GIT_BRANCH "unknown")
 endif()
 
 target_compile_definitions(reticolo_core INTERFACE
@@ -161,34 +123,31 @@ target_compile_options(reticolo_core INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:-ffp-contract=on>
 )
 
+# AVX-512 note: compilers default to 256-bit vectors even with -mavx512f
+# (prefer-vector-width=256), so the gauge site-batch defaults to 8 lanes. For
+# full 512-bit registers on an AVX-512 host, configure with
+#   -DCMAKE_CXX_FLAGS="-mprefer-vector-width=512 -DRETICOLO_GAUGE_K_BATCH_MAX=16"
+# (see include/reticolo/math/group/base.hpp).
 if(RETICOLO_TUNE_NATIVE)
     target_compile_options(reticolo_core INTERFACE
         $<$<COMPILE_LANGUAGE:CXX>:-march=native>
     )
 endif()
 
-reticolo_configure_warnings(reticolo_core)
+# NOTE: the warning policy is deliberately NOT applied to reticolo_core. It is an
+# INTERFACE target, so `reticolo_configure_warnings` would attach the flags with
+# INTERFACE scope and export -Wall/-Wextra/-Wconversion/-Werror to every consumer
+# — the standalone examples and any external project that links reticolo::core
+# would be judged by OUR policy. Each compiled target in this repo calls
+# reticolo_configure_warnings() on itself instead (src/io, src/lint, apps, tests).
 
 # ---------------------------------------------------------------------------
-# reticolo::io  (static; owns libhdf5)
+# reticolo::io (STATIC; owns libhdf5) + reticolo::cli + the lint amalgamation
 # ---------------------------------------------------------------------------
 if(RETICOLO_BUILD_IO)
     add_subdirectory(src/io)
-endif()
-
-# ---------------------------------------------------------------------------
-# reticolo::cli  (header-only; wraps cxxopts; needs reticolo::io for stamping)
-# ---------------------------------------------------------------------------
-if(RETICOLO_BUILD_IO)
     add_subdirectory(src/cli)
-endif()
-
-# ---------------------------------------------------------------------------
-# Lint amalgamation TU (CI-only — see src/lint/CMakeLists.txt for rationale).
-# Only registered if we have the umbrella's transitive deps.
-# ---------------------------------------------------------------------------
-if(RETICOLO_BUILD_IO)
-    add_subdirectory(src/lint)
+    add_subdirectory(src/lint)  # CI-only; see src/lint/CMakeLists.txt
 endif()
 
 # ---------------------------------------------------------------------------
@@ -208,7 +167,6 @@ if(RETICOLO_ENABLE_CUDA)
     add_library(reticolo::cuda ALIAS reticolo_cuda)
     target_include_directories(reticolo_cuda INTERFACE
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
     )
     target_link_libraries(reticolo_cuda INTERFACE CUDA::cudart)
 endif()
@@ -254,17 +212,4 @@ if(RETICOLO_ENABLE_CUDA)
     endif()
 endif()
 
-message(STATUS "reticolo: version       ${PROJECT_VERSION}")
-message(STATUS "reticolo: commit        ${RETICOLO_GIT_COMMIT}")
-message(STATUS "reticolo: build type    ${CMAKE_BUILD_TYPE}")
-message(STATUS "reticolo: C++ standard  ${CMAKE_CXX_STANDARD}")
-message(STATUS "reticolo: native tuning ${RETICOLO_TUNE_NATIVE}")
-if(RETICOLO_BUILD_IO)
-    message(STATUS "reticolo: HDF5          ${HDF5_VERSION}")
-endif()
-if(RETICOLO_ENABLE_CUDA)
-    message(STATUS "reticolo: CUDA arch     ${CMAKE_CUDA_ARCHITECTURES}")
-endif()
-if(RETICOLO_ENABLE_OPENMP)
-    message(STATUS "reticolo: OpenMP        ${OpenMP_CXX_VERSION}")
-endif()
+reticolo_print_summary()
