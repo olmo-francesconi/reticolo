@@ -26,11 +26,32 @@
     #include <unistd.h>
 #endif
 
+// The git stamp is regenerated at BUILD time (cmake/ReticoloBuildStamp.cmake)
+// into this header, so `/run@commit` is the commit that produced THIS binary —
+// not whatever HEAD was at the last `cmake` invocation. This TU is the only
+// consumer, so a new commit recompiles one file rather than the whole tree.
+// __has_include keeps the file compilable outside the CMake build (clang-tidy on
+// a stale DB, an IDE indexer) — it falls back to the compile-definition value.
+#if __has_include(<reticolo_build_stamp.h>)
+    #include <reticolo_build_stamp.h>
+#endif
+
 #ifndef RETICOLO_VERSION
     #define RETICOLO_VERSION "0.0.0"
 #endif
-#ifndef RETICOLO_GIT_COMMIT
-    #define RETICOLO_GIT_COMMIT "unknown"
+#ifdef RETICOLO_STAMP_GIT_COMMIT
+    #define RETICOLO_RUN_COMMIT RETICOLO_STAMP_GIT_COMMIT
+#elif defined(RETICOLO_GIT_COMMIT)
+    #define RETICOLO_RUN_COMMIT RETICOLO_GIT_COMMIT
+#else
+    #define RETICOLO_RUN_COMMIT "unknown"
+#endif
+#ifdef RETICOLO_STAMP_GIT_BRANCH
+    #define RETICOLO_RUN_BRANCH RETICOLO_STAMP_GIT_BRANCH
+#elif defined(RETICOLO_GIT_BRANCH)
+    #define RETICOLO_RUN_BRANCH RETICOLO_GIT_BRANCH
+#else
+    #define RETICOLO_RUN_BRANCH "unknown"
 #endif
 #ifndef RETICOLO_BUILD_TYPE
     #define RETICOLO_BUILD_TYPE "Unknown"
@@ -277,7 +298,7 @@ struct Writer::Impl {
 
         write_string_attr(grp, "cmdline", join_argv(argc, argv));
         write_string_attr(grp, "version", RETICOLO_VERSION);
-        write_string_attr(grp, "commit", RETICOLO_GIT_COMMIT);
+        write_string_attr(grp, "commit", RETICOLO_RUN_COMMIT);
         write_string_attr(grp, "build_type", RETICOLO_BUILD_TYPE);
         write_string_attr(grp, "compile_flags", RETICOLO_COMPILE_FLAGS);
         write_string_attr(grp, "hostname", hostname_str());

@@ -17,12 +17,19 @@ target_include_directories(reticolo_io PUBLIC
 target_compile_features(reticolo_io PUBLIC cxx_std_20)
 
 # The /run@compile_flags stamp uses the same RETICOLO_COMPILE_FLAGS macro
-# the core target carries.
+# the core target carries. The git values here are only the fallback for a
+# non-CMake compile; the real ones come from the build-time stamp below.
 target_compile_definitions(reticolo_io PRIVATE
     RETICOLO_VERSION="${PROJECT_VERSION}"
     RETICOLO_GIT_COMMIT="${RETICOLO_GIT_COMMIT}"
+    RETICOLO_GIT_BRANCH="${RETICOLO_GIT_BRANCH}"
     RETICOLO_COMPILE_FLAGS="${_reticolo_compile_flags}"
     RETICOLO_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 )
+
+# `/run@commit` must name the commit that produced this binary, so the stamp is
+# refreshed at build time and attached here — reticolo_io is the only target
+# that writes the run record, so a commit rebuilds writer.cpp and nothing else.
+reticolo_attach_build_stamp(reticolo_io)
 
 reticolo_configure_warnings(reticolo_io)
