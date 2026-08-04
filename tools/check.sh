@@ -24,8 +24,8 @@ cd "$ROOT"
 PRESET="${PRESET:-macos-appleclang}"
 TIDY_DB="build/tidy22"
 
-say()  { printf '\033[1m== %s\033[0m\n' "$*"; }
-die()  { printf '\033[31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
+say()  { printf '== %s\n' "$*"; }
+die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 # --- tool resolution ---------------------------------------------------------
 resolve_clang_format() {
@@ -129,7 +129,17 @@ CATEGORIES=(core rng physics io app cuda)
 # Elapsed seconds with a fractional part, portable across macOS/Linux bash.
 now_s() { python3 -c 'import time; print(f"{time.time():.3f}")'; }
 
+# Version comes straight from the top-level CMakeLists so there is one source of
+# truth; PrintBanner.cmake renders the same logo the build phase prints.
+reticolo_logo() {
+    local tag="$1" ver
+    ver="$(sed -n 's/^set(RETICOLO_VERSION \([0-9.]*\))/\1/p' CMakeLists.txt)"
+    cmake -DRETICOLO_LOGO_VERSION="${ver:-0.0.0}" -DRETICOLO_LOGO_TAG="$tag" \
+          -P cmake/PrintBanner.cmake 2>&1
+}
+
 do_test() {
+    reticolo_logo "t e s t"
     say "ctest --preset $PRESET — by category"
 
     local -a fail_names=()
@@ -143,7 +153,7 @@ do_test() {
         [ -n "$n" ] || n=0
 
         if [ "$n" -eq 0 ]; then
-            printf '  \033[2m%-9s ▸ skipped — no tests registered for this preset\033[0m\n' "$cat"
+            printf '  %-9s ▸ skipped — no tests registered for this preset\n' "$cat"
             skipped=$((skipped + 1))
             continue
         fi
@@ -165,24 +175,24 @@ do_test() {
         total=$((total + n)); passed=$((passed + npass)); failed=$((failed + nfail))
 
         if [ "$rc" -eq 0 ]; then
-            printf '  \033[32m%-9s\033[0m ▸ %4d tests   %4d passed   %4d failed   %6ss\n' \
+            printf '  %-9s ▸ %4d tests   %4d passed   %4d failed   %6ss\n' \
                    "$cat" "$n" "$npass" "$nfail" "$dt"
         else
             # Full --output-on-failure diff first (that is what you actually
             # debug from), then the row — so the table at the end stays a
             # scannable overview rather than a replacement for the log.
-            printf '\n\033[31m--- %s failures ------------------------------------------\033[0m\n' "$cat"
+            printf '\n--- %s failures ------------------------------------------\n' "$cat"
             # Drop the per-test "Passed" progress chatter; keep the failing
             # tests' captured output and the summary.
             printf '%s\n\n' "$out" | grep -vE '^[[:space:]]*Start[[:space:]]+[0-9]+:|\.\.\.\.*   Passed '
-            printf '  \033[31m%-9s\033[0m ▸ %4d tests   %4d passed   \033[31m%4d FAILED\033[0m   %6ss\n' \
+            printf '  %-9s ▸ %4d tests   %4d passed   %4d FAILED   %6ss\n' \
                    "$cat" "$n" "$npass" "$nfail" "$dt"
             # ctest lists these as "  <N> - <name> (Failed) <label>": take the
             # text after " - ", then strip the trailing "(Status) label".
             printf '%s\n' "$out" | sed -n '/The following tests FAILED/,$p' | \
                 sed -n 's/^[[:space:]]*[0-9][0-9]* - //p' | \
                 sed 's/ ([A-Za-z][^)]*).*$//' | while read -r name; do
-                    printf '              \033[31m✖\033[0m %s\n' "$name"
+                    printf '              ✖ %s\n' "$name"
                     done
             fail_names+=("$cat")
         fi
@@ -192,25 +202,25 @@ do_test() {
     dt_all="$(python3 -c "print(f'{$t_end-$t_start:.2f}')")"
     printf '  %s\n' "──────────────────────────────────────────────────────────────"
     if [ "$failed" -eq 0 ]; then
-        printf '  \033[1m%-9s\033[0m ▸ %4d tests   \033[32m%4d passed\033[0m   %4d failed   %6ss\n' \
+        printf '  %-9s ▸ %4d tests   %4d passed   %4d failed   %6ss\n' \
                TOTAL "$total" "$passed" "$failed" "$dt_all"
     else
-        printf '  \033[1m%-9s\033[0m ▸ %4d tests   %4d passed   \033[31m%4d FAILED\033[0m   %6ss\n' \
+        printf '  %-9s ▸ %4d tests   %4d passed   %4d FAILED   %6ss\n' \
                TOTAL "$total" "$passed" "$failed" "$dt_all"
     fi
-    [ "$skipped" -gt 0 ] && printf '  \033[2m%d categor%s skipped\033[0m\n' \
+    [ "$skipped" -gt 0 ] && printf '  %d categor%s skipped\n' \
         "$skipped" "$([ "$skipped" -eq 1 ] && echo y || echo ies)"
 
     # Thread-invariance cases are only meaningful with OpenMP; without it
     # exec::traverse_threads() is hardcoded to 1 and they compare serial against
     # serial. Say so rather than let them read as real coverage.
     if ! grep -q '^RETICOLO_ENABLE_OPENMP:BOOL=ON' "build/$PRESET/CMakeCache.txt" 2>/dev/null; then
-        printf '  \033[2mnote: OpenMP off on this preset — thread-invariance cases in `core`\n'
-        printf '        ran degenerate (team size forced to 1).\033[0m\n'
+        printf '  note: OpenMP off on this preset — thread-invariance cases in `core`\n'
+        printf '        ran degenerate (team size forced to 1).\n'
     fi
 
     if [ "$failed" -gt 0 ]; then
-        printf '\n  rerun: \033[1mctest --preset %s -L %s --output-on-failure\033[0m\n' \
+        printf '\n  rerun: ctest --preset %s -L %s --output-on-failure\n' \
                "$PRESET" "${fail_names[0]}"
         return 1
     fi
@@ -237,5 +247,5 @@ case "$STAGE" in
     tidy)   do_tidy "$FIX";;
     build)  do_build;;
     all)    do_format "$FIX"; do_tidy "$FIX"; do_build
-            printf '\033[32m== all gates passed\033[0m\n';;
+            printf '== all gates passed\n';;
 esac
