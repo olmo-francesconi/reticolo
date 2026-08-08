@@ -18,7 +18,7 @@
 
 // Device HMC stack in single precision. f32 momenta/fields flow through axpy_f32
 // (MD) + the double-accumulating sum-of-squares reduction; this TU runs the same
-// checks hmc_probe.cu runs in f64, but to a bounded tolerance.
+// checks test_cuda_hmc.cu runs in f64, but to a bounded tolerance.
 
 namespace reticolo::cuda {
 

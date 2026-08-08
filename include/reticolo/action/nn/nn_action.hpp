@@ -1,8 +1,11 @@
 #pragma once
 
 #include <reticolo/action/cache.hpp>
+#include <reticolo/action/concepts.hpp>
+#include <reticolo/core/exec/nn_checkerboard.hpp>
 #include <reticolo/core/exec/nn_stencil.hpp>
 #include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/field_traits.hpp>
 #include <reticolo/core/field/lattice.hpp>
 
 #include <cstddef>
@@ -43,6 +46,11 @@ namespace reticolo::action {
 
 template <class Derived, class T>
 struct NNAction : SFullCache {
+    // The field this family operates on. Every action names its own field, so
+    // generic code (orchestration) can default to `Action::field_type` instead of
+    // making the caller spell a type the action already knows.
+    using field_type = Lattice<T>;
+
     [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
         auto comb        = action_combine_();
         auto fin         = derived_().action_kernel();
@@ -97,6 +105,89 @@ struct NNAction : SFullCache {
                 base, cnt, [sb](std::size_t i) { return static_cast<double>(sb[i]); });
         });
     }
+
+    // One colour of a local (Metropolis) sweep — the local-update peer of
+    // `compute_force_and_kick`, and built from the SAME leaf kernels, so a leaf
+    // gets it for free the moment it defines `action_kernel`. No new physics, no
+    // new formula file, nothing for a leaf to opt into.
+    //
+    // The ΔS identity that makes it free: the per-site energy of x is exactly the
+    // leaf's own `action_kernel(φ_x, agg)` once `agg` folds ALL 2d neighbours
+    // instead of the d forward ones — every bond touching x then appears exactly
+    // once, which is precisely the set of terms a move of φ_x changes. So
+    //
+    //     ΔS = action_scale · [ K(prop, fold(comb, prop)) − K(old, fold(comb, old)) ]
+    //
+    // and the overall scale rides along because it multiplies the total, hence
+    // every difference of totals. Folding per candidate rather than reusing one
+    // aggregate is what makes this correct for a BOND leaf, whose combine reads
+    // its first argument (XY); for a site leaf `comb` is IdentityCombine, it drops
+    // `cand`, and the compiler collapses the two folds back to one gather.
+    //
+    // A leaf whose action_kernel is not linear in the aggregate declares its own
+    // `metropolis_stencil`, hiding this one — the same override route as `s_full`.
+    //
+    // The `requires` clause is load-bearing, not decoration: `action::LocalAction`
+    // is a declaration check, so without it a leaf that has no `action_kernel`
+    // (SineGordon, whose s_full batches its transcendental and never forms one)
+    // would SATISFY the concept and then fail to compile at the first call. Same
+    // guard style as Wilson's `compute_force_and_kick` / `s_full_and_force`.
+    // The per-site local energy, as a callable `(cand, gather) -> T` over a
+    // checkerboard/sequential gather of all 2·d neighbours. Exposed — rather than
+    // kept inside metropolis_stencil — because a DECORATOR action needs to
+    // evaluate SEVERAL actions' local energies against ONE traversal:
+    // `WindowedAction` wants the base's ΔS and the constraint observable's ΔQ at
+    // the same site, and neither can drive its own sweep of the other's lattice.
+    //
+    // Kernel and scale stay SEPARATE, un-premultiplied, because a local energy is
+    // only ever used as a difference of two calls: applying the scale to the
+    // difference is what keeps this bit-identical to a hand-written ΔS, which is
+    // not a formality in f32.
+    [[nodiscard]] auto local_energy_kernel() const noexcept
+        requires requires(Derived const& d) { d.action_kernel(); }
+    {
+        // Fold the neighbours per candidate: a bond combine reads its first
+        // argument, so the two candidates of a move genuinely fold to different
+        // sums. For a site leaf `comb` is IdentityCombine, it drops `cand`, and
+        // the compiler collapses the two folds back to one gather.
+        return [comb = action_combine_(), fin = derived_().action_kernel()](T cand,
+                                                                            auto const& gather) {
+            T agg{};
+            gather([&](std::size_t /*mu*/, T nbr) { agg += comb(cand, nbr); });
+            return fin(cand, agg);
+        };
+    }
+
+    [[nodiscard]] T local_energy_scale() const noexcept { return action_scale_(); }
+
+    [[nodiscard]] LocalStats metropolis_stencil(Lattice<T>& l,
+                                                int color,
+                                                Lattice<T> const& noise,
+                                                Lattice<real_scalar_t<T>> const& logu,
+                                                T sigma) const noexcept
+        requires requires(Derived const& d) { d.action_kernel(); }
+    {
+        auto const e                     = local_energy_kernel();
+        T const sc                       = local_energy_scale();
+        T* const data                    = l.data();
+        T const* const nz                = noise.data();
+        real_scalar_t<T> const* const lu = logu.data();
+
+        return exec::nn_color_reduce<LocalStats>(
+            l, color, [&](std::size_t i, T self, auto const& gather) {
+                T const prop  = self + (sigma * nz[i]);
+                auto const ds = static_cast<double>(sc * (e(prop, gather) - e(self, gather)));
+                // −ΔS ≥ log u — the branchless form of `ΔS ≤ 0 or u < exp(−ΔS)`.
+                if (-ds >= static_cast<double>(lu[i])) {
+                    data[i] = prop;
+                    return LocalStats{.n_accepted = 1, .n_attempts = 1, .ds = ds};
+                }
+                return LocalStats{.n_accepted = 0, .n_attempts = 1, .ds = 0.0};
+            });
+    }
+
+    // Two checkerboard colours — a site field's elementary move is per site.
+    [[nodiscard]] static constexpr int n_colors(Lattice<T> const& /*l*/) noexcept { return 2; }
 
     // Lazy per-site scratch, sized to nsites — shared by the LLR fast-path and by
     // any leaf `prep`/`s_full` that batches a transcendental (SineGordon). Public

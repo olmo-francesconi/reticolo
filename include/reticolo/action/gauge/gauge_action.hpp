@@ -3,15 +3,15 @@
 #include <reticolo/action/cache.hpp>
 
 // GaugeAction<Derived> — the common interface for gauge (link-field) actions,
-// the gauge analogue of SiteAction / BondAction / ComplexAction. It owns the
+// the gauge analogue of NNAction / ComplexAction. It owns the
 // `last_s_full` cache and the HMC-concept member surface (`s_full` writes the
 // cache, `compute_force` forwards); the leaf supplies the physics.
 //
 // Unlike the scalar families the *traversal* cannot live in the base: a gauge
 // action sweeps plaquette planes over a direction-major link field, and the
-// per-plane work is fundamentally different per field type — U(1) batches four
-// signed angles through a Sleef cos/sin scratch on a `LinkLattice<T>`, while
-// SU(N) batches complex matrix products on a `MatrixLinkLattice<G,T>`. So the
+// per-plane work is fundamentally different per group — U(1) batches four
+// signed angles through a Sleef cos/sin scratch, while SU(N) batches complex
+// matrix products, both on the same `MatrixLinkLattice<G,T>`. So the
 // leaf owns the plane loop (or delegates it to a gauge-group model G), and the
 // base only requires two hooks:
 //

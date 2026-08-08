@@ -144,8 +144,8 @@ void run_action(char const* name,
                 char const* shape,
                 char const* th) {
     using T = typename Field::value_type;
-    Field mom{field.indexing()};
-    Field snap{field.indexing()};
+    Field mom{field.shape()};
+    Field snap{field.shape()};
     reticolo::bench::hot_init(mom, rng);
     double const V   = static_cast<double>(field.nsites());
     double const b   = static_cast<double>(field.bytes_per_site());

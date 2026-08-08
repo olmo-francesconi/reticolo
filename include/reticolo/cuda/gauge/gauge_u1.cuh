@@ -5,10 +5,11 @@
 // The gauge counterpart of stencil.cuh / reduce_fwd.cuh: a thread-per-LINK force
 // (a gather, never the CPU scatter) and a thread-per-SITE plaquette energy. The
 // link field is direction-major (link (mu, x) at flat index mu·nsites + x), the
-// same order as the host LinkLattice<T>.
+// same order as the host MatrixLinkLattice<U1,T> (n_real_components == 1).
 
 #include <reticolo/action/gauge/formula/wilson_u1_formula.hpp>
 #include <reticolo/cuda/check.hpp>
+#include <reticolo/cuda/checkerboard.cuh>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/reduce.cuh>
 
@@ -91,6 +92,98 @@ __global__ void plaq_force_gather_kernel(T const* __restrict__ field,
         acc += sin(fwd) - sin(bwd);
     }
     force[(static_cast<long>(mu) * ns) + x] = static_cast<T>(-beta * acc);
+}
+
+// Per-link U(1) Metropolis, one (direction, site parity) colour. Same colouring
+// argument as the SU(N) kernel; the staple is a plain complex sum here because a
+// 1x1 unitary is just e^{iθ}, so the local action is −β·Re(e^{iθ}·A) with
+// A = Σ_ν e^{i·(staple phase)}.
+template <class T>
+__global__ void u1_metropolis_kernel(T* __restrict__ field,
+                                     DeviceTopology topo,
+                                     int mu,
+                                     int parity,
+                                     double sigma,
+                                     double beta,
+                                     std::uint64_t seed,
+                                     std::uint64_t const* __restrict__ sweep,
+                                     double* __restrict__ ds_out,
+                                     double* __restrict__ acc_out) {
+    long const x  = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
+    long const ns = topo.nsites;
+    int const d   = topo.ndim;
+    if (x >= ns) {
+        return;
+    }
+    if (site_parity(topo, x) != parity) {
+        ds_out[x]  = 0.0;
+        acc_out[x] = 0.0;
+        return;
+    }
+    long const x_pmu = topo.next(x, mu);
+
+    // A = Σ_ν [ e^{i(θ_ν(x+μ) − θ_μ(x+ν) − θ_ν(x))}
+    //         + e^{i(−θ_ν(x+μ−ν) − θ_μ(x−ν) + θ_ν(x−ν))} ]
+    double a_re = 0.0;
+    double a_im = 0.0;
+    for (int nu = 0; nu < d; ++nu) {
+        if (nu == mu) {
+            continue;
+        }
+        long const x_pnu     = topo.next(x, nu);
+        long const x_mnu     = topo.prev(x, nu);
+        long const x_pmu_mnu = topo.prev(x_pmu, nu);
+        auto const th        = [&](int dir, long site) {
+            return static_cast<double>(field[(static_cast<long>(dir) * ns) + site]);
+        };
+        double const fwd = th(nu, x_pmu) - th(mu, x_pnu) - th(nu, x);
+        double const bwd = -th(nu, x_pmu_mnu) - th(mu, x_mnu) + th(nu, x_mnu);
+        a_re += cos(fwd) + cos(bwd);
+        a_im += sin(fwd) + sin(bwd);
+    }
+
+    long const link = (static_cast<long>(mu) * ns) + x;
+    double n0       = 0.0;
+    double n1       = 0.0;
+    double u0       = 0.0;
+    double u1       = 0.0;
+    philox_normal2(seed, *sweep, static_cast<std::uint64_t>(2 * link), n0, n1);
+    philox_uniform2(seed, *sweep, static_cast<std::uint64_t>((2 * link) + 1), u0, u1);
+
+    auto const theta  = static_cast<double>(field[link]);
+    double const prop = theta + (sigma * n0);
+    // S_local = −β·Re(e^{iθ}·A)
+    double const s_old = -beta * ((cos(theta) * a_re) - (sin(theta) * a_im));
+    double const s_new = -beta * ((cos(prop) * a_re) - (sin(prop) * a_im));
+    double const ds    = s_new - s_old;
+
+    // ::log — unqualified `log` resolves to the reticolo::log NAMESPACE here.
+    bool const accept = -ds >= ::log(u0);
+    if (accept) {
+        field[link] = static_cast<T>(prop);
+    }
+    ds_out[x]  = accept ? ds : 0.0;
+    acc_out[x] = accept ? 1.0 : 0.0;
+}
+
+template <class T>
+void u1_metropolis_launch(T* field,
+                          DeviceTopology const& topo,
+                          int color,
+                          double sigma,
+                          double beta,
+                          std::uint64_t seed,
+                          std::uint64_t const* sweep,
+                          double* ds_out,
+                          double* acc_out,
+                          cudaStream_t stream) {
+    int const mu          = color / 2;
+    int const parity      = color % 2;
+    constexpr int k_block = 256;
+    auto const grid       = static_cast<unsigned>((topo.nsites + k_block - 1) / k_block);
+    u1_metropolis_kernel<T><<<grid, k_block, 0, stream>>>(
+        field, topo, mu, parity, sigma, beta, seed, sweep, ds_out, acc_out);
+    RETICOLO_CUDA_CHECK_LAUNCH();
 }
 
 // Fused per-link force + per-link plaquette-energy partial, one gather. The LLR

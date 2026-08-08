@@ -68,8 +68,8 @@ template <class Action, class Field>
 void bench_one(
     int ndim, int L, char const* action_name, Action const& action, Field& phi, std::size_t dofs) {
     using namespace reticolo;
-    Field mom{phi.indexing()};
-    Field force{phi.indexing()};
+    Field mom{phi.shape()};
+    Field force{phi.shape()};
 
     // Sample a momentum once outside the timed loop. Each trajectory
     // call reads from `mom` and writes back; back-to-back calls preserve
@@ -160,7 +160,7 @@ void run_all() {
             act::BoseGas<double> const action{.mass = 1.0, .lambda = 1.0, .mu = 0.9};
             bench_one(c.ndim, c.L, "BoseGas", action, phi, phi.nsites());
         }
-        // CompactU1 (MatrixLinkLattice<math::group::U1, double>)
+        // Wilson<U1> (MatrixLinkLattice<math::group::U1, double>)
         {
             MatrixLinkLattice<math::group::U1, double> theta{shape_l};
             hot_init(theta, init_rng);

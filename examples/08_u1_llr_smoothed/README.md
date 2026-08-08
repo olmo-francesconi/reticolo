@@ -2,7 +2,7 @@
 
 Direct side-by-side comparison of `u1_llr` and `u1_llr_smoothed` at the
 4D compact U(1) bulk transition (β = 1.002, L = 6, same setup as
-example 05). Identical RNG seed and physics; only the driver
+example 04). Identical RNG seed and physics; only the driver
 differs.
 
 ## Background
@@ -60,7 +60,7 @@ Outputs:
 - `compare_vanilla_vs_smoothed.pdf` — convergence + reconstruction overlay
 - `doublepeak_vanilla.pdf`, `doublepeak_smoothed.pdf` — full 2x2 panel
   (ln ρ, ρ, a_n convergence, a_n vs E_n), one per algorithm, same
-  layout as example 05
+  layout as example 04
 - `smoothed_amplitudes.pdf` — per-step breakdown of the smoothed update:
   magnitude of the RM contribution `|a_rm − a_old|` vs the smoothing
   contribution `|λ · (â − a_rm)|`, plus the λ schedule. Shows
@@ -74,7 +74,7 @@ Outputs:
 - `smooth_K` (neighbours each side of the local fit). Default 4. Larger
   → more smoothing, smaller transient if `a(E)` is genuinely smooth.
 - `smooth_degree`. Default 2. Linear (1) forces local Gaussian DoS and
-  will visibly bias near a transition. Cubic (3) needs `K ≥ 3` for
+  will visibly bias near a transition. Cubic (3) needs `K ≥ 2` for
   determinacy.
 - `smooth_lambda_exp`. Default 2. Set to 1 (non-summable) to let the
   smoother drive the asymptotics — buys faster rate at the cost of

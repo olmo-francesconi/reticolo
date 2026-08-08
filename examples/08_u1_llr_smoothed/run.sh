@@ -5,10 +5,10 @@
 #
 # Two runs with identical physics + RNG seed; the only difference is
 # the driver. Output:
-#   results/llr_vanilla.h5     — apps/u1_llr
-#   results/llr_smoothed.h5      — apps/u1_llr_smoothed
+#   results/llr_vanilla.h5     — u1_llr (this directory)
+#   results/llr_smoothed.h5      — u1_llr_smoothed (this directory)
 #
-# Run lengths are deliberately modest (n_rm=80) so the comparison
+# Run lengths are deliberately modest (n_rm=40) so the comparison
 # completes in ~6 min on 8 cores; the goal is to see the transient
 # behaviour of <dE>/δ, not to produce a publication-grade ρ(E).
 

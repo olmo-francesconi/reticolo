@@ -5,15 +5,15 @@ regimes:
 
 Each plot has the two scenarios side-by-side. Outputs (in this folder):
 
-  rho_semilog.png        ρ(t) on semi-log Y axis, per scenario.
-  hmc_step_scan.png      τ_int(Σφ²) and acceptance vs step size ε = τ/n_md,
+  rho_semilog.pdf        ρ(t) on semi-log Y axis, per scenario.
+  hmc_step_scan.pdf      τ_int(Σφ²) and acceptance vs step size ε = τ/n_md,
                          one curve per τ, per integrator, per scenario.
-  pareto.png             cost-per-independent-sample vs acceptance for every
+  pareto.pdf             cost-per-independent-sample vs acceptance for every
                          HMC run, with the empirical Pareto frontier per
                          integrator drawn explicitly so you can see whether
                          the picked "best" is robust or just the corner of a
                          flat plateau.
-  summary_bar.png        best-per-integrator independent samples / wall second,
+  summary_bar.pdf        best-per-integrator independent samples / wall second,
                          per scenario.
 
 τ_int is converted to wall seconds via the *algorithm-only* per-update cost

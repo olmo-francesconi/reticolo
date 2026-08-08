@@ -1,8 +1,8 @@
 // LLR (Gaussian-penalty) with replica exchange for SU(3) Wilson gauge theory on
 // the CUDA backend. Identical in structure to su2_llr_cuda — only the group
 // changes (the gauge windowed action, identity cold-start, and per-link kernels
-// are all group-generic via group_device<G>). Two-pass (no fused
-// s_full_and_force yet).
+// are all group-generic via group_device<G>). Uses the fused s_full_and_force
+// (one staple gather for both force and action).
 //
 // There is no CPU su3_llr to gate a(E_n) against, but SU(3) is validated
 // transitively: the SU(3) device action matches the CPU action (unit test), the

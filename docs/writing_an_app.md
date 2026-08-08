@@ -61,9 +61,12 @@ auto const cf      = app::common_flags(p, {.out = "phi4.h5"});
 auto const& kappa  = p.opt<double>("kappa",  0.18, "hopping parameter");
 auto const& lambda = p.opt<double>("lambda", 1.0,  "quartic coupling");
 auto const& ndim   = p.opt<int>("ndim",      4,    "spatial dimensions");
-// Tier 2 — the HMC family: tau / n_md / n_therm / n_prod / meas_every /
+// Tier 2 — the family helper. HMC: tau / n_md / n_therm / n_prod / meas_every /
 // checkpoint_every / resume. Pass only the defaults that differ from the
 // struct's ({.tau=1.0, .n_md=20, .n_therm=200, .n_prod=1000, .meas_every=1}).
+// A Metropolis app uses app::metropolis_run_flags instead (sigma in place of
+// tau/n_md, same run-control block); an LLR app uses app::llr_run_flags. Pick
+// one — a family helper is all-or-nothing.
 auto const rf      = app::hmc_run_flags(p);
 p.parse(argc, argv);
 ```
@@ -196,8 +199,9 @@ io::Writer out = app::open_writer(p, cf, argc, argv);  // log::start + Writer, o
 `start` creates the workspace folder, opens the main log file
 `<workspace>/<stem>.log` (stem = the `--out` name minus extension — sweeps
 sharing a workspace don't clobber each other) and mirrors every entry into
-it, then prints the banner. LLR apps pass `/*replicas=*/true` to add the
-run-id column and per-replica `<stem>.<rNNN>.log` files.
+it, then prints the banner. LLR apps pass `/*replicas=*/true` to add a
+run-id column to scoped lines — everything still lands in the one main log,
+there are no separate per-replica files.
 
 Suppress everything with `log::off()`; opt out of a single algorithm step
 with `log::Mode::silent` (e.g. `hmc.step(log::Mode::silent)` during
@@ -258,7 +262,10 @@ the couplings, and `describe`.
    };
    ```
 
-   The base gives you `HmcAction` + `HasFusedKick` from these two kernels. The
+   The base gives you `HmcAction` + `HasFusedKick` + `action::LocalAction` from
+   these two kernels — `metropolis_stencil` is built from `action_kernel` itself,
+   so a leaf runs under `updater::Metropolis` and under a windowed (LLR)
+   Metropolis sweep with no extra formula. The
    couplings are captured by value, so the hot loop is byte-for-byte what a
    hand-written action would emit. Two opt-in refinements the base picks up by
    concept when the leaf provides them: a `prep(l)` hook (called before each
@@ -493,8 +500,9 @@ binary name + expected paths.
 ## Conventions
 
 - Seed RNGs explicitly. Most tests use `FastRng{42}` or similar.
-- Use `Lattice<T> force{phi.indexing()}` (sibling), not
-  `Lattice<T> force{phi.shape()}` (allocates a fresh `Indexing`).
+- Build sibling buffers from `shape()` — `Lattice<T> force{phi.shape()}` — not
+  a fresh literal shape; it keeps the sibling's geometry byte-identical to
+  `phi`'s with no separate object to share or dangle.
 - Reset `phi[x] = old;` after a single-site FD probe inside a loop.
 - Central diff noise floor with ε = 1e-4 is ~1e-8, not 1e-12 — don't
   over-tighten the tolerance.

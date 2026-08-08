@@ -49,37 +49,47 @@ all in scope.
 
 ### `Lattice<T>`
 
-Value semantics: copy = deep-copy the field, share the `Indexing`. Move is
-cheap. The element type `T` is whatever the action needs — `double` for
-real scalar fields, `std::complex<double>` for charged scalars (BoseGas).
+Value semantics: copy = deep-copy, both data and geometry. Move is cheap. The
+element type `T` is whatever the action needs — `double` for real scalar fields,
+`std::complex<double>` for charged scalars (BoseGas).
 
 ```cpp
-Lattice<double>                phi{{16, 16, 16}};        // 3D, fresh Indexing from pool
-Lattice<double>                momentum{phi.indexing()}; // sibling: share Indexing
-Lattice<std::array<double, 3>> on3{{20, 20, 20}};        // O(3)
+Lattice<double>                phi{{16, 16, 16}};   // 3D
+Lattice<double>                momentum{phi.shape()};  // sibling: same shape, fresh storage
+Lattice<std::array<double, 3>> on3{{20, 20, 20}};   // O(3)
 ```
 
-The sibling constructor lets HMC stash momentum, force, and rollback
-buffers sharing one `Indexing` instead of three. It is the most
-performance-sensitive shortcut in the library.
+### Geometry lives in the field
 
-### `Indexing` + pool
+Shape, packed strides and site count are the field's own state, through the
+private base `impl::LatticeGeometry` — so `shape()`, `ndims()`, `nsites()`,
+`next(s, mu)` and `prev(s, mu)` are members of the field, and no geometry object
+appears in any signature. `shape()` returns a `std::span<std::size_t const>` over
+extents that live inline (build a shape with `std::vector<std::size_t>`; read one
+back through the span).
 
-`Indexing` holds the shape it was built from and the corresponding strides, and
-computes the neighbours `next(s, mu)` / `prev(s, mu)` on the fly from those
-strides — no stored table (the periodic wrap is closed-form, `ndims ≤ 4`). It's
-immutable and cheaply shared, so the library keeps a process-wide pool keyed on
-`shape`:
+This used to be a separate `Indexing` class, immutable and shared between
+same-shape fields through a `shared_ptr` out of a process-wide `weak_ptr` pool.
+That was worth it while `Indexing` carried neighbour **tables** — `nsites·d·2·8`
+bytes, tens of MB at production volumes. Those are gone: the periodic wrap is
+closed-form on the strides (`ndims ≤ 4`) and the hot nests roll their own
+row-nested offsets. What remained was 64 bytes reached through a mutex, an
+atomic refcount and a pointer chase, saving 240 bytes across HMC's four buffers
+against 40 MB of payload each — so the pool, the sharing and the class went, and
+a sibling buffer is now four multiplies:
 
 ```cpp
-auto idx = Indexing::acquire(shape);   // hits pool, builds once
+Lattice<double> mom{phi.shape()};   // HMC's mom / force / old_field
 ```
 
-The pool holds `weak_ptr`s; entries die when nobody holds them. Lattices
-with the same shape automatically share.
+Two consequences worth knowing. Sibling fields have no lifetime coupling at all
+(nothing is shared, so nothing can dangle). And "same geometry" is now a value
+question — `a.same_geometry(b)` — where it used to be answered by pointer
+identity on the pooled object, which was only ever a proxy for it.
 
 Boundary conditions are always periodic. `next` / `prev` are unbranched.
-Open / antiperiodic BCs are out of scope.
+Open / antiperiodic BCs are out of scope, and would land as a separate geometry
+base rather than a runtime flag.
 
 ### `FastRng` and the RNG families
 
@@ -164,7 +174,9 @@ and friends), alongside the per-site `exec` primitives it builds on.
   its gradient. Only `BoseGas` uses it today; `action::WindowedAction` switches to
   its complex mode when the base satisfies it.
 
-Earlier revisions carried a `LocalAction` Metropolis baseline
+(Historical note, now partly superseded — a local updater is back, but with the
+elementary move kept inside the action so the arity never crosses the
+interface; see `action::LocalAction`.) Earlier revisions carried a `LocalAction` Metropolis baseline
 (`s_local`/`ds_local`) and a parallel `gauge::` concept family keyed on the
 `(Site, mu)` elementary-update arity. With Metropolis and Wolff removed, both
 are gone: HMC's `s_full`/`compute_force` are field-agnostic, so one concept set
@@ -197,7 +209,20 @@ orthogonal `ImagPart` mixin the leaf *also* derives — the decorator spirit of
 
 The kernels return a lambda that captures the couplings by value, so the base
 hoists them into the hot loop exactly as a hand-written action would — the
-vectorised inner loop is unchanged. The gauge family is the odd one out: the
+vectorised inner loop is unchanged.
+
+`NNAction` also exposes the per-site **local energy** as a callable —
+`local_energy_kernel()` (a `(cand, gather) -> T` over the all-directions gather)
+plus `local_energy_scale()`. `metropolis_stencil` is written in terms of it, but
+the reason it is a public member is that a *decorator* action needs to evaluate
+several actions' local energies against one traversal: `WindowedAction` wants the
+base's ΔS and the constraint observable's ΔQ at the same site, and neither can
+drive its own sweep of the other's lattice. Kernel and scale stay separate and
+un-premultiplied because a local energy is only ever used as a difference of two
+calls — applying the scale to the difference is what keeps this bit-identical to
+a hand-written ΔS, which is not a formality in f32.
+
+The gauge family is the odd one out: the
 plaquette *traversal* can't be shared (U(1) batches four signed angles through a
 Sleef cos/sin scratch on a `MatrixLinkLattice<U1,T>`; SU(N) batches complex matrix
 products on a `MatrixLinkLattice<G,T>`), so `GaugeAction` only owns the
@@ -234,31 +259,99 @@ member — read the compiler error.
 
 ## Updaters
 
-| updater                | models                | needs                                     |
-| ---------------------- | --------------------- | ----------------------------------------- |
-| `updater::Hmc<A,R,Integ>`  | `updater::Updater`        | `HmcAction` (+ optionally `HasFusedKick`) |
+### One parameter shape, everywhere
 
-`updater::Hmc` is the only update algorithm. The **`updater::Updater`** concept
+Every class template that carries an action follows the same rule, so there is
+one thing to learn rather than six:
+
+```cpp
+updater::Hmc          <Action, Rng, Integrator = integ::Omelyan2>
+updater::Metropolis   <Action, Rng>
+action::WindowedAction<Action, Constraint = void>
+orch::span::Chain     <Action, Rng, Sampler>
+orch::llr::Replica    <Action, Rng, Sampler, Constraint = void>
+orch::llr::Orchestrator<Action, Rng, Sampler, Constraint = void>
+cuda::Hmc             <Action, Integ = integ::Omelyan2>
+cuda::Metropolis      <Action>
+```
+
+- **The element and field types are never parameters.** Every action names both
+  (`value_type`, `field_type` — the family bases declare the latter, as does
+  `cuda::DeviceAction`), so a parameter for either could only be set to what the
+  action already says, or to something wrong. Gauge and scalar therefore read
+  identically: `Replica<Wilson<SU3>, FastRng, updater::HmcSampler<>>`.
+- **The MD integrator is never a sibling parameter of a sampler choice.** Where
+  more than one updater can drive the thing, it rides on the sampler tag
+  (`updater::HmcSampler<integ::Omelyan4>`), so it does not exist when the sampler
+  is local. Where HMC is the only option (`updater::Hmc` itself, `cuda::`) it is
+  a plain parameter.
+- **The sampler has no default** in the orchestration workers: which updater
+  drives a run is worth reading at the call site. The integrator keeps one
+  (`HmcSampler<>` = Omelyan2) — that is a knob inside an already-named sampler.
+- **A `Spec` carries only the chosen sampler's knobs.** Both orchestrators nest
+  their `Spec` so it is parameterised by their own arguments, and the sampler
+  block is `Sampler::spec_type` — `{.tau, .n_md}` under HMC, `{.sigma}` under
+  Metropolis. No Spec advertises a field the sampler in play would ignore, and a
+  future sampler needs no edit to either. `setup()` resolves the ensemble thread
+  request into it (`if constexpr (requires { s.n_threads; })`), so the outer Spec
+  keeps only `worker_threads` / `replica_threads`.
+- Parameter names are the same words in the same order: `Action`, `Rng`,
+  `Sampler`/`Integrator`, `Constraint`.
+
+The one deliberate exception is `cuda::llr::Replica<HostAction, Integ, Field>`,
+which keeps both. It takes a *host* action — which names a host lattice, not a
+device field — so the device field's precision is a genuine choice; and it is not
+sampler-parameterised because a windowed sweep must be sequential with a running
+Q, which on a GPU is a serial walk over V sites. Offering that choice would be
+offering a trap.
+
+
+| updater                                    | models             | needs                                     |
+| ------------------------------------------ | ------------------ | ----------------------------------------- |
+| `updater::Hmc<Action, Rng, Integrator>`    | `updater::Updater` | `HmcAction` (+ optionally `HasFusedKick`) |
+| `updater::Metropolis<Action, Rng>`         | `updater::Updater` | `action::LocalAction`                     |
+
+`updater::Hmc` (global) and `updater::Metropolis` (local checkerboard sweep) are the update algorithms. The **`updater::Updater`** concept
 ([`updater/concepts.hpp`](../include/reticolo/updater/concepts.hpp)) is the
 updater-level analogue of `action::HmcAction` — the contract apps and the
-orchestration layer rely on: `step()` (returns `{dH, accepted}`),
-`last_s_full()`, `rng()`. It is duck-typed and checked at the use site (both
+orchestration layer rely on: `step().acceptance()`, `last_s_full()`, `rng()`.
+It keys on `acceptance()` rather than on `dH`/`accepted` because those are not
+shared: one HMC trajectory is accepted or not, while one Metropolis sweep is
+V independent accept tests with no meaningful boolean. Algorithm-specific
+fields live on the concrete result (`HmcResult::dH`, `action::LocalStats::n_accepted`). It is duck-typed and checked at the use site (both
 orchestration workers `static_assert` their sampler against it), so a new
 updater is just a class modelling it — no base class, reuse the same
 `updater::integ::*` type-parameters. `orch::llr::Replica` and `orch::span::Chain`
 each own an `updater::Hmc` and drive it through this surface.
+
+`updater::Metropolis` is the local counterpart: a checkerboard sweep in place of
+a trajectory. It owns no momentum, force or rollback buffer — a rejected local
+move is discarded before it is written — and carries `S` incrementally from the
+ΔS the sweep already knew, so a measurement costs no extra pass. What it needs
+from the action is `action::LocalAction`: `n_colors(l)` and
+`metropolis_stencil(l, color, noise, logu, sigma)`. Both randomness fields are
+filled by the UPDATER (`updater/random_fill.hpp` — the same per-slab Gaussian
+fill HMC samples momenta with) and handed down as plain fields, so the action
+stays physics-only and the traversal stays in the action family. The colour
+index is opaque to the updater — 2 for a site field, 2·ndim for a link field —
+which is why one signature covers scalar, complex and gauge without
+reintroducing a `(Site, mu)` arity split. It also lets an action opt OUT of the
+checkerboard entirely: `action::WindowedAction` declares **one** colour and runs a
+sequential pass, because its ΔS reads a global scalar (see [LLR](#llr-orchllr)).
+The updater cannot tell, and the even-extent precondition — which belongs to the
+checkerboard, not to Metropolis — is skipped when `n_colors == 1`.
 
 The HMC integrator is a **type parameter**, not a runtime switch. Three
 ship: `updater::integ::Omelyan2` (2nd-order minimum-norm, ~1.4× speedup at the
 same acceptance — the **default**), `updater::integ::Leapfrog` (2nd-order,
 cheapest per MD step), `updater::integ::Omelyan4` (4th-order, large τ). Select
 one at the `Hmc` ctor with a brace-free tag value (`updater::integ::leapfrog`, CTAD
-deduces the type) or the explicit `Hmc<A, R, Omelyan2>` form. Adding one =
+deduces the type) or the explicit `Hmc<Action, Rng, Omelyan2>` form. Adding one =
 struct with a static `run(...)`; the matching `inline constexpr` tag is a
 one-liner.
 
 HMC keeps its momentum, force, and rollback buffers as sibling lattices
-of the field — one shared `Indexing`, three lattices.
+of the field — same shape, three lattices.
 
 ## IO
 
@@ -321,7 +414,7 @@ Two tiers, and a family helper is **all-or-nothing**:
 - one helper per algorithm family for the run-control block that family shares
   verbatim: `hmc_run_flags` + `resume_or_start` (`tau`, `n_md`, `n_therm`,
   `n_prod`, `meas_every`, `checkpoint_every`, `resume`) for the 16 HMC apps,
-  `llr_run_flags` for the 8 LLR apps. Either every app in the family uses it or
+  `llr_run_flags` for the 10 LLR apps. Either every app in the family uses it or
   it does not exist — HMC ran 18 apps without one, which is how `--resume` came
   to be implemented in exactly one of them.
 
@@ -374,8 +467,9 @@ OpenMP-aware logger. Severity = sigil (`·` debug, `┃` info, `⚠` warn,
 creates the workspace folder, opens the main log file
 `<workspace>/<stem>.log` (stem = out_name minus extension, so sweeps
 sharing a workspace don't collide) and mirrors every entry into it, then
-prints the banner. With `replicas = true` each scoped run id also gets its
-own `<workspace>/<stem>.<rNNN>.log`.
+prints the banner. With `replicas = true` each scoped line also carries its
+run id in a dedicated column — everything still lands in the one main log,
+there are no separate per-replica files.
 
 `log::scope("rNNN")` (RAII) binds a thread-local replica tag —
 `orch::llr::Replica` binds its own id inside its public methods, so apps and
@@ -416,18 +510,39 @@ Two orchestrators ship as clients:
 
 ### Parameter span (`orch::span`)
 
-`orch::span::Chain<Action,…>` is a generic HMC worker (any scalar/gauge action);
-the app builds one per point of a parameter grid (the grid is the app's reason to
-exist) and hands them to `orch::span::Orchestrator` by move. `setup(out)` opens
-the `/worker_NNN/…` series; `run(Schedule)` runs the workers concurrently and
-records their time series. `apps/param_span_hmc` sweeps `kappa` in one binary —
-an in-process replacement for an outer bash sweep.
+`orch::span::Orchestrator<Action, Rng, Sampler>` is two-phase exactly like the
+LLR one: `setup(out)` plans threads, **builds the worker grid**, and opens the
+`/worker_NNN/…` series; `run(Schedule)` runs the workers concurrently and records
+their time series. The worker is `orch::span::Chain<Action, Rng, Sampler>` — any
+scalar/gauge action, HMC or local Metropolis.
+
+The one thing the orchestrator cannot synthesise is the **grid**. An LLR ladder
+is always `E_n = E_min + n·dE`, so three numbers describe it; a parameter span is
+arbitrary — log-spaced, hand-picked, multi-dimensional — and choosing it is the
+app's reason to exist. So `Spec::points` *is* the grid, one action per worker,
+and everything else about worker construction (ids, per-worker seeds, the thread
+plan) is derived rather than re-written per app. `span::scan(base, &Action::knob,
+lo, hi, n)` covers the common one-knob linear case in a line; anything else is a
+loop that fills `points`, and there is no second mechanism.
+
+```cpp
+using Span = orch::span::Orchestrator<act::Phi4<double>, FastRng, updater::HmcSampler<>>;
+Span runner{Span::Spec{.shape   = shape,
+                       .seed    = seed,
+                       .points  = orch::span::scan(base, &Action::kappa, k_min, k_max, n),
+                       .sampler = {.tau = tau, .n_md = n_md},
+                       .worker_threads = worker_threads},
+            std::move(obs)};
+```
+
+`apps/param_span_hmc` sweeps `kappa` in one binary — an in-process replacement
+for an outer bash sweep.
 
 ### LLR (`orch::llr`)
 
 LLR reconstructs the density of states ρ(S) by running N replicas, each pinned by
 a Gaussian-window penalty to a different region of action space, each sampled by
-its own HMC. A Newton-Raphson + Robbins-Monro loop adapts a per-replica
+its own updater. A Newton-Raphson + Robbins-Monro loop adapts a per-replica
 reweighting parameter `a`; periodic even/odd replica exchange improves mixing.
 `orch::llr::Replica` wraps a `Base` action in `action::WindowedAction` and is an
 `orch::Worker`; `orch::llr::Orchestrator` is the client of the spine — a two-phase
@@ -443,6 +558,79 @@ is a `Constraint` policy — `SelfConstraint` (Q = the action, real LLR),
 `ImagConstraint` (Q = `s_imag`, sign-problem LLR), or `ObservableConstraint<Obs>`
 for any custom observable (window on magnetization, plaquette, topological
 charge…). The self/imag defaults reproduce the previous hardcoded modes exactly.
+
+**One orchestrator; the sampler is a template parameter.** There is a single
+`Replica` and a single `Orchestrator`, and the sampler occupies the slot the MD
+integrator used to hold — because the integrator belongs to the HMC sampler,
+where it means something, and a Metropolis-driven run has none:
+
+```cpp
+orch::llr::Orchestrator<Action, FastRng, updater::HmcSampler<>>       // HMC, Omelyan2
+orch::llr::Orchestrator<Action, FastRng, updater::MetropolisSampler>  // local sweeps
+orch::llr::Orchestrator<Action, FastRng, updater::HmcSampler<updater::integ::Omelyan4>>
+orch::llr::Orchestrator<Action, FastRng, updater::HmcSampler<>, Constraint>  // window on Q
+```
+
+The sampler has **no default** — which updater drives a run is a decision worth
+reading at the call site. The integrator does keep one (`HmcSampler<>` is
+Omelyan2), since it is a knob *inside* an already-named sampler.
+
+Gauge LLR takes the **same** shape as scalar —
+`Orchestrator<Wilson<SU3>, FastRng, updater::HmcSampler<>>`.
+The full parameter list is `<Base, Rng, Sampler, Constraint>`, and that is all of
+it: the element and field types are **not** parameters, because the action
+already names both (`value_type` and `field_type` — every family base declares
+the latter). A parameter for either could only ever be set to what the action
+says, or to something wrong.
+
+**The two worker kinds share this structure**, because they are the same kind of
+thing — an `orch::Worker` wrapping one action and one updater:
+
+```cpp
+orch::span::Chain  <Action, Rng, Sampler>
+orch::llr::Replica <Action, Rng, Sampler, Constraint = void>
+```
+
+Neither takes an integrator parameter: it rides on the HMC tag, so it does not
+exist when the sampler is local. Both build the updater through the identical
+`make_sampler_` (tag's optional `integrator` alias → does the ctor take one).
+`span::Chain` reports `acceptance()` always and dH/accepted only when the sampler
+has them (`Chain::k_hmc_stats`), so a span records `/worker_NNN/stats/dH` +
+`/stats/accepted` under HMC and `/stats/acceptance` under Metropolis — the same
+split the standalone apps make.
+
+The sampler parameter is a **tag** (`updater/samplers.hpp`), not the updater
+type: the updater is parameterised on the `WindowedAction` the replica builds
+internally, which a caller has no business spelling, so the tag names it via
+`Sampler::template type<Action, Rng, Field, T>`. `Sampler::spec_type` gives the
+ctor arguments, and an optional `Sampler::integrator` alias is how `Replica`
+decides whether that ctor takes an integrator.
+
+Nothing in the LLR layer reaches past `updater::Updater`, so the ladder, the
+warm-up ramp, NR/RM, exchange and checkpointing are all shared — which is what
+keying that concept on `acceptance()` rather than on an `accepted` flag bought.
+Only `Spec` carries both knob sets (`tau`/`n_md` vs `sigma`). Counts are **not**
+comparable across the two: a trajectory is `n_md` lattice passes, a sweep is one.
+
+**A windowed sweep is sequential, not checkerboarded.** `a·Q` is linear in Q, so
+its per-site increment `a·ΔQ` is purely local; the Gaussian penalty is quadratic
+in a **global** scalar, so a single-site move contributes
+`[2(Q−E_n)ΔQ + ΔQ²]/2δ²`, which reads the *current* Q. Accepting a move at one
+site therefore changes ΔS at every other site of the same colour — exactly the
+independence the checkerboard rests on. Freezing Q across a colour would restore
+the parallelism and break detailed balance, so `WindowedAction::metropolis_stencil`
+declares `n_colors() = 1` and runs one lexicographic pass carrying Q as a running
+scalar (`exec::nn_sequential_reduce`). The site-level threading this gives up is
+threading LLR never had: a replica runs its lattice passes serially inside the
+replica-parallel team. It also drops the even-extent requirement, which belonged
+to the checkerboard rather than to the algorithm.
+
+Coverage today: a real nearest-neighbour base with `SelfConstraint` or an
+`ObservableConstraint<Obs>` over another NN observable. Gauge bases and
+`ImagConstraint` (Q = S_I) have no local windowed form yet and stay on HMC — the
+`requires` guard on `metropolis_stencil` makes that a failed `action::LocalAction`
+at the instantiation site rather than a link error or, worse, a silently wrong
+measure.
 
 Two convention watch-outs:
 
@@ -478,10 +666,10 @@ apps/cuda/                      all runnable .cu binaries: the reference sims
 The dependency is strictly one-way: **`cuda → core`, never `core → cuda`**. The
 only GPU-awareness in `core` is two deliberate shims:
 
-- `core/hd.hpp` — the `RETICOLO_HD` macro (`__host__ __device__` under nvcc,
+- `core/sys/hd.hpp` — the `RETICOLO_HD` macro (`__host__ __device__` under nvcc,
   expands to nothing otherwise), so one annotated function compiles for both.
-- `core/rng.hpp` — a `__CUDACC__` guard exposing the shared counter-based Philox
-  on the device.
+- `core/rng/philox.hpp` — the shared counter-based Philox, a pure `RETICOLO_HD`
+  bijection so it compiles identically on host and device.
 
 Header naming inside `cuda/`: **`.cuh` = contains device kernels** (`__global__`/
 `__device__` bodies, nvcc-mandatory); **`.hpp` = host-callable API** (may use the
@@ -496,9 +684,9 @@ The seam is a four-hop chain (Phi4 shown):
    the single source of truth.
 2. `action::Phi4` (CPU) and `cuda::Phi4ForceFunctor` (GPU) **both call that same
    formula** — they cannot silently diverge.
-3. `cuda/actions/site/phi4.hpp` — the `device_functors<action::Phi4<T>>` trait adapts
+3. `cuda/actions/nn/phi4.hpp` — the `device_functors<action::Phi4<T>>` trait adapts
    a *host* action struct into device launchers (force / s_full / sample_momenta).
-4. `cuda::DeviceAction<HostAction, Field>` + `cuda::Hmc<DAct, Integ, Field>` — the
+4. `cuda::DeviceAction<HostAction, Field>` + `cuda::Hmc<DAct, Integ>` — the
    generic device HMC, reusing the *same* `updater::integ::*` integrator tags as the
    CPU `updater::Hmc`. No virtual dispatch, no `switch(action)` — the trait resolves
    at compile time (a lint gate forbids integrator-specific kernel code).
@@ -527,9 +715,11 @@ OpenMP is off, so neither reaches the nvcc compile. See
 ### Builtin apps (`apps/`)
 
 `apps/` is the canonical reference set: one HMC sim per action
-(`phi4_hmc`, `phi6_hmc`, `sine_gordon_hmc`, `bose_gas_hmc`, `u1_hmc`,
-`su2_hmc`, `su3_hmc`), the LLR sims (`phi4_llr`, `u1_llr`,
-`u1_llr_smoothed`, `bose_gas_llr`, `su2_llr`), `f32` variants, and the
+(`phi4_hmc`, `phi6_hmc`, `sine_gordon_hmc`, `xy_hmc`, `bose_gas_hmc`, `u1_hmc`,
+`su2_hmc`, `su3_hmc`), one Metropolis sim per action (`*_metropolis`, same
+list), the LLR sims (`phi4_llr`, `phi4_llr_metropolis`, `phi6_llr`,
+`sine_gordon_llr`, `xy_llr`, `bose_gas_llr`, `u1_llr`, `u1_llr_smoothed`,
+`su2_llr`, `su3_llr`), `f32` variants of the HMC and Metropolis sims, and the
 `bench_*` suite. Built in-tree only; registered with `reticolo_add_app`
 in `apps/CMakeLists.txt`.
 
@@ -581,7 +771,7 @@ sets `RETICOLO_ENABLE_OPENMP=OFF` explicitly.
 
 ## Tests
 
-- `tests/unit/` — types in isolation: `Site`, `Indexing`, pool, `Lattice`,
+- `tests/unit/` — types in isolation: `Site`, lattice geometry, `Lattice`,
   `FastRng`, `Parser`, observers, analysis.
 - `tests/physics/` — force-vs-FD consistency for every action,
   HMC reversibility & integrator-order across the gauge groups.

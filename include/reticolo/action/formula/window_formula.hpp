@@ -42,6 +42,25 @@ template <class R>
     return a + ((q - e_n) / (delta * delta));
 }
 
+// --- local (single-site) update -----------------------------------------------
+
+// The change in S_LLR under a single-element move that shifts the base action by
+// `ds` and the constraint observable by `dq`, evaluated at the CURRENT global
+// constraint value `q`. Expanding (q + dq − e_n)² − (q − e_n)²:
+//
+//     ΔS_LLR = ds + a·dq + dq·(2(q − e_n) + dq) / (2δ²)
+//
+// Mode A is the same expression with dq = ds. Note what the middle term is NOT:
+// the tilt a·q is LINEAR in q, so its increment a·dq is purely local and poses no
+// difficulty at all. The window quadratic is the whole problem — its increment
+// reads the GLOBAL q, so accepting a move at one site changes ΔS at every other
+// site. That is why a windowed sweep is sequential with a running q rather than a
+// checkerboard (see WindowedAction::metropolis_stencil).
+template <class R>
+[[nodiscard]] RETICOLO_HD R windowed_delta(R ds, R dq, R q, R a, R e_n, R delta) noexcept {
+    return ds + (a * dq) + ((dq * ((R{2} * (q - e_n)) + dq)) / (R{2} * delta * delta));
+}
+
 // --- replica exchange ---------------------------------------------------------
 
 // Acceptance exponent for swapping two Gaussian-window replicas i, j with tilts

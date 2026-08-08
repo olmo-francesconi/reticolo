@@ -58,7 +58,7 @@ namespace reticolo::log {
 
 enum class Level : std::uint8_t { debug, info, warn, error };
 
-// Verbosity mode for the updater `step()` methods (Hmc / Metropolis / Wolff).
+// Verbosity mode for the updater `step()` methods (Hmc / Metropolis).
 // The counter always advances; only the line emission is gated. Extend with
 // new modes as needed.
 enum class Mode : std::uint8_t { normal, silent };

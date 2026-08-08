@@ -24,7 +24,8 @@
 //
 // U(1) is abelian and does NOT use the matrix path: the Wilson<U1> specialization
 // below reuses the dedicated angle kernels (gauge_u1.cuh) on a 1-angle link,
-// identical to CompactU1 (n_color=1 ⇒ β/N = β). Keeping the abelian kernels
+// the plaquette reducing to the angle form (n_color=1 ⇒ β/N = β). Keeping the
+// abelian kernels
 // separate from gauge_sun.cuh is deliberate — a future non-SU(N) family (e.g. a
 // symplectic group) plugs in as its own kernel set + functor, not a contortion of
 // the generic matrix path.
@@ -94,13 +95,33 @@ struct device_functors<action::Wilson<G, T>> {
         su_plaq_fused_launch<GD>(field, force, scratch, topo, static_cast<double>(a.beta), s);
         reduce_sum_into(out, scratch, topo.nsites * topo.ndim, partials, s);
     }
+    // Local-update path (cuda::Metropolis). Colour enumerates (direction, site
+    // parity), so a link sweep is 2*ndim passes. The proposal reuses the same
+    // Gell-Mann algebra draw and closed-form exponential the momentum sampler and
+    // the drift already use — no new device group math.
+    static void metropolis_stencil(action::Wilson<G, T> const& a,
+                                   T* field,
+                                   DeviceTopology const& topo,
+                                   int color,
+                                   double sigma,
+                                   std::uint64_t seed,
+                                   std::uint64_t const* sweep,
+                                   double* ds_out,
+                                   double* acc_out,
+                                   cudaStream_t s) {
+        double const beta_over_n = static_cast<double>(a.beta) / static_cast<double>(GD::n_color);
+        su_metropolis_launch<GD>(
+            field, topo, color, sigma, beta_over_n, seed, sweep, ds_out, acc_out, s);
+    }
+    // A link field's elementary move is per LINK: (direction, site parity).
+    [[nodiscard]] static int n_colors(DeviceTopology const& topo) { return 2 * topo.ndim; }
 };
 
 // Wilson<U(1)> — abelian specialization (more specialized than Wilson<G> above,
 // so it wins for G = U1). Reuses the dedicated angle kernels (gauge_u1.cuh) on a
 // 1-angle LinkLayout link, NOT the matrix path: a U(1) link is a phase, the drift
 // is additive (θ ← θ + dt·p, the generic axpy atom), and the momentum is one iid
-// normal per link. Bodies mirror device_functors<CompactU1> (n_color = 1).
+// normal per link. Bodies are the abelian angle form (n_color = 1).
 template <class T>
 struct device_functors<action::Wilson<math::group::U1, T>> {
     static void compute_force(action::Wilson<math::group::U1, T> const& a,
@@ -154,6 +175,30 @@ struct device_functors<action::Wilson<math::group::U1, T>> {
                                cudaStream_t s) {
         fill_normals(mom, n, seed, traj, s);
     }
+    // Local-update path (cuda::Metropolis) — see the SU(N) trait above; U(1)
+    // carries the angle, so the staple is a plain complex accumulator.
+    static void metropolis_stencil(action::Wilson<math::group::U1, T> const& a,
+                                   T* field,
+                                   DeviceTopology const& topo,
+                                   int color,
+                                   double sigma,
+                                   std::uint64_t seed,
+                                   std::uint64_t const* sweep,
+                                   double* ds_out,
+                                   double* acc_out,
+                                   cudaStream_t s) {
+        u1_metropolis_launch<T>(field,
+                                topo,
+                                color,
+                                sigma,
+                                static_cast<double>(a.beta),
+                                seed,
+                                sweep,
+                                ds_out,
+                                acc_out,
+                                s);
+    }
+    [[nodiscard]] static int n_colors(DeviceTopology const& topo) { return 2 * topo.ndim; }
 };
 
 }  // namespace reticolo::cuda

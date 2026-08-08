@@ -62,7 +62,7 @@ Outputs in `examples/03_phi4_llr/results/`:
 * `range_kappa<k>.txt` — `E_min E_max delta` chosen for the LLR run
 * `llr_kappa<k>.h5`  — LLR slopes per replica + exchange stats
 
-And `rho_hmc_vs_llr.png` next to the script: one subplot per κ, HMC
+And `rho_hmc_vs_llr.pdf` next to the script: one subplot per κ, HMC
 histogram (markers) and aligned LLR `ln ρ(S)` (line).
 
 ## What this is *not*

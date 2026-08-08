@@ -7,7 +7,7 @@
 //     #include <reticolo/cuda/cuda.hpp>
 //
 // and gets the whole device stack: DeviceField (the host-side handle), the
-// generic DeviceAction<HostAction,Field> + Hmc<DAct,Integ,Field>, on-device
+// generic DeviceAction<HostAction,Field> + Hmc<DAct,Integ>, on-device
 // reductions, and the device-functor adapters for every supported action +
 // gauge group. The per-phase device-vs-CPU validation gates are native .cu
 // Catch2 tests under tests/cuda/ (test_cuda_<action>.cu); they include the
@@ -19,6 +19,7 @@
 
 // NOLINTBEGIN(misc-include-cleaner): re-exports are the whole point of the umbrella.
 #include <reticolo/cuda/check.hpp>
+#include <reticolo/cuda/checkerboard.cuh>
 #include <reticolo/cuda/device_action.cuh>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_field.hpp>
@@ -28,6 +29,7 @@
 #include <reticolo/cuda/hmc.cuh>
 #include <reticolo/cuda/integ_ops.hpp>
 #include <reticolo/cuda/macros.hpp>
+#include <reticolo/cuda/metropolis.cuh>
 #include <reticolo/cuda/obs_reduce.cuh>
 #include <reticolo/cuda/pinned.hpp>
 #include <reticolo/cuda/reduce.cuh>

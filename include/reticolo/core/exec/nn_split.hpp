@@ -23,7 +23,8 @@
 //
 // The isotropic combine is the identity (the anisotropy weight is applied by the
 // leaf body as nbrs_total + (c_last - 1)·nbrs_last). D in {2,3,4} take the
-// vectorised/threaded path; D==1 and D>4 fall back to the flat gather.
+// vectorised/threaded path; D==1 has its own dedicated nest — there is no D>4
+// path (ndims caps at 4).
 
 namespace reticolo::exec {
 
@@ -304,7 +305,8 @@ template <class Acc, class T, class Body>
 //  nn_visit_split_last(l, body): body(i, phi, nbrs_total, nbrs_last) -> void.
 //  Reuses the shared `traverse_dispatch_` (site and split-last share the tiling and
 //  partition); the split item drivers add only the second (last-direction)
-//  aggregate. 1D and D>4 route to the flat split-last gather.
+//  aggregate. 1D routes through the same dispatcher to its own dedicated nest;
+//  there is no D>4 path (ndims caps at 4).
 template <class T, class Body>
 inline void nn_visit_split_last(Lattice<T> const& l, Body&& body) noexcept {
     Body const& b = body;

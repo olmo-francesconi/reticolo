@@ -20,8 +20,8 @@
 
 // Wilson<U(1)> on the device via the abelian specialization. The link is a
 // single angle (LinkLayout); device_functors<Wilson<U1>> reuses the gauge_u1.cuh
-// kernels (the CompactU1 device path) since the two actions are bit-identical
-// (n_color=1). The host MatrixLinkLattice<U1> stores ndim·nsites angles in the
+// kernels (the abelian device path) because at n_color=1 the matrix plaquette
+// reduces to the angle one. The host MatrixLinkLattice<U1> stores ndim·nsites angles in the
 // same [ndim][nsites] order as LinkLayout, so a flat copy round-trips — no
 // matrix conversion. (Excluded from the no-integrator-kernels lint gate: it names
 // updater::integ::Leapfrog to instantiate the generic integrator over the link field.)
@@ -41,7 +41,7 @@ constexpr double kBeta = 1.1;
 // Host U(1) gauge config: a real angle per link, in the [ndim][nsites] order
 // shared by MatrixLinkLattice<U1> and the device LinkLayout.
 MatrixLinkLattice<U1G, double> make_links() {
-    MatrixLinkLattice<U1G, double> u{Indexing::SizeVec(kShape.begin(), kShape.end())};
+    MatrixLinkLattice<U1G, double> u{std::vector<std::size_t>(kShape.begin(), kShape.end())};
     double* const d        = u.data();
     std::size_t const ncmp = u.ncomponents();  // ndim·nsites (1 angle per link)
     for (std::size_t i = 0; i < ncmp; ++i) {
@@ -58,7 +58,7 @@ bool wilson_u1_cpu_matches_device() {
     Wil cpu{};
     cpu.beta           = kBeta;
     double const s_cpu = cpu.s_full(host);
-    MatrixLinkLattice<U1G, double> f_cpu{host.indexing()};
+    MatrixLinkLattice<U1G, double> f_cpu{host.shape()};
     cpu.compute_force(host, f_cpu);
 
     DField dfield{kShape};
@@ -138,7 +138,7 @@ bool wilson_u1_hmc_runs() {
     act.beta = kBeta;
     DAct dact{act, field.topology()};
 
-    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 1.0, 10};
+    Hmc<DAct, updater::integ::Leapfrog> hmc{std::move(dact), field, 1.0, 10};
     hmc.run(8);
     double const acc = hmc.acceptance();
     hmc.sync();
@@ -161,7 +161,7 @@ bool wilson_u1_hmc_runs() {
 }  // namespace reticolo::cuda
 
 // Wilson<U(1)> on the device via the SPECIALIZED abelian path (reuses the
-// CompactU1 angle kernels on a 1-angle LinkLayout field).
+// abelian angle kernels on a 1-angle LinkLayout field).
 TEST_CASE("cuda DeviceAction<Wilson<U1>> matches CPU action::Wilson<U1>", "[cuda]") {
     REQUIRE(reticolo::cuda::wilson_u1_cpu_matches_device());
 }

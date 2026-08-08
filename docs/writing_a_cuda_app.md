@@ -32,8 +32,11 @@ warnings (inert on the `.cu` compile), and sets `CUDA_STANDARD 20`.
 ```
 
 `<reticolo/cuda/cuda.hpp>` re-exports the public device API: `DeviceField`,
-`DeviceAction`, `cuda::Hmc`, the on-device reductions, and the device-functor
-adapters for every supported action + gauge group. The device-vs-CPU validation
+`DeviceAction`, `cuda::Hmc`, `cuda::Metropolis`, the on-device reductions, and the
+device-functor adapters for every supported action + gauge group. A device action
+supplies force/energy functors (`init`/`accumulate`/`finalize`) for HMC and a ds
+functor (`init`/`accumulate`/`ds`) for Metropolis; both bind the same shared
+`RETICOLO_HD` formula the CPU action binds. The device-vs-CPU validation
 gates are separate `tests/cuda/test_cuda_<name>.cu` files, not part of this
 umbrella. `io::Writer` PIMPLs HDF5, so nvcc never sees `<hdf5.h>` — the app just
 links the prebuilt `reticolo::io` archive.
@@ -67,7 +70,7 @@ field.copy_from_host(host.data());
 RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
 
 DAct meas{phi4, field.topology()};                      // measurement action (own scratch)
-cuda::Hmc<DAct, updater::integ::Leapfrog, DField> hmc{
+cuda::Hmc<DAct, updater::integ::Leapfrog> hmc{
     DAct{phi4, field.topology()}, field, tau, n_md, seed};
 ```
 
@@ -137,8 +140,8 @@ annotated `RETICOLO_HD`. To run it on the GPU:
 1. Add `include/reticolo/cuda/actions/<family>/<name>.hpp`: device functors whose
    `finalize()` calls the *same* `action::formula::<name>_*_site<T>(...)` formula,
    plus a `device_functors<action::<Name><T>>` trait wiring them to the site/
-   plaquette launchers (copy `actions/phi4.hpp` for a scalar, `actions/wilson.hpp`
-   for a gauge action).
+   plaquette launchers (copy `actions/nn/phi4.hpp` for a scalar,
+   `actions/gauge/wilson.hpp` for a gauge action).
 2. Re-export it from `include/reticolo/cuda/cuda.hpp`.
 3. Add a native `.cu` Catch2 test `tests/cuda/test_cuda_<name>.cu` (copy an
    existing one) and register it with `reticolo_add_cuda_test(...)` in

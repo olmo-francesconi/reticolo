@@ -8,16 +8,16 @@
 
 namespace reticolo::cuda {
 
-// Matches the CPU `Indexing` support window (1..4 dims); see next/prev parity.
+// Matches the CPU field-geometry support window (1..4 dims); see next/prev parity.
 inline constexpr int kMaxDim = 4;
 
 // Periodic hypercubic indexing, computed closed-form per thread rather than
 // gathered from a neighbour table — passed BY VALUE into kernels (lands in the
-// constant param bank, broadcasts to the warp). Mirrors the CPU `Indexing`
+// constant param bank, broadcasts to the warp). Mirrors the CPU field geometry's
 // stride convention exactly: stride[0] = 1 (x fastest), flat index = Σ c_mu·stride_mu.
 //
 // next/prev are RETICOLO_HD so they run on the device in kernels and on the
-// host in tests (where they can be checked against the reference `Indexing`).
+// host in tests (where they can be checked against the CPU field geometry).
 struct DeviceTopology {
     int ndim             = 0;
     long nsites          = 0;
@@ -34,7 +34,7 @@ struct DeviceTopology {
     }
 };
 
-// Host-side builder from a shape (matches reticolo::Indexing's column-major /
+// Host-side builder from a shape (matches the CPU geometry's column-major /
 // x-fastest layout). Host-only; not called from device code.
 [[nodiscard]] inline DeviceTopology make_device_topology(std::vector<std::size_t> const& shape) {
     if (shape.empty() || shape.size() > static_cast<std::size_t>(kMaxDim)) {

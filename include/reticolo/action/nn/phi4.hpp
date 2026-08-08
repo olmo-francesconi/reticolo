@@ -18,7 +18,7 @@ namespace reticolo::action {
 //                + lambda (phi(x)^2 - 1)^2 ]
 //
 // Each nearest-neighbour bond appears once in `s_full` (positive-mu
-// convention). All the physics lives in the shared `detail/phi4_formula.hpp`
+// convention). All the physics lives in the shared `nn/formula/phi4_formula.hpp`
 // functions (host+device); the loop shells, cache and LLR fast-path come from
 // `NNAction`. This struct is just the couplings + the kernel binds.
 

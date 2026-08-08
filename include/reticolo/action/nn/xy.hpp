@@ -19,7 +19,7 @@ namespace reticolo::action {
 // `action_combine`/`force_combine`. There is no per-site self term, so the
 // finalizers pass the aggregate through; the -beta prefactor scales the total
 // action (post-reduce, via `action_scale`) and each force site. The bond math
-// lives in `detail/xy_formula.hpp`.
+// lives in `nn/formula/xy_formula.hpp`.
 
 template <class T = double>
 struct Xy : NNAction<Xy<T>, T> {

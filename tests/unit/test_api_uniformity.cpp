@@ -102,8 +102,8 @@ TEST_CASE("BoseGas fused kick equals force-then-kick", "[api][kick][bose]") {
     }
     double const k_dt = 0.123;
 
-    Lattice<C> mom_fused{field.indexing()};
-    Lattice<C> mom_ref{field.indexing()};
+    Lattice<C> mom_fused{field.shape()};
+    Lattice<C> mom_ref{field.shape()};
     for (std::size_t i = 0; i < field.nsites(); ++i) {
         mom_fused.data()[i] = C{1.0, -2.0};
         mom_ref.data()[i]   = C{1.0, -2.0};
@@ -111,7 +111,7 @@ TEST_CASE("BoseGas fused kick equals force-then-kick", "[api][kick][bose]") {
 
     bg.compute_force_and_kick(field, mom_fused, k_dt);
 
-    Lattice<C> force{field.indexing()};
+    Lattice<C> force{field.shape()};
     bg.compute_force(field, force);
     for (std::size_t i = 0; i < field.nsites(); ++i) {
         mom_ref.data()[i] += k_dt * force.data()[i];
@@ -148,4 +148,76 @@ TEST_CASE("app::common_flags registers shared flags; out_path joins", "[api][app
     REQUIRE(cf.workspace == "/tmp/ws");
     REQUIRE(ndim == 3);
     REQUIRE(app::out_path(cf) == "/tmp/ws/foo.h5");
+}
+
+// ---- one parameter shape for everything that carries an action ---------------
+//
+// The rule, pinned here so it cannot drift back: `<Action, Rng, Sampler[, …]>`,
+// with the element and field types DERIVED (the action names both) and the MD
+// integrator riding on the sampler tag rather than sitting beside it. These are
+// all compile-time; the point is that a shape regression fails to build here
+// rather than in fifteen apps.
+TEST_CASE("orchestration templates share one parameter shape", "[api][orch]") {
+    using Phi4 = act::Phi4<double>;
+    using Su3  = act::Wilson<math::group::SU3, double>;
+
+    using SpanHmc   = orch::span::Chain<Phi4, FastRng, updater::HmcSampler<>>;
+    using SpanMetro = orch::span::Chain<Phi4, FastRng, updater::MetropolisSampler>;
+    using SpanGauge = orch::span::Chain<Su3, FastRng, updater::HmcSampler<>>;
+    using ReplHmc   = orch::llr::Replica<Phi4, FastRng, updater::HmcSampler<>>;
+    using ReplMetro = orch::llr::Replica<Phi4, FastRng, updater::MetropolisSampler>;
+    using ReplGauge = orch::llr::Replica<Su3, FastRng, updater::HmcSampler<>>;
+
+    // The field comes from the ACTION, so gauge and scalar spell the same shape.
+    STATIC_REQUIRE(std::is_same_v<SpanHmc::field_type, Lattice<double>>);
+    STATIC_REQUIRE(std::is_same_v<ReplHmc::field_type, Lattice<double>>);
+    STATIC_REQUIRE(
+        std::is_same_v<SpanGauge::field_type, MatrixLinkLattice<math::group::SU3, double>>);
+    STATIC_REQUIRE(
+        std::is_same_v<ReplGauge::field_type, MatrixLinkLattice<math::group::SU3, double>>);
+
+    // The tag names the updater; the integrator rides on it.
+    STATIC_REQUIRE(std::is_same_v<SpanHmc::sampler_type, updater::Hmc<Phi4, FastRng>>);
+    STATIC_REQUIRE(std::is_same_v<SpanMetro::sampler_type, updater::Metropolis<Phi4, FastRng>>);
+    STATIC_REQUIRE(std::is_same_v<
+                   orch::span::Chain<Phi4, FastRng, updater::HmcSampler<updater::integ::Omelyan4>>::
+                       sampler_type,
+                   updater::Hmc<Phi4, FastRng, updater::integ::Omelyan4>>);
+
+    // Both worker kinds model the sampler contract, whichever sampler they hold.
+    STATIC_REQUIRE(updater::Updater<SpanMetro::sampler_type>);
+    STATIC_REQUIRE(updater::Updater<ReplMetro::sampler_type>);
+
+    // A Spec carries ONLY the chosen sampler's knobs — never a field the sampler
+    // in play would ignore.
+    using SpanOrchHmc   = orch::span::Orchestrator<Phi4, FastRng, updater::HmcSampler<>>;
+    using SpanOrchMetro = orch::span::Orchestrator<Phi4, FastRng, updater::MetropolisSampler>;
+    using LlrOrchHmc    = orch::llr::Orchestrator<Phi4, FastRng, updater::HmcSampler<>>;
+    using LlrOrchMetro  = orch::llr::Orchestrator<Phi4, FastRng, updater::MetropolisSampler>;
+
+    STATIC_REQUIRE(std::is_same_v<decltype(SpanOrchHmc::Spec::sampler), updater::HmcSpec>);
+    STATIC_REQUIRE(std::is_same_v<decltype(SpanOrchMetro::Spec::sampler), updater::MetropolisSpec>);
+    STATIC_REQUIRE(std::is_same_v<decltype(LlrOrchHmc::Spec::sampler), updater::HmcSpec>);
+    STATIC_REQUIRE(std::is_same_v<decltype(LlrOrchMetro::Spec::sampler), updater::MetropolisSpec>);
+}
+
+// `span::scan` is the sugar that fills Spec::points for the common one-knob
+// linear grid — the span analogue of an LLR ladder. Endpoints must be exact
+// (a sweep that misses kappa_max by a rounding step is a silently wrong study),
+// and n = 1 must degenerate to the low end rather than divide by zero.
+TEST_CASE("span::scan sweeps one member with exact endpoints", "[api][orch][span]") {
+    using Phi4 = act::Phi4<double>;
+
+    auto const pts = orch::span::scan(Phi4{.lambda = 1.5}, &Phi4::kappa, 0.10, 0.26, 5);
+    REQUIRE(pts.size() == 5);
+    REQUIRE(pts.front().kappa == Catch::Approx(0.10));
+    REQUIRE(pts.back().kappa == Catch::Approx(0.26));
+    REQUIRE(pts[2].kappa == Catch::Approx(0.18));
+    for (auto const& a : pts) {
+        REQUIRE(a.lambda == Catch::Approx(1.5));  // untouched members ride along
+    }
+
+    auto const one = orch::span::scan(Phi4{.lambda = 1.5}, &Phi4::kappa, 0.10, 0.26, 1);
+    REQUIRE(one.size() == 1);
+    REQUIRE(one.front().kappa == Catch::Approx(0.10));
 }

@@ -42,8 +42,8 @@ TEST_CASE("Phi6 at g6=0 reduces exactly to Phi4", "[physics][phi6]") {
 
     REQUIRE(a6.s_full(phi) == Catch::Approx(a4.s_full(phi)).margin(1e-12));
 
-    Lattice<double> f6{phi.indexing()};
-    Lattice<double> f4{phi.indexing()};
+    Lattice<double> f6{phi.shape()};
+    Lattice<double> f4{phi.shape()};
     a6.compute_force(phi, f6);
     a4.compute_force(phi, f4);
     for (Site const x : phi.sites()) {

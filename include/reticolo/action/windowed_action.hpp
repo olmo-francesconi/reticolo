@@ -3,11 +3,13 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/formula/window_formula.hpp>
 #include <reticolo/core/exec/field_ops.hpp>
+#include <reticolo/core/exec/nn_checkerboard.hpp>
 #include <reticolo/core/field/field_traits.hpp>
 #include <reticolo/core/field/lattice.hpp>
 
 #include <cstddef>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <type_traits>
 
@@ -123,6 +125,23 @@ struct ObservableConstraint {
     void restore(Base const& /*b*/, double v) const noexcept {
         obs.restore_last_s_full(v);
     }
+    // The observable's per-site local energy, for the sequential windowed sweep.
+    // Present only when the observable is a family that offers one (any NNAction
+    // leaf with an `action_kernel`), so a windowed action over an observable that
+    // has no local form simply fails `action::LocalAction` instead of failing to
+    // compile inside the updater.
+    template <class Base>
+    [[nodiscard]] auto local_energy_kernel(Base const& /*b*/) const noexcept
+        requires requires(Obs const& o) { o.local_energy_kernel(); }
+    {
+        return obs.local_energy_kernel();
+    }
+    template <class Base>
+    [[nodiscard]] auto local_energy_scale(Base const& /*b*/) const noexcept
+        requires requires(Obs const& o) { o.local_energy_scale(); }
+    {
+        return obs.local_energy_scale();
+    }
 };
 
 // The default constraint for a base: imaginary part if it has a sign problem,
@@ -131,18 +150,22 @@ template <class Base, class Field>
 using default_constraint_t =
     std::conditional_t<action::HasImagPart<Base, Field>, ImagConstraint, SelfConstraint>;
 
-template <class Base, class T = Base::value_type, class Field = Lattice<T>, class Constraint = void>
+// Same parameter structure as every other action-carrying template here: the
+// element and field types are not parameters, because `Base` names both.
+template <class Action, class Constraint = void>
 struct WindowedAction {
-    using value_type      = T;
-    using field_type      = Field;
-    using scalar_t        = scalar_of_t<T>;
-    using constraint_type = std::
-        conditional_t<std::is_void_v<Constraint>, default_constraint_t<Base, Field>, Constraint>;
+    using base_type       = Action;
+    using value_type      = Action::value_type;
+    using field_type      = Action::field_type;
+    using scalar_t        = scalar_of_t<value_type>;
+    using constraint_type = std::conditional_t<std::is_void_v<Constraint>,
+                                               default_constraint_t<Action, field_type>,
+                                               Constraint>;
 
     // Owned by value (not reference): each Replica carries its own base +
     // constraint so any mutable scratch/cache stays per-replica (OpenMP over
     // replicas).
-    Base base;
+    Action base;
     scalar_t a = scalar_t{0};
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention E_n = window centre
     scalar_t E_n   = scalar_t{0};
@@ -153,7 +176,7 @@ struct WindowedAction {
     static constexpr bool k_complex = !k_self;  // there is a separate constraint observable
 
     // The current constraint value Q(field) (fresh sweep).
-    [[nodiscard]] scalar_t constraint_value(Field const& l) const noexcept {
+    [[nodiscard]] scalar_t constraint_value(field_type const& l) const noexcept {
         if constexpr (k_self) {
             return static_cast<scalar_t>(base.s_full(l));
         } else {
@@ -161,7 +184,7 @@ struct WindowedAction {
         }
     }
 
-    [[nodiscard]] scalar_t s_full(Field const& l) const noexcept {
+    [[nodiscard]] scalar_t s_full(field_type const& l) const noexcept {
         if constexpr (k_self) {
             return formula::windowed_value(static_cast<scalar_t>(base.s_full(l)), a, E_n, delta);
         } else {
@@ -199,7 +222,7 @@ struct WindowedAction {
         }
     }
 
-    void compute_force(Field const& l, Field& force) const noexcept {
+    void compute_force(field_type const& l, field_type& force) const noexcept {
         if constexpr (k_self) {
             // Fused base kernel when available: one neighbour pass yields both
             // S_base and the force, dropping the separate full-lattice s_full.
@@ -215,19 +238,19 @@ struct WindowedAction {
         } else {
             // Generic: F = F_base + (a + (Q − E_n)/δ²)·F_Q.
             base.compute_force(l, force);
-            Field& q_force       = scratch_(force.indexing());
+            field_type& q_force  = scratch_(force.shape());
             scalar_t const q     = constraint_value_and_force_(l, q_force);
             scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
             exec::kick_add(force, q_force, scale);  // force += scale·F_Q
         }
     }
 
-    void compute_force_and_kick(Field const& l, Field& mom, scalar_t k_dt) const noexcept
-        requires action::HasFusedKick<Base, Field>
+    void compute_force_and_kick(field_type const& l, field_type& mom, scalar_t k_dt) const noexcept
+        requires action::HasFusedKick<Action, field_type>
     {
         if constexpr (k_self) {
-            if constexpr (requires(Field& f) { base.s_full_and_force(l, f); }) {
-                Field& f             = scratch_(mom.indexing());
+            if constexpr (requires(field_type& f) { base.s_full_and_force(l, f); }) {
+                field_type& f        = scratch_(mom.shape());
                 auto const s         = static_cast<scalar_t>(base.s_full_and_force(l, f));
                 scalar_t const scale = formula::force_scale(s, a, E_n, delta);
                 exec::kick_add(mom, f, k_dt * scale);
@@ -251,7 +274,7 @@ struct WindowedAction {
             } else {
                 // Q's pass runs first (it only reads `l`, which no kick touches),
                 // so the two `kick_add`s stay in base-then-Q order regardless.
-                Field& q_force       = scratch_(mom.indexing());
+                field_type& q_force  = scratch_(mom.shape());
                 scalar_t const q     = constraint_value_and_force_(l, q_force);
                 scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
                 base.compute_force_and_kick(l, mom, k_dt);
@@ -260,16 +283,124 @@ struct WindowedAction {
         }
     }
 
+    // --- local (Metropolis) update -------------------------------------------
+    //
+    // ONE colour, and a strictly sequential pass — not the two-colour parallel
+    // checkerboard every other action uses. The reason is the window, and only
+    // the window: `a·Q` is LINEAR in Q, so its per-site increment `a·ΔQ` is
+    // purely local, but the Gaussian penalty is quadratic in a GLOBAL scalar, so
+    // a single move contributes `[2(Q−E_n)ΔQ + ΔQ²]/2δ²` — a term that reads the
+    // CURRENT Q. Accepting a move at one site therefore changes ΔS at every other
+    // site of the same colour, which is exactly the independence the checkerboard
+    // rests on. Freezing Q across a colour would restore the parallelism and break
+    // detailed balance; carrying Q as a running scalar through a fixed site order
+    // keeps detailed balance exactly (each single-site update is a proper
+    // Metropolis step against the current configuration).
+    //
+    // The parallelism this gives up is parallelism the consumer never had: an LLR
+    // replica runs its lattice passes serially inside the replica-parallel team.
+    //
+    // Available only when the base — and the constraint observable, when there is
+    // a separate one — expose a local energy. `ImagConstraint` does not yet, so a
+    // sign-problem windowed action simply fails `action::LocalAction` and stays on
+    // HMC rather than silently sampling something else.
+    static constexpr bool k_local = requires(Action const& b) { b.local_energy_kernel(); } &&
+                                    (k_self || requires(constraint_type const& c, Action const& b) {
+                                        c.local_energy_kernel(b);
+                                        c.local_energy_scale(b);
+                                    });
+
+    [[nodiscard]] static constexpr int n_colors(field_type const& /*l*/) noexcept { return 1; }
+
+    [[nodiscard]] LocalStats metropolis_stencil(field_type& l,
+                                                int /*color*/,
+                                                field_type const& noise,
+                                                Lattice<scalar_t> const& logu,
+                                                scalar_t sigma) const noexcept
+        requires k_local
+    {
+        auto const kb   = base.local_energy_kernel();
+        auto const sc_b = base.local_energy_scale();
+        auto const kq   = constraint_local_kernel_();
+        auto const sc_q = constraint_local_scale_();
+
+        // Re-derive both running scalars instead of trusting the caches. A stale Q
+        // here does not merely mis-report the bookkeeping — it enters the window
+        // term and biases EVERY accept test in the sweep. And the field is
+        // routinely mutated between sweeps by code that never passed through this
+        // action: an LLR app hot-starts it after construction, and replica
+        // exchange swaps whole configurations. One extra reduce, against a sweep
+        // that already gathers 2·d neighbours per site, buys immunity to a class
+        // of bug that would only surface deep in a production run.
+        auto s_base = static_cast<scalar_t>(base.s_full(l));
+        scalar_t q  = s_base;
+        if constexpr (!k_self) {
+            q = static_cast<scalar_t>(constraint.value(base, l));
+        }
+
+        value_type* const data     = l.data();
+        value_type const* const nz = noise.data();
+        scalar_t const* const lu   = logu.data();
+
+        auto const stats = exec::nn_sequential_reduce<LocalStats>(
+            l, [&](std::size_t i, value_type self, auto const& gather) {
+                value_type const prop = self + (sigma * nz[i]);
+                auto const ds_base =
+                    static_cast<scalar_t>(sc_b * (kb(prop, gather) - kb(self, gather)));
+                scalar_t dq = ds_base;
+                if constexpr (!k_self) {
+                    dq = static_cast<scalar_t>(sc_q * (kq(prop, gather) - kq(self, gather)));
+                }
+                scalar_t const dw = formula::windowed_delta(ds_base, dq, q, a, E_n, delta);
+                if (-static_cast<double>(dw) >= static_cast<double>(lu[i])) {
+                    data[i] = prop;
+                    s_base += ds_base;
+                    q += dq;
+                    return LocalStats{
+                        .n_accepted = 1, .n_attempts = 1, .ds = static_cast<double>(dw)};
+                }
+                return LocalStats{.n_accepted = 0, .n_attempts = 1, .ds = 0.0};
+            });
+
+        // Publish what the sweep already knows exactly. These are the caches
+        // orch::llr::Replica reads for ⟨dE⟩, exchange and reporting — the same
+        // ones HMC leaves behind at the end of a trajectory.
+        base.restore_last_s_full(static_cast<double>(s_base));
+        if constexpr (!k_self) {
+            constraint.restore(base, static_cast<double>(q));
+        }
+        return stats;
+    }
+
     // Lazy scratch field for the non-self F_Q pass (and the self fused merge).
     // Allocated on first force call and reused; avoids the per-MD-step
     // malloc/free. `mutable` because the force methods are const.
-    mutable std::optional<Field> scratch_storage{};
+    mutable std::optional<field_type> scratch_storage{};
 
 private:
+    // The constraint observable's local energy. For the self constraint there is
+    // no separate observable — ΔQ IS ΔS_base and these are never called — so they
+    // resolve to the base's own, which keeps the declaration well-formed without
+    // inventing a placeholder type.
+    [[nodiscard]] auto constraint_local_kernel_() const noexcept {
+        if constexpr (k_self) {
+            return base.local_energy_kernel();
+        } else {
+            return constraint.local_energy_kernel(base);
+        }
+    }
+    [[nodiscard]] auto constraint_local_scale_() const noexcept {
+        if constexpr (k_self) {
+            return base.local_energy_scale();
+        } else {
+            return constraint.local_energy_scale(base);
+        }
+    }
+
     // Q and F_Q for the non-self path: one fused sweep when the constraint
     // offers `value_and_force`, else the value sweep + the force sweep.
-    [[nodiscard]] scalar_t constraint_value_and_force_(Field const& l,
-                                                       Field& q_force) const noexcept {
+    [[nodiscard]] scalar_t constraint_value_and_force_(field_type const& l,
+                                                       field_type& q_force) const noexcept {
         if constexpr (requires { constraint.value_and_force(base, l, q_force); }) {
             return static_cast<scalar_t>(constraint.value_and_force(base, l, q_force));
         } else {
@@ -279,9 +410,11 @@ private:
         }
     }
 
-    [[nodiscard]] Field& scratch_(std::shared_ptr<Indexing const> idx) const noexcept {
+    // Built from the sibling's SHAPE, not from a shared geometry handle — so the
+    // scratch field has no lifetime coupling to the field it mirrors.
+    [[nodiscard]] field_type& scratch_(std::span<std::size_t const> shape) const noexcept {
         if (!scratch_storage) {
-            scratch_storage.emplace(std::move(idx));
+            scratch_storage.emplace(shape);
         }
         return *scratch_storage;
     }

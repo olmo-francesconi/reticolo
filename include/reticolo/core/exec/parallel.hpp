@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdlib>
 #include <format>
 #include <mutex>
 #include <set>
@@ -43,6 +44,28 @@
 // Without `-fopenmp` every pragma vanishes and this all degrades to serial.
 
 namespace reticolo::exec {
+
+// ---------- OpenMP runtime policy -------------------------------------------
+//
+// Every per-site pass here opens its own parallel region. Keeping workers active
+// between those short regions avoids paying a wake-up on every pass. This must
+// run before the OpenMP runtime initialises, hence the inline static initializer.
+// Set RETICOLO_NO_OMP_TUNE to preserve an externally selected wait policy.
+namespace impl {
+
+inline bool tune_openmp_wait_policy() noexcept {
+#if defined(_OPENMP) && (defined(__APPLE__) || defined(__unix__) || defined(_POSIX_VERSION))
+    if (std::getenv("RETICOLO_NO_OMP_TUNE") != nullptr) {
+        return true;
+    }
+    ::setenv("OMP_WAIT_POLICY", "active", 1);
+#endif
+    return true;
+}
+
+inline bool const k_openmp_wait_policy_tuned = tune_openmp_wait_policy();
+
+}  // namespace impl
 
 // Target working-set per flat-range work item. Small enough that a big lattice
 // yields many chunks (load balance across the team), large enough to amortise the

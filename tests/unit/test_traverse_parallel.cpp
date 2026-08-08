@@ -53,7 +53,7 @@ Lattice<double> hot_lattice(Lattice<double>::SizeVec const& shape) {
 }
 
 std::vector<double> force_vec(Phi4<double> const& action, Lattice<double> const& phi) {
-    Lattice<double> f{phi.indexing()};
+    Lattice<double> f{phi.shape()};
     action.compute_force(phi, f);
     return {f.data(), f.data() + f.nsites()};
 }
@@ -89,7 +89,7 @@ void gauge_hot_start(MatrixLinkLattice<G, double>& u, FastRng& rng, double scale
             }
         }
     }
-    MatrixLinkLattice<G, double> x0{u.indexing()};
+    MatrixLinkLattice<G, double> x0{u.shape()};
     for (std::size_t mu = 0; mu < d; ++mu) {
         G::sample_algebra_slab(x0.mu_block_data(mu), rng, ns);
         G::expi_lmul_slab(u.mu_block_data(mu), x0.mu_block_data(mu), scale, ns);
@@ -99,14 +99,14 @@ void gauge_hot_start(MatrixLinkLattice<G, double>& u, FastRng& rng, double scale
 template <class G>
 std::vector<double> gauge_force_vec(Wilson<G, double> const& action,
                                     MatrixLinkLattice<G, double> const& u) {
-    MatrixLinkLattice<G, double> f{u.indexing()};
+    MatrixLinkLattice<G, double> f{u.shape()};
     action.compute_force(u, f);
     return {f.data(), f.data() + f.ncomponents()};
 }
 
 std::vector<std::complex<double>> bose_force_vec(BoseGas<double> const& action,
                                                  Lattice<std::complex<double>> const& phi) {
-    Lattice<std::complex<double>> f{phi.indexing()};
+    Lattice<std::complex<double>> f{phi.shape()};
     action.compute_force(phi, f);
     return {f.data(), f.data() + f.nsites()};
 }
@@ -114,9 +114,9 @@ std::vector<std::complex<double>> bose_force_vec(BoseGas<double> const& action,
 }  // namespace
 
 // The threaded per-dim force pass must land on the identical answer as the plain
-// gather through the neighbour table — each site is written exactly once and its
-// neighbour sum is in the same order, so the tiling/slab decomposition and thread
-// count are bit-for-bit irrelevant.
+// gather over computed next/prev (no neighbour table anymore) — each site is
+// written exactly once and its neighbour sum is in the same order, so the
+// tiling/slab decomposition and thread count are bit-for-bit irrelevant.
 TEST_CASE("threaded compute_force equals the gather fallback, every dimension",
           "[hot_loop][parallel]") {
     Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
@@ -212,7 +212,7 @@ TEST_CASE("SineGordon force is thread-count invariant; s_full is fixed-team dete
     SineGordon<double> const action{.kappa = 0.18, .alpha = 0.7};
 
     auto force = [&] {
-        Lattice<double> f{phi.indexing()};
+        Lattice<double> f{phi.shape()};
         action.compute_force(phi, f);  // triggers prep() sin-batch + nn_visit_all
         return std::vector<double>{f.data(), f.data() + f.nsites()};
     };

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <reticolo/cuda/checkerboard.cuh>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/reduce.cuh>
 #include <reticolo/cuda/reduce_fwd.cuh>
@@ -57,6 +58,24 @@ inline void site_s_full_and_force(double* out,
                                   DeviceTopology const& topo,
                                   cudaStream_t s) {
     stencil_fwd_fused_launch(f, field, force, out, scratch, partials, topo, s);
+}
+
+// One colour of a local Metropolis sweep — the local-update counterpart of
+// site_force, wrapping the generic checkerboard skeleton with the action's own
+// ds functor. Updates `field` in place and stages the per-site ΔS / accepted
+// counts for the caller's reduction.
+template <class DsF, class T>
+inline void site_metropolis(DsF f,
+                            T* field,
+                            DeviceTopology const& topo,
+                            int color,
+                            double sigma,
+                            std::uint64_t seed,
+                            std::uint64_t const* sweep,
+                            double* ds_out,
+                            double* acc_out,
+                            cudaStream_t s) {
+    checkerboard_launch(f, field, topo, color, sigma, seed, sweep, ds_out, acc_out, s);
 }
 
 // Scalar / U(1) momentum sampler: one iid normal per field component. The

@@ -19,7 +19,8 @@ using reticolo::exec::slab_scope;
 
 namespace {
 
-// The canonical shapes every per-site pass slices: one per dimensionality.
+// The canonical shapes every per-site pass slices: 2D through 4D, plus a second,
+// uneven 4D shape to exercise the block-split search on unequal extents.
 std::vector<Lattice<double>::SizeVec> shapes() {
     return {{64, 64}, {24, 24, 24}, {8, 8, 8, 8}, {12, 6, 4, 2}};
 }

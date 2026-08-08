@@ -148,6 +148,17 @@ public:
     // cache branch. Used by HMC momentum sampling where every site needs an
     // independent normal. The byte stream is not identical to repeated
     // `normal()` calls (different algorithm); statistical properties are.
+    // Batched uniforms in (0, 1] — the accept thresholds of a local sweep, which
+    // tests `−ΔS ≥ log u`. The twin of `normal_fill`, and the reason it exists is
+    // the same: a per-element `uniform()` call reloads the generator state from
+    // memory every draw, while a fill keeps it in registers across the loop. The
+    // low end is clamped so a caller taking `log(u)` never sees −inf.
+    void uniform_fill(double* out, std::size_t n) noexcept {
+        for (std::size_t i = 0; i < n; ++i) {
+            out[i] = std::max(uniform(), 1.0e-300);
+        }
+    }
+
     void normal_fill(double* out, std::size_t n) noexcept {
         std::size_t i = 0;
         if (has_cached_normal_ && i < n) {

@@ -1,7 +1,7 @@
 #pragma once
 
 // Public umbrella include — covers actions, algorithms, observers, IO, and
-// core types (lattice, indexing, site, bc, rng, log).
+// core types (lattice, site, rng, log).
 
 // NOLINTBEGIN(misc-include-cleaner): re-exports are the whole point of the umbrella.
 #include <reticolo/action/complex.hpp>
@@ -13,8 +13,8 @@
 #include <reticolo/cli/parser.hpp>
 #include <reticolo/core/exec/nn_site.hpp>
 #include <reticolo/core/field/field_traits.hpp>
-#include <reticolo/core/field/indexing.hpp>
 #include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/field/lattice_geometry.hpp>
 #include <reticolo/core/field/site.hpp>
 #include <reticolo/core/log/log.hpp>
 #include <reticolo/core/log/log_helpers.hpp>
@@ -48,6 +48,8 @@
 #include <reticolo/updater/concepts.hpp>
 #include <reticolo/updater/hmc/hmc.hpp>
 #include <reticolo/updater/hmc/integrators.hpp>
+#include <reticolo/updater/metropolis/metropolis.hpp>
+#include <reticolo/updater/samplers.hpp>
 // NOLINTEND(misc-include-cleaner)
 
 // Short namespace aliases. One `using namespace reticolo;` per app then gives

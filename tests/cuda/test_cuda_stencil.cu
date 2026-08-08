@@ -97,8 +97,8 @@ namespace {
 template <class G>
 [[nodiscard]] bool exercise() {
     MatrixLinkLattice<G> u{{4, 4, 4, 4}};
-    MatrixLinkLattice<G> mom{u.indexing()};
-    MatrixLinkLattice<G> force{u.indexing()};
+    MatrixLinkLattice<G> mom{u.shape()};
+    MatrixLinkLattice<G> force{u.shape()};
 
     action::Wilson<G> w{};
     w.beta = 1.0;

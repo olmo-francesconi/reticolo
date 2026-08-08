@@ -25,7 +25,8 @@ namespace reticolo::action {
 // The per-site transcendental is the only reason this doesn't reduce to the
 // plain NNAction kernels: on the f64 hot path sin(phi) is Sleef-batched into
 // the shared scratch by `prep`, and cos(phi) is batched inside the bespoke
-// `s_full`. The physics still lives entirely in `detail/sine_gordon_formula.hpp`.
+// `s_full`. The physics still lives entirely in
+// `nn/formula/sine_gordon_formula.hpp`.
 
 template <class T = double>
 struct SineGordon : NNAction<SineGordon<T>, T> {
@@ -45,6 +46,18 @@ struct SineGordon : NNAction<SineGordon<T>, T> {
         e.line("SineGordon<{}>", scalar_name<T>());
         e.param("κ={:.3f}", kappa);
         e.param("α={:.3f}", alpha);
+    }
+
+    // Per-site action from phi and the forward neighbour sum, with cos(phi) taken
+    // scalar. The bespoke `s_full` below does NOT use this — it batches the whole
+    // cos pass through Sleef, which is why this leaf overrides s_full in the first
+    // place. It exists for the per-site paths, where a single candidate value has
+    // nothing to batch over: `NNAction::metropolis_stencil` scores one proposal at a
+    // time, so the batched form has no way in. Without it this leaf is HMC-only.
+    [[nodiscard]] auto action_kernel() const noexcept {
+        return [k = kappa, alp = alpha](T phi, T fwd) {
+            return formula::sine_gordon_action_site<T>(phi, fwd, std::cos(phi), k, alp);
+        };
     }
 
     // Fill the shared scratch with sin(phi) per site — Sleef-batched on f64,

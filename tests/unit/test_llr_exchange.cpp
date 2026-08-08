@@ -17,7 +17,7 @@ using reticolo::action::Phi4;
 namespace alg  = reticolo::updater;
 namespace orch = reticolo::orch;
 
-using ReplicaT = orch::llr::Replica<Phi4<double>, FastRng>;
+using ReplicaT = orch::llr::Replica<Phi4<double>, FastRng, alg::HmcSampler<>>;
 
 namespace {
 

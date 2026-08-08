@@ -74,21 +74,21 @@ int main(int argc, char** argv) {
     log::act(base);
 
     // ---- Orchestrator: owns geometry, the replica ladder, threading ----
-    orch::llr::Orchestrator<Action, FastRng> llr{base,
-                                                 orch::llr::Spec{.shape      = shape,
-                                                                 .seed       = seed,
-                                                                 .e_min      = e_min,
-                                                                 .e_max      = e_max,
-                                                                 .delta      = delta,
-                                                                 .spacing    = spacing,
-                                                                 .tau        = tau,
-                                                                 .n_md       = n_md,
-                                                                 .n_nr       = n_nr,
-                                                                 .n_therm_nr = n_therm_nr,
-                                                                 .n_meas_nr  = n_meas_nr,
-                                                                 .n_rm       = n_rm,
-                                                                 .n_therm_rm = n_therm_rm,
-                                                                 .n_meas_rm  = n_meas_rm}};
+    using Llr = orch::llr::Orchestrator<Action, FastRng, updater::HmcSampler<>>;
+    Llr llr{base,
+            Llr::Spec{.shape      = shape,
+                      .seed       = seed,
+                      .e_min      = e_min,
+                      .e_max      = e_max,
+                      .delta      = delta,
+                      .spacing    = spacing,
+                      .sampler    = {.tau = tau, .n_md = n_md},
+                      .n_nr       = n_nr,
+                      .n_therm_nr = n_therm_nr,
+                      .n_meas_nr  = n_meas_nr,
+                      .n_rm       = n_rm,
+                      .n_therm_rm = n_therm_rm,
+                      .n_meas_rm  = n_meas_rm}};
 
     // ---- Output ----
     io::Writer out{outpath, argc, argv, &p};

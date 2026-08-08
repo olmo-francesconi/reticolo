@@ -46,7 +46,7 @@ struct Params {
 // Deterministic non-trivial complex config in the host AoS layout.
 template <class T>
 Lattice<std::complex<T>> make_field() {
-    Lattice<std::complex<T>> l{Indexing::SizeVec(kShape.begin(), kShape.end())};
+    Lattice<std::complex<T>> l{std::vector<std::size_t>(kShape.begin(), kShape.end())};
     std::complex<T>* const d = l.data();
     std::size_t const ns     = l.nsites();
     for (std::size_t i = 0; i < ns; ++i) {
@@ -81,7 +81,7 @@ bool cpu_matches_device_impl(double s_tol, double f_tol) {
     action::BoseGas<T> const a          = make_action<T>();
 
     double const s_cpu = a.s_full(host);
-    Lattice<std::complex<T>> f_cpu{host.indexing()};
+    Lattice<std::complex<T>> f_cpu{host.shape()};
     a.compute_force(host, f_cpu);
 
     DField dfield{kShape};
@@ -122,7 +122,7 @@ bool hmc_runs_impl() {
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
     DAct dact{make_action<T>(), field.topology()};
-    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 0.5, 10};
+    Hmc<DAct, updater::integ::Leapfrog> hmc{std::move(dact), field, 0.5, 10};
     hmc.run(8);
     double const acc = hmc.acceptance();
     hmc.sync();
@@ -229,7 +229,7 @@ bool bose_gas_force_imag_matches_cpu() {
     Lattice<std::complex<double>> const host = make_field<double>();
     action::BoseGas<double> const a          = make_action<double>();
 
-    Lattice<std::complex<double>> f_cpu{host.indexing()};
+    Lattice<std::complex<double>> f_cpu{host.shape()};
     a.compute_force_imag(host, f_cpu);
 
     DeviceField<cplx<double>> dfield{kShape};
@@ -271,7 +271,7 @@ bool bose_gas_windowed_modeB_matches_cpu_impl(double s_tol, double f_tol) {
         a, static_cast<T>(a_slope), static_cast<T>(e_n), static_cast<T>(delta)};
     static_assert(decltype(w)::k_complex, "BoseGas CPU WindowedAction must be mode B");
     double const s_cpu = w.s_full(host);
-    Lattice<std::complex<T>> f_cpu{host.indexing()};
+    Lattice<std::complex<T>> f_cpu{host.shape()};
     w.compute_force(host, f_cpu);
 
     // Device windowed.

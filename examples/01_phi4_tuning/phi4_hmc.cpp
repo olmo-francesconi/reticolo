@@ -1,6 +1,6 @@
 // HMC for the phi^4 scalar field on a `ndim`-dimensional hypercubic lattice
-// (default ndim = 4; the example sweeps use ndim = 3 for cleaner FSS in the
-// 3D Ising universality class).
+// (default ndim = 4; the example sweeps use ndim = 2 for cleaner FSS in the
+// 2D Ising universality class).
 //
 // Output schema:
 //  /run@*                — reproducibility metadata stamped by Writer

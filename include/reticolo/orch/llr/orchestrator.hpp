@@ -19,6 +19,7 @@
 #include <format>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace reticolo::orch::llr {
@@ -38,53 +39,12 @@ namespace reticolo::orch::llr {
 // identity; U(1) / complex hot-start): the app does that between setup() and run()
 // via replicas(), guarded by resuming().
 //
-//   using Llr = orch::llr::Orchestrator<act::Phi4<double>, FastRng>;
+//   using Llr = orch::llr::Orchestrator<act::Phi4<double>, FastRng, updater::HmcSampler<>>;
 //   Llr llr{base, orch::llr::Spec{.shape=shape, .seed=seed, .e_min=…, …}};
 //   io::Writer out{outpath, argc, argv, &p};
 //   out.start_phase("llr");
 //   llr.setup(out);
 //   llr.run();
-
-// Everything the run needs beyond the base action + window constraint: window
-// geometry (in the constraint observable's units), the shared HMC sampler, the
-// NR/RM schedule, warm-up, threading and checkpoint/resume. `spacing = 0` makes
-// the replica spacing equal to `delta`; the ladder centres are snapped to a
-// (n_rep − 1)·dE grid, exactly as the old apps computed inline.
-struct Spec {
-    std::vector<std::size_t> shape;
-    unsigned long long seed = 0;
-
-    double e_min   = 0.0;
-    double e_max   = 0.0;
-    double delta   = 0.0;  // Gaussian penalty width δ AND (if spacing=0) replica spacing
-    double spacing = 0.0;  // window-centre interval; 0 ⇒ equal to delta
-
-    double tau = 1.0;
-    int n_md   = 20;
-
-    int n_nr       = 6;
-    int n_therm_nr = 200;
-    int n_meas_nr  = 1000;
-    int n_rm       = 20;
-    int n_therm_rm = 100;
-    int n_meas_rm  = 500;
-    bool exchange  = true;
-
-    int warm_therm     = 200;
-    int warm_max_traj  = 2000;
-    double warm_thresh = 1.0;
-
-    int replica_threads = 1;  // → plan_threads(n_rep, replica_threads)
-    int slabs           = 0;
-
-    // Explicit {} so every Spec member carries a default initializer: a
-    // designated-init caller may then omit any trailing field without tripping
-    // -Wmissing-designated-field-initializers (clang 20+). The NOLINTs suppress
-    // readability-redundant-member-init, which flags the very same {}.
-    std::string checkpoint_path{};  // NOLINT(readability-redundant-member-init)
-    std::string resume{};           // NOLINT(readability-redundant-member-init)
-    int checkpoint_every = 0;
-};
 
 // Smoothed-RM knobs: a cross-replica local-polynomial fit â(E) shrunk into each
 // per-replica RM iterate. λ_s = λ0/(s+1)^exp; exp > 1 keeps the perturbation
@@ -96,7 +56,7 @@ struct SmoothConfig {
     double smooth_lambda_exp = 2.0;
 };
 
-namespace detail {
+namespace impl {
 
 // In-place Gauss elimination with partial pivoting. `mat` is `n × n` row-major;
 // `vec` is `n`. Returns false if singular to within `k_tol`; else `vec` holds
@@ -205,21 +165,81 @@ inline void local_poly_fit(std::vector<double> const& e,
     }
 }
 
-}  // namespace detail
+}  // namespace impl
 
-template <class Base,
-          class Rng,
-          class Integrator = updater::integ::Omelyan2,
-          class T          = Base::value_type,
-          class Field      = Lattice<T>,
-          class Constraint = void>
+// ONE orchestrator; the sampler is a required template parameter (an `updater::`
+// sampler tag), in the slot the MD integrator used to hold — the integrator now
+// rides on the HMC tag, where it means something. No default: which updater
+// drives a run is a decision worth reading at the call site.
+//
+//   Orchestrator<Action, FastRng, updater::HmcSampler<>>              HMC, Omelyan2
+//   Orchestrator<Action, FastRng, updater::MetropolisSampler>         local sweeps
+//   Orchestrator<Action, FastRng, updater::HmcSampler<updater::integ::Omelyan4>>
+//   Orchestrator<Action, FastRng, updater::HmcSampler<>, Constraint>  window on Q
+//
+// Gauge LLR takes the SAME shape as scalar — `Orchestrator<Wilson<SU3>, FastRng>`.
+// The element and field types are not parameters at all: the action names both,
+// so a parameter for either could only be set to what the action already says, or
+// to something wrong.
+//
+// The schedule, the ladder, warm-up, NR/RM, exchange and checkpointing are shared
+// verbatim: nothing here reaches past `updater::Updater`. `Spec::sampler` carries
+// only the chosen sampler's own knobs (tau/n_md for HMC, sigma for Metropolis) —
+// never both — and `sampler_spec_()` resolves the team size into it.
+template <class Action, class Rng, class Sampler, class Constraint = void>
 class Orchestrator {
 public:
-    using replica_type    = Replica<Base, Rng, Integrator, T, Field, Constraint>;
+    using replica_type    = Replica<Action, Rng, Sampler, Constraint>;
     using constraint_type = replica_type::constraint_type;
-    using scalar_t        = action::scalar_of_t<T>;
+    using scalar_t        = action::scalar_of_t<typename Action::value_type>;
 
-    Orchestrator(Base base, Spec spec, constraint_type constraint = {})
+    // Everything the run needs beyond the base action + window constraint: window
+    // geometry (in the constraint observable's units), the sampler's own knobs,
+    // the NR/RM schedule, warm-up, threading and checkpoint/resume. `spacing = 0`
+    // makes the replica spacing equal to `delta`; the ladder centres are snapped
+    // to a (n_rep − 1)·dE grid.
+    //
+    // Nested, so it is parameterised by exactly this orchestrator's arguments —
+    // in particular `sampler` is `Sampler::spec_type`, so a Spec never advertises
+    // a knob the chosen sampler ignores. `replica_threads` stays out of it: that
+    // is the ENSEMBLE thread request, which setup() resolves into `sampler`.
+    // Counts are NOT comparable across samplers — an HMC trajectory is n_md
+    // lattice passes, a Metropolis sweep is one.
+    struct Spec {
+        std::vector<std::size_t> shape;
+        unsigned long long seed = 0;
+
+        double e_min   = 0.0;
+        double e_max   = 0.0;
+        double delta   = 0.0;  // Gaussian penalty width δ AND (if spacing=0) replica spacing
+        double spacing = 0.0;  // window-centre interval; 0 ⇒ equal to delta
+
+        Sampler::spec_type sampler{};
+
+        int n_nr       = 6;
+        int n_therm_nr = 200;
+        int n_meas_nr  = 1000;
+        int n_rm       = 20;
+        int n_therm_rm = 100;
+        int n_meas_rm  = 500;
+        bool exchange  = true;
+
+        int warm_therm     = 200;
+        int warm_max_traj  = 2000;
+        double warm_thresh = 1.0;
+
+        int replica_threads = 1;  // → plan_threads(n_rep, replica_threads)
+
+        // Explicit {} so every Spec member carries a default initializer: a
+        // designated-init caller may then omit any trailing field without tripping
+        // -Wmissing-designated-field-initializers (clang 20+). The NOLINTs suppress
+        // readability-redundant-member-init, which flags the very same {}.
+        std::string checkpoint_path{};  // NOLINT(readability-redundant-member-init)
+        std::string resume{};           // NOLINT(readability-redundant-member-init)
+        int checkpoint_every = 0;
+    };
+
+    Orchestrator(Action base, Spec spec, constraint_type constraint = {})
         : base_{std::move(base)}, spec_{std::move(spec)}, constraint_{std::move(constraint)},
           exch_rng_{spec_.seed} {}
 
@@ -249,10 +269,7 @@ public:
                                                 .shape = spec_.shape,
                                                 .e_n   = static_cast<scalar_t>(e_n),
                                                 .delta = static_cast<scalar_t>(spec_.delta)},
-                    updater::HmcSpec{.tau              = spec_.tau,
-                                     .n_md             = spec_.n_md,
-                                     .n_threads        = plan_.m,
-                                     .slabs_per_thread = spec_.slabs},
+                    sampler_spec_(),
                     constraint_));
             }
         }
@@ -390,6 +407,29 @@ public:
     [[nodiscard]] int n_rep() const noexcept { return n_rep_; }
 
 private:
+    // The sampler's construction parameters, drawn from the shared Spec. Which
+    // subset applies is decided by the sampler's own `spec_type` — the ladder,
+    // the schedule and the threading plan are identical either way.
+    [[nodiscard]] replica_type::sampler_spec_type sampler_spec_() const {
+        auto s = spec_.sampler;
+        // The resolved team size is the orchestrator's to set; not every sampler
+        // has to have the field, so probe rather than assume.
+        if constexpr (requires { s.n_threads; }) {
+            s.n_threads = plan_.m;
+        }
+        return s;
+    }
+
+    // The slab granularity, for the checkpoint header. Lives on the sampler spec
+    // (both shipped ones carry it); 0 when a sampler has no such knob.
+    [[nodiscard]] int slabs_() const noexcept {
+        if constexpr (requires { spec_.sampler.slabs_per_thread; }) {
+            return spec_.sampler.slabs_per_thread;
+        } else {
+            return 0;
+        }
+    }
+
     [[nodiscard]] int start_phase() const noexcept { return resuming_ ? resume_state_.phase : 0; }
     [[nodiscard]] int start_iter() const noexcept { return resuming_ ? resume_state_.iter : 0; }
 
@@ -413,8 +453,7 @@ private:
             spec_.checkpoint_path,
             reps_,
             exch_rng_,
-            OrchState{
-                .phase = phase, .iter = next_iter, .n_threads = plan_.m, .slabs = spec_.slabs});
+            OrchState{.phase = phase, .iter = next_iter, .n_threads = plan_.m, .slabs = slabs_()});
     }
 
     // Even/odd alternating nearest-neighbour exchange. Serial (shared exch RNG).
@@ -449,7 +488,7 @@ private:
                 de_buf_[n]     = static_cast<double>(r.sample(spec_.n_meas_nr, log::Mode::silent));
                 auto const st1 = r.stats();
                 acc_buf_[n]    = (st1.n_traj > st0.n_traj)
-                                     ? static_cast<double>(st1.n_accepted - st0.n_accepted) /
+                                     ? (st1.sum_acceptance - st0.sum_acceptance) /
                                            static_cast<double>(st1.n_traj - st0.n_traj)
                                      : 0.0;
                 // The Newton step needs only THIS replica's own (a, ⟨dE⟩), so it
@@ -500,7 +539,7 @@ private:
                 de_buf_[n]     = static_cast<double>(r.sample(spec_.n_meas_rm, log::Mode::silent));
                 auto const st1 = r.stats();
                 acc_buf_[n]    = (st1.n_traj > st0.n_traj)
-                                     ? static_cast<double>(st1.n_accepted - st0.n_accepted) /
+                                     ? (st1.sum_acceptance - st0.sum_acceptance) /
                                            static_cast<double>(st1.n_traj - st0.n_traj)
                                      : 0.0;
                 // Same as NR: the Robbins-Monro step is per-replica, so it is
@@ -567,7 +606,7 @@ private:
                 a_rm[n] = rm_update(reps_[n]->a(), de_buf_[n], spec_.delta, s);
             }
 
-            detail::local_poly_fit(e_n_vec_, a_rm, sm.smooth_K, sm.smooth_degree, a_hat);
+            impl::local_poly_fit(e_n_vec_, a_rm, sm.smooth_K, sm.smooth_degree, a_hat);
             double const lam =
                 sm.smooth_lambda0 / std::pow(static_cast<double>(s + 1), sm.smooth_lambda_exp);
             double rm_step_sum = 0.0;
@@ -627,7 +666,7 @@ private:
         }
     }
 
-    Base base_;
+    Action base_;
     Spec spec_;
     constraint_type constraint_;
     Rng exch_rng_;

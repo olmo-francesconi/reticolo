@@ -75,7 +75,7 @@ void hot_start(MatrixLinkLattice<G, double>& u, FastRng& rng, double scale) {
             }
         }
     }
-    MatrixLinkLattice<G, double> x0{u.indexing()};
+    MatrixLinkLattice<G, double> x0{u.shape()};
     for (std::size_t mu = 0; mu < d; ++mu) {
         G::sample_algebra_slab(x0.mu_block_data(mu), rng, ns);
         G::expi_lmul_slab(u.mu_block_data(mu), x0.mu_block_data(mu), scale, ns);
@@ -95,18 +95,18 @@ void check_force_fd(double beta, unsigned seed) {
     std::size_t const d  = u.ndims();
     std::size_t const ns = u.nsites();
 
-    Field force{u.indexing()};
+    Field force{u.shape()};
     action.compute_force(u, force);
 
     // Random algebra perturbation direction X (momentum-shaped).
-    Field x{u.indexing()};
+    Field x{u.shape()};
     for (std::size_t mu = 0; mu < d; ++mu) {
         G::sample_algebra_slab(x.mu_block_data(mu), rng, ns);
     }
 
     // predicted = -(1/2)[ kinetic_slab(X+F) - kinetic_slab(X-F) ], per mu-block.
-    Field xpf{u.indexing()};
-    Field xmf{u.indexing()};
+    Field xpf{u.shape()};
+    Field xmf{u.shape()};
     {
         double const* const xd  = x.data();
         double const* const fd  = force.data();

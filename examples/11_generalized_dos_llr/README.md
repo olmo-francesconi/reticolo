@@ -13,8 +13,7 @@ from example 03 (LLR on S) to this one is a **single template argument**:
 ```cpp
 using Constraint = action::ObservableConstraint<example::FieldAmplitude<double>>;
 using Llr        = orch::llr::Orchestrator<act::Phi4<double>, FastRng,
-                                           updater::integ::Omelyan2, double,
-                                           Lattice<double>, Constraint>;
+                                           updater::HmcSampler<>, Constraint>;
 ```
 
 ## Defining the observable

@@ -28,8 +28,8 @@ TEST_CASE("Phi4: s_full_and_force matches s_full + compute_force", "[unit][phi4]
     Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
 
     Lattice<double> phi{{6, 6, 6}};
-    Lattice<double> f_fused{phi.indexing()};
-    Lattice<double> f_ref{phi.indexing()};
+    Lattice<double> f_fused{phi.shape()};
+    Lattice<double> f_ref{phi.shape()};
     FastRng rng{1234};
     for (Site x : phi.sites()) {
         phi[x] = rng.normal();
@@ -49,7 +49,7 @@ TEST_CASE("Phi4: s_full_and_force leaves the last_s_full cache untouched", "[uni
     Phi4<double> const action{.kappa = 0.13, .lambda = 0.05};
 
     Lattice<double> phi{{4, 4, 4}};
-    Lattice<double> force{phi.indexing()};
+    Lattice<double> force{phi.shape()};
     FastRng rng{77};
     for (Site x : phi.sites()) {
         phi[x] = rng.normal();
@@ -67,8 +67,8 @@ TEST_CASE("Wilson<U1>: s_full_and_force matches s_full + compute_force",
     Wilson<reticolo::math::group::U1, double> const action{.beta = 1.0};
 
     MatrixLinkLattice<reticolo::math::group::U1, double> u{{4, 4, 4, 4}};
-    MatrixLinkLattice<reticolo::math::group::U1, double> f_fused{u.indexing()};
-    MatrixLinkLattice<reticolo::math::group::U1, double> f_ref{u.indexing()};
+    MatrixLinkLattice<reticolo::math::group::U1, double> f_fused{u.shape()};
+    MatrixLinkLattice<reticolo::math::group::U1, double> f_ref{u.shape()};
     FastRng rng{4321};
     for (auto& link : u) {
         link = (rng.uniform() - 0.5) * 2.0 * std::numbers::pi;
@@ -92,8 +92,8 @@ TEST_CASE(
     Wilson<reticolo::math::group::U1, float> const action{.beta = 1.0F};
 
     MatrixLinkLattice<reticolo::math::group::U1, float> u{{4, 4, 4, 4}};
-    MatrixLinkLattice<reticolo::math::group::U1, float> f_fused{u.indexing()};
-    MatrixLinkLattice<reticolo::math::group::U1, float> f_ref{u.indexing()};
+    MatrixLinkLattice<reticolo::math::group::U1, float> f_fused{u.shape()};
+    MatrixLinkLattice<reticolo::math::group::U1, float> f_ref{u.shape()};
     FastRng rng{999};
     for (auto& link : u) {
         link = static_cast<float>((rng.uniform() - 0.5) * 2.0 * std::numbers::pi);

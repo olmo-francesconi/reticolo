@@ -1,5 +1,5 @@
-#include <reticolo/core/field/indexing.hpp>
 #include <reticolo/core/field/lattice.hpp>
+#include <reticolo/core/field/lattice_geometry.hpp>
 #include <reticolo/core/field/site.hpp>
 
 #include <algorithm>
@@ -33,7 +33,7 @@ TEST_CASE("Element write/read is direct-indexed by Site", "[lattice]") {
     REQUIRE(phi[Site{15}] == 0.0);
 }
 
-TEST_CASE("Copy-construct deep-copies data but shares Indexing", "[lattice]") {
+TEST_CASE("Copy-construct deep-copies data and geometry", "[lattice]") {
     Lattice<double> phi{{4, 4}};
     phi[Site{2}] = 11.0;
 
@@ -44,21 +44,23 @@ TEST_CASE("Copy-construct deep-copies data but shares Indexing", "[lattice]") {
     REQUIRE(phi[Site{2}] == 11.0);
     REQUIRE(psi[Site{2}] == 99.0);
 
-    REQUIRE(phi.indexing().get() == psi.indexing().get());
+    // A copy carries its own geometry by value (this used to be a shared pooled
+    // object, and the assertion here was pointer identity).
+    REQUIRE(psi.same_geometry(phi));
 }
 
-TEST_CASE("Sibling Lattice constructor reuses the source's Indexing", "[lattice]") {
+TEST_CASE("Sibling Lattice constructor rebuilds the source's geometry", "[lattice]") {
     Lattice<double> phi{{4, 4, 4, 4}};
-    Lattice<double> mom{phi.indexing()};
+    Lattice<double> mom{phi.shape()};
 
     REQUIRE(mom.nsites() == phi.nsites());
-    REQUIRE(mom.indexing().get() == phi.indexing().get());
+    REQUIRE(mom.same_geometry(phi));
     for (Site s : mom.sites()) {
         REQUIRE(mom[s] == 0.0);
     }
 }
 
-TEST_CASE("Topology queries delegate to Indexing", "[lattice]") {
+TEST_CASE("Topology queries come from the field itself", "[lattice]") {
     Lattice<int> const phi{{4, 4}};
     REQUIRE(phi.next(Site{0}, 0) == Site{1});
     REQUIRE(phi.prev(Site{0}, 0) == Site{3});

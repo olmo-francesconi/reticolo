@@ -10,7 +10,7 @@ The target is the exact 2D Ising universality class — Onsager 1944:
 
 ## What this proves
 
-- The whole `apps/phi4_hmc.cpp` → HDF5 → Python loop works from a fresh clone
+- The whole `phi4_hmc.cpp` → HDF5 → Python loop works from a fresh clone
   with two commands.
 - The library reproduces a textbook FSS collapse on three independent
   observables (`κ_c`, `γ/ν`, `1/ν`) extracted jointly by minimising a
@@ -42,7 +42,7 @@ run the scripts as above.
 ## Run it
 
 Results land in `examples/01_phi4_tuning/results/` (one HDF5 per (L, κ)) and
-`susceptibility.png` next to the script.
+`susceptibility.pdf` next to the script.
 
 ## What you get
 
@@ -70,7 +70,7 @@ explicitly.
 | `LAMBDA`          | `1.145`              | quartic coupling                 |
 | `N_THERM`         | `3000`               | HMC thermalisation trajectories  |
 | `N_PROD`          | `50000`              | HMC production trajectories      |
-| `SEED`            | `20260517`           | RNG seed                         |
+| `SEED`            | `42`                 | RNG seed                         |
 
 The κ grid is hard-coded inside `run.sh`; widen or refine there.
 

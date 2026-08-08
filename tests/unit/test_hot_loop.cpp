@@ -48,7 +48,7 @@ TEST_CASE("nn_visit_all dispatch matches gather fallback in 1D/2D/3D/4D", "[hot_
         nn_visit_all<double>(l, [&out_dispatch](std::size_t i, double phi, double nbrs) {
             out_dispatch[i] = phi * 7.0 + nbrs;  // arbitrary linear body
         });
-        // Reference (gather through the computed Indexing::next/prev).
+        // Reference (gather through the computed the field's next/prev).
         reticolo::test::visit_nn_ref<double>(
             l, [&out_fallback](std::size_t i, double phi, double nbrs) {
                 out_fallback[i] = phi * 7.0 + nbrs;

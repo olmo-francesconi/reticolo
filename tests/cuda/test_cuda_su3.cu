@@ -69,7 +69,7 @@ void hot_start(MatrixLinkLattice<SU3, double>& u, FastRng& rng) {
 }
 
 MatrixLinkLattice<SU3, double> make_links() {
-    MatrixLinkLattice<SU3, double> u{Indexing::SizeVec(kShape.begin(), kShape.end())};
+    MatrixLinkLattice<SU3, double> u{std::vector<std::size_t>(kShape.begin(), kShape.end())};
     FastRng rng{2718};
     hot_start(u, rng);
     return u;
@@ -136,7 +136,7 @@ bool su3_cpu_matches_device() {
     Wil cpu{};
     cpu.beta           = kBeta;
     double const s_cpu = cpu.s_full(host);
-    MatrixLinkLattice<SU3, double> f_cpu{host.indexing()};
+    MatrixLinkLattice<SU3, double> f_cpu{host.shape()};
     cpu.compute_force(host, f_cpu);
 
     DField dfield{kShape};
@@ -206,7 +206,7 @@ bool su3_fused_matches_twopass() {
 
 bool su3_energy_conserved_ok() {
     MatrixLinkLattice<SU3, double> const init = make_links();
-    MatrixLinkLattice<SU3, double> p_host{init.indexing()};
+    MatrixLinkLattice<SU3, double> p_host{init.shape()};
     FastRng rng{77};
     std::size_t const d  = p_host.ndims();
     std::size_t const ns = p_host.nsites();
@@ -262,7 +262,7 @@ bool su3_hmc_reversibility_ok() {
 
     field.copy_from_host(init.data());
 
-    MatrixLinkLattice<SU3, double> p_host{init.indexing()};
+    MatrixLinkLattice<SU3, double> p_host{init.shape()};
     FastRng rng{99};
     std::size_t const d  = p_host.ndims();
     std::size_t const ns = p_host.nsites();
@@ -345,7 +345,7 @@ bool su3_hmc_runs() {
     w.beta = kBeta;
     DAct dact{w, field.topology()};
 
-    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 0.4, 10};
+    Hmc<DAct, updater::integ::Leapfrog> hmc{std::move(dact), field, 0.4, 10};
     hmc.run(8);  // host-free: 8 SU(3) trajectories over the matrix link field
     double const acc = hmc.acceptance();
     hmc.sync();

@@ -18,7 +18,7 @@ namespace reticolo::action {
 //               + g6     * phi(x)^6 ]
 //
 // At g6 = 0 this reduces exactly to Phi4 — verified by the physics suite. All
-// physics is in `detail/phi6_formula.hpp`; the machinery is `NNAction`.
+// physics is in `nn/formula/phi6_formula.hpp`; the machinery is `NNAction`.
 
 template <class T = double>
 struct Phi6 : NNAction<Phi6<T>, T> {

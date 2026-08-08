@@ -8,8 +8,7 @@
 #include <reticolo/orch/llr/ramp.hpp>
 #include <reticolo/orch/llr/update_a.hpp>
 #include <reticolo/updater/concepts.hpp>
-#include <reticolo/updater/hmc/hmc.hpp>
-#include <reticolo/updater/hmc/integrators.hpp>
+#include <reticolo/updater/samplers.hpp>
 
 #include <cmath>
 #include <complex>
@@ -22,42 +21,70 @@
 namespace reticolo::orch::llr {
 
 struct ReplicaStats {
-    long n_traj     = 0;
-    long n_accepted = 0;
+    long n_traj = 0;
+    // Σ of each update's `acceptance()`, not a count of accepted updates: an HMC
+    // trajectory contributes 0 or 1, a Metropolis sweep contributes its site
+    // acceptance fraction. Divided by n_traj it is the mean acceptance for either
+    // sampler — which is exactly why `updater::Updater` keys on acceptance() and
+    // not on an `accepted` flag one of the two algorithms cannot supply.
+    double sum_acceptance = 0.0;
 };
 
 // Single LLR replica: owns its phi, its RNG, its WindowedAction wrapper (and
-// through it, its own copy of the base action), and its HMC kernel. The base
+// through it, its own copy of the base action), and its sampler. The base
 // is copied at construction so any mutable per-action state stays
 // per-replica — required for OpenMP parallelism over replicas.
 //
-// One template for both scalar and gauge LLR: `Field` defaults to
-// `Lattice<T>` so existing scalar callers compile unchanged; gauge users
-// pass `LinkLattice<T>` explicitly. Window/tilt math lives in
-// WindowedAction; HMC handles the field-type dispatch via flat_size.
+// One template for both scalar and gauge LLR: the field type comes from the
+// ACTION (`Action::field_type`), so a gauge replica spells the same thing a
+// scalar one does. Window/tilt math lives in WindowedAction; the sampler
+// handles the field-type dispatch via flat_size.
 //
-// Non-moveable / non-copyable: the HMC inside holds references into the
+// THE SAMPLER IS A TEMPLATE PARAMETER — an `updater::` sampler tag, in the slot
+// the MD integrator used to hold, and with NO default: which updater drives a run
+// is a decision worth reading at the call site. There is ONE Replica: nothing
+// below reaches past `updater::Updater` (`step().acceptance()` plus the action's
+// own caches is the entire surface), so swapping HMC for local Metropolis is a
+// template argument, not a second class.
+//
+//   Replica<Action, Rng, updater::HmcSampler<>>                          Omelyan2
+//   Replica<Action, Rng, updater::HmcSampler<updater::integ::Omelyan4>>
+//   Replica<Action, Rng, updater::MetropolisSampler>
+//
+// It shares this structure with `orch::span::Chain<Action, Rng, Sampler>` — the
+// two are the same kind of thing. The integrator rides on the HMC tag because it
+// is meaningless for any other sampler. What genuinely differs between samplers
+// is the construction spec, so the ctor takes `Sampler::spec_type` and
+// `make_sampler_` reads the tag's optional `integrator` alias to decide whether
+// the ctor takes one.
+//
+// Non-moveable / non-copyable: the sampler inside holds references into the
 // replica's own members. Use `std::vector<std::unique_ptr<Replica<...>>>`
 // in the driver code.
 
-template <class Base,
-          class Rng,
-          class Integrator = updater::integ::Omelyan2,
-          class T          = Base::value_type,
-          class Field      = Lattice<T>,
-          class Constraint = void>
+// The element and field types are NOT parameters: the action already names both
+// (`value_type`, `field_type`), so a parameter for either could only ever be set
+// to what the action says or to something wrong. A gauge LLR therefore looks
+// exactly like a scalar one — `Replica<Wilson<SU3>, FastRng>`.
+template <class Action, class Rng, class Sampler, class Constraint = void>
 class Replica {
 public:
-    using value_type           = T;
-    using field_type           = Field;
-    using scalar_t             = action::scalar_of_t<T>;
-    using SizeVec              = Field::SizeVec;
-    using windowed_action_type = action::WindowedAction<Base, T, Field, Constraint>;
+    using value_type           = Action::value_type;
+    using field_type           = Action::field_type;
+    using scalar_t             = action::scalar_of_t<value_type>;
+    using SizeVec              = field_type::SizeVec;
+    using windowed_action_type = action::WindowedAction<Action, Constraint>;
     // The resolved constraint policy: SelfConstraint / ImagConstraint by default
     // (empty), or a caller-supplied ObservableConstraint<Obs> for a window on an
     // arbitrary observable. Passed to the ctor; `{}` (the default) is the empty
     // built-in, so existing real/complex LLR callers are unchanged.
     using constraint_type = windowed_action_type::constraint_type;
+    // The tag names the updater only once the windowed action exists — which is
+    // the whole reason the parameter is a tag and not the updater itself.
+    using sampler_type      = Sampler::template type<windowed_action_type, Rng>;
+    using sampler_spec_type = Sampler::spec_type;
+
+    static_assert(updater::Updater<sampler_type>, "the LLR sampler must model updater::Updater");
 
     static constexpr std::string_view log_tag = "repl";
 
@@ -69,10 +96,10 @@ public:
         scalar_t a_init = scalar_t{0};
     };
 
-    Replica(Base const& base,
+    Replica(Action const& base,
             Rng rng_init,
             Spec spec,
-            updater::HmcSpec const& hmc_spec,
+            sampler_spec_type const& sampler_spec,
             constraint_type constraint = {})
         : id_{std::move(spec.id)}, field_{std::move(spec.shape)},
           windowed_{.base       = base,
@@ -80,13 +107,13 @@ public:
                     .E_n        = spec.e_n,
                     .delta      = spec.delta,
                     .constraint = std::move(constraint)},
-          hmc_{windowed_, field_, std::move(rng_init), hmc_spec, Integrator{}, log::Mode::silent} {}
+          sampler_{make_sampler_(windowed_, field_, std::move(rng_init), sampler_spec)} {}
 
-    // Announce the nested HMC sampler (integrator / τ / n_md). The LLR driver
+    // Announce the nested sampler (integrator / τ / n_md, or σ). The LLR driver
     // calls this once, on a representative replica, so the ensemble's shared
     // sampler config shows exactly once instead of N× — replica construction is
     // otherwise wrapped in `log::quiet()` by the app.
-    void announce_sampler() const { log::algo(hmc_); }
+    void announce_sampler() const { log::algo(sampler_); }
 
     Replica(Replica const&)            = delete;
     Replica& operator=(Replica const&) = delete;
@@ -104,20 +131,19 @@ public:
     }
 
     void thermalize(int n, log::Mode log_mode = log::Mode::normal) {
-        auto _             = log::scope(id_);
-        int local_accepted = 0;
+        auto _           = log::scope(id_);
+        double local_acc = 0.0;
         for (int i = 0; i < n; ++i) {
-            auto const step = hmc_.step(log::Mode::silent);
+            double const acc = sampler_.step(log::Mode::silent).acceptance();
             ++stats_.n_traj;
-            if (step.accepted) {
-                ++stats_.n_accepted;
-                ++local_accepted;
-            }
+            stats_.sum_acceptance += acc;
+            local_acc += acc;
         }
         if (log_mode == log::Mode::normal) {
-            double const acc =
-                n > 0 ? static_cast<double>(local_accepted) / static_cast<double>(n) : 0.0;
-            log::info("repl", "thermalize n={}  acc={:.3f}", n, acc);
+            log::info("repl",
+                      "thermalize n={}  acc={:.3f}",
+                      n,
+                      n > 0 ? local_acc / static_cast<double>(n) : 0.0);
         }
     }
 
@@ -131,11 +157,8 @@ public:
         auto _       = log::scope(id_);
         scalar_t sum = scalar_t{0};
         for (int i = 0; i < n; ++i) {
-            auto const step = hmc_.step(log::Mode::silent);
+            stats_.sum_acceptance += sampler_.step(log::Mode::silent).acceptance();
             ++stats_.n_traj;
-            if (step.accepted) {
-                ++stats_.n_accepted;
-            }
             sum += windowed_.last_constraint() - windowed_.E_n;
         }
         scalar_t const dE = sum / static_cast<scalar_t>(n);
@@ -187,11 +210,11 @@ public:
     void set_E_n(scalar_t v) noexcept { windowed_.E_n = v; }
     void set_delta(scalar_t v) noexcept { windowed_.delta = v; }
 
-    [[nodiscard]] Field& field() noexcept { return field_; }
-    [[nodiscard]] Field const& field() const noexcept { return field_; }
-    // The replica's randomness is owned by its Hmc (one site stream per slab —
+    [[nodiscard]] field_type& field() noexcept { return field_; }
+    [[nodiscard]] field_type const& field() const noexcept { return field_; }
+    // The replica's randomness is owned by its sampler (one site stream per slab —
     // one stream inside the replica team — plus a driver for serial draws).
-    [[nodiscard]] StreamSet<Rng>& rng() noexcept { return hmc_.rng(); }
+    [[nodiscard]] StreamSet<Rng>& rng() noexcept { return sampler_.rng(); }
     [[nodiscard]] windowed_action_type const& windowed_action() const noexcept { return windowed_; }
 
     // Per-replica checkpoint payload beyond field + rng: the adapted tilt `a`
@@ -209,19 +232,19 @@ public:
     // Random Gaussian-shift seed of the field, sigma per real component.
     // Complex fields get independent N(0, sigma²) on Re and Im.
     void hot_start(scalar_t sigma) noexcept {
-        T* const data       = field_.data();
-        std::size_t const n = field_.nsites();
-        Rng& drv            = hmc_.rng().driver();  // serial draw → driver stream
-        if constexpr (std::is_same_v<T, std::complex<double>> ||
-                      std::is_same_v<T, std::complex<float>>) {
-            using R = T::value_type;
+        value_type* const data = field_.data();
+        std::size_t const n    = field_.nsites();
+        Rng& drv               = sampler_.rng().driver();  // serial draw → driver stream
+        if constexpr (std::is_same_v<value_type, std::complex<double>> ||
+                      std::is_same_v<value_type, std::complex<float>>) {
+            using R = value_type::value_type;
             for (std::size_t i = 0; i < n; ++i) {
-                data[i] = T{static_cast<R>(static_cast<scalar_t>(drv.normal()) * sigma),
-                            static_cast<R>(static_cast<scalar_t>(drv.normal()) * sigma)};
+                data[i] = value_type{static_cast<R>(static_cast<scalar_t>(drv.normal()) * sigma),
+                                     static_cast<R>(static_cast<scalar_t>(drv.normal()) * sigma)};
             }
         } else {
             for (std::size_t i = 0; i < n; ++i) {
-                data[i] = static_cast<T>(static_cast<scalar_t>(drv.normal()) * sigma);
+                data[i] = static_cast<value_type>(static_cast<scalar_t>(drv.normal()) * sigma);
             }
         }
     }
@@ -254,7 +277,7 @@ public:
         windowed_.a                = scalar_t{0};
         windowed_.delta            = saved_delta * static_cast<scalar_t>(1e8);
         for (int i = 0; i < n_therm; ++i) {
-            (void)hmc_.step(log::Mode::silent);
+            (void)sampler_.step(log::Mode::silent);
             ++stats_.n_traj;
         }
         windowed_.delta = saved_delta;
@@ -281,7 +304,7 @@ public:
             scalar_t sum  = scalar_t{0};
             int cnt       = 0;
             for (; cnt < k_batch && traj < max_traj; ++cnt) {
-                (void)hmc_.step(log::Mode::silent);
+                (void)sampler_.step(log::Mode::silent);
                 ++traj;
                 ++stats_.n_traj;
                 sum += windowed_.last_constraint() - windowed_.E_n;
@@ -301,7 +324,7 @@ public:
             scalar_t sum = scalar_t{0};
             int cnt      = 0;
             for (; cnt < k_batch && traj < max_traj; ++cnt) {
-                (void)hmc_.step(log::Mode::silent);
+                (void)sampler_.step(log::Mode::silent);
                 ++traj;
                 ++stats_.n_traj;
                 sum += windowed_.last_constraint() - windowed_.E_n;
@@ -339,13 +362,27 @@ public:
 
 private:
     using Windowed = windowed_action_type;
-    static_assert(updater::Updater<updater::Hmc<Windowed, Rng, Integrator, Field, T>>,
-                  "the LLR sampler must model updater::Updater");
+
+    // The samplers differ only in whether they take an integrator, and the ones
+    // that do name it themselves — so the branch reads the sampler's own alias
+    // rather than a parameter the replica would otherwise have to carry for a
+    // sampler that has no integrator. Guaranteed elision constructs the return
+    // object directly into `sampler_`, which matters: an updater holds references
+    // into this replica and is not movable.
+    [[nodiscard]] static sampler_type
+    make_sampler_(Windowed& w, field_type& f, Rng rng, sampler_spec_type const& spec) {
+        if constexpr (requires { typename Sampler::integrator; }) {
+            return sampler_type{
+                w, f, std::move(rng), spec, typename Sampler::integrator{}, log::Mode::silent};
+        } else {
+            return sampler_type{w, f, std::move(rng), spec, log::Mode::silent};
+        }
+    }
 
     std::string id_;
-    Field field_;
+    field_type field_;
     Windowed windowed_;
-    updater::Hmc<Windowed, Rng, Integrator, Field, T> hmc_;
+    sampler_type sampler_;
     ReplicaStats stats_{};
 };
 

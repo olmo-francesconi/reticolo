@@ -101,6 +101,31 @@ private:
     T fwd_  = T{0};
 };
 
+// Local-update functor (checkerboard.cuh's init/accumulate/ds protocol). Same
+// construction as Phi4's: the per-site energy of x is phi6_action_site on the
+// FULL 2d neighbour sum, so ΔS is a difference of two calls to the shared HD
+// formula — the same expression NNAction::metropolis_stencil builds on the CPU.
+template <class T>
+class Phi6DsFunctor {
+public:
+    using element = T;
+    RETICOLO_HD Phi6DsFunctor(T kappa, T lambda, T g6) : kappa_{kappa}, lambda_{lambda}, g6_{g6} {}
+
+    RETICOLO_HD void init(T /*self*/) { nbrs_ = T{0}; }
+    RETICOLO_HD void accumulate(int /*mu*/, T nbr) { nbrs_ += nbr; }
+    [[nodiscard]] RETICOLO_HD double ds(T old_v, T prop) const {
+        return static_cast<double>(
+            action::formula::phi6_action_site<T>(prop, nbrs_, kappa_, lambda_, g6_) -
+            action::formula::phi6_action_site<T>(old_v, nbrs_, kappa_, lambda_, g6_));
+    }
+
+private:
+    T kappa_;
+    T lambda_;
+    T g6_;
+    T nbrs_ = T{0};
+};
+
 template <class T>
 struct device_functors<action::Phi6<T>> {
     static void compute_force(action::Phi6<T> const& a,
@@ -153,6 +178,31 @@ struct device_functors<action::Phi6<T>> {
                                     topo,
                                     s);
     }
+    // Local-update path (cuda::Metropolis) — the same trait shape as
+    // compute_force: bind the action's ds functor, hand it to the skeleton.
+    static void metropolis_stencil(action::Phi6<T> const& a,
+                                   T* field,
+                                   DeviceTopology const& topo,
+                                   int color,
+                                   double sigma,
+                                   std::uint64_t seed,
+                                   std::uint64_t const* sweep,
+                                   double* ds_out,
+                                   double* acc_out,
+                                   cudaStream_t s) {
+        impl::site_metropolis(Phi6DsFunctor<T>{a.kappa, a.lambda, a.g6},
+                              field,
+                              topo,
+                              color,
+                              sigma,
+                              seed,
+                              sweep,
+                              ds_out,
+                              acc_out,
+                              s);
+    }
+    // A site field's elementary move is per site: the two checkerboard parities.
+    [[nodiscard]] static int n_colors(DeviceTopology const& /*topo*/) { return 2; }
 };
 
 }  // namespace reticolo::cuda

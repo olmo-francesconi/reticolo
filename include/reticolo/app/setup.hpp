@@ -152,15 +152,63 @@ inline HmcRunFlags hmc_run_flags(cli::Parser& p, HmcRunDefaults const& d = {}) {
             .resume           = resume};
 }
 
-// Resume a single-chain HMC app from a config checkpoint, or start fresh.
-// Returns the trajectory index to continue from (0 when not resuming). Loads the
-// field AND the updater's RNG state, so a resumed chain is bit-identical to the
-// uninterrupted one — which is what the `*_resume_equivalence` tests assert.
-// Shape is validated against the app's own `--L`/`--ndim` before anything is
-// overwritten.
-template <class Field, class Updater, class Shape>
+// Per-app defaults for the Metropolis run-control block.
+struct MetropolisRunDefaults {
+    double sigma   = 0.5;
+    int n_therm    = 500;
+    int n_prod     = 2000;
+    int meas_every = 1;
+};
+
+// Stable references to the Metropolis run-control flags — the block every
+// `*_metropolis` app registers identically. It is the exact peer of
+// `HmcRunFlags`: same run-control surface (`n_therm` / `n_prod` / `meas_every` /
+// `checkpoint_every` / `resume`) with the algorithm's own knob in place of
+// HMC's (`sigma` rather than `tau` + `n_md`), and `resuming()` the same guard.
+//
+// Sweeps are the unit here, not trajectories, so an app's counts are NOT
+// comparable to an HMC app's at the same number — a sweep is one lattice pass,
+// a trajectory is n_md of them.
+struct MetropolisRunFlags {
+    double const& sigma;
+    int const& n_therm;
+    int const& n_prod;
+    int const& meas_every;
+    int const& checkpoint_every;
+    std::string const& resume;
+
+    [[nodiscard]] bool resuming() const noexcept { return !resume.empty(); }
+};
+
+inline MetropolisRunFlags metropolis_run_flags(cli::Parser& p,
+                                               MetropolisRunDefaults const& d = {}) {
+    auto const& sigma     = p.opt<double>("sigma", d.sigma, "Metropolis proposal width");
+    int const& n_therm    = p.opt<int>("n_therm", d.n_therm, "thermalisation sweeps");
+    int const& n_prod     = p.opt<int>("n_prod", d.n_prod, "production sweeps");
+    int const& meas_every = p.opt<int>("meas_every", d.meas_every, "measure every N sweeps");
+    int const& ckpt_every =
+        p.opt<int>("checkpoint_every", 0, "write a config every N prod sweeps (0 = off)");
+    auto const& resume =
+        p.opt<std::string>("resume", std::string{}, "resume from a previous config (.h5)");
+    return {.sigma            = sigma,
+            .n_therm          = n_therm,
+            .n_prod           = n_prod,
+            .meas_every       = meas_every,
+            .checkpoint_every = ckpt_every,
+            .resume           = resume};
+}
+
+// Resume a single-chain app from a config checkpoint, or start fresh. Returns the
+// step index to continue from (0 when not resuming). Loads the field AND the
+// updater's RNG state, so a resumed chain is bit-identical to the uninterrupted
+// one — which is what the `*_resume_equivalence` tests assert. Shape is validated
+// against the app's own `--L`/`--ndim` before anything is overwritten.
+//
+// `RunFlags` is whichever family block the app registered — the two only need to
+// agree on `resuming()` and `resume`, so one overload serves HMC and Metropolis.
+template <class RunFlags, class Field, class Updater, class Shape>
 [[nodiscard]] inline long long
-resume_or_start(HmcRunFlags const& rf, Field& field, Updater& upd, Shape const& shape) {
+resume_or_start(RunFlags const& rf, Field& field, Updater& upd, Shape const& shape) {
     if (!rf.resuming()) {
         return 0;
     }

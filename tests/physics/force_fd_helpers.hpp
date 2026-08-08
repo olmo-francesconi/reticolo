@@ -115,7 +115,7 @@ inline void require_force_matches_fd(Action const& action,
 template <class Action, class Field>
 inline void
 require_force_consistent(Action const& action, Field& phi, FastRng& rng, FdSpec const& spec = {}) {
-    Field force{phi.indexing()};
+    Field force{phi.shape()};
     action.compute_force(phi, force);
     require_force_matches_fd(action, phi, force, rng, spec);
 }

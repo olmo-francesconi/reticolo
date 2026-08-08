@@ -5,6 +5,8 @@
 #include <reticolo/core/rng/fast_rng.hpp>
 #include <reticolo/io/writer.hpp>
 
+#include "hid_guard.hpp"
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -12,6 +14,7 @@
 #include <ctime>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -151,27 +154,21 @@ std::pair<std::string, std::string> split_attr(std::string_view path) {
 }
 
 // Create intermediate groups (all but the last segment) and return an open
-// handle on the parent of the leaf. Caller must H5Gclose() the returned hid.
-hid_t ensure_parent_groups(hid_t file, std::vector<std::string> const& segments) {
-    hid_t current = H5Gopen2(file, "/", H5P_DEFAULT);
-    hid_check(current, "ensure_parent_groups Gopen2 /");
-
-    if (segments.size() <= 1) {
-        return current;
-    }
+// handle on the parent of the leaf. Ownership travels with the returned guard —
+// this used to hand back a bare hid_t under a "caller must H5Gclose()" comment.
+impl::GroupId ensure_parent_groups(hid_t file, std::vector<std::string> const& segments) {
+    impl::GroupId current{H5Gopen2(file, "/", H5P_DEFAULT)};
+    hid_check(current.get(), "ensure_parent_groups Gopen2 /");
 
     for (std::size_t i = 0; i + 1 < segments.size(); ++i) {
         std::string const& name = segments[i];
-        htri_t const exists     = H5Lexists(current, name.c_str(), H5P_DEFAULT);
-        hid_t next              = H5I_INVALID_HID;
-        if (exists > 0) {
-            next = H5Gopen2(current, name.c_str(), H5P_DEFAULT);
-        } else {
-            next = H5Gcreate2(current, name.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        }
-        H5Gclose(current);
-        hid_check(next, "ensure_parent_groups segment");
-        current = next;
+        htri_t const exists     = H5Lexists(current.get(), name.c_str(), H5P_DEFAULT);
+        impl::GroupId next{
+            exists > 0
+                ? H5Gopen2(current.get(), name.c_str(), H5P_DEFAULT)
+                : H5Gcreate2(current.get(), name.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT)};
+        hid_check(next.get(), "ensure_parent_groups segment");
+        current = std::move(next);
     }
     return current;
 }
@@ -231,32 +228,29 @@ std::string join_argv(int argc, char const* const* argv) {
 }
 
 void write_string_attr(hid_t obj, char const* name, std::string const& value) {
-    hid_t const dtype = H5Tcopy(H5T_C_S1);
-    hid_check(dtype, "Tcopy");
-    herr_check(H5Tset_size(dtype, H5T_VARIABLE), "Tset_size");
-    herr_check(H5Tset_strpad(dtype, H5T_STR_NULLTERM), "Tset_strpad");
-    hid_t const space = H5Screate(H5S_SCALAR);
-    hid_check(space, "Screate scalar");
-    hid_t const attr = H5Acreate2(obj, name, dtype, space, H5P_DEFAULT, H5P_DEFAULT);
-    hid_check(attr, "Acreate2");
+    impl::TypeId const dtype{H5Tcopy(H5T_C_S1)};
+    hid_check(dtype.get(), "Tcopy");
+    herr_check(H5Tset_size(dtype.get(), H5T_VARIABLE), "Tset_size");
+    herr_check(H5Tset_strpad(dtype.get(), H5T_STR_NULLTERM), "Tset_strpad");
+    impl::SpaceId const space{H5Screate(H5S_SCALAR)};
+    hid_check(space.get(), "Screate scalar");
+    impl::AttrId const attr{
+        H5Acreate2(obj, name, dtype.get(), space.get(), H5P_DEFAULT, H5P_DEFAULT)};
+    hid_check(attr.get(), "Acreate2");
     char const* cstr = value.c_str();
     // HDF5 takes the address of the char* for a variable-length string write.
     // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
-    herr_check(H5Awrite(attr, dtype, &cstr), "Awrite string");
-    H5Aclose(attr);
-    H5Sclose(space);
-    H5Tclose(dtype);
+    herr_check(H5Awrite(attr.get(), dtype.get(), &cstr), "Awrite string");
 }
 
 template <class T>
 void write_scalar_attr(hid_t obj, char const* name, T const& value) {
-    hid_t const space = H5Screate(H5S_SCALAR);
-    hid_check(space, "Screate scalar");
-    hid_t const attr = H5Acreate2(obj, name, native_type<T>(), space, H5P_DEFAULT, H5P_DEFAULT);
-    hid_check(attr, "Acreate2");
-    herr_check(H5Awrite(attr, native_type<T>(), &value), "Awrite scalar");
-    H5Aclose(attr);
-    H5Sclose(space);
+    impl::SpaceId const space{H5Screate(H5S_SCALAR)};
+    hid_check(space.get(), "Screate scalar");
+    impl::AttrId const attr{
+        H5Acreate2(obj, name, native_type<T>(), space.get(), H5P_DEFAULT, H5P_DEFAULT)};
+    hid_check(attr.get(), "Acreate2");
+    herr_check(H5Awrite(attr.get(), native_type<T>(), &value), "Awrite scalar");
 }
 
 }  // namespace
@@ -293,20 +287,18 @@ struct Writer::Impl {
     Impl& operator=(Impl&&)      = delete;
 
     void stamp_run(int argc, char const* const* argv) const {
-        hid_t const grp = H5Gcreate2(file, "/run", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        hid_check(grp, "stamp_run create /run");
+        impl::GroupId const grp{H5Gcreate2(file, "/run", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT)};
+        hid_check(grp.get(), "stamp_run create /run");
 
-        write_string_attr(grp, "cmdline", join_argv(argc, argv));
-        write_string_attr(grp, "version", RETICOLO_VERSION);
-        write_string_attr(grp, "commit", RETICOLO_RUN_COMMIT);
-        write_string_attr(grp, "build_type", RETICOLO_BUILD_TYPE);
-        write_string_attr(grp, "compile_flags", RETICOLO_COMPILE_FLAGS);
-        write_string_attr(grp, "hostname", hostname_str());
-        write_string_attr(grp, "started_utc", utc_now_iso());
-        write_string_attr(grp, "hdf5_library_version", hdf5_library_version_str());
-        write_string_attr(grp, "hdf5_complex_schema", "legacy_compound");
-
-        H5Gclose(grp);
+        write_string_attr(grp.get(), "cmdline", join_argv(argc, argv));
+        write_string_attr(grp.get(), "version", RETICOLO_VERSION);
+        write_string_attr(grp.get(), "commit", RETICOLO_RUN_COMMIT);
+        write_string_attr(grp.get(), "build_type", RETICOLO_BUILD_TYPE);
+        write_string_attr(grp.get(), "compile_flags", RETICOLO_COMPILE_FLAGS);
+        write_string_attr(grp.get(), "hostname", hostname_str());
+        write_string_attr(grp.get(), "started_utc", utc_now_iso());
+        write_string_attr(grp.get(), "hdf5_library_version", hdf5_library_version_str());
+        write_string_attr(grp.get(), "hdf5_complex_schema", "legacy_compound");
     }
 };
 
@@ -352,23 +344,20 @@ struct Series<T>::Impl {
         hsize_t const new_size = total_written + count;
         herr_check(H5Dset_extent(dataset, &new_size), "Dset_extent");
 
-        hid_t const fspace = H5Dget_space(dataset);
-        hid_check(fspace, "Dget_space");
+        impl::SpaceId const fspace{H5Dget_space(dataset)};
+        hid_check(fspace.get(), "Dget_space");
         hsize_t const offset = total_written;
-        herr_check(H5Sselect_hyperslab(fspace, H5S_SELECT_SET, &offset, nullptr, &count, nullptr),
-                   "Sselect_hyperslab");
+        herr_check(
+            H5Sselect_hyperslab(fspace.get(), H5S_SELECT_SET, &offset, nullptr, &count, nullptr),
+            "Sselect_hyperslab");
 
-        hid_t const mspace = H5Screate_simple(1, &count, nullptr);
-        if (mspace < 0) {
-            H5Sclose(fspace);
-            hdf5_throw("Screate_simple");
-        }
+        impl::SpaceId const mspace{H5Screate_simple(1, &count, nullptr)};
+        hid_check(mspace.get(), "Screate_simple");
 
-        herr_t const e =
-            H5Dwrite(dataset, native_type<T>(), mspace, fspace, H5P_DEFAULT, buffer.data());
-        H5Sclose(mspace);
-        H5Sclose(fspace);
-        herr_check(e, "Dwrite");
+        herr_check(
+            H5Dwrite(
+                dataset, native_type<T>(), mspace.get(), fspace.get(), H5P_DEFAULT, buffer.data()),
+            "Dwrite");
 
         total_written = new_size;
         buffer.clear();
@@ -452,10 +441,9 @@ void Writer::start_phase(std::string_view phase) {
     if (exists > 0) {
         throw std::runtime_error{"Writer::start_phase: '" + phase_path + "' already exists"};
     }
-    hid_t const grp =
-        H5Gcreate2(impl_->file, phase_path.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    hid_check(grp, "start_phase create");
-    H5Gclose(grp);
+    impl::GroupId const grp{
+        H5Gcreate2(impl_->file, phase_path.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT)};
+    hid_check(grp.get(), "start_phase create");
     impl_->phases.emplace_back(phase);
 }
 
@@ -468,24 +456,26 @@ Series<T> Writer::series(std::string_view path, std::size_t chunk) {
         throw std::invalid_argument{"Writer::series: empty path"};
     }
 
-    hid_t const parent = ensure_parent_groups(impl_->file, segments);
+    impl::GroupId const parent = ensure_parent_groups(impl_->file, segments);
 
     hsize_t const initial = 0;
     hsize_t const maxdim  = H5S_UNLIMITED;
-    hid_t const space     = H5Screate_simple(1, &initial, &maxdim);
-    hid_check(space, "Screate_simple");
+    impl::SpaceId const space{H5Screate_simple(1, &initial, &maxdim)};
+    hid_check(space.get(), "Screate_simple");
 
-    hid_t const dcpl       = H5Pcreate(H5P_DATASET_CREATE);
+    impl::PropId const dcpl{H5Pcreate(H5P_DATASET_CREATE)};
     hsize_t const chunkdim = chunk == 0 ? hsize_t{4096} : static_cast<hsize_t>(chunk);
-    H5Pset_chunk(dcpl, 1, &chunkdim);
+    H5Pset_chunk(dcpl.get(), 1, &chunkdim);
 
-    hid_t const dset = H5Dcreate2(
-        parent, segments.back().c_str(), native_type<T>(), space, H5P_DEFAULT, dcpl, H5P_DEFAULT);
-
-    H5Pclose(dcpl);
-    H5Sclose(space);
-    H5Gclose(parent);
-
+    // The ONLY id here that outlives this scope: Series<T>::Impl takes ownership
+    // of the dataset and closes it in its own destructor, so it stays unguarded.
+    hid_t const dset = H5Dcreate2(parent.get(),
+                                  segments.back().c_str(),
+                                  native_type<T>(),
+                                  space.get(),
+                                  H5P_DEFAULT,
+                                  dcpl.get(),
+                                  H5P_DEFAULT);
     hid_check(dset, "Dcreate2");
 
     auto impl        = std::make_unique<typename Series<T>::Impl>();
@@ -502,31 +492,24 @@ void Writer::attr(std::string_view path, T const& value) {
     auto const [obj_path, attr_name] = split_attr(path);
     auto segments                    = split_path(obj_path);
 
-    hid_t parent = H5I_INVALID_HID;
+    impl::ObjId parent{};
     if (segments.empty()) {
-        parent = H5Gopen2(impl_->file, "/", H5P_DEFAULT);
+        parent = impl::ObjId{H5Gopen2(impl_->file, "/", H5P_DEFAULT)};
     } else {
-        hid_t const pre         = ensure_parent_groups(impl_->file, segments);
+        impl::GroupId const pre = ensure_parent_groups(impl_->file, segments);
         std::string const& leaf = segments.back();
-        htri_t const ex         = H5Lexists(pre, leaf.c_str(), H5P_DEFAULT);
-        hid_t leaf_grp          = H5I_INVALID_HID;
-        if (ex > 0) {
-            leaf_grp = H5Oopen(pre, leaf.c_str(), H5P_DEFAULT);
-        } else {
-            leaf_grp = H5Gcreate2(pre, leaf.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        }
-        H5Gclose(pre);
-        parent = leaf_grp;
+        htri_t const ex         = H5Lexists(pre.get(), leaf.c_str(), H5P_DEFAULT);
+        parent                  = impl::ObjId{
+            ex > 0 ? H5Oopen(pre.get(), leaf.c_str(), H5P_DEFAULT)
+                   : H5Gcreate2(pre.get(), leaf.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT)};
     }
-    hid_check(parent, "attr open parent");
+    hid_check(parent.get(), "attr open parent");
 
     if constexpr (std::is_same_v<T, std::string>) {
-        write_string_attr(parent, attr_name.c_str(), value);
+        write_string_attr(parent.get(), attr_name.c_str(), value);
     } else {
-        write_scalar_attr<T>(parent, attr_name.c_str(), value);
+        write_scalar_attr<T>(parent.get(), attr_name.c_str(), value);
     }
-
-    H5Oclose(parent);
 }
 
 // Explicit instantiations
@@ -596,7 +579,7 @@ char const* field_kind_name(Writer::FieldKind k) {
     return "?";
 }
 
-std::string join_shape(std::vector<std::size_t> const& shape) {
+std::string join_shape(std::span<std::size_t const> shape) {
     std::string out;
     for (std::size_t i = 0; i < shape.size(); ++i) {
         if (i > 0) {
@@ -609,18 +592,12 @@ std::string join_shape(std::vector<std::size_t> const& shape) {
 
 void write_1d_dataset(
     hid_t parent, char const* leaf, hid_t htype, void const* data, hsize_t count) {
-    hid_t const space = H5Screate_simple(1, &count, nullptr);
-    hid_check(space, "Screate_simple field");
-    hid_t const dset =
-        H5Dcreate2(parent, leaf, htype, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    if (dset < 0) {
-        H5Sclose(space);
-        hdf5_throw("Dcreate2 field");
-    }
-    herr_t const e = H5Dwrite(dset, htype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
-    H5Dclose(dset);
-    H5Sclose(space);
-    herr_check(e, "Dwrite field");
+    impl::SpaceId const space{H5Screate_simple(1, &count, nullptr)};
+    hid_check(space.get(), "Screate_simple field");
+    impl::DsetId const dset{
+        H5Dcreate2(parent, leaf, htype, space.get(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT)};
+    hid_check(dset.get(), "Dcreate2 field");
+    herr_check(H5Dwrite(dset.get(), htype, H5S_ALL, H5S_ALL, H5P_DEFAULT, data), "Dwrite field");
 }
 
 }  // namespace
@@ -630,7 +607,7 @@ void Writer::write_field_raw_(std::string_view path,
                               std::size_t n_elems,
                               ScalarKind scalar_kind,
                               FieldKind kind,
-                              std::vector<std::size_t> const& shape,
+                              std::span<std::size_t const> shape,
                               std::size_t n_components,
                               char const* group_name) {
     std::scoped_lock const lock{impl_->mu};
@@ -640,24 +617,21 @@ void Writer::write_field_raw_(std::string_view path,
         throw std::invalid_argument{"Writer::field: empty path"};
     }
 
-    hid_t const parent = ensure_parent_groups(impl_->file, segments);
+    impl::GroupId const parent = ensure_parent_groups(impl_->file, segments);
 
     hid_t const htype = native_type_for(scalar_kind);
-    write_1d_dataset(parent, segments.back().c_str(), htype, data, n_elems);
+    write_1d_dataset(parent.get(), segments.back().c_str(), htype, data, n_elems);
 
-    hid_t const dset = H5Oopen(parent, segments.back().c_str(), H5P_DEFAULT);
-    H5Gclose(parent);
-    hid_check(dset, "field reopen for attrs");
+    impl::ObjId const dset{H5Oopen(parent.get(), segments.back().c_str(), H5P_DEFAULT)};
+    hid_check(dset.get(), "field reopen for attrs");
 
-    write_string_attr(dset, "kind", field_kind_name(kind));
-    write_string_attr(dset, "scalar_type", scalar_type_name(scalar_kind));
-    write_string_attr(dset, "shape", join_shape(shape));
-    write_scalar_attr<std::uint64_t>(dset, "n_components", n_components);
+    write_string_attr(dset.get(), "kind", field_kind_name(kind));
+    write_string_attr(dset.get(), "scalar_type", scalar_type_name(scalar_kind));
+    write_string_attr(dset.get(), "shape", join_shape(shape));
+    write_scalar_attr<std::uint64_t>(dset.get(), "n_components", n_components);
     if (group_name != nullptr && group_name[0] != '\0') {
-        write_string_attr(dset, "group", group_name);
+        write_string_attr(dset.get(), "group", group_name);
     }
-
-    H5Oclose(dset);
 }
 
 void Writer::rng_state(std::string_view path, FastRng const& rng) {
@@ -668,20 +642,18 @@ void Writer::rng_state(std::string_view path, FastRng const& rng) {
         throw std::invalid_argument{"Writer::rng_state: empty path"};
     }
 
-    hid_t const parent = ensure_parent_groups(impl_->file, segments);
+    impl::GroupId const parent = ensure_parent_groups(impl_->file, segments);
 
     auto const& s = rng.state();
-    write_1d_dataset(parent, segments.back().c_str(), H5T_NATIVE_UINT64, s.data(), s.size());
+    write_1d_dataset(parent.get(), segments.back().c_str(), H5T_NATIVE_UINT64, s.data(), s.size());
 
-    hid_t const dset = H5Oopen(parent, segments.back().c_str(), H5P_DEFAULT);
-    H5Gclose(parent);
-    hid_check(dset, "rng_state reopen for attrs");
+    impl::ObjId const dset{H5Oopen(parent.get(), segments.back().c_str(), H5P_DEFAULT)};
+    hid_check(dset.get(), "rng_state reopen for attrs");
 
-    write_string_attr(dset, "kind", "FastRng");
-    write_scalar_attr<unsigned int>(dset, "has_cached_normal", rng.has_cached_normal() ? 1U : 0U);
-    write_scalar_attr<double>(dset, "cached_normal", rng.cached_normal());
-
-    H5Oclose(dset);
+    write_string_attr(dset.get(), "kind", "FastRng");
+    write_scalar_attr<unsigned int>(
+        dset.get(), "has_cached_normal", rng.has_cached_normal() ? 1U : 0U);
+    write_scalar_attr<double>(dset.get(), "cached_normal", rng.cached_normal());
 }
 
 void Writer::rng_streams(std::string_view path,
@@ -699,19 +671,16 @@ void Writer::rng_streams(std::string_view path,
         throw std::invalid_argument{"Writer::rng_streams: word count mismatch"};
     }
 
-    hid_t const parent = ensure_parent_groups(impl_->file, segments);
+    impl::GroupId const parent = ensure_parent_groups(impl_->file, segments);
     write_1d_dataset(
-        parent, segments.back().c_str(), H5T_NATIVE_UINT64, words.data(), words.size());
+        parent.get(), segments.back().c_str(), H5T_NATIVE_UINT64, words.data(), words.size());
 
-    hid_t const dset = H5Oopen(parent, segments.back().c_str(), H5P_DEFAULT);
-    H5Gclose(parent);
-    hid_check(dset, "rng_streams reopen for attrs");
+    impl::ObjId const dset{H5Oopen(parent.get(), segments.back().c_str(), H5P_DEFAULT)};
+    hid_check(dset.get(), "rng_streams reopen for attrs");
 
-    write_string_attr(dset, "kind", std::string{kind});
-    write_scalar_attr<std::uint64_t>(dset, "n_streams", n_streams);
-    write_scalar_attr<std::uint64_t>(dset, "n_words", n_words);
-
-    H5Oclose(dset);
+    write_string_attr(dset.get(), "kind", std::string{kind});
+    write_scalar_attr<std::uint64_t>(dset.get(), "n_streams", n_streams);
+    write_scalar_attr<std::uint64_t>(dset.get(), "n_words", n_words);
 }
 
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage) — token-pasting instantiation list, not a constant

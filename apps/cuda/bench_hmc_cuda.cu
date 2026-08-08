@@ -1,8 +1,9 @@
 // P100 perf survey across every action ported to the device so far: Phi4
-// (f64 + f32), Phi6, SineGordon, XY (scalar / ScalarLayout) and CompactU1
-// (gauge / LinkLayout). Each runs the host-free cuda::Hmc through the unified
-// DeviceAction, so this also exercises both access patterns end-to-end. Reports
-// per-trajectory wall time and trajectories/second. Leapfrog, tau=1.0, n_md=10.
+// (f64 + f32), Phi6, SineGordon, XY (scalar / ScalarLayout), Wilson<U1>
+// (gauge / LinkLayout), and SU(2)/SU(3) Wilson (gauge / MatrixLayout). Each runs
+// the host-free cuda::Hmc through the unified DeviceAction, so this also
+// exercises every access pattern end-to-end. Reports per-trajectory wall time
+// and trajectories/second. Leapfrog, tau=1.0, n_md=10.
 //
 // DOF = field.size(): nsites for the scalar actions, ndim·nsites for the gauge
 // link field — the gauge row does ~ndim× the elementwise work at equal V, so
@@ -60,8 +61,8 @@ void bench(char const* label, std::vector<std::size_t> const& shape, HostAction 
     cudaDeviceSynchronize();
 
     DeviceAction<HostAction, Field> dact{action, field.topology()};
-    reticolo::cuda::Hmc<DeviceAction<HostAction, Field>, reticolo::updater::integ::Leapfrog, Field>
-        hmc{std::move(dact), field, kTau, kNmd};
+    reticolo::cuda::Hmc<DeviceAction<HostAction, Field>, reticolo::updater::integ::Leapfrog> hmc{
+        std::move(dact), field, kTau, kNmd};
 
     hmc.run(kWarmup);  // first replay captures the full-trajectory graph
     hmc.sync();

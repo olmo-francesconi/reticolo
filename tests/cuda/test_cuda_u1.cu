@@ -23,7 +23,7 @@
 // validates the gather force against a finite difference, and checks MD
 // reversibility. (Excluded from the no-integrator-kernels lint gate: it names
 // updater::integ::Leapfrog to instantiate the generic integrator over the link
-// field, the same as hmc_probe.cu / f32_probe.cu.)
+// field, the same as test_cuda_hmc.cu / test_cuda_f32.cu.)
 
 namespace reticolo::cuda {
 
@@ -37,7 +37,8 @@ std::vector<std::size_t> const kShape{4, 4, 4, 4};
 constexpr double kBeta = 1.1;
 
 MatrixLinkLattice<math::group::U1, double> make_links() {
-    MatrixLinkLattice<math::group::U1, double> l{Indexing::SizeVec(kShape.begin(), kShape.end())};
+    MatrixLinkLattice<math::group::U1, double> l{
+        std::vector<std::size_t>(kShape.begin(), kShape.end())};
     double* const d          = l.data();
     std::size_t const nlinks = l.nlinks();
     for (std::size_t i = 0; i < nlinks; ++i) {
@@ -54,7 +55,7 @@ bool u1_cpu_matches_device() {
     U1 cpu{};
     cpu.beta           = kBeta;
     double const s_cpu = cpu.s_full(host);
-    MatrixLinkLattice<math::group::U1, double> f_cpu{host.indexing()};
+    MatrixLinkLattice<math::group::U1, double> f_cpu{host.shape()};
     cpu.compute_force(host, f_cpu);
 
     DField dfield{kShape};
@@ -215,7 +216,7 @@ bool u1_hmc_runs() {
     act.beta = kBeta;
     DAct dact{act, field.topology()};
 
-    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 1.0, 10};
+    Hmc<DAct, updater::integ::Leapfrog> hmc{std::move(dact), field, 1.0, 10};
     hmc.run(8);  // host-free: 8 gauge trajectories over the link field
     double const acc = hmc.acceptance();
     hmc.sync();
@@ -237,8 +238,9 @@ bool u1_hmc_runs() {
 
 }  // namespace reticolo::cuda
 
-// Compact U(1) gauge on the device through the SAME unified DeviceAction.
-TEST_CASE("cuda DeviceAction<CompactU1> matches CPU action::CompactU1", "[cuda]") {
+// U(1) gauge on the device through the SAME unified DeviceAction, via the
+// specialized abelian angle kernels (gauge_u1.cuh) rather than the matrix path.
+TEST_CASE("cuda DeviceAction<Wilson<U1>> angle kernels match CPU", "[cuda]") {
     REQUIRE(reticolo::cuda::u1_cpu_matches_device());
 }
 
