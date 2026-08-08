@@ -29,7 +29,7 @@ namespace reticolo::updater {
 template <class Field>
 concept MatrixLinkField = requires { typename Field::group_type; };
 
-namespace detail {
+namespace impl {
 
 // Per-slab standard-normal fill narrowed to float. Draws doubles (so the stream
 // advances exactly as the double path would) into a thread_local scratch, then
@@ -45,7 +45,7 @@ inline void fill_narrowed_slab(R& r, float* out, std::size_t n) {
     }
 }
 
-}  // namespace detail
+}  // namespace impl
 
 // Fill `f` with independent standard normals, one per real degree of freedom.
 // Field-type mapping:
@@ -92,14 +92,14 @@ void fill_gaussian(Field& f, StreamSet<R>& streams) {
         float* const m = f.data();
         exec::field_visit_indexed(
             f, 1, [&streams, m](std::size_t i, std::size_t base, std::size_t cnt) {
-                detail::fill_narrowed_slab(streams.site_stream(i), m + base, cnt);
+                impl::fill_narrowed_slab(streams.site_stream(i), m + base, cnt);
             });
     } else if constexpr (std::is_same_v<Scalar, std::complex<float>>) {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
         auto* const mf = reinterpret_cast<float*>(f.data());
         exec::field_visit_indexed(
             f, 1, [&streams, mf](std::size_t i, std::size_t base, std::size_t cnt) {
-                detail::fill_narrowed_slab(streams.site_stream(i), mf + (2 * base), 2 * cnt);
+                impl::fill_narrowed_slab(streams.site_stream(i), mf + (2 * base), 2 * cnt);
             });
     } else {
         Scalar* const m = f.data();

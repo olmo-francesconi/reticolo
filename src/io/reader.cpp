@@ -112,9 +112,9 @@ std::pair<std::string, std::string> split_attr(std::string_view path) {
 }
 
 std::string read_string_attr(hid_t obj, char const* name) {
-    detail::AttrId const attr{H5Aopen(obj, name, H5P_DEFAULT)};
+    impl::AttrId const attr{H5Aopen(obj, name, H5P_DEFAULT)};
     hid_check(attr.get(), "Aopen string");
-    detail::TypeId const dtype{H5Aget_type(attr.get())};
+    impl::TypeId const dtype{H5Aget_type(attr.get())};
     hid_check(dtype.get(), "Aget_type");
     if (H5Tis_variable_str(dtype.get()) > 0) {
         char* cstr = nullptr;
@@ -127,7 +127,7 @@ std::string read_string_attr(hid_t obj, char const* name) {
             // H5Aget_space mints an id of its own — reclaim needs it, and it must
             // be closed like any other. Reading it inline (as this once did) leaks
             // one dataspace per vlen attribute read, on the SUCCESS path.
-            detail::SpaceId const aspace{H5Aget_space(attr.get())};
+            impl::SpaceId const aspace{H5Aget_space(attr.get())};
             // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
             H5Dvlen_reclaim(dtype.get(), aspace.get(), H5P_DEFAULT, &cstr);
         }
@@ -145,7 +145,7 @@ std::string read_string_attr(hid_t obj, char const* name) {
 
 template <class T>
 T read_scalar_attr(hid_t obj, char const* name) {
-    detail::AttrId const attr{H5Aopen(obj, name, H5P_DEFAULT)};
+    impl::AttrId const attr{H5Aopen(obj, name, H5P_DEFAULT)};
     hid_check(attr.get(), "Aopen scalar");
     T value{};
     herr_check(H5Aread(attr.get(), native_type<T>(), &value), "Aread scalar");
@@ -214,7 +214,7 @@ bool Reader::has(std::string_view path) const {
         if (lex <= 0) {
             return false;
         }
-        detail::ObjId const obj{H5Oopen(impl_->file, probe.c_str(), H5P_DEFAULT)};
+        impl::ObjId const obj{H5Oopen(impl_->file, probe.c_str(), H5P_DEFAULT)};
         if (!obj.valid()) {
             return false;
         }
@@ -229,7 +229,7 @@ template <class T>
 T Reader::attr(std::string_view path) const {
     auto const [obj_path, attr_name] = split_attr(path);
     std::string const open_path      = obj_path.empty() ? std::string{"/"} : obj_path;
-    detail::ObjId const obj{H5Oopen(impl_->file, open_path.c_str(), H5P_DEFAULT)};
+    impl::ObjId const obj{H5Oopen(impl_->file, open_path.c_str(), H5P_DEFAULT)};
     hid_check(obj.get(), "attr Oopen");
     if constexpr (std::is_same_v<T, std::string>) {
         return read_string_attr(obj.get(), attr_name.c_str());
@@ -240,7 +240,7 @@ T Reader::attr(std::string_view path) const {
 
 std::vector<std::size_t> Reader::field_shape(std::string_view path) const {
     std::string const p{path};
-    detail::ObjId const dset{H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT)};
+    impl::ObjId const dset{H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT)};
     hid_check(dset.get(), "field_shape Oopen");
     return parse_shape_string(read_string_attr(dset.get(), "shape"));
 }
@@ -253,7 +253,7 @@ void Reader::read_field_raw_(std::string_view path,
                              std::span<std::size_t const> expected_shape,
                              std::size_t expected_n_components) const {
     std::string const p{path};
-    detail::ObjId const dset{H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT)};
+    impl::ObjId const dset{H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT)};
     hid_check(dset.get(), "field Oopen");
 
     // No hand-rolled close here any more: `dset` unwinds with the scope, which is
@@ -284,7 +284,7 @@ void Reader::read_field_raw_(std::string_view path,
              " expected=" + std::to_string(expected_n_components));
     }
 
-    detail::SpaceId const space{H5Dget_space(dset.get())};
+    impl::SpaceId const space{H5Dget_space(dset.get())};
     hid_check(space.get(), "field Dget_space");
     hsize_t dims[1] = {0};
     if (H5Sget_simple_extent_ndims(space.get()) != 1) {
@@ -303,7 +303,7 @@ void Reader::read_field_raw_(std::string_view path,
 
 FastRng Reader::rng_state(std::string_view path) const {
     std::string const p{path};
-    detail::ObjId const dset{H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT)};
+    impl::ObjId const dset{H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT)};
     hid_check(dset.get(), "rng Oopen");
 
     auto fail = [&](std::string const& msg) {
@@ -317,7 +317,7 @@ FastRng Reader::rng_state(std::string_view path) const {
     auto const has_cached_u = read_scalar_attr<unsigned int>(dset.get(), "has_cached_normal");
     auto const cached       = read_scalar_attr<double>(dset.get(), "cached_normal");
 
-    detail::SpaceId const space{H5Dget_space(dset.get())};
+    impl::SpaceId const space{H5Dget_space(dset.get())};
     hid_check(space.get(), "rng Dget_space");
     hsize_t dims[1] = {0};
     H5Sget_simple_extent_dims(space.get(), dims, nullptr);
@@ -336,7 +336,7 @@ std::vector<std::uint64_t> Reader::rng_streams(std::string_view path,
                                                std::size_t expected_n_streams,
                                                std::size_t expected_n_words) const {
     std::string const p{path};
-    detail::ObjId const dset{H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT)};
+    impl::ObjId const dset{H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT)};
     hid_check(dset.get(), "rng_streams Oopen");
 
     auto fail = [&](std::string const& msg) {
@@ -363,7 +363,7 @@ std::vector<std::uint64_t> Reader::rng_streams(std::string_view path,
     }
 
     std::size_t const total = (n_streams + 1) * n_words;
-    detail::SpaceId const space{H5Dget_space(dset.get())};
+    impl::SpaceId const space{H5Dget_space(dset.get())};
     hid_check(space.get(), "rng_streams Dget_space");
     hsize_t dims[1] = {0};
     H5Sget_simple_extent_dims(space.get(), dims, nullptr);

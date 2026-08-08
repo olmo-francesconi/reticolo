@@ -19,7 +19,7 @@
 // The closer is a template non-type parameter, so a guard is exactly one hid_t
 // wide and the close call devirtualises to a direct call.
 
-namespace reticolo::io::detail {
+namespace reticolo::io::impl {
 
 template <herr_t (*Close)(hid_t)>
 class HidGuard {
@@ -66,4 +66,4 @@ using TypeId  = HidGuard<H5Tclose>;
 using AttrId  = HidGuard<H5Aclose>;
 using PropId  = HidGuard<H5Pclose>;
 
-}  // namespace reticolo::io::detail
+}  // namespace reticolo::io::impl

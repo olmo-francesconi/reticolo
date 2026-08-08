@@ -160,7 +160,7 @@ __global__ void obs_reduce_nn_kernel(T const* __restrict__ x,
 
 // ---- host entry points ------------------------------------------------------
 
-namespace detail {
+namespace impl {
 
 // Fold grid partials for each lane in index order and reassemble the lane's own
 // type from its double components.
@@ -188,7 +188,7 @@ assemble(double const* host, int grid, std::index_sequence<I...>) {
     return std::tuple<Rs...>{lane.template operator()<Rs>(offs[I])...};
 }
 
-}  // namespace detail
+}  // namespace impl
 
 // Σ_x k_i(φ(x)) per lane, one pass. Returns std::tuple<R...> in kernel order —
 // the same shape `obs::reduce` returns, so the `obs::*_of` finalizers apply
@@ -210,7 +210,7 @@ template <class T, class Layout, class... Ks>
         partials.copy_to_host(host.data());
         RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
     }
-    return detail::assemble<std::decay_t<std::invoke_result_t<Ks const&, T>>...>(
+    return impl::assemble<std::decay_t<std::invoke_result_t<Ks const&, T>>...>(
         host.data(), grid, std::index_sequence_for<Ks...>{});
 }
 
@@ -235,7 +235,7 @@ template <class Policy = exec::FwdOnly, class T, class Layout, class... Ks>
         partials.copy_to_host(host.data());
         RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
     }
-    return detail::assemble<std::decay_t<std::invoke_result_t<Ks const&, T, T>>...>(
+    return impl::assemble<std::decay_t<std::invoke_result_t<Ks const&, T, T>>...>(
         host.data(), grid, std::index_sequence_for<Ks...>{});
 }
 

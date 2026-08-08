@@ -56,7 +56,7 @@ struct SmoothConfig {
     double smooth_lambda_exp = 2.0;
 };
 
-namespace detail {
+namespace impl {
 
 // In-place Gauss elimination with partial pivoting. `mat` is `n × n` row-major;
 // `vec` is `n`. Returns false if singular to within `k_tol`; else `vec` holds
@@ -165,7 +165,7 @@ inline void local_poly_fit(std::vector<double> const& e,
     }
 }
 
-}  // namespace detail
+}  // namespace impl
 
 // ONE orchestrator; the sampler is a required template parameter (an `updater::`
 // sampler tag), in the slot the MD integrator used to hold — the integrator now
@@ -605,7 +605,7 @@ private:
                 a_rm[n] = rm_update(reps_[n]->a(), de_buf_[n], spec_.delta, s);
             }
 
-            detail::local_poly_fit(e_n_vec_, a_rm, sm.smooth_K, sm.smooth_degree, a_hat);
+            impl::local_poly_fit(e_n_vec_, a_rm, sm.smooth_K, sm.smooth_degree, a_hat);
             double const lam =
                 sm.smooth_lambda0 / std::pow(static_cast<double>(s + 1), sm.smooth_lambda_exp);
             double rm_step_sum = 0.0;

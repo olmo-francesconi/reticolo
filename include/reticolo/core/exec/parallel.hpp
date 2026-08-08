@@ -51,7 +51,7 @@ namespace reticolo::exec {
 // between those short regions avoids paying a wake-up on every pass. This must
 // run before the OpenMP runtime initialises, hence the inline static initializer.
 // Set RETICOLO_NO_OMP_TUNE to preserve an externally selected wait policy.
-namespace detail {
+namespace impl {
 
 inline bool tune_openmp_wait_policy() noexcept {
 #if defined(_OPENMP) && (defined(__APPLE__) || defined(__unix__) || defined(_POSIX_VERSION))
@@ -65,7 +65,7 @@ inline bool tune_openmp_wait_policy() noexcept {
 
 inline bool const k_openmp_wait_policy_tuned = tune_openmp_wait_policy();
 
-}  // namespace detail
+}  // namespace impl
 
 // Target working-set per flat-range work item. Small enough that a big lattice
 // yields many chunks (load balance across the team), large enough to amortise the
