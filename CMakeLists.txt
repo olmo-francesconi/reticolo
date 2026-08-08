@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.25)
 # Version lives here so the logo can carry it BEFORE project() runs — the logo
 # must be the first thing a cold configure prints, and project() emits the
 # compiler-identification lines.
-set(RETICOLO_VERSION 0.5.0)
+set(RETICOLO_VERSION 0.6.0)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 include(ReticoloBanner)

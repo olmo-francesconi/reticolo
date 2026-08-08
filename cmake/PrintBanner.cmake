@@ -1,6 +1,6 @@
 # Print the reticolo logo for a non-configure phase. Run via `cmake -P`:
 #
-#   cmake -DRETICOLO_LOGO_VERSION=0.5.0 [-DRETICOLO_LOGO_TAG="t e s t"] \
+#   cmake -DRETICOLO_LOGO_VERSION=0.6.0 [-DRETICOLO_LOGO_TAG="t e s t"] \
 #         -P cmake/PrintBanner.cmake
 #
 # Used by the reticolo_banner custom target (build phase) and by
