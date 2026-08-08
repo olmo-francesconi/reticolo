@@ -2,13 +2,14 @@
 
 #include <reticolo/action/gauge/formula/wilson_kernels.hpp>
 #include <reticolo/core/exec/parallel.hpp>
-#include <reticolo/core/field/indexing.hpp>
+#include <reticolo/core/field/lattice_geometry.hpp>
 #include <reticolo/core/field/matrix_link_lattice.hpp>
 #include <reticolo/core/field/site.hpp>
 #include <reticolo/math/group/su3.hpp>
 #include <reticolo/math/su3_ops.hpp>
 
 #include <cstddef>
+#include <span>
 
 // Wilson plaquette kernels for SU(3) — the action-specific physics (Re Tr U_p,
 // the Σ Re Tr plane fast-path, the link-centric staple force / fused kick) for
@@ -60,7 +61,7 @@ struct wilson_kernels<math::group::SU3> {
     // range worker — no threading. Table-free: the two plaquette-forward
     // neighbours (s+μ̂, s+ν̂) are computed from the lattice strides by the same
     // row-nested sweep the force uses, so the gauge s_full no longer reads the
-    // Indexing tables. The partition hands whole rows (base, cnt multiples of L0).
+    // neighbour tables. The partition hands whole rows (base, cnt multiples of L0).
     template <class T>
     static double s_full_plane_range(MatrixLinkLattice<math::group::SU3, T> const& u,
                                      std::size_t mu,
@@ -182,7 +183,7 @@ public:
     // Pure per-range staple force/kick worker over the links [base, base+cnt).
     // Table-free: neighbour flat indices come from the lattice strides via a
     // row-nested sweep (odometer over the outer dims, dim 0 as the inner loop),
-    // NOT the Indexing next/prev tables. A direction ≥ 1 neighbour is a per-row
+    // NOT a stored neighbour table. A direction ≥ 1 neighbour is a per-row
     // constant offset, so the k_batch index array stays contiguous and
     // load_links_batched collapses it to a stride-1 vector load; direction 0
     // wraps per site. The staple math + scatter are byte-for-byte the former
@@ -215,7 +216,7 @@ public:
             // Per-row |offset| to the ±ĵ neighbour for each direction j ≥ 1 (dir 0
             // is per-x). `*wrap` flags that the offset crosses the periodic seam,
             // so it is subtracted (fwd) / added (bwd) instead — matching the
-            // Indexing table's wrap exactly.
+            // geometry's wrap exactly.
             std::size_t fwd[4] = {0, 0, 0, 0};
             std::size_t bwd[4] = {0, 0, 0, 0};
             bool fwd_wrap[4]   = {false, false, false, false};

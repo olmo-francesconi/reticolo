@@ -39,7 +39,7 @@ int g_rt = 8;   // trajectory timed reps
 template <class A, class Field>
 void bench_one(
     char const* name, A const& a, Field& fld, FastRng& rng, char const* shape, char const* th) {
-    Field force{fld.indexing()};
+    Field force{fld.shape()};
     double const fms = time_ms([&] { a.compute_force(fld, force); }, g_rf);
     double sink      = 0.0;
     double const sms = time_ms([&] { sink += a.s_full(fld); }, g_rf);

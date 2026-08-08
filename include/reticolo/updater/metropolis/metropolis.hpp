@@ -87,7 +87,7 @@ public:
                Rng rng,
                MetropolisSpec const& spec,
                log::Mode announce = log::Mode::normal)
-        : action_{action}, field_{field}, noise_{field.indexing()}, logu_{field.indexing()},
+        : action_{action}, field_{field}, noise_{field.shape()}, logu_{field.shape()},
           sigma_{static_cast<real_scalar_t<value_type>>(spec.sigma)},
           n_threads_{resolve_threads_(spec.n_threads)}, n_slabs_{spec.slabs_per_thread},
           streams_{rng.uniform_u64(), slab_count_(field, n_threads_, n_slabs_), announce},

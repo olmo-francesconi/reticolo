@@ -126,7 +126,7 @@ void bench_kernels(std::ostream& os,
         emit_row(os, ndim, L, nsites, dofs, name, "s_full", r);
     }
     {
-        Field force{phi.indexing()};
+        Field force{phi.shape()};
         start_progress(ndim, L, dofs, name, "compute_force");
         auto const r =
             time_per_call_budgeted([&] { action.compute_force(phi, force); }, dofs, budget);

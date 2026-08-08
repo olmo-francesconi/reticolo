@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -167,7 +168,7 @@ private:
                           std::size_t n_elems,
                           ScalarKind scalar_kind,
                           FieldKind kind,
-                          std::vector<std::size_t> const& shape,
+                          std::span<std::size_t const> shape,
                           std::size_t n_components,
                           char const* group_name);
 };

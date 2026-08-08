@@ -1,4 +1,4 @@
-#include <reticolo/core/field/indexing.hpp>
+#include <reticolo/core/field/lattice.hpp>
 #include <reticolo/cuda/check.hpp>
 #include <reticolo/cuda/device_buffer.hpp>
 #include <reticolo/cuda/device_topology.hpp>
@@ -62,22 +62,24 @@ TEST_CASE("cuda backend self-test round-trips through the device", "[cuda]") {
     REQUIRE(reticolo::cuda::selftest());
 }
 
-// The device's closed-form periodic indexing must reproduce the CPU
-// reference neighbour table exactly — checked on the host (next/prev are
-// __host__ __device__). Covers a 4D cube and a non-cube, non-power-of-two shape.
-TEST_CASE("cuda DeviceTopology matches the reference Indexing", "[cuda]") {
+// The device's closed-form periodic indexing must reproduce the CPU one exactly
+// — checked on the host (next/prev are __host__ __device__). Covers a 4D cube and
+// a non-cube, non-power-of-two shape. The CPU reference is now a field: the
+// geometry lives in the field itself, so there is no standalone object to
+// compare against.
+TEST_CASE("cuda DeviceTopology matches the CPU field geometry", "[cuda]") {
     for (std::vector<std::size_t> shape :
          {std::vector<std::size_t>{4, 4, 4, 4}, std::vector<std::size_t>{6, 4, 5}}) {
-        auto const idx  = reticolo::Indexing::acquire(shape);
+        reticolo::Lattice<double> const ref{shape};
         auto const topo = reticolo::cuda::make_device_topology(shape);
-        REQUIRE(topo.nsites == static_cast<long>(idx->nsites()));
+        REQUIRE(topo.nsites == static_cast<long>(ref.nsites()));
 
-        for (std::size_t s = 0; s < idx->nsites(); ++s) {
+        for (std::size_t s = 0; s < ref.nsites(); ++s) {
             for (std::size_t mu = 0; mu < shape.size(); ++mu) {
                 REQUIRE(topo.next(static_cast<long>(s), static_cast<int>(mu)) ==
-                        static_cast<long>(idx->next(reticolo::Site{s}, mu).value()));
+                        static_cast<long>(ref.next(reticolo::Site{s}, mu).value()));
                 REQUIRE(topo.prev(static_cast<long>(s), static_cast<int>(mu)) ==
-                        static_cast<long>(idx->prev(reticolo::Site{s}, mu).value()));
+                        static_cast<long>(ref.prev(reticolo::Site{s}, mu).value()));
             }
         }
     }

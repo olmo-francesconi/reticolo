@@ -3,13 +3,14 @@
 #include <reticolo/action/gauge/formula/wilson_kernels.hpp>
 #include <reticolo/action/gauge/formula/wilson_u1_formula.hpp>
 #include <reticolo/core/exec/parallel.hpp>
-#include <reticolo/core/field/indexing.hpp>
+#include <reticolo/core/field/lattice_geometry.hpp>
 #include <reticolo/core/field/matrix_link_lattice.hpp>
 #include <reticolo/core/field/site.hpp>
 #include <reticolo/math/group/u1.hpp>
 #include <reticolo/math/vec_libm.hpp>
 
 #include <cstddef>
+#include <span>
 #include <vector>
 
 // Wilson plaquette kernels for U(1) — the action-specific physics for the
@@ -69,7 +70,7 @@ plane_idx(std::size_t d, std::size_t a, std::size_t b) noexcept {
 // seam) from the row index r. Shared by the U(1) strided plane sweeps; the same
 // odometer the SU(N) kernels use. Requires d ≤ 4.
 [[gnu::always_inline]] inline void row_fwd_offsets(std::size_t r,
-                                                   Indexing::SizeVec const& sh,
+                                                   std::span<std::size_t const> sh,
                                                    std::size_t d,
                                                    std::size_t const (&stg)[4],
                                                    std::size_t (&off)[4],
@@ -106,7 +107,7 @@ struct wilson_kernels<math::group::U1> {
                                  double* sp,
                                  std::size_t a,
                                  std::size_t b,
-                                 Indexing::SizeVec const& sh,
+                                 std::span<std::size_t const> sh,
                                  std::size_t d,
                                  std::size_t l0,
                                  std::size_t const (&stg)[4],

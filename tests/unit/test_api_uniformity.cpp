@@ -102,8 +102,8 @@ TEST_CASE("BoseGas fused kick equals force-then-kick", "[api][kick][bose]") {
     }
     double const k_dt = 0.123;
 
-    Lattice<C> mom_fused{field.indexing()};
-    Lattice<C> mom_ref{field.indexing()};
+    Lattice<C> mom_fused{field.shape()};
+    Lattice<C> mom_ref{field.shape()};
     for (std::size_t i = 0; i < field.nsites(); ++i) {
         mom_fused.data()[i] = C{1.0, -2.0};
         mom_ref.data()[i]   = C{1.0, -2.0};
@@ -111,7 +111,7 @@ TEST_CASE("BoseGas fused kick equals force-then-kick", "[api][kick][bose]") {
 
     bg.compute_force_and_kick(field, mom_fused, k_dt);
 
-    Lattice<C> force{field.indexing()};
+    Lattice<C> force{field.shape()};
     bg.compute_force(field, force);
     for (std::size_t i = 0; i < field.nsites(); ++i) {
         mom_ref.data()[i] += k_dt * force.data()[i];

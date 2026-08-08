@@ -67,7 +67,7 @@ void bench_phi4(int L) {
     FastRng rng{42};
     hot_init(phi, rng);
     act::Phi4<double> const action{.kappa = 0.18, .lambda = 1.0};
-    Lattice<double> force{phi.indexing()};
+    Lattice<double> force{phi.shape()};
 
     char lat[8];
     std::snprintf(lat, sizeof(lat), "%d^4", L);
@@ -84,7 +84,7 @@ void bench_wilson(char const* name, int L, double beta) {
     FastRng rng{42};
     hot_init(u, rng);
     act::Wilson<Group, double> const action{.beta = beta};
-    Field force{u.indexing()};
+    Field force{u.shape()};
 
     char lat[8];
     std::snprintf(lat, sizeof(lat), "%d^4", L);

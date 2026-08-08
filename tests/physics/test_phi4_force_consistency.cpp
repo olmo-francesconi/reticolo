@@ -37,7 +37,7 @@ TEST_CASE("Phi4: free-theory limit (lambda=0) gives force = 2 kappa sum_nn - 2 p
     Phi4<double> const action{.kappa = 0.15, .lambda = 0.0};
 
     Lattice<double> phi{{4, 4, 4}};
-    Lattice<double> force{phi.indexing()};
+    Lattice<double> force{phi.shape()};
     FastRng rng{42};
     randomize(phi, rng);
     action.compute_force(phi, force);

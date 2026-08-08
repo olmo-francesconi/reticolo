@@ -43,8 +43,8 @@ TEST_CASE("SineGordon at alpha=0 reduces to Phi4 with lambda=0", "[physics][sine
 
     REQUIRE(sg.s_full(phi) == Catch::Approx(p4.s_full(phi)).margin(1e-12));
 
-    Lattice<double> f_sg{phi.indexing()};
-    Lattice<double> f_p4{phi.indexing()};
+    Lattice<double> f_sg{phi.shape()};
+    Lattice<double> f_p4{phi.shape()};
     sg.compute_force(phi, f_sg);
     p4.compute_force(phi, f_p4);
     for (Site const x : phi.sites()) {

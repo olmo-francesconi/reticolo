@@ -14,6 +14,7 @@
 #include <ctime>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -496,9 +497,9 @@ void Writer::attr(std::string_view path, T const& value) {
         parent = detail::ObjId{H5Gopen2(impl_->file, "/", H5P_DEFAULT)};
     } else {
         detail::GroupId const pre = ensure_parent_groups(impl_->file, segments);
-        std::string const& leaf   = segments.back();
-        htri_t const ex           = H5Lexists(pre.get(), leaf.c_str(), H5P_DEFAULT);
-        parent                    = detail::ObjId{
+        std::string const& leaf = segments.back();
+        htri_t const ex         = H5Lexists(pre.get(), leaf.c_str(), H5P_DEFAULT);
+        parent                  = detail::ObjId{
             ex > 0 ? H5Oopen(pre.get(), leaf.c_str(), H5P_DEFAULT)
                    : H5Gcreate2(pre.get(), leaf.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT)};
     }
@@ -578,7 +579,7 @@ char const* field_kind_name(Writer::FieldKind k) {
     return "?";
 }
 
-std::string join_shape(std::vector<std::size_t> const& shape) {
+std::string join_shape(std::span<std::size_t const> shape) {
     std::string out;
     for (std::size_t i = 0; i < shape.size(); ++i) {
         if (i > 0) {
@@ -606,7 +607,7 @@ void Writer::write_field_raw_(std::string_view path,
                               std::size_t n_elems,
                               ScalarKind scalar_kind,
                               FieldKind kind,
-                              std::vector<std::size_t> const& shape,
+                              std::span<std::size_t const> shape,
                               std::size_t n_components,
                               char const* group_name) {
     std::scoped_lock const lock{impl_->mu};

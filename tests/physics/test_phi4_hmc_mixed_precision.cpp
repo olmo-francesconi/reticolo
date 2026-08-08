@@ -29,7 +29,7 @@ TEST_CASE("Phi4<float>: compute_force matches central finite difference of s_ful
     Phi4<float> const action{.kappa = 0.18F, .lambda = 0.04F};
 
     Lattice<float> phi{{6, 6, 6}};
-    Lattice<float> force{phi.indexing()};
+    Lattice<float> force{phi.shape()};
     FastRng rng{56789};
     for (Site x : phi.sites()) {
         phi[x] = static_cast<float>(rng.normal());
@@ -80,8 +80,8 @@ TEST_CASE("Phi4: float kernels reproduce double on one configuration",
     REQUIRE(af.s_full(pf) == Catch::Approx(ad.s_full(pd)).epsilon(1.0e-4));
 
     // compute_force: elementwise agreement.
-    Lattice<double> fd{pd.indexing()};
-    Lattice<float> ff{pf.indexing()};
+    Lattice<double> fd{pd.shape()};
+    Lattice<float> ff{pf.shape()};
     ad.compute_force(pd, fd);
     af.compute_force(pf, ff);
     for (Site x : pd.sites()) {

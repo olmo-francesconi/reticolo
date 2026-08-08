@@ -40,7 +40,7 @@ TEST_CASE("BoseGas: compute_force_imag matches finite difference of s_imag", "[p
     BoseGas<double> const action{.mass = 1.0, .lambda = 0.5, .mu = 0.4};
 
     Lattice<C> phi{{4, 4, 4, 4}};
-    Lattice<C> force{phi.indexing()};
+    Lattice<C> force{phi.shape()};
     FastRng rng{99};
     randomize(phi, rng);
     action.compute_force_imag(phi, force);

@@ -63,8 +63,8 @@ TEST_CASE("SU(2): float kernels reproduce double on one configuration",
     REQUIRE(af.s_full(uf) == Catch::Approx(ad.s_full(ud)).epsilon(1.0e-4));
 
     // Force agreement, elementwise.
-    MatrixLinkLattice<SU2, double> fd{ud.indexing()};
-    MatrixLinkLattice<SU2, float> ff{uf.indexing()};
+    MatrixLinkLattice<SU2, double> fd{ud.shape()};
+    MatrixLinkLattice<SU2, float> ff{uf.shape()};
     reticolo::action::formula::wilson_kernels<SU2>::compute_force(ud, fd, k_beta / 2.0);
     reticolo::action::formula::wilson_kernels<SU2>::compute_force(uf, ff, k_beta / 2.0);
     for (std::size_t i = 0; i < fd.ncomponents(); ++i) {

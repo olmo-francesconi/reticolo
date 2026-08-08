@@ -2,13 +2,14 @@
 
 #include <reticolo/action/gauge/formula/wilson_kernels.hpp>
 #include <reticolo/core/exec/parallel.hpp>
-#include <reticolo/core/field/indexing.hpp>
+#include <reticolo/core/field/lattice_geometry.hpp>
 #include <reticolo/core/field/matrix_link_lattice.hpp>
 #include <reticolo/core/field/site.hpp>
 #include <reticolo/math/group/su2.hpp>
 #include <reticolo/math/su2_ops.hpp>
 
 #include <cstddef>
+#include <span>
 
 // Wilson plaquette kernels for SU(2) — the action-specific physics (Re Tr U_p,
 // the Σ Re Tr plane fast-path, the link-centric staple force / fused kick) for
@@ -50,7 +51,7 @@ struct wilson_kernels<math::group::SU2> {
 
     // Table-free row-nested plane sum: the two forward neighbours (s+μ̂, s+ν̂) are
     // computed from the lattice strides, so the k_batch index arrays stay
-    // contiguous (stride-1 vector loads) and no Indexing table is read. Unifies
+    // contiguous (stride-1 vector loads) and no neighbour table is read. Unifies
     // the former shape[0] % k_batch guard: that split existed because the GATHER
     // was slow on misaligned shapes — with strided contiguous loads the batched
     // path wins throughout, with the row remainder handled per site.
@@ -168,7 +169,7 @@ public:
     // Pure per-range staple force/kick worker over the links [base, base+cnt).
     // Table-free: neighbour flat indices come from the lattice strides via a
     // row-nested sweep (odometer over the outer dims, dim 0 as the inner loop),
-    // NOT the Indexing next/prev tables. A direction ≥ 1 neighbour is a per-row
+    // NOT a stored neighbour table. A direction ≥ 1 neighbour is a per-row
     // constant offset, so the k_batch index array stays contiguous and
     // load_links_batched collapses it to a stride-1 vector load; direction 0
     // wraps per site. The staple math + scatter are byte-for-byte the former

@@ -7,6 +7,8 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <ranges>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -248,7 +250,7 @@ void Reader::read_field_raw_(std::string_view path,
                              std::size_t n_elems,
                              Writer::ScalarKind scalar_kind,
                              Writer::FieldKind kind,
-                             std::vector<std::size_t> const& expected_shape,
+                             std::span<std::size_t const> expected_shape,
                              std::size_t expected_n_components) const {
     std::string const p{path};
     detail::ObjId const dset{H5Oopen(impl_->file, p.c_str(), H5P_DEFAULT)};
@@ -272,7 +274,9 @@ void Reader::read_field_raw_(std::string_view path,
     std::string const shape_s    = read_string_attr(dset.get(), "shape");
     auto const file_shape        = parse_shape_string(shape_s);
     auto const file_n_components = read_scalar_attr<std::uint64_t>(dset.get(), "n_components");
-    if (file_shape != expected_shape) {
+    // file_shape is a vector, expected_shape a span over the field's inline
+    // extents — compare element-wise rather than by container type.
+    if (!std::ranges::equal(file_shape, expected_shape)) {
         fail("shape mismatch: file='" + shape_s + "'");
     }
     if (file_n_components != expected_n_components) {

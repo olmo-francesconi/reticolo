@@ -52,7 +52,7 @@
 // order — deterministic for a fixed (team, slabs-per-thread), but the partition
 // now tracks the team size, so a different team re-folds.
 //
-// D in {1, 2, 3, 4} each have a hand-written vectorised nest; Indexing caps ndims
+// D in {1, 2, 3, 4} each have a hand-written vectorised nest; the geometry caps ndims
 // at 4, so there is no D>4 path — the neighbours are always computed from strides.
 
 namespace reticolo::exec {
@@ -212,7 +212,7 @@ inline Acc run_partition_items_(Lattice<T> const& l, int nthreads, Item const& i
 // per-item behaviour:
 //   item.template operator()<D>(L, stride, lo, hi) — one partition item, D∈{2,3,4}
 //   one_d(x0, cnt)  — one inner-axis chunk of a 1D lattice
-// each returning void (map) or Acc (reduce). `ndims` is 1..4 (Indexing enforces the
+// each returning void (map) or Acc (reduce). `ndims` is 1..4 (the field geometry enforces the
 // cap), so there is no D>4 gather path — the geometry is always a hand-written nest.
 template <class Acc, class T, class Item, class OneD>
 inline Acc traverse_dispatch_(Lattice<T> const& l,
@@ -228,7 +228,7 @@ inline Acc traverse_dispatch_(Lattice<T> const& l,
             return run_partition_items_<Acc, 2>(l, nthreads, item);
         case 3:
             return run_partition_items_<Acc, 3>(l, nthreads, item);
-        default:  // 4 — Indexing caps ndims at 4
+        default:  // 4 — the geometry caps ndims at 4
             return run_partition_items_<Acc, 4>(l, nthreads, item);
     }
 }

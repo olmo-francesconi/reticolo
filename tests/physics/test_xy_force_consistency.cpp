@@ -43,7 +43,7 @@ TEST_CASE("Xy at beta=0 yields zero action and zero force", "[physics][xy]") {
     Xy<double> const action{.beta = 0.0};
 
     Lattice<double> theta{{4, 4}};
-    Lattice<double> force{theta.indexing()};
+    Lattice<double> force{theta.shape()};
     FastRng rng{0};
     randomize_angles(theta, rng);
 

@@ -53,7 +53,7 @@ void print_row(
 
 template <class Action, class Field>
 void bench_scalar_action(char const* name, int ndim, int L, Action const& action, Field& phi) {
-    Field force{phi.indexing()};
+    Field force{phi.shape()};
     std::size_t const dofs = phi.nsites();
 
     double const t_sfull = time_per_call([&] { consume(action.s_full(phi)); });
@@ -79,7 +79,7 @@ void bench_wilson(char const* name,
                   reticolo::MatrixLinkLattice<Group, double>& phi) {
     using Action = reticolo::action::Wilson<Group, double>;
     Action const action{.beta = beta};
-    reticolo::MatrixLinkLattice<Group, double> force{phi.indexing()};
+    reticolo::MatrixLinkLattice<Group, double> force{phi.shape()};
     std::size_t const dofs = phi.ndims() * phi.nsites();
 
     double const t_sfull = time_per_call([&] { consume(action.s_full(phi)); });
@@ -151,7 +151,7 @@ void run_all() {
             hot_init(phi, rng);
             act::BoseGas<double> const action{.mass = 1.0, .lambda = 1.0, .mu = 0.9};
             std::size_t const dofs = phi.nsites();
-            Lattice<std::complex<double>> force{phi.indexing()};
+            Lattice<std::complex<double>> force{phi.shape()};
             double const t_sfull = time_per_call([&] { consume(action.s_full(phi)); });
             print_row(c.ndim, c.L, "BoseGas", dofs, "s_full", t_sfull);
             double const t_force = time_per_call([&] { action.compute_force(phi, force); });

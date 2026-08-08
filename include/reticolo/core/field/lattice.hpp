@@ -1,6 +1,6 @@
 #pragma once
 
-#include <reticolo/core/field/indexing.hpp>
+#include <reticolo/core/field/lattice_geometry.hpp>
 #include <reticolo/core/field/site.hpp>
 #include <reticolo/core/log/log.hpp>
 
@@ -16,50 +16,47 @@ namespace reticolo {
 // Lattice<T> — owning value-semantic field container on a periodic hypercubic
 // lattice. One value of type `T` per site, stored in a flat std::vector.
 //
-// Value semantics with one twist:
-//
 //     Lattice<double> a{{16, 16, 16}};
-//     Lattice<double> b = a;       // ← deep-copies the FIELD DATA
-//                                  //   but SHARES the Indexing neighbour table
-//     b[Site{0}] = 42;             //   modifies only b's data
+//     Lattice<double> b = a;       // deep copy: data AND geometry
+//     b[Site{0}] = 42;             // modifies only b
 //
-// The Indexing (neighbour pointers, parity labels) is immutable and pooled by
-// shape, so sharing it costs only a shared_ptr increment. Two lattices of the
-// same shape automatically share — `Lattice<T> mom{phi.indexing()}` (the
-// "sibling" ctor) constructs a fresh field without rebuilding the topology.
-// HMC uses this for its mom/force/old_field buffers: one neighbour table,
-// four lattices.
+// The geometry (shape, packed strides, site count) is inlined into the field
+// through `impl::LatticeGeometry` — it is not a separate object, and there is
+// no pool. A sibling buffer is built from the same shape, which costs four
+// multiplies:
 //
-// If you ever need a fully independent copy whose Indexing is its own object
-// (rare — you'd be paying for nothing), construct from a fresh shape:
-//     Lattice<double> b{a.shape()};
-//     std::ranges::copy(a, b.begin());
+//     Lattice<double> mom{phi.shape()};   // HMC's mom / force / old_field
 template <class T>
-class Lattice {
+class Lattice : public impl::LatticeGeometry {
 public:
     using value_type = T;
-    using SizeVec    = Indexing::SizeVec;
+    using SizeVec    = std::vector<std::size_t>;
 
     // Default-fill a fresh lattice on a new shape (always periodic).
-    explicit Lattice(SizeVec shape)
-        : idx_{Indexing::acquire(std::move(shape))}, data_(idx_->nsites(), T{}) {
+    explicit Lattice(SizeVec const& shape)
+        : impl::LatticeGeometry{std::span<std::size_t const>{shape}}, data_(nsites(), T{}) {
         log_construct_();
     }
 
-    Lattice(SizeVec shape, T fill)
-        : idx_{Indexing::acquire(std::move(shape))}, data_(idx_->nsites(), std::move(fill)) {
+    Lattice(SizeVec const& shape, T fill)
+        : impl::LatticeGeometry{std::span<std::size_t const>{shape}},
+          data_(nsites(), std::move(fill)) {
         log_construct_();
     }
 
-    // Sibling-lattice constructors: reuse an existing Indexing
-    // (the HMC pattern — mom, force, old_field share the field's topology).
-    explicit Lattice(std::shared_ptr<Indexing const> idx)
-        : idx_{std::move(idx)}, data_(idx_->nsites(), T{}) {}
+    // Sibling-lattice constructors: same shape, fresh storage (the HMC pattern —
+    // mom, force and old_field are built from the field's own shape()).
+    explicit Lattice(std::span<std::size_t const> shape)
+        : impl::LatticeGeometry{shape}, data_(nsites(), T{}) {
+        log_construct_();
+    }
 
-    Lattice(std::shared_ptr<Indexing const> idx, T fill)
-        : idx_{std::move(idx)}, data_(idx_->nsites(), std::move(fill)) {}
+    Lattice(std::span<std::size_t const> shape, T fill)
+        : impl::LatticeGeometry{shape}, data_(nsites(), std::move(fill)) {
+        log_construct_();
+    }
 
-    // Value semantics: deep-copy data, share Indexing.
+    // Value semantics: deep-copy data and geometry (the geometry is 80 bytes inline).
     Lattice(Lattice const&)                = default;
     Lattice(Lattice&&) noexcept            = default;
     Lattice& operator=(Lattice const&)     = default;
@@ -73,12 +70,7 @@ public:
     [[nodiscard]] T& operator[](Site s) noexcept { return data_[s.value()]; }
     [[nodiscard]] T const& operator[](Site s) const noexcept { return data_[s.value()]; }
 
-    [[nodiscard]] Site next(Site s, std::size_t mu) const noexcept { return idx_->next(s, mu); }
-    [[nodiscard]] Site prev(Site s, std::size_t mu) const noexcept { return idx_->prev(s, mu); }
-
-    [[nodiscard]] SizeVec const& shape() const noexcept { return idx_->shape(); }
-    [[nodiscard]] std::size_t ndims() const noexcept { return idx_->ndims(); }
-    [[nodiscard]] std::size_t nsites() const noexcept { return idx_->nsites(); }
+    // shape() / ndims() / nsites() / next() / prev() come from the geometry base.
 
     // Per-site storage footprint (bytes) — the threading threshold / chunk size are
     // derived from this, so a memory-bound decision reflects the real footprint.
@@ -97,23 +89,15 @@ public:
     [[nodiscard]] auto begin() const noexcept { return data_.begin(); }
     [[nodiscard]] auto end() const noexcept { return data_.end(); }
 
-    [[nodiscard]] std::shared_ptr<Indexing const> indexing() const noexcept { return idx_; }
-
-    // Non-owning accessor for hot kernels — bypasses the shared_ptr copy
-    // (refcount atomics) that calling `indexing()` would incur. Returned
-    // reference is valid for the life of this `Lattice`.
-    [[nodiscard]] Indexing const& indexing_ref() const noexcept { return *idx_; }
-
 private:
     void log_construct_() const {
         log::info("init",
                   "Lattice<{}>  shape={}  sites={}",
                   scalar_name<T>(),
-                  shape_str(idx_->shape()),
-                  idx_->nsites());
+                  shape_str(shape()),
+                  nsites());
     }
 
-    std::shared_ptr<Indexing const> idx_;
     std::vector<T> data_;
 };
 

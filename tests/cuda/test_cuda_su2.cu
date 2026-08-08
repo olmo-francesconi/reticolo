@@ -30,7 +30,7 @@
 // the CPU Wilson<SU2>, MD energy conservation + reversibility, the Gell-Mann
 // momentum moments, and the generic host-free Hmc instantiation. (Excluded from the
 // no-integrator-kernels lint gate: it names updater::integ::Leapfrog to instantiate the
-// generic integrator over the matrix field, as hmc_probe.cu / u1_probe.cu.)
+// generic integrator over the matrix field, as test_cuda_hmc.cu / test_cuda_u1.cu.)
 
 namespace reticolo::cuda {
 
@@ -69,7 +69,7 @@ void hot_start(MatrixLinkLattice<SU2, double>& u, FastRng& rng) {
 }
 
 MatrixLinkLattice<SU2, double> make_links() {
-    MatrixLinkLattice<SU2, double> u{Indexing::SizeVec(kShape.begin(), kShape.end())};
+    MatrixLinkLattice<SU2, double> u{std::vector<std::size_t>(kShape.begin(), kShape.end())};
     FastRng rng{2718};
     hot_start(u, rng);
     return u;
@@ -139,7 +139,7 @@ bool su2_cpu_matches_device() {
     Wil cpu{};
     cpu.beta           = kBeta;
     double const s_cpu = cpu.s_full(host);
-    MatrixLinkLattice<SU2, double> f_cpu{host.indexing()};
+    MatrixLinkLattice<SU2, double> f_cpu{host.shape()};
     cpu.compute_force(host, f_cpu);
 
     DField dfield{kShape};
@@ -210,7 +210,7 @@ bool su2_fused_matches_twopass() {
 
 bool su2_energy_conserved_ok() {
     MatrixLinkLattice<SU2, double> const init = make_links();
-    MatrixLinkLattice<SU2, double> p_host{init.indexing()};
+    MatrixLinkLattice<SU2, double> p_host{init.shape()};
     FastRng rng{77};
     std::size_t const d  = p_host.ndims();
     std::size_t const ns = p_host.nsites();
@@ -272,7 +272,7 @@ bool su2_hmc_reversibility_ok() {
     field.copy_from_host(init.data());
 
     // Sample a valid algebra momentum on the host (per direction), stage it in.
-    MatrixLinkLattice<SU2, double> p_host{init.indexing()};
+    MatrixLinkLattice<SU2, double> p_host{init.shape()};
     FastRng rng{99};
     std::size_t const d  = p_host.ndims();
     std::size_t const ns = p_host.nsites();

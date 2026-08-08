@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <type_traits>
 
@@ -237,7 +238,7 @@ struct WindowedAction {
         } else {
             // Generic: F = F_base + (a + (Q − E_n)/δ²)·F_Q.
             base.compute_force(l, force);
-            field_type& q_force  = scratch_(force.indexing());
+            field_type& q_force  = scratch_(force.shape());
             scalar_t const q     = constraint_value_and_force_(l, q_force);
             scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
             exec::kick_add(force, q_force, scale);  // force += scale·F_Q
@@ -249,7 +250,7 @@ struct WindowedAction {
     {
         if constexpr (k_self) {
             if constexpr (requires(field_type& f) { base.s_full_and_force(l, f); }) {
-                field_type& f        = scratch_(mom.indexing());
+                field_type& f        = scratch_(mom.shape());
                 auto const s         = static_cast<scalar_t>(base.s_full_and_force(l, f));
                 scalar_t const scale = formula::force_scale(s, a, E_n, delta);
                 exec::kick_add(mom, f, k_dt * scale);
@@ -273,7 +274,7 @@ struct WindowedAction {
             } else {
                 // Q's pass runs first (it only reads `l`, which no kick touches),
                 // so the two `kick_add`s stay in base-then-Q order regardless.
-                field_type& q_force  = scratch_(mom.indexing());
+                field_type& q_force  = scratch_(mom.shape());
                 scalar_t const q     = constraint_value_and_force_(l, q_force);
                 scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
                 base.compute_force_and_kick(l, mom, k_dt);
@@ -409,9 +410,11 @@ private:
         }
     }
 
-    [[nodiscard]] field_type& scratch_(std::shared_ptr<Indexing const> idx) const noexcept {
+    // Built from the sibling's SHAPE, not from a shared geometry handle — so the
+    // scratch field has no lifetime coupling to the field it mirrors.
+    [[nodiscard]] field_type& scratch_(std::span<std::size_t const> shape) const noexcept {
         if (!scratch_storage) {
-            scratch_storage.emplace(std::move(idx));
+            scratch_storage.emplace(shape);
         }
         return *scratch_storage;
     }

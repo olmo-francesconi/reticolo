@@ -81,15 +81,15 @@ TEST_CASE("WindowedAction: fused observable force equals the two-sweep force",
     action::WindowedAction<act::Phi4<double>, action::ObservableConstraint<MagSum<double>>> plain{
         .base = base, .a = 0.3, .E_n = 2.0, .delta = 5.0};
 
-    Lattice<double> f_fused{phi.indexing()};
-    Lattice<double> f_plain{phi.indexing()};
+    Lattice<double> f_fused{phi.shape()};
+    Lattice<double> f_plain{phi.shape()};
     fused.compute_force(phi, f_fused);
     plain.compute_force(phi, f_plain);
 
     // The fused kick is the path an LLR MD step actually runs.
     constexpr double k_dt = 0.05;
-    Lattice<double> m_fused{phi.indexing()};
-    Lattice<double> m_plain{phi.indexing()};
+    Lattice<double> m_fused{phi.shape()};
+    Lattice<double> m_plain{phi.shape()};
     fused.compute_force_and_kick(phi, m_fused, k_dt);
     plain.compute_force_and_kick(phi, m_plain, k_dt);
 
@@ -136,7 +136,7 @@ TEST_CASE("WindowedAction: force matches FD of s_full for a custom-observable wi
     // WindowedAction is itself an HmcAction — it drives HMC directly.
     STATIC_REQUIRE(action::HmcAction<WA, Lattice<double>>);
 
-    Lattice<double> force{phi.indexing()};
+    Lattice<double> force{phi.shape()};
     wa.compute_force(phi, force);
 
     constexpr double eps = 1e-6;
@@ -200,7 +200,7 @@ TEST_CASE("WindowedAction: force matches FD of s_full for SelfConstraint (Phi4)"
 
     STATIC_REQUIRE(action::HmcAction<WA, Lattice<double>>);
 
-    Lattice<double> force{phi.indexing()};
+    Lattice<double> force{phi.shape()};
     wa.compute_force(phi, force);
 
     constexpr double eps = 1e-6;
@@ -237,12 +237,12 @@ TEST_CASE("WindowedAction: compute_force_and_kick matches two-pass force+kick (S
 
     constexpr double k_dt = 0.05;
 
-    Lattice<double> force{phi.indexing()};
+    Lattice<double> force{phi.shape()};
     wa.compute_force(phi, force);
-    Lattice<double> mom_twopass{phi.indexing()};
+    Lattice<double> mom_twopass{phi.shape()};
     exec::kick_add(mom_twopass, force, k_dt);
 
-    Lattice<double> mom_fused{phi.indexing()};
+    Lattice<double> mom_fused{phi.shape()};
     wa.compute_force_and_kick(phi, mom_fused, k_dt);
 
     double const* const mt = mom_twopass.data();
@@ -271,7 +271,7 @@ TEST_CASE("WindowedAction: force matches FD of s_full for ImagConstraint (BoseGa
 
     STATIC_REQUIRE(action::HmcAction<WA, Lattice<C>>);
 
-    Lattice<C> force{phi.indexing()};
+    Lattice<C> force{phi.shape()};
     wa.compute_force(phi, force);
 
     constexpr double k_eps = 1e-4;
@@ -318,12 +318,12 @@ TEST_CASE("WindowedAction: compute_force_and_kick matches two-pass force+kick (I
 
     constexpr double k_dt = 0.05;
 
-    Lattice<C> force{phi.indexing()};
+    Lattice<C> force{phi.shape()};
     wa.compute_force(phi, force);
-    Lattice<C> mom_twopass{phi.indexing()};
+    Lattice<C> mom_twopass{phi.shape()};
     exec::kick_add(mom_twopass, force, k_dt);
 
-    Lattice<C> mom_fused{phi.indexing()};
+    Lattice<C> mom_fused{phi.shape()};
     wa.compute_force_and_kick(phi, mom_fused, k_dt);
 
     C const* const mt = mom_twopass.data();

@@ -144,8 +144,8 @@ public:
         HmcSpec const& spec,
         Integrator         = {},
         log::Mode announce = log::Mode::normal)
-        : action_{action}, field_{field}, mom_{field.indexing()}, force_{field.indexing()},
-          old_field_{field.indexing()}, tau_{spec.tau}, n_md_{spec.n_md},
+        : action_{action}, field_{field}, mom_{field.shape()}, force_{field.shape()},
+          old_field_{field.shape()}, tau_{spec.tau}, n_md_{spec.n_md},
           n_threads_{resolve_threads_(spec.n_threads)}, n_slabs_{spec.slabs_per_thread},
           streams_{rng.uniform_u64(), slab_count_(field, n_threads_, n_slabs_), announce} {
         if (announce == log::Mode::normal) {
