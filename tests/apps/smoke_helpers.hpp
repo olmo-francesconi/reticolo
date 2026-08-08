@@ -67,6 +67,58 @@ inline void require_hmc_smoke(HmcSmoke const& s) {
     H5Fclose(file);
 }
 
+// The Metropolis peer of HmcSmoke. Same shape, two differences that follow from
+// the algorithm: the loop unit is a SWEEP (so the flag is --sigma, not --tau /
+// --n_md), and a sweep has no single accept decision — it records the accepted
+// FRACTION in /prod/stats/acceptance where an HMC app records /prod/stats/dH and
+// /prod/stats/accepted. `size` defaults even: the checkerboard needs a bipartite
+// lattice and the updater refuses an odd extent.
+struct MetropolisSmoke {
+    std::string binary;
+    std::string tag;
+    std::string physics;
+    std::vector<std::string> obs;
+    double sigma            = 0.3;
+    int n_therm             = 10;
+    int n_prod              = 25;
+    unsigned long long seed = 20260517;
+    int size                = 4;
+    std::string therm_stat  = "s";
+};
+
+inline void require_metropolis_smoke(MetropolisSmoke const& s) {
+    ScratchH5 const out{s.tag};
+
+    std::string const cmd =
+        s.binary + " --size=" + std::to_string(s.size) + " " + s.physics +
+        " --sigma=" + std::to_string(s.sigma) + " --n_therm=" + std::to_string(s.n_therm) +
+        " --n_prod=" + std::to_string(s.n_prod) + " --seed=" + std::to_string(s.seed) +
+        " --workspace=" + out.path().parent_path().string() +
+        " --out=" + out.path().filename().string();
+    run_and_require_exit(cmd);
+    REQUIRE(std::filesystem::exists(out.path()));
+
+    hid_t file = H5Fopen(out.path().string().c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    REQUIRE(file >= 0);
+
+    require_link(file, "/run");
+    require_link(file, "/vars");
+    require_link(file, "/therm");
+    require_link(file, "/prod");
+
+    auto const therm = static_cast<hsize_t>(s.n_therm);
+    auto const prod  = static_cast<hsize_t>(s.n_prod);
+    REQUIRE(rows_in(file, ("/therm/stats/" + s.therm_stat).c_str()) == therm);
+    REQUIRE(rows_in(file, "/prod/stats/acceptance") == prod);
+    for (std::string const& o : s.obs) {
+        INFO("observable /prod/obs/" << o);
+        require_link(file, ("/prod/obs/" + o).c_str());
+        REQUIRE(rows_in(file, ("/prod/obs/" + o).c_str()) == prod);
+    }
+
+    H5Fclose(file);
+}
+
 struct LlrSmoke {
     std::string binary;
     std::string tag;
