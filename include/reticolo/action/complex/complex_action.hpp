@@ -29,7 +29,8 @@ namespace reticolo::action {
 
 template <class Derived, class T>
 struct ComplexAction : SFullCache {
-    using complex_t = std::complex<T>;
+    using complex_t  = std::complex<T>;
+    using field_type = Lattice<complex_t>;  // see NNAction::field_type
 
     [[nodiscard]] double s_full(Lattice<complex_t> const& l) const noexcept {
         auto kern             = derived_().action_kernel(l);

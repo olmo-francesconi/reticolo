@@ -1,8 +1,21 @@
 #pragma once
 
+#include <reticolo/core/rng/rng.hpp>
+#include <reticolo/core/rng/stream_set.hpp>
+
 #include <concepts>
 
 namespace reticolo::updater {
+
+// What an updater needs of a generator: a usable Rng that can also be split into
+// the independent per-slab streams a StreamSet is built from. Named once here
+// because both updaters require exactly this, and because spelling it inline
+// forces a template parameter called `R` — the whole point of naming it is that
+// the parameter can then be called `Rng` like everywhere else, without shadowing
+// the `reticolo::Rng` concept at the point of use (which GCC and clang do not
+// even agree on).
+template <class G>
+concept SamplerRng = reticolo::Rng<G> && (JumpStream<G> || KeyedStream<G>);
 
 // The contract every update algorithm satisfies — the surface that apps and the
 // orchestration layer (orch::llr::Replica, orch::span::Chain) depend on. It is

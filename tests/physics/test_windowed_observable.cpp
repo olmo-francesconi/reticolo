@@ -76,16 +76,10 @@ TEST_CASE("WindowedAction: fused observable force equals the two-sweep force",
     }
 
     act::Phi4<double> const base{.kappa = 0.18, .lambda = 1.0};
-    action::WindowedAction<act::Phi4<double>,
-                           double,
-                           Lattice<double>,
-                           action::ObservableConstraint<MagSumFused<double>>>
+    action::WindowedAction<act::Phi4<double>, action::ObservableConstraint<MagSumFused<double>>>
         fused{.base = base, .a = 0.3, .E_n = 2.0, .delta = 5.0};
-    action::WindowedAction<act::Phi4<double>,
-                           double,
-                           Lattice<double>,
-                           action::ObservableConstraint<MagSum<double>>>
-        plain{.base = base, .a = 0.3, .E_n = 2.0, .delta = 5.0};
+    action::WindowedAction<act::Phi4<double>, action::ObservableConstraint<MagSum<double>>> plain{
+        .base = base, .a = 0.3, .E_n = 2.0, .delta = 5.0};
 
     Lattice<double> f_fused{phi.indexing()};
     Lattice<double> f_plain{phi.indexing()};
@@ -132,10 +126,8 @@ TEST_CASE("WindowedAction: force matches FD of s_full for a custom-observable wi
         d[i] = 0.3 * rng.normal();
     }
 
-    using WA = action::WindowedAction<act::Phi4<double>,
-                                      double,
-                                      Lattice<double>,
-                                      action::ObservableConstraint<MagSum<double>>>;
+    using WA =
+        action::WindowedAction<act::Phi4<double>, action::ObservableConstraint<MagSum<double>>>;
     WA wa{.base  = act::Phi4<double>{.kappa = 0.18, .lambda = 1.0},
           .a     = 0.3,
           .E_n   = 2.0,
@@ -167,8 +159,7 @@ TEST_CASE("WindowedAction: force matches FD of s_full for a custom-observable wi
 TEST_CASE("orch::llr::Replica: window / exchange observable is a custom observable",
           "[llr][window]") {
     using Obs = action::ObservableConstraint<MagSum<double>>;
-    using Rep = orch::llr::
-        Replica<act::Phi4<double>, FastRng, updater::integ::Omelyan2, double, Lattice<double>, Obs>;
+    using Rep = orch::llr::Replica<act::Phi4<double>, FastRng, updater::HmcSampler<>, Obs>;
 
     act::Phi4<double> const base{.kappa = 0.18, .lambda = 1.0};
     Rep r{base,
@@ -201,8 +192,7 @@ TEST_CASE("WindowedAction: force matches FD of s_full for SelfConstraint (Phi4)"
         d[i] = 0.3 * rng.normal();
     }
 
-    using WA =
-        action::WindowedAction<act::Phi4<double>, double, Lattice<double>, action::SelfConstraint>;
+    using WA = action::WindowedAction<act::Phi4<double>, action::SelfConstraint>;
     WA wa{.base  = act::Phi4<double>{.kappa = 0.18, .lambda = 1.0},
           .a     = 0.3,
           .E_n   = 2.0,
@@ -238,8 +228,7 @@ TEST_CASE("WindowedAction: compute_force_and_kick matches two-pass force+kick (S
         d[i] = 0.3 * rng.normal();
     }
 
-    using WA =
-        action::WindowedAction<act::Phi4<double>, double, Lattice<double>, action::SelfConstraint>;
+    using WA = action::WindowedAction<act::Phi4<double>, action::SelfConstraint>;
     WA wa{.base  = act::Phi4<double>{.kappa = 0.18, .lambda = 1.0},
           .a     = 0.3,
           .E_n   = 2.0,
@@ -277,8 +266,7 @@ TEST_CASE("WindowedAction: force matches FD of s_full for ImagConstraint (BoseGa
         d[i] = C{rng.normal(), rng.normal()};
     }
 
-    using WA =
-        action::WindowedAction<act::BoseGas<double>, double, Lattice<C>, action::ImagConstraint>;
+    using WA = action::WindowedAction<act::BoseGas<double>, action::ImagConstraint>;
     WA wa{.base = base, .a = 0.3, .E_n = 0.5, .delta = 2.0};
 
     STATIC_REQUIRE(action::HmcAction<WA, Lattice<C>>);
@@ -324,8 +312,7 @@ TEST_CASE("WindowedAction: compute_force_and_kick matches two-pass force+kick (I
         d[i] = C{rng.normal(), rng.normal()};
     }
 
-    using WA =
-        action::WindowedAction<act::BoseGas<double>, double, Lattice<C>, action::ImagConstraint>;
+    using WA = action::WindowedAction<act::BoseGas<double>, action::ImagConstraint>;
     WA wa{.base = base, .a = 0.3, .E_n = 0.5, .delta = 2.0};
     STATIC_REQUIRE(action::HasFusedKick<WA, Lattice<C>>);
 

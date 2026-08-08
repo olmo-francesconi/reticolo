@@ -31,12 +31,19 @@
 
 namespace reticolo::cuda::llr {
 
+// `Field` IS a parameter here, unlike everywhere else: this takes a HOST action,
+// which names a host lattice, and the device field's precision is a genuine
+// choice the host action cannot make. It is NOT sampler-parameterised like
+// orch::llr::Replica, and deliberately: a windowed sweep must be sequential with
+// a running Q (the window is quadratic in a global scalar), which on a GPU is a
+// serial walk over V sites. Offering the choice would be offering a trap.
 template <class HostAction,
           class Integ = updater::integ::Omelyan2,
           class Field = DeviceField<double>>
 class Replica {
 public:
     using value_type = typename Field::value_type;
+    using field_type = Field;
     using Windowed   = WindowedAction<HostAction, Field>;
 
     Replica(HostAction host,
@@ -201,7 +208,7 @@ private:
     static constexpr std::uint64_t k_hot_counter = 1ULL << 48;
 
     Field field_;
-    Hmc<Windowed, Integ, Field> hmc_;
+    Hmc<Windowed, Integ> hmc_;
     double e_n_;
     double delta_;
     std::uint64_t seed_;

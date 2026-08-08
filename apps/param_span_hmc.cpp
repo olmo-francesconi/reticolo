@@ -25,8 +25,9 @@
 
 int main(int argc, char** argv) {
     using namespace reticolo;
-    using Field = Lattice<double>;
-    using Chain = orch::span::Chain<act::Phi4<double>, FastRng>;
+    using Action = act::Phi4<double>;
+    using Field  = Lattice<double>;
+    using Span   = orch::span::Orchestrator<Action, FastRng, updater::HmcSampler<>>;
 
     // ---- CLI ----
     cli::Parser p{"param_span_hmc", "Concurrent phi^4 HMC chains over a kappa span"};
@@ -52,32 +53,12 @@ int main(int argc, char** argv) {
     io::Writer out = app::open_writer(p, cf, argc, argv);
     auto const n_w = static_cast<std::size_t>(n_workers < 1 ? 1 : n_workers);
 
-    // ---- Worker geometry: kappa across the span ----
+    // ---- The grid: one action per worker, kappa linear across the span. That is
+    //      the app's whole job here; ids, per-worker seeds and the thread plan are
+    //      the orchestrator's, and it derives them in setup(). ----
     Field::SizeVec shape(static_cast<std::size_t>(ndim), static_cast<std::size_t>(cf.L));
-    auto const kappa_at = [&](std::size_t n) {
-        double const t = n_w == 1 ? 0.0 : static_cast<double>(n) / static_cast<double>(n_w - 1);
-        return kappa_min + (t * (kappa_max - kappa_min));
-    };
-
-    // ---- Thread plan: saturate workers first, spill into per-worker HMC teams
-    //      only when threads outnumber workers. ----
-    auto const plan = orch::plan_threads(static_cast<int>(n_w), worker_threads);
-
-    // ---- Workers: one phi^4 chain per kappa point ----
-    std::vector<std::unique_ptr<Chain>> workers;
-    workers.reserve(n_w);
-    {
-        auto const quiet = log::quiet();  // silence per-worker ctor announces
-        for (std::size_t n = 0; n < n_w; ++n) {
-            workers.push_back(std::make_unique<Chain>(
-                std::format("w{:03d}", n),
-                shape,
-                act::Phi4<double>{.kappa = kappa_at(n), .lambda = lambda},
-                FastRng{cf.seed + 1ULL + static_cast<unsigned long long>(n)},
-                updater::HmcSpec{
-                    .tau = tau, .n_md = n_md, .n_threads = plan.m, .slabs_per_thread = slabs}));
-        }
-    }
+    auto points = orch::span::scan(
+        Action{.lambda = lambda}, &Action::kappa, kappa_min, kappa_max, static_cast<int>(n_w));
 
     // ---- /cfg metadata: the swept kappa values ----
     out.attr<int>("/cfg@n_workers", static_cast<int>(n_w));
@@ -85,8 +66,8 @@ int main(int argc, char** argv) {
     out.attr<double>("/cfg@kappa_min", kappa_min);
     out.attr<double>("/cfg@kappa_max", kappa_max);
     auto kappa_series = out.series<double>("/cfg/kappa");
-    for (std::size_t n = 0; n < n_w; ++n) {
-        kappa_series.append(kappa_at(n));
+    for (auto const& a : points) {
+        kappa_series.append(a.kappa);
     }
 
     // ---- Drive: concurrent therm + prod, recording phi^4 observables ----
@@ -107,7 +88,12 @@ int main(int argc, char** argv) {
              return obs::mean_of(std::get<0>(obs::reduce(f, obs::kernel::phi_sq)),
                                  static_cast<double>(f.nsites()));
          }}};
-    orch::span::Orchestrator<Chain> runner{std::move(workers), plan, std::move(obs)};
+    Span runner{Span::Spec{.shape          = shape,
+                           .seed           = cf.seed,
+                           .points         = std::move(points),
+                           .sampler        = {.tau = tau, .n_md = n_md, .slabs_per_thread = slabs},
+                           .worker_threads = worker_threads},
+                std::move(obs)};
     runner.setup(out);
     runner.run(
         orch::span::Schedule{.n_therm = n_therm, .n_prod = n_prod, .meas_every = meas_every});

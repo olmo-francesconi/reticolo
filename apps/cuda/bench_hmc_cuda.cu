@@ -60,8 +60,8 @@ void bench(char const* label, std::vector<std::size_t> const& shape, HostAction 
     cudaDeviceSynchronize();
 
     DeviceAction<HostAction, Field> dact{action, field.topology()};
-    reticolo::cuda::Hmc<DeviceAction<HostAction, Field>, reticolo::updater::integ::Leapfrog, Field>
-        hmc{std::move(dact), field, kTau, kNmd};
+    reticolo::cuda::Hmc<DeviceAction<HostAction, Field>, reticolo::updater::integ::Leapfrog> hmc{
+        std::move(dact), field, kTau, kNmd};
 
     hmc.run(kWarmup);  // first replay captures the full-trajectory graph
     hmc.sync();

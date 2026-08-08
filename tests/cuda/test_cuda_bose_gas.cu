@@ -122,7 +122,7 @@ bool hmc_runs_impl() {
     RETICOLO_CUDA_CHECK(cudaStreamSynchronize(nullptr));
 
     DAct dact{make_action<T>(), field.topology()};
-    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 0.5, 10};
+    Hmc<DAct, updater::integ::Leapfrog> hmc{std::move(dact), field, 0.5, 10};
     hmc.run(8);
     double const acc = hmc.acceptance();
     hmc.sync();

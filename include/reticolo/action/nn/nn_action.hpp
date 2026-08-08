@@ -46,6 +46,11 @@ namespace reticolo::action {
 
 template <class Derived, class T>
 struct NNAction : SFullCache {
+    // The field this family operates on. Every action names its own field, so
+    // generic code (orchestration) can default to `Action::field_type` instead of
+    // making the caller spell a type the action already knows.
+    using field_type = Lattice<T>;
+
     [[nodiscard]] double s_full(Lattice<T> const& l) const noexcept {
         auto comb        = action_combine_();
         auto fin         = derived_().action_kernel();

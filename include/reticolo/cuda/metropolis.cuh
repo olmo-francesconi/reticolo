@@ -76,10 +76,14 @@ struct MetropolisResult {
     }
 };
 
-template <class A, class Field = DeviceField<double>>
+// Same parameter structure as cuda::Hmc and the host updaters.
+template <class Action>
 class Metropolis {
 public:
-    Metropolis(A action, Field& field, double sigma, std::uint64_t seed = 0xC0FFEEULL)
+    using action_type = Action;
+    using field_type  = Action::field_type;
+
+    Metropolis(Action action, field_type& field, double sigma, std::uint64_t seed = 0xC0FFEEULL)
         : action_{std::move(action)}, field_{field}, sigma_{sigma}, seed_{seed}, sweep_buf_{1},
           ds_site_{field.size()}, acc_site_{field.size()},
           partials_{static_cast<std::size_t>(k_reduce_max_grid)}, red_{2}, stats_{3},
@@ -146,13 +150,13 @@ public:
         return st[2] == 0.0 ? 0.0 : st[1] / st[2];
     }
 
-    [[nodiscard]] A& action() noexcept { return action_; }
-    [[nodiscard]] A const& action() const noexcept { return action_; }
+    [[nodiscard]] Action& action() noexcept { return action_; }
+    [[nodiscard]] Action const& action() const noexcept { return action_; }
 
     // --- checkpoint hooks ---------------------------------------------------
     // Same contract as cuda::Hmc: the complete per-run RNG state is (seed_,
     // device sweep counter), because Philox is stateless given (seed, counter,
-    // pair). Field + these two reproduce an uninterrupted run bit-for-bit.
+    // pair). field_type + these two reproduce an uninterrupted run bit-for-bit.
     [[nodiscard]] std::uint64_t seed() const { return seed_; }
 
     [[nodiscard]] std::uint64_t rng_counter() {
@@ -241,8 +245,8 @@ private:
         return h;
     }
 
-    A action_;
-    Field& field_;
+    Action action_;
+    field_type& field_;
     double sigma_;
     std::uint64_t seed_;
     std::uint64_t sweep_count_ = 0;

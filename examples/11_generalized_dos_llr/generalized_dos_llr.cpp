@@ -27,12 +27,7 @@ int main(int argc, char** argv) {
     using namespace reticolo;
     using Action     = act::Phi4<double>;
     using Constraint = action::ObservableConstraint<example::FieldAmplitude<double>>;
-    using Llr        = orch::llr::Orchestrator<Action,
-                                               FastRng,
-                                               updater::integ::Omelyan2,
-                                               double,
-                                               Lattice<double>,
-                                               Constraint>;
+    using Llr        = orch::llr::Orchestrator<Action, FastRng, updater::HmcSampler<>, Constraint>;
 
     // ---- CLI ----
     cli::Parser p{"generalized_dos_llr", "LLR density of states of the field amplitude Σφ²"};
@@ -77,23 +72,21 @@ int main(int argc, char** argv) {
     // ---- Orchestrator: windows on Q = Σφ² via ObservableConstraint. The only
     //      change from a plain-action LLR app is the Constraint template arg. ----
     Llr llr{base,
-            orch::llr::Spec{.shape           = shape,
-                            .seed            = cf.seed,
-                            .e_min           = e_min,
-                            .e_max           = e_max,
-                            .delta           = delta,
-                            .tau             = tau,
-                            .n_md            = n_md,
-                            .n_nr            = n_nr,
-                            .n_therm_nr      = n_therm_nr,
-                            .n_meas_nr       = n_meas_nr,
-                            .n_rm            = n_rm,
-                            .n_therm_rm      = n_therm_rm,
-                            .n_meas_rm       = n_meas_rm,
-                            .warm_therm      = rf.warm_therm,
-                            .warm_max_traj   = rf.warm_max_traj,
-                            .replica_threads = rf.replica_threads,
-                            .slabs           = rf.slabs}};
+            Llr::Spec{.shape           = shape,
+                      .seed            = cf.seed,
+                      .e_min           = e_min,
+                      .e_max           = e_max,
+                      .delta           = delta,
+                      .sampler         = {.tau = tau, .n_md = n_md, .slabs_per_thread = rf.slabs},
+                      .n_nr            = n_nr,
+                      .n_therm_nr      = n_therm_nr,
+                      .n_meas_nr       = n_meas_nr,
+                      .n_rm            = n_rm,
+                      .n_therm_rm      = n_therm_rm,
+                      .n_meas_rm       = n_meas_rm,
+                      .warm_therm      = rf.warm_therm,
+                      .warm_max_traj   = rf.warm_max_traj,
+                      .replica_threads = rf.replica_threads}};
 
     // ---- Output ----
     io::Writer out{outpath, argc, argv, &p};

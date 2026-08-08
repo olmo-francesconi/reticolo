@@ -113,7 +113,7 @@ void phi4_block() {
         f.copy_from_host(zero.data());
         RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
         DAct meas{a, f.topology()};
-        cuda::Hmc<DAct, updater::integ::Leapfrog, DField> hmc{
+        cuda::Hmc<DAct, updater::integ::Leapfrog> hmc{
             DAct{a, f.topology()}, f, k_tau, k_n_md, 0x9114ULL};
         hmc.run(k_n_therm);
         hmc.sync();
@@ -180,7 +180,7 @@ void su2_block() {
         DAct meas{a, f.topology()};
         // Omelyan2 (as in the canonical su2_hmc app): Leapfrog at this dt is past
         // the SU(2) stability edge from a cold start and rejects every trajectory.
-        cuda::Hmc<DAct, updater::integ::Omelyan2, DField> hmc{
+        cuda::Hmc<DAct, updater::integ::Omelyan2> hmc{
             DAct{a, f.topology()}, f, k_tau, k_n_md, 0x5202ULL};
         hmc.run(k_n_therm);
         hmc.sync();
@@ -234,7 +234,7 @@ void bose_gas_block() {
         DAct meas{a, f.topology()};
         // Omelyan2 (as in the canonical bose_gas_hmc app): leapfrog at this
         // trajectory length is past the BoseGas stability edge from a cold start.
-        cuda::Hmc<DAct, updater::integ::Omelyan2, DField> hmc{
+        cuda::Hmc<DAct, updater::integ::Omelyan2> hmc{
             DAct{a, f.topology()}, f, k_tau, k_n_md, 0xB05EULL};
         hmc.run(k_n_therm);
         hmc.sync();

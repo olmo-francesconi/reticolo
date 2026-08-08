@@ -49,6 +49,7 @@
 #include <reticolo/updater/hmc/hmc.hpp>
 #include <reticolo/updater/hmc/integrators.hpp>
 #include <reticolo/updater/metropolis/metropolis.hpp>
+#include <reticolo/updater/samplers.hpp>
 // NOLINTEND(misc-include-cleaner)
 
 // Short namespace aliases. One `using namespace reticolo;` per app then gives

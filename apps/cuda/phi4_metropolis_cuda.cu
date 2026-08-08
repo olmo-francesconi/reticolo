@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
     RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
 
     DAct meas{phi4, field.topology()};  // measurement action (own scratch)
-    cuda::Metropolis<DAct, DField> metro{DAct{phi4, field.topology()}, field, sigma, seed};
+    cuda::Metropolis<DAct> metro{DAct{phi4, field.topology()}, field, sigma, seed};
     if (resuming) {
         metro.set_rng_counter(counter0);
     }

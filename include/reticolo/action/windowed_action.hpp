@@ -131,18 +131,22 @@ template <class Base, class Field>
 using default_constraint_t =
     std::conditional_t<action::HasImagPart<Base, Field>, ImagConstraint, SelfConstraint>;
 
-template <class Base, class T = Base::value_type, class Field = Lattice<T>, class Constraint = void>
+// Same parameter structure as every other action-carrying template here: the
+// element and field types are not parameters, because `Base` names both.
+template <class Action, class Constraint = void>
 struct WindowedAction {
-    using value_type      = T;
-    using field_type      = Field;
-    using scalar_t        = scalar_of_t<T>;
-    using constraint_type = std::
-        conditional_t<std::is_void_v<Constraint>, default_constraint_t<Base, Field>, Constraint>;
+    using base_type       = Action;
+    using value_type      = Action::value_type;
+    using field_type      = Action::field_type;
+    using scalar_t        = scalar_of_t<value_type>;
+    using constraint_type = std::conditional_t<std::is_void_v<Constraint>,
+                                               default_constraint_t<Action, field_type>,
+                                               Constraint>;
 
     // Owned by value (not reference): each Replica carries its own base +
     // constraint so any mutable scratch/cache stays per-replica (OpenMP over
     // replicas).
-    Base base;
+    Action base;
     scalar_t a = scalar_t{0};
     // NOLINTNEXTLINE(readability-identifier-naming) physics convention E_n = window centre
     scalar_t E_n   = scalar_t{0};
@@ -153,7 +157,7 @@ struct WindowedAction {
     static constexpr bool k_complex = !k_self;  // there is a separate constraint observable
 
     // The current constraint value Q(field) (fresh sweep).
-    [[nodiscard]] scalar_t constraint_value(Field const& l) const noexcept {
+    [[nodiscard]] scalar_t constraint_value(field_type const& l) const noexcept {
         if constexpr (k_self) {
             return static_cast<scalar_t>(base.s_full(l));
         } else {
@@ -161,7 +165,7 @@ struct WindowedAction {
         }
     }
 
-    [[nodiscard]] scalar_t s_full(Field const& l) const noexcept {
+    [[nodiscard]] scalar_t s_full(field_type const& l) const noexcept {
         if constexpr (k_self) {
             return formula::windowed_value(static_cast<scalar_t>(base.s_full(l)), a, E_n, delta);
         } else {
@@ -199,7 +203,7 @@ struct WindowedAction {
         }
     }
 
-    void compute_force(Field const& l, Field& force) const noexcept {
+    void compute_force(field_type const& l, field_type& force) const noexcept {
         if constexpr (k_self) {
             // Fused base kernel when available: one neighbour pass yields both
             // S_base and the force, dropping the separate full-lattice s_full.
@@ -215,19 +219,19 @@ struct WindowedAction {
         } else {
             // Generic: F = F_base + (a + (Q − E_n)/δ²)·F_Q.
             base.compute_force(l, force);
-            Field& q_force       = scratch_(force.indexing());
+            field_type& q_force  = scratch_(force.indexing());
             scalar_t const q     = constraint_value_and_force_(l, q_force);
             scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
             exec::kick_add(force, q_force, scale);  // force += scale·F_Q
         }
     }
 
-    void compute_force_and_kick(Field const& l, Field& mom, scalar_t k_dt) const noexcept
-        requires action::HasFusedKick<Base, Field>
+    void compute_force_and_kick(field_type const& l, field_type& mom, scalar_t k_dt) const noexcept
+        requires action::HasFusedKick<Action, field_type>
     {
         if constexpr (k_self) {
-            if constexpr (requires(Field& f) { base.s_full_and_force(l, f); }) {
-                Field& f             = scratch_(mom.indexing());
+            if constexpr (requires(field_type& f) { base.s_full_and_force(l, f); }) {
+                field_type& f        = scratch_(mom.indexing());
                 auto const s         = static_cast<scalar_t>(base.s_full_and_force(l, f));
                 scalar_t const scale = formula::force_scale(s, a, E_n, delta);
                 exec::kick_add(mom, f, k_dt * scale);
@@ -251,7 +255,7 @@ struct WindowedAction {
             } else {
                 // Q's pass runs first (it only reads `l`, which no kick touches),
                 // so the two `kick_add`s stay in base-then-Q order regardless.
-                Field& q_force       = scratch_(mom.indexing());
+                field_type& q_force  = scratch_(mom.indexing());
                 scalar_t const q     = constraint_value_and_force_(l, q_force);
                 scalar_t const scale = formula::force_scale_imag(q, a, E_n, delta);
                 base.compute_force_and_kick(l, mom, k_dt);
@@ -263,13 +267,13 @@ struct WindowedAction {
     // Lazy scratch field for the non-self F_Q pass (and the self fused merge).
     // Allocated on first force call and reused; avoids the per-MD-step
     // malloc/free. `mutable` because the force methods are const.
-    mutable std::optional<Field> scratch_storage{};
+    mutable std::optional<field_type> scratch_storage{};
 
 private:
     // Q and F_Q for the non-self path: one fused sweep when the constraint
     // offers `value_and_force`, else the value sweep + the force sweep.
-    [[nodiscard]] scalar_t constraint_value_and_force_(Field const& l,
-                                                       Field& q_force) const noexcept {
+    [[nodiscard]] scalar_t constraint_value_and_force_(field_type const& l,
+                                                       field_type& q_force) const noexcept {
         if constexpr (requires { constraint.value_and_force(base, l, q_force); }) {
             return static_cast<scalar_t>(constraint.value_and_force(base, l, q_force));
         } else {
@@ -279,7 +283,7 @@ private:
         }
     }
 
-    [[nodiscard]] Field& scratch_(std::shared_ptr<Indexing const> idx) const noexcept {
+    [[nodiscard]] field_type& scratch_(std::shared_ptr<Indexing const> idx) const noexcept {
         if (!scratch_storage) {
             scratch_storage.emplace(std::move(idx));
         }

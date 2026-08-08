@@ -9,6 +9,7 @@
 #include <reticolo/core/log/log_helpers.hpp>
 #include <reticolo/core/rng/rng.hpp>
 #include <reticolo/core/rng/stream_set.hpp>
+#include <reticolo/updater/concepts.hpp>
 #include <reticolo/updater/random_fill.hpp>
 
 #include <cstddef>
@@ -67,24 +68,27 @@ struct MetropolisSpec {
 // `ds` are the algorithm-specific extras, the peers of `HmcResult::dH`.
 using MetropolisResult = action::LocalStats;
 
-template <class A,
-          class R,
-          class Field  = Lattice<typename A::value_type>,
-          class Scalar = A::value_type>
-    requires action::LocalAction<A, Field> && Rng<R> && (JumpStream<R> || KeyedStream<R>)
+// Same parameter structure as `updater::Hmc` — the element and field types are
+// not parameters, the action names both.
+template <class Action, SamplerRng Rng>
+    requires action::LocalAction<Action, typename Action::field_type>
 class Metropolis {
 public:
-    using value_type = Scalar;
+    using action_type = Action;
+    using rng_type    = Rng;
+    using value_type  = Action::value_type;
+    using field_type  = Action::field_type;
+    using spec_type   = MetropolisSpec;  // see Hmc::spec_type
 
     static constexpr std::string_view log_tag = "metr";
 
-    Metropolis(A const& action,
-               Field& field,
-               R rng,
+    Metropolis(Action const& action,
+               field_type& field,
+               Rng rng,
                MetropolisSpec const& spec,
                log::Mode announce = log::Mode::normal)
         : action_{action}, field_{field}, noise_{field.indexing()}, logu_{field.indexing()},
-          sigma_{static_cast<real_scalar_t<Scalar>>(spec.sigma)},
+          sigma_{static_cast<real_scalar_t<value_type>>(spec.sigma)},
           n_threads_{resolve_threads_(spec.n_threads)}, n_slabs_{spec.slabs_per_thread},
           streams_{rng.uniform_u64(), slab_count_(field, n_threads_, n_slabs_), announce},
           last_s_full_{action_.s_full(field_)} {
@@ -100,9 +104,9 @@ public:
 
     // See Hmc's equivalent: binding the action to a temporary would dangle for
     // the life of the driver, so make the mistake a compile error.
-    Metropolis(A const&& action,
-               Field& field,
-               R rng,
+    Metropolis(Action const&& action,
+               field_type& field,
+               Rng rng,
                MetropolisSpec const& spec,
                log::Mode announce = log::Mode::normal) = delete;
 
@@ -132,7 +136,7 @@ public:
         // accept decisions that must be independent; it is refilled per colour.
         // The distinction is the field type, known at compile time, so this is a
         // branch the optimiser removes rather than a runtime test.
-        constexpr bool per_color_thresholds = MatrixLinkField<Field>;
+        constexpr bool per_color_thresholds = MatrixLinkField<field_type>;
         fill_gaussian(noise_, streams_);
         if constexpr (!per_color_thresholds) {
             fill_log_uniform(logu_, streams_);
@@ -164,7 +168,7 @@ public:
     double resync_s_full() { return last_s_full_ = action_.s_full(field_); }
 
     [[nodiscard]] double sigma() const noexcept { return static_cast<double>(sigma_); }
-    void set_sigma(double s) noexcept { sigma_ = static_cast<real_scalar_t<Scalar>>(s); }
+    void set_sigma(double s) noexcept { sigma_ = static_cast<real_scalar_t<value_type>>(s); }
 
     [[nodiscard]] MetropolisSpec spec() const noexcept {
         return {.sigma            = static_cast<double>(sigma_),
@@ -174,15 +178,15 @@ public:
 
     // The owned stream set — one site stream per canonical slab + the driver.
     // Exposed for checkpointing, exactly as Hmc::rng() is.
-    [[nodiscard]] StreamSet<R>& rng() noexcept { return streams_; }
-    [[nodiscard]] StreamSet<R> const& rng() const noexcept { return streams_; }
+    [[nodiscard]] StreamSet<Rng>& rng() noexcept { return streams_; }
+    [[nodiscard]] StreamSet<Rng> const& rng() const noexcept { return streams_; }
 
 private:
     [[nodiscard]] static int resolve_threads_(int n) noexcept {
         return n > 0 ? n : exec::traverse_threads(0, 0);
     }
 
-    [[nodiscard]] static std::size_t slab_count_(Field const& field, int nthr, int slabs) {
+    [[nodiscard]] static std::size_t slab_count_(field_type const& field, int nthr, int slabs) {
         exec::team_scope const team{nthr};
         exec::slab_scope const sl{slabs};
         return exec::partition(field).n_items;
@@ -199,14 +203,14 @@ private:
         }
     }
 
-    A const& action_;
-    Field& field_;
-    Field noise_;                          // proposal noise — the peer of Hmc's mom_
-    Lattice<real_scalar_t<Scalar>> logu_;  // accept thresholds, one real per site
-    real_scalar_t<Scalar> sigma_;
+    Action const& action_;
+    field_type& field_;
+    field_type noise_;                         // proposal noise — the peer of Hmc's mom_
+    Lattice<real_scalar_t<value_type>> logu_;  // accept thresholds, one real per site
+    real_scalar_t<value_type> sigma_;
     int n_threads_;
     int n_slabs_;
-    StreamSet<R> streams_;
+    StreamSet<Rng> streams_;
     double last_s_full_;
     std::size_t step_count_ = 0;
 };

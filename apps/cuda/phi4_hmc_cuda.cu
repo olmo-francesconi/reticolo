@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
     RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
 
     DAct meas{phi4, field.topology()};  // measurement action (own scratch)
-    cuda::Hmc<DAct, updater::integ::Leapfrog, DField> hmc{
+    cuda::Hmc<DAct, updater::integ::Leapfrog> hmc{
         DAct{phi4, field.topology()}, field, tau, n_md, seed};
     if (resuming) {
         hmc.set_rng_counter(counter0);

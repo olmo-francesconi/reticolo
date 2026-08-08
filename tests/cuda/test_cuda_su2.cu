@@ -358,7 +358,7 @@ bool su2_hmc_runs() {
     w.beta = kBeta;
     DAct dact{w, field.topology()};
 
-    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 0.4, 10};
+    Hmc<DAct, updater::integ::Leapfrog> hmc{std::move(dact), field, 0.4, 10};
     hmc.run(8);  // host-free: 8 SU(2) trajectories over the matrix link field
     double const acc = hmc.acceptance();
     hmc.sync();

@@ -120,6 +120,12 @@ template <class HostAction, class Field>
 class DeviceAction {
 public:
     using traits = device_functors<HostAction>;
+    // A device action names its own field and element type, exactly as a host
+    // action does — so cuda::Hmc / cuda::Metropolis derive them instead of taking
+    // a parameter that could only be set to this or to something wrong.
+    using host_type  = HostAction;
+    using field_type = Field;
+    using value_type = Field::value_type;
 
     // scratch_ holds per-site energy for site actions (nsites) but also the
     // per-LINK energy partials of the fused gauge path (ndim·nsites, one plaquette

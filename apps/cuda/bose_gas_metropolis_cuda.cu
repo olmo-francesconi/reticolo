@@ -73,7 +73,7 @@ int main(int argc, char** argv) {
     RETICOLO_CUDA_CHECK(cudaDeviceSynchronize());
 
     DAct meas{action, field.topology()};  // measurement action (own scratch)
-    cuda::Metropolis<DAct, DField> metro{DAct{action, field.topology()}, field, sigma, cf.seed};
+    cuda::Metropolis<DAct> metro{DAct{action, field.topology()}, field, sigma, cf.seed};
 
     io::Writer out{outpath, argc, argv, &p};
     out.start_phase("therm");

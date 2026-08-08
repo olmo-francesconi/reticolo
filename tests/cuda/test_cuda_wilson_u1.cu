@@ -138,7 +138,7 @@ bool wilson_u1_hmc_runs() {
     act.beta = kBeta;
     DAct dact{act, field.topology()};
 
-    Hmc<DAct, updater::integ::Leapfrog, DField> hmc{std::move(dact), field, 1.0, 10};
+    Hmc<DAct, updater::integ::Leapfrog> hmc{std::move(dact), field, 1.0, 10};
     hmc.run(8);
     double const acc = hmc.acceptance();
     hmc.sync();

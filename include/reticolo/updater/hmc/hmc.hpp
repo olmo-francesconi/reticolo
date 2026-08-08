@@ -10,6 +10,7 @@
 #include <reticolo/core/rng/rng.hpp>
 #include <reticolo/core/rng/stream_set.hpp>
 #include <reticolo/math/vec_libm.hpp>
+#include <reticolo/updater/concepts.hpp>
 #include <reticolo/updater/hmc/integrators.hpp>
 #include <reticolo/updater/random_fill.hpp>
 
@@ -67,7 +68,7 @@ struct HmcResult {
 //   - real F:    H_kin = (1/2) sum_i mom_i^2
 //   - complex F: H_kin = (1/2) sum_i |mom_i|^2  (= (Re^2 + Im^2)/2 per slot)
 //
-// Momentum sampling: Hmc OWNS a StreamSet<R> sized from the canonical field
+// Momentum sampling: Hmc OWNS a StreamSet<Rng> sized from the canonical field
 // partition — one site stream per slab, bound one-to-one by the partition
 // item index (exec::field_visit_indexed), never by the executing thread or
 // the schedule. The count and the (n_threads, slabs_per_thread) config are
@@ -82,7 +83,7 @@ struct HmcResult {
 //   - matrix links:           Group::sample_algebra_slab per (slab, μ)
 //   - anything else:          per-element stream_i.normal()
 
-// The field-agnostic action gate `action::HmcAction<A, Field>` (defined in
+// The field-agnostic action gate `action::HmcAction<Action, Field>` (defined in
 // action/concepts.hpp) is the single source of truth: any action with
 // `s_full(field)` and `compute_force(field, force)` qualifies — scalar, U(1),
 // and `Wilson<G>` over `MatrixLinkLattice<G, T>` all satisfy it directly.
@@ -107,22 +108,28 @@ concept HasSImagCache = requires(A const& a) {
 // `MatrixLinkField` (the compile-time "is this a link field" tag) comes from
 // random_fill.hpp, shared with the fills and with Metropolis.
 
-template <class A,
-          class R,
-          class Integrator = integ::Omelyan2,
-          class Field      = Lattice<typename A::value_type>,
-          class Scalar     = A::value_type>
-    requires HmcAction<A, Field> && Rng<R> && (JumpStream<R> || KeyedStream<R>)
+// The element and field types are NOT parameters: the action names both
+// (`value_type` / `field_type`), so a parameter for either could only be set to
+// what the action already says, or to something wrong. Same rule as the
+// orchestration workers (`orch::span::Chain`, `orch::llr::Replica`).
+template <class Action, SamplerRng Rng, class Integrator = integ::Omelyan2>
+    requires HmcAction<Action, typename Action::field_type>
 class Hmc {
 public:
-    using value_type = Scalar;
+    using action_type = Action;
+    using rng_type    = Rng;
+    using value_type  = Action::value_type;
+    using field_type  = Action::field_type;
+    // The construction parameters, named so orchestration can build ANY updater
+    // from `typename Sampler::spec_type` without knowing which one it is.
+    using spec_type  = HmcSpec;
     using integrator = Integrator;
 
     static constexpr std::string_view log_tag = "hmc";
 
     // The defaulted Integrator parameter is a deduction anchor only: it lets
     // CTAD pick the integrator from a tag value (e.g. integ::leapfrog) while
-    // A/R/Field/Scalar deduce from the other args. Omit it for Omelyan2.
+    // A/R/field_type/value_type deduce from the other args. Omit it for Omelyan2.
     //
     // `rng` is taken BY VALUE: the caller hands over a freshly-seeded family
     // generator as the entropy source and Hmc owns the randomness from there —
@@ -131,9 +138,9 @@ public:
     // n_threads = 0 resolves to the ambient team ONCE, here, so a later
     // OMP_NUM_THREADS change cannot silently re-partition a running chain
     // (the per-fill check below would refuse it anyway).
-    Hmc(A const& action,
-        Field& field,
-        R rng,
+    Hmc(Action const& action,
+        field_type& field,
+        Rng rng,
         HmcSpec const& spec,
         Integrator         = {},
         log::Mode announce = log::Mode::normal)
@@ -151,9 +158,9 @@ public:
     // action so the mistake is a compile error. (field_ is a non-const lvalue
     // reference, so a temporary there already fails to bind; rng is by-value
     // ownership transfer, so an rvalue is exactly right for it.)
-    Hmc(A const&& action,
-        Field& field,
-        R rng,
+    Hmc(Action const&& action,
+        field_type& field,
+        Rng rng,
         HmcSpec const& spec,
         Integrator         = {},
         log::Mode announce = log::Mode::normal) = delete;
@@ -249,14 +256,14 @@ public:
     // The owned stream set — one site stream per canonical slab + the driver.
     // Exposed for checkpointing: io::save_config(path, field, hmc.rng(), i)
     // and load_config(path, field, hmc.rng()) round-trip the full RNG state.
-    [[nodiscard]] StreamSet<R>& rng() noexcept { return streams_; }
-    [[nodiscard]] StreamSet<R> const& rng() const noexcept { return streams_; }
+    [[nodiscard]] StreamSet<Rng>& rng() noexcept { return streams_; }
+    [[nodiscard]] StreamSet<Rng> const& rng() const noexcept { return streams_; }
 
     // Exposed so reversibility tests can run a bare integrator without
     // the Metropolis acceptance and momentum sampling.
-    [[nodiscard]] Field& momentum() noexcept { return mom_; }
-    [[nodiscard]] Field const& momentum() const noexcept { return mom_; }
-    [[nodiscard]] Field& force_buffer() noexcept { return force_; }
+    [[nodiscard]] field_type& momentum() noexcept { return mom_; }
+    [[nodiscard]] field_type const& momentum() const noexcept { return mom_; }
+    [[nodiscard]] field_type& force_buffer() noexcept { return force_; }
 
     void integrate_only(double tau, int n_md) noexcept {
         exec::team_scope const team{n_threads_};
@@ -277,11 +284,11 @@ private:
     // Flat elementwise copy (rollback snapshot / restore) — a write-disjoint map
     // over the raw buffer. Unlike the leapfrog ops this is not a producer/consumer
     // in the trajectory chain, so it needs no slab-ownership alignment: a plain
-    // chunked flat copy serves both site fields (Scalar per site) and the
+    // chunked flat copy serves both site fields (value_type per site) and the
     // multi-component link buffer (whose flat index isn't site-major).
-    void copy_flat_(Scalar* dst, Scalar const* src, std::size_t n) const noexcept {
+    void copy_flat_(value_type* dst, value_type const* src, std::size_t n) const noexcept {
         reticolo::exec::parallel_map_ranges(
-            n, sizeof(Scalar), 1, [dst, src](std::size_t base, std::size_t cnt) {
+            n, sizeof(value_type), 1, [dst, src](std::size_t base, std::size_t cnt) {
                 std::size_t const end = base + cnt;
                 for (std::size_t i = base; i < end; ++i) {
                     dst[i] = src[i];
@@ -297,7 +304,7 @@ private:
     // The canonical slab count for `field` under this Hmc's thread/slab config
     // — the stream count the set is built with, and the value every fill is
     // checked against.
-    [[nodiscard]] static std::size_t slab_count_(Field const& field, int nthr, int slabs) {
+    [[nodiscard]] static std::size_t slab_count_(field_type const& field, int nthr, int slabs) {
         exec::team_scope const team{nthr};
         exec::slab_scope const sl{slabs};
         return exec::partition(field).n_items;
@@ -330,19 +337,19 @@ private:
 
     [[nodiscard]] double kinetic_() const {
         double kin = 0.0;
-        if constexpr (MatrixLinkField<Field>) {
+        if constexpr (MatrixLinkField<field_type>) {
             // K = (1/2)·Tr(P†P) = ‖h‖² for SU(N) with P = i·(h·σ). Hamilton's
             // dU/dt = P·U gives ∂K/∂P = P → K = (1/2)·Tr(P†P) = ‖h‖² (no extra
             // 1/2 here). For exp(-K) detailed balance the algebra coords are
             // sampled with variance 1/2 (see SU2::sample_algebra_slab).
-            using Group            = Field::group_type;
+            using Group            = field_type::group_type;
             std::size_t const d    = mom_.ndims();
             std::size_t const span = mom_.link_span();  // padded component stride
             // Parallel deterministic reduce per direction; ½ applied once.
             // gran = 8 (kinetic_range's internal batch).
             double raw = 0.0;
             for (std::size_t mu = 0; mu < d; ++mu) {
-                Scalar const* const pblk = mom_.mu_block_data(mu);
+                value_type const* const pblk = mom_.mu_block_data(mu);
                 raw += reticolo::exec::field_reduce(
                     mom_, 8, [pblk, span](std::size_t base, std::size_t cnt) {
                         return Group::kinetic_range(pblk, span, base, cnt);
@@ -350,7 +357,7 @@ private:
             }
             kin += 0.5 * raw;
         } else {
-            Scalar const* const p = mom_.data();
+            value_type const* const p = mom_.data();
             double const sum =
                 reticolo::exec::field_reduce(mom_, 1, [p](std::size_t base, std::size_t cnt) {
                     return reticolo::exec::lane_sum8(base, cnt, [p](std::size_t i) {
@@ -368,7 +375,7 @@ private:
     }
 
     static constexpr bool is_complex_v_ =
-        requires(Scalar f) { std::norm(f); } && !std::is_arithmetic_v<Scalar>;
+        requires(value_type f) { std::norm(f); } && !std::is_arithmetic_v<value_type>;
 
     struct CacheSnap_ {
         std::optional<double> s_full;
@@ -377,29 +384,29 @@ private:
 
     [[nodiscard]] CacheSnap_ capture_action_cache_() const noexcept {
         CacheSnap_ snap;
-        if constexpr (HasSFullCache<A>) {
+        if constexpr (HasSFullCache<Action>) {
             snap.s_full = action_.last_s_full();
         }
-        if constexpr (HasSImagCache<A>) {
+        if constexpr (HasSImagCache<Action>) {
             snap.s_imag = action_.last_s_imag();
         }
         return snap;
     }
 
     void restore_action_cache_(CacheSnap_ const& snap) const noexcept {
-        if constexpr (HasSFullCache<A>) {
+        if constexpr (HasSFullCache<Action>) {
             action_.restore_last_s_full(*snap.s_full);
         }
-        if constexpr (HasSImagCache<A>) {
+        if constexpr (HasSImagCache<Action>) {
             action_.restore_last_s_imag(*snap.s_imag);
         }
     }
 
-    A const& action_;
-    Field& field_;
-    Field mom_;
-    Field force_;
-    Field old_field_;
+    Action const& action_;
+    field_type& field_;
+    field_type mom_;
+    field_type force_;
+    field_type old_field_;
     double tau_;
     int n_md_;
     int n_threads_;  // bound via team_scope each trajectory; resolved from
@@ -408,7 +415,7 @@ private:
     // Owned randomness: one site stream per canonical slab + a driver for the
     // serial draws. Declared after the threading fields — its size derives
     // from them (member init order).
-    StreamSet<R> streams_;
+    StreamSet<Rng> streams_;
     // last s_full of `field_` after the most recent trajectory. NaN until the
     // first trajectory runs. Used by Replica / Exchange so they can read the
     // current action without re-sweeping.

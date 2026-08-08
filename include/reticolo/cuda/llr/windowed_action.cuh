@@ -90,6 +90,8 @@ __global__ void merge_imag_force_kernel(
 template <class HostAction, class Field>
 class WindowedAction {
 public:
+    using host_type  = HostAction;
+    using field_type = Field;  // named so cuda::Hmc derives it (see DeviceAction)
     using value_type = typename Field::value_type;
     using real_t     = real_scalar_t<value_type>;
 

@@ -18,7 +18,7 @@ namespace {
 using Action = reticolo::action::Phi4<double>;
 using Field  = reticolo::cuda::DeviceField<double>;
 using DAct   = reticolo::cuda::DeviceAction<Action, Field>;
-using Metro  = reticolo::cuda::Metropolis<DAct, Field>;
+using Metro  = reticolo::cuda::Metropolis<DAct>;
 // Spell the shape type out: `Field f{{4, 4, 4}}` is ambiguous, because a braced
 // literal initialises both DeviceField(std::vector<std::size_t>) and the
 // DeviceTopology aggregate (int ndim; long nsites; long shape[4]; ...).

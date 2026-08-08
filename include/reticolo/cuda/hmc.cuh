@@ -104,10 +104,16 @@ struct HmcResult {
     bool accepted = false;
 };
 
-template <class A, class Integ = updater::integ::Omelyan2, class Field = DeviceField<double>>
+// Same parameter structure as the host `updater::Hmc`: the device action names
+// its own field type, so there is no Field parameter to restate.
+template <class Action, class Integ = updater::integ::Omelyan2>
 class Hmc {
 public:
-    Hmc(A action, Field& field, double tau, int n_md, std::uint64_t seed = 0xC0FFEEULL)
+    using action_type = Action;
+    using field_type  = Action::field_type;
+    using integrator  = Integ;
+
+    Hmc(Action action, field_type& field, double tau, int n_md, std::uint64_t seed = 0xC0FFEEULL)
         : action_{std::move(action)}, field_{field}, mom_{field.topology()},
           force_{field.topology()}, old_{field.topology()}, tau_{tau}, n_md_{n_md}, seed_{seed},
           traj_buf_{1}, acc_buf_{1}, accept_buf_{1},
@@ -164,7 +170,7 @@ public:
     // The base-action constraint value S of the CURRENT (post-resolve) config,
     // for the LLR a-update. Two-phase so a driver can overlap replicas: enqueue
     // every replica's reduction first (all async, streams overlap), then gather.
-    // Requires the action A to expose constraint_s_full_into (cuda::llr::
+    // Requires the action to expose constraint_s_full_into (cuda::llr::
     // WindowedAction does; a plain DeviceAction does not — these members only
     // instantiate when called). Recomputes over field_ rather than reusing the
     // trajectory's eng_[3]: that is the WINDOWED proposal action and is not
@@ -208,8 +214,8 @@ public:
 
     // Access the action so LLR can drive the window slope a / centre E_n between
     // trajectories (graph-safe: only device param buffers, pointers stable).
-    [[nodiscard]] A& action() noexcept { return action_; }
-    [[nodiscard]] A const& action() const noexcept { return action_; }
+    [[nodiscard]] Action& action() noexcept { return action_; }
+    [[nodiscard]] Action const& action() const noexcept { return action_; }
 
     // --- checkpoint hooks ---------------------------------------------------
     // The complete per-run RNG state is (seed_, device trajectory counter): the
@@ -265,26 +271,26 @@ private:
         mh_accept_kernel<void><<<1, 1, 0, md_stream_>>>(
             eng_.data(), traj_buf_.data(), seed_, accept_buf_.data(), acc_buf_.data());
         RETICOLO_CUDA_CHECK_LAUNCH();
-        resolve_kernel<typename Field::value_type><<<site_grid, kBlock, 0, md_stream_>>>(
+        resolve_kernel<typename field_type::value_type><<<site_grid, kBlock, 0, md_stream_>>>(
             field_.data(), old_.data(), accept_buf_.data(), n);
         RETICOLO_CUDA_CHECK_LAUNCH();
         bump_counter_kernel<void><<<1, 1, 0, md_stream_>>>(traj_buf_.data());
         RETICOLO_CUDA_CHECK_LAUNCH();
     }
 
-    void copy_device_(Field& dst, Field const& src) {
+    void copy_device_(field_type& dst, field_type const& src) {
         RETICOLO_CUDA_CHECK(cudaMemcpyAsync(dst.data(),
                                             src.data(),
-                                            src.size() * sizeof(typename Field::value_type),
+                                            src.size() * sizeof(typename field_type::value_type),
                                             cudaMemcpyDeviceToDevice,
                                             md_stream_));
     }
 
-    A action_;
-    Field& field_;
-    Field mom_;
-    Field force_;
-    Field old_;
+    Action action_;
+    field_type& field_;
+    field_type mom_;
+    field_type force_;
+    field_type old_;
     double tau_;
     int n_md_;
     std::uint64_t seed_;
