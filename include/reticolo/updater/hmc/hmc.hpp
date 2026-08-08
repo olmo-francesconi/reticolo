@@ -11,6 +11,7 @@
 #include <reticolo/core/rng/stream_set.hpp>
 #include <reticolo/math/vec_libm.hpp>
 #include <reticolo/updater/hmc/integrators.hpp>
+#include <reticolo/updater/random_fill.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -103,9 +104,8 @@ concept HasSImagCache = requires(A const& a) {
     { a.restore_last_s_imag(a.last_s_imag()) } noexcept;
 };
 
-// Compile-time tag: Field is a MatrixLinkLattice (carries a Group type alias).
-template <class Field>
-concept MatrixLinkField = requires { typename Field::group_type; };
+// `MatrixLinkField` (the compile-time "is this a link field" tag) comes from
+// random_fill.hpp, shared with the fills and with Metropolis.
 
 template <class A,
           class R,
@@ -319,76 +319,13 @@ private:
         }
     }
 
+    // Momentum sampling IS the shared per-slab Gaussian fill (random_fill.hpp) —
+    // the same operation Metropolis draws its proposal noise with, including the
+    // algebra-aware matrix-link path and the float narrowing. Kept as a named
+    // member because that is what the trajectory reads as.
     void sample_momenta_() {
         check_streams_();
-        if constexpr (MatrixLinkField<Field>) {
-            // Algebra-aware momentum sampling per direction. The group writes
-            // anti-hermitian elements with the right structural zeros; raw
-            // normal_fill would put noise on the constrained slots. Slab i of
-            // every direction draws from site stream i, in μ order — the draw
-            // sequence is a pure function of the frozen partition.
-            using Group            = Field::group_type;
-            std::size_t const d    = mom_.ndims();
-            std::size_t const span = mom_.link_span();  // padded component stride
-            for (std::size_t mu = 0; mu < d; ++mu) {
-                Scalar* const pblk = mom_.mu_block_data(mu);
-                exec::field_visit_indexed(
-                    mom_, 1, [this, pblk, span](std::size_t i, std::size_t base, std::size_t cnt) {
-                        Group::sample_algebra_slab(pblk + base, streams_.site_stream(i), span, cnt);
-                    });
-            }
-        } else if constexpr (std::is_same_v<Scalar, double>) {
-            double* const m = mom_.data();
-            exec::field_visit_indexed(
-                mom_, 1, [this, m](std::size_t i, std::size_t base, std::size_t cnt) {
-                    streams_.site_stream(i).normal_fill(m + base, cnt);
-                });
-        } else if constexpr (std::is_same_v<Scalar, std::complex<double>>) {
-            // Independent N(0,1) on Re/Im is the correct complex-Gaussian sampling;
-            // std guarantees the {Re,Im} layout (§29.5.4). Two doubles per site,
-            // so slab i covers doubles [2·base, 2·(base+cnt)).
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-            auto* const md = reinterpret_cast<double*>(mom_.data());
-            exec::field_visit_indexed(
-                mom_, 1, [this, md](std::size_t i, std::size_t base, std::size_t cnt) {
-                    streams_.site_stream(i).normal_fill(md + (2 * base), 2 * cnt);
-                });
-        } else if constexpr (std::is_same_v<Scalar, float>) {
-            float* const m = mom_.data();
-            exec::field_visit_indexed(
-                mom_, 1, [this, m](std::size_t i, std::size_t base, std::size_t cnt) {
-                    fill_narrowed_slab_(streams_.site_stream(i), m + base, cnt);
-                });
-        } else if constexpr (std::is_same_v<Scalar, std::complex<float>>) {
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-            auto* const mf = reinterpret_cast<float*>(mom_.data());
-            exec::field_visit_indexed(
-                mom_, 1, [this, mf](std::size_t i, std::size_t base, std::size_t cnt) {
-                    fill_narrowed_slab_(streams_.site_stream(i), mf + (2 * base), 2 * cnt);
-                });
-        } else {
-            Scalar* const m = mom_.data();
-            exec::field_visit_indexed(
-                mom_, 1, [this, m](std::size_t i, std::size_t base, std::size_t cnt) {
-                    R& r = streams_.site_stream(i);
-                    for (std::size_t j = base; j < base + cnt; ++j) {
-                        m[j] = static_cast<Scalar>(r.normal());
-                    }
-                });
-        }
-    }
-
-    // Per-slab standard-normal fill narrowed to float. Draws doubles (so the
-    // stream advances exactly as the double path would) into a thread_local
-    // scratch, then narrows. Momentum precision is non-critical — the kinetic
-    // energy is summed in double regardless of the field's scalar type.
-    static void fill_narrowed_slab_(R& r, float* out, std::size_t n) {
-        thread_local std::vector<double> scratch;
-        double* const s = reticolo::exec::thread_scratch(scratch, n);
-        r.normal_fill(s, n);
-        for (std::size_t j = 0; j < n; ++j) {
-            out[j] = static_cast<float>(s[j]);
-        }
+        fill_gaussian(mom_, streams_);
     }
 
     [[nodiscard]] double kinetic_() const {

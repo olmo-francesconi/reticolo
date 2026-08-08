@@ -86,6 +86,7 @@ public:
         return driver().uniform_int(n);
     }
     void normal_fill(double* out, std::size_t n) noexcept { driver().normal_fill(out, n); }
+    void uniform_fill(double* out, std::size_t n) noexcept { driver().uniform_fill(out, n); }
 
     // Flat state of every stream, driver first — (n_streams+1)·words_per_stream
     // words, the payload of the multi-stream /rng checkpoint dataset.
