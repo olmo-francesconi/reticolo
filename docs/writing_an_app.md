@@ -261,7 +261,10 @@ the couplings, and `describe`.
    };
    ```
 
-   The base gives you `HmcAction` + `HasFusedKick` from these two kernels. The
+   The base gives you `HmcAction` + `HasFusedKick` + `action::LocalAction` from
+   these two kernels — `metropolis_stencil` is built from `action_kernel` itself,
+   so a leaf runs under `updater::Metropolis` and under a windowed (LLR)
+   Metropolis sweep with no extra formula. The
    couplings are captured by value, so the hot loop is byte-for-byte what a
    hand-written action would emit. Two opt-in refinements the base picks up by
    concept when the leaf provides them: a `prep(l)` hook (called before each

@@ -56,14 +56,21 @@ struct MyUpdaterResult {
     bool accepted = false;
 };
 
-template <class Action,
-          class Rng,
-          class Field = Lattice<typename Action::value_type>,
-          class T     = typename Action::value_type>
+// PARAMETER SHAPE — keep it: `<Action, Rng, …>` in that order, with the element
+// and field types derived, never restated. Every action names `value_type` and
+// `field_type`, so a parameter for either could only be set to what the action
+// already says, or to something wrong. `SamplerRng` is the generator contract
+// both shipped updaters use (a usable Rng that splits into per-slab streams).
+// Add `using spec_type = MyUpdaterSpec;` so an orchestration sampler tag can
+// build this without knowing which updater it named (updater/samplers.hpp).
+template <class Action, SamplerRng Rng>
 class MyUpdater {
 public:
-    using value_type = T;
-    using field_type = Field;
+    using action_type = Action;
+    using rng_type    = Rng;
+    using value_type  = Action::value_type;
+    using field_type  = Action::field_type;
+    using spec_type   = MyUpdaterSpec;
 
     // The action + field are held by reference (the caller owns them). The RNG is
     // taken BY VALUE and turned into an owned StreamSet: `streams_.driver()` is
@@ -73,7 +80,7 @@ public:
     // NEVER pass the same rng lvalue to two updaters: copies give identical
     // chains; derive distinct seeds instead.
     MyUpdater(Action const& action,
-              Field& field,
+              field_type& field,
               Rng rng,
               MyUpdaterSpec spec,
               log::Mode announce = log::Mode::normal)
@@ -84,7 +91,7 @@ public:
     }
 
     void describe(log::Entry& e) const {
-        e.line("MyUpdater<{}>", scalar_name<T>());
+        e.line("MyUpdater<{}>", scalar_name<value_type>());
         // ── FILL IN ② — one e.param() per knob (shown in the run banner) ──────
         //   Worked example:
         //       e.param("step={:.3g}", spec_.step_size);
@@ -97,7 +104,7 @@ public:
     // What you have to work with:
     //   action_.s_full(field_)               → total S (double)
     //   action_.compute_force(field_, force) → writes −dS/dφ into a Lattice force
-    //   field_.data() / field_.nsites()      → raw T* + site count (scalar field)
+    //   field_.data() / field_.nsites()      → raw value_type* + site count (scalar field)
     //   streams_.driver()                    → serial Rng: .uniform() ∈[0,1),
     //                                          .normal() ~N(0,1), .uniform_int(n)
     MyUpdaterResult step(log::Mode log_mode = log::Mode::normal) {
@@ -109,11 +116,11 @@ public:
         //
         //     auto& drv       = streams_.driver();
         //     double const s0 = action_.s_full(field_);        // S before
-        //     T* const data          = field_.data();          // 1. snapshot
+        //     value_type* const data          = field_.data();          // 1. snapshot
         //     std::size_t const n    = field_.nsites();
-        //     std::vector<T> saved(data, data + n);
+        //     std::vector<value_type> saved(data, data + n);
         //     for (std::size_t k = 0; k < n; ++k)               // 2. propose
-        //         data[k] += static_cast<T>(drv.normal() * spec_.step_size);
+        //         data[k] += static_cast<value_type>(drv.normal() * spec_.step_size);
         //     double const s1 = action_.s_full(field_);         // S after
         //     double const dS = s1 - s0;                        // 3. accept/reject
         //     bool const accepted = (dS <= 0.0) || (drv.uniform() < std::exp(-dS));
@@ -138,11 +145,11 @@ public:
     [[nodiscard]] StreamSet<Rng> const& rng() const noexcept { return streams_; }
 
 private:
-    static_assert(action::HmcAction<Action, Field>,
+    static_assert(action::HmcAction<Action, field_type>,
                   "the action must model action::HmcAction (s_full + compute_force)");
 
     Action const& action_;
-    Field& field_;
+    field_type& field_;
     MyUpdaterSpec spec_;
     StreamSet<Rng> streams_;
     double last_s_full_ = 0.0;
