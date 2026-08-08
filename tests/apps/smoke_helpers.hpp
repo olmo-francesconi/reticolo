@@ -134,6 +134,9 @@ struct LlrSmoke {
     // Kept tiny: the seating phase is not what a schema smoke test is checking.
     int warm_therm    = 4;
     int warm_max_traj = 40;
+    // Sampler flags — the one part of an LLR app's CLI that the sampler choice
+    // changes. HMC apps take (tau, n_md); a Metropolis LLR app takes sigma.
+    std::string sampler = "--tau=1.0 --n_md=10";
 };
 
 inline void require_llr_smoke(LlrSmoke const& s) {
@@ -141,7 +144,7 @@ inline void require_llr_smoke(LlrSmoke const& s) {
 
     std::string const cmd =
         s.binary + " --size=" + std::to_string(s.size) + " --ndim=" + std::to_string(s.ndim) + " " +
-        s.physics + " " + s.window + " --tau=1.0 --n_md=10" + " --n_nr=" + std::to_string(s.n_nr) +
+        s.physics + " " + s.window + " " + s.sampler + " --n_nr=" + std::to_string(s.n_nr) +
         " --n_therm_nr=4 --n_meas_nr=8" + " --n_rm=" + std::to_string(s.n_rm) +
         " --n_therm_rm=4 --n_meas_rm=8" + " --warm_therm=" + std::to_string(s.warm_therm) +
         " --warm_max_traj=" + std::to_string(s.warm_max_traj) +
