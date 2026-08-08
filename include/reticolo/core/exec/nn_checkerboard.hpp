@@ -124,6 +124,69 @@ template <class Acc, class T, class Body>
     });
 }
 
+// Reduce `body(i, self, gather) -> Acc` over EVERY site in lexicographic order,
+// strictly serially — the sequential member of this family, and the one a local
+// update falls back to when the checkerboard's premise fails.
+//
+// That premise is that a colour's sites are mutually independent, so their moves
+// may be decided in any order (hence in parallel). It fails whenever ΔS depends
+// on a GLOBAL quantity that the moves themselves change — the LLR window is the
+// standing example: its increment reads the current constraint value q, so
+// accepting a move at one site alters ΔS at every other site of the same colour.
+// Freezing q across a colour would restore the parallelism and break detailed
+// balance; visiting the sites in a fixed order with a running q keeps detailed
+// balance exactly, at the cost of the site-level threading.
+//
+// Costing that trade honestly: LLR is the consumer, and an LLR replica already
+// runs its lattice passes serially inside the replica-parallel team (the
+// `in_traverse_region` flag is false in a foreign region), so the threading given
+// up here is threading that context never had.
+//
+// Unlike the colour walk this has no parity precondition — it reads whatever is
+// currently in the lattice, including sites it updated earlier in the same pass,
+// which is what single-site Metropolis is defined to do.
+template <class Acc, class T, class Body>
+[[nodiscard]] inline Acc nn_sequential_reduce(Lattice<T>& l, Body const& body) noexcept {
+    T* const data        = l.data();
+    auto const& sh       = l.shape();
+    std::size_t const d  = l.ndims();
+    std::size_t const l0 = sh[0];
+
+    std::array<std::size_t, 4> stride{};
+    stride[0] = 1;
+    for (std::size_t mu = 1; mu < d; ++mu) {
+        stride[mu] = stride[mu - 1] * sh[mu - 1];
+    }
+
+    Acc acc{};
+    std::size_t const n = l.nsites();
+    // d == 1 degenerates correctly: one row, and the mu loops below are empty.
+    for (std::size_t row = 0; row < n; row += l0) {
+        std::array<std::size_t, 4> rp{};
+        std::array<std::size_t, 4> rm{};
+        for (std::size_t mu = 1; mu < d; ++mu) {
+            std::size_t const c = (row / stride[mu]) % sh[mu];
+            rp[mu] = (c + 1 == sh[mu]) ? (row - ((sh[mu] - 1) * stride[mu])) : (row + stride[mu]);
+            rm[mu] = (c == 0) ? (row + ((sh[mu] - 1) * stride[mu])) : (row - stride[mu]);
+        }
+        for (std::size_t x = 0; x < l0; ++x) {
+            std::size_t const i  = row + x;
+            std::size_t const xp = (x + 1 == l0) ? row : (i + 1);
+            std::size_t const xm = (x == 0) ? (row + l0 - 1) : (i - 1);
+            auto const gather    = [&](auto const& fn) {
+                fn(std::size_t{0}, data[xp]);
+                fn(std::size_t{0}, data[xm]);
+                for (std::size_t mu = 1; mu < d; ++mu) {
+                    fn(mu, data[rp[mu] + x]);
+                    fn(mu, data[rm[mu] + x]);
+                }
+            };
+            acc += body(i, data[i], gather);
+        }
+    }
+    return acc;
+}
+
 // Reduce `body(i) -> Acc` over the SITE INDICES of one colour, with no neighbour
 // gather. The link families use this: a gauge staple reaches sites two hops away
 // (x+μ̂−ν̂) and in other directions, so the nearest-neighbour gather above is the

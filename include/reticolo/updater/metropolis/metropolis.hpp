@@ -92,7 +92,13 @@ public:
           n_threads_{resolve_threads_(spec.n_threads)}, n_slabs_{spec.slabs_per_thread},
           streams_{rng.uniform_u64(), slab_count_(field, n_threads_, n_slabs_), announce},
           last_s_full_{action_.s_full(field_)} {
-        if (!exec::checkerboard_ok(field_)) {
+        // The even-extent precondition belongs to the CHECKERBOARD, not to the
+        // algorithm: an odd extent wraps a colour onto itself under periodic BCs,
+        // so a colour's sweep would read what it writes. An action that declares a
+        // single colour (action::WindowedAction, whose global window forces a
+        // sequential pass) never makes that assumption and must not inherit the
+        // restriction.
+        if (action_.n_colors(field_) > 1 && !exec::checkerboard_ok(field_)) {
             throw std::invalid_argument{
                 "Metropolis: the checkerboard sweep needs every lattice extent even "
                 "(an odd extent wraps a colour onto itself under periodic BCs)"};

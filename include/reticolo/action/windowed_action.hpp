@@ -3,6 +3,7 @@
 #include <reticolo/action/concepts.hpp>
 #include <reticolo/action/formula/window_formula.hpp>
 #include <reticolo/core/exec/field_ops.hpp>
+#include <reticolo/core/exec/nn_checkerboard.hpp>
 #include <reticolo/core/field/field_traits.hpp>
 #include <reticolo/core/field/lattice.hpp>
 
@@ -122,6 +123,23 @@ struct ObservableConstraint {
     template <class Base>
     void restore(Base const& /*b*/, double v) const noexcept {
         obs.restore_last_s_full(v);
+    }
+    // The observable's per-site local energy, for the sequential windowed sweep.
+    // Present only when the observable is a family that offers one (any NNAction
+    // leaf with an `action_kernel`), so a windowed action over an observable that
+    // has no local form simply fails `action::LocalAction` instead of failing to
+    // compile inside the updater.
+    template <class Base>
+    [[nodiscard]] auto local_energy_kernel(Base const& /*b*/) const noexcept
+        requires requires(Obs const& o) { o.local_energy_kernel(); }
+    {
+        return obs.local_energy_kernel();
+    }
+    template <class Base>
+    [[nodiscard]] auto local_energy_scale(Base const& /*b*/) const noexcept
+        requires requires(Obs const& o) { o.local_energy_scale(); }
+    {
+        return obs.local_energy_scale();
     }
 };
 
@@ -264,12 +282,120 @@ struct WindowedAction {
         }
     }
 
+    // --- local (Metropolis) update -------------------------------------------
+    //
+    // ONE colour, and a strictly sequential pass — not the two-colour parallel
+    // checkerboard every other action uses. The reason is the window, and only
+    // the window: `a·Q` is LINEAR in Q, so its per-site increment `a·ΔQ` is
+    // purely local, but the Gaussian penalty is quadratic in a GLOBAL scalar, so
+    // a single move contributes `[2(Q−E_n)ΔQ + ΔQ²]/2δ²` — a term that reads the
+    // CURRENT Q. Accepting a move at one site therefore changes ΔS at every other
+    // site of the same colour, which is exactly the independence the checkerboard
+    // rests on. Freezing Q across a colour would restore the parallelism and break
+    // detailed balance; carrying Q as a running scalar through a fixed site order
+    // keeps detailed balance exactly (each single-site update is a proper
+    // Metropolis step against the current configuration).
+    //
+    // The parallelism this gives up is parallelism the consumer never had: an LLR
+    // replica runs its lattice passes serially inside the replica-parallel team.
+    //
+    // Available only when the base — and the constraint observable, when there is
+    // a separate one — expose a local energy. `ImagConstraint` does not yet, so a
+    // sign-problem windowed action simply fails `action::LocalAction` and stays on
+    // HMC rather than silently sampling something else.
+    static constexpr bool k_local = requires(Action const& b) { b.local_energy_kernel(); } &&
+                                    (k_self || requires(constraint_type const& c, Action const& b) {
+                                        c.local_energy_kernel(b);
+                                        c.local_energy_scale(b);
+                                    });
+
+    [[nodiscard]] static constexpr int n_colors(field_type const& /*l*/) noexcept { return 1; }
+
+    [[nodiscard]] LocalStats metropolis_stencil(field_type& l,
+                                                int /*color*/,
+                                                field_type const& noise,
+                                                Lattice<scalar_t> const& logu,
+                                                scalar_t sigma) const noexcept
+        requires k_local
+    {
+        auto const kb   = base.local_energy_kernel();
+        auto const sc_b = base.local_energy_scale();
+        auto const kq   = constraint_local_kernel_();
+        auto const sc_q = constraint_local_scale_();
+
+        // Re-derive both running scalars instead of trusting the caches. A stale Q
+        // here does not merely mis-report the bookkeeping — it enters the window
+        // term and biases EVERY accept test in the sweep. And the field is
+        // routinely mutated between sweeps by code that never passed through this
+        // action: an LLR app hot-starts it after construction, and replica
+        // exchange swaps whole configurations. One extra reduce, against a sweep
+        // that already gathers 2·d neighbours per site, buys immunity to a class
+        // of bug that would only surface deep in a production run.
+        auto s_base = static_cast<scalar_t>(base.s_full(l));
+        scalar_t q  = s_base;
+        if constexpr (!k_self) {
+            q = static_cast<scalar_t>(constraint.value(base, l));
+        }
+
+        value_type* const data     = l.data();
+        value_type const* const nz = noise.data();
+        scalar_t const* const lu   = logu.data();
+
+        auto const stats = exec::nn_sequential_reduce<LocalStats>(
+            l, [&](std::size_t i, value_type self, auto const& gather) {
+                value_type const prop = self + (sigma * nz[i]);
+                auto const ds_base =
+                    static_cast<scalar_t>(sc_b * (kb(prop, gather) - kb(self, gather)));
+                scalar_t dq = ds_base;
+                if constexpr (!k_self) {
+                    dq = static_cast<scalar_t>(sc_q * (kq(prop, gather) - kq(self, gather)));
+                }
+                scalar_t const dw = formula::windowed_delta(ds_base, dq, q, a, E_n, delta);
+                if (-static_cast<double>(dw) >= static_cast<double>(lu[i])) {
+                    data[i] = prop;
+                    s_base += ds_base;
+                    q += dq;
+                    return LocalStats{
+                        .n_accepted = 1, .n_attempts = 1, .ds = static_cast<double>(dw)};
+                }
+                return LocalStats{.n_accepted = 0, .n_attempts = 1, .ds = 0.0};
+            });
+
+        // Publish what the sweep already knows exactly. These are the caches
+        // orch::llr::Replica reads for ⟨dE⟩, exchange and reporting — the same
+        // ones HMC leaves behind at the end of a trajectory.
+        base.restore_last_s_full(static_cast<double>(s_base));
+        if constexpr (!k_self) {
+            constraint.restore(base, static_cast<double>(q));
+        }
+        return stats;
+    }
+
     // Lazy scratch field for the non-self F_Q pass (and the self fused merge).
     // Allocated on first force call and reused; avoids the per-MD-step
     // malloc/free. `mutable` because the force methods are const.
     mutable std::optional<field_type> scratch_storage{};
 
 private:
+    // The constraint observable's local energy. For the self constraint there is
+    // no separate observable — ΔQ IS ΔS_base and these are never called — so they
+    // resolve to the base's own, which keeps the declaration well-formed without
+    // inventing a placeholder type.
+    [[nodiscard]] auto constraint_local_kernel_() const noexcept {
+        if constexpr (k_self) {
+            return base.local_energy_kernel();
+        } else {
+            return constraint.local_energy_kernel(base);
+        }
+    }
+    [[nodiscard]] auto constraint_local_scale_() const noexcept {
+        if constexpr (k_self) {
+            return base.local_energy_scale();
+        } else {
+            return constraint.local_energy_scale(base);
+        }
+    }
+
     // Q and F_Q for the non-self path: one fused sweep when the constraint
     // offers `value_and_force`, else the value sweep + the force sweep.
     [[nodiscard]] scalar_t constraint_value_and_force_(field_type const& l,

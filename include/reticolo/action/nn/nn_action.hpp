@@ -132,6 +132,34 @@ struct NNAction : SFullCache {
     // (SineGordon, whose s_full batches its transcendental and never forms one)
     // would SATISFY the concept and then fail to compile at the first call. Same
     // guard style as Wilson's `compute_force_and_kick` / `s_full_and_force`.
+    // The per-site local energy, as a callable `(cand, gather) -> T` over a
+    // checkerboard/sequential gather of all 2·d neighbours. Exposed — rather than
+    // kept inside metropolis_stencil — because a DECORATOR action needs to
+    // evaluate SEVERAL actions' local energies against ONE traversal:
+    // `WindowedAction` wants the base's ΔS and the constraint observable's ΔQ at
+    // the same site, and neither can drive its own sweep of the other's lattice.
+    //
+    // Kernel and scale stay SEPARATE, un-premultiplied, because a local energy is
+    // only ever used as a difference of two calls: applying the scale to the
+    // difference is what keeps this bit-identical to a hand-written ΔS, which is
+    // not a formality in f32.
+    [[nodiscard]] auto local_energy_kernel() const noexcept
+        requires requires(Derived const& d) { d.action_kernel(); }
+    {
+        // Fold the neighbours per candidate: a bond combine reads its first
+        // argument, so the two candidates of a move genuinely fold to different
+        // sums. For a site leaf `comb` is IdentityCombine, it drops `cand`, and
+        // the compiler collapses the two folds back to one gather.
+        return [comb = action_combine_(), fin = derived_().action_kernel()](T cand,
+                                                                            auto const& gather) {
+            T agg{};
+            gather([&](std::size_t /*mu*/, T nbr) { agg += comb(cand, nbr); });
+            return fin(cand, agg);
+        };
+    }
+
+    [[nodiscard]] T local_energy_scale() const noexcept { return action_scale_(); }
+
     [[nodiscard]] LocalStats metropolis_stencil(Lattice<T>& l,
                                                 int color,
                                                 Lattice<T> const& noise,
@@ -139,28 +167,16 @@ struct NNAction : SFullCache {
                                                 T sigma) const noexcept
         requires requires(Derived const& d) { d.action_kernel(); }
     {
-        auto const comb                  = action_combine_();
-        auto const fin                   = derived_().action_kernel();
-        T const sc                       = action_scale_();
+        auto const e                     = local_energy_kernel();
+        T const sc                       = local_energy_scale();
         T* const data                    = l.data();
         T const* const nz                = noise.data();
         real_scalar_t<T> const* const lu = logu.data();
 
-        // Fold the neighbours once per candidate: a bond combine reads its first
-        // argument, so the two sums genuinely differ. For a site leaf `comb` is
-        // IdentityCombine, it drops `cand`, and the compiler collapses the two
-        // folds back to one gather.
-        auto const fold = [&comb](auto const& gather, T cand) {
-            T agg{};
-            gather([&](std::size_t /*mu*/, T nbr) { agg += comb(cand, nbr); });
-            return agg;
-        };
-
         return exec::nn_color_reduce<LocalStats>(
             l, color, [&](std::size_t i, T self, auto const& gather) {
                 T const prop  = self + (sigma * nz[i]);
-                auto const ds = static_cast<double>(
-                    sc * (fin(prop, fold(gather, prop)) - fin(self, fold(gather, self))));
+                auto const ds = static_cast<double>(sc * (e(prop, gather) - e(self, gather)));
                 // −ΔS ≥ log u — the branchless form of `ΔS ≤ 0 or u < exp(−ΔS)`.
                 if (-ds >= static_cast<double>(lu[i])) {
                     data[i] = prop;
