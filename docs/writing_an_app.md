@@ -61,9 +61,12 @@ auto const cf      = app::common_flags(p, {.out = "phi4.h5"});
 auto const& kappa  = p.opt<double>("kappa",  0.18, "hopping parameter");
 auto const& lambda = p.opt<double>("lambda", 1.0,  "quartic coupling");
 auto const& ndim   = p.opt<int>("ndim",      4,    "spatial dimensions");
-// Tier 2 — the HMC family: tau / n_md / n_therm / n_prod / meas_every /
+// Tier 2 — the family helper. HMC: tau / n_md / n_therm / n_prod / meas_every /
 // checkpoint_every / resume. Pass only the defaults that differ from the
 // struct's ({.tau=1.0, .n_md=20, .n_therm=200, .n_prod=1000, .meas_every=1}).
+// A Metropolis app uses app::metropolis_run_flags instead (sigma in place of
+// tau/n_md, same run-control block); an LLR app uses app::llr_run_flags. Pick
+// one — a family helper is all-or-nothing.
 auto const rf      = app::hmc_run_flags(p);
 p.parse(argc, argv);
 ```

@@ -14,8 +14,8 @@
 
 **reticolo** is a C++20 library for Monte Carlo simulation of lattice quantum
 field theories. It provides scalar and gauge field actions on periodic
-hypercubic lattices, samples them with Hybrid Monte Carlo, and reconstructs the
-density of states with the LLR algorithm. An optional CUDA backend runs the same
+hypercubic lattices, samples them with Hybrid Monte Carlo or local Metropolis,
+and reconstructs the density of states with the LLR algorithm. An optional CUDA backend runs the same
 simulations on the GPU. Configurations and observables are written to
 self-describing HDF5.
 
@@ -25,11 +25,12 @@ self-describing HDF5.
   charged scalar with a sign problem (Bose gas); and Wilson gauge theory for
   U(1), SU(2) and SU(3).
 - **Updates** — Hybrid Monte Carlo with Leapfrog, second-order Omelyan and
-  fourth-order Omelyan molecular-dynamics integrators.
+  fourth-order Omelyan molecular-dynamics integrators; and a local Metropolis
+  checkerboard sweep, for scalar, complex and gauge fields alike.
 - **Density of states** — LLR reconstruction (Newton–Raphson and Robbins–Monro
   adaptation with replica exchange) over parallel windowed HMC chains.
-- **GPU** — optional CUDA backend covering HMC for every action in single and
-  double precision, sharing one per-site formula with the CPU code.
+- **GPU** — optional CUDA backend covering HMC and Metropolis for every action
+  in single and double precision, sharing one per-site formula with the CPU code.
 - **Random number generators** — xoshiro256++, Philox4×32, Mersenne Twister and
   RANLUX behind a common interface.
 - **Output** — self-describing HDF5 carrying the full run record (command line,
@@ -77,7 +78,7 @@ int main() {
 }
 ```
 
-The `apps/` directory contains a reference HMC and LLR program for each action.
+The `apps/` directory contains a reference HMC, Metropolis and LLR program for each action.
 Output is read back with any HDF5 tool; run metadata lives in the `/run` and
 `/vars` attributes and each observable is a 1-D dataset:
 
@@ -160,7 +161,7 @@ with the CUDA preset:
 cmake --preset linux-nvcc && cmake --build --preset linux-nvcc
 ```
 
-`apps/cuda/` has HMC and LLR reference apps for φ⁴, Bose gas and U(1)/SU(2)/SU(3).
+`apps/cuda/` has HMC, Metropolis and LLR reference apps for φ⁴, Bose gas and U(1)/SU(2)/SU(3).
 With no local GPU, the `tools/modal/` runner builds and runs on a cloud GPU —
 see [`docs/cuda_architecture.md`](docs/cuda_architecture.md).
 

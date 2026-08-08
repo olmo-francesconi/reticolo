@@ -164,7 +164,9 @@ and friends), alongside the per-site `exec` primitives it builds on.
   its gradient. Only `BoseGas` uses it today; `action::WindowedAction` switches to
   its complex mode when the base satisfies it.
 
-Earlier revisions carried a `LocalAction` Metropolis baseline
+(Historical note, now partly superseded — a local updater is back, but with the
+elementary move kept inside the action so the arity never crosses the
+interface; see `action::LocalAction`.) Earlier revisions carried a `LocalAction` Metropolis baseline
 (`s_local`/`ds_local`) and a parallel `gauge::` concept family keyed on the
 `(Site, mu)` elementary-update arity. With Metropolis and Wolff removed, both
 are gone: HMC's `s_full`/`compute_force` are field-agnostic, so one concept set
@@ -234,19 +236,36 @@ member — read the compiler error.
 
 ## Updaters
 
-| updater                | models                | needs                                     |
-| ---------------------- | --------------------- | ----------------------------------------- |
-| `updater::Hmc<A,R,Integ>`  | `updater::Updater`        | `HmcAction` (+ optionally `HasFusedKick`) |
+| updater                       | models             | needs                                     |
+| ----------------------------- | ------------------ | ----------------------------------------- |
+| `updater::Hmc<A,R,Integ>`     | `updater::Updater` | `HmcAction` (+ optionally `HasFusedKick`) |
+| `updater::Metropolis<A,R>`    | `updater::Updater` | `action::LocalAction`                     |
 
-`updater::Hmc` is the only update algorithm. The **`updater::Updater`** concept
+`updater::Hmc` (global) and `updater::Metropolis` (local checkerboard sweep) are the update algorithms. The **`updater::Updater`** concept
 ([`updater/concepts.hpp`](../include/reticolo/updater/concepts.hpp)) is the
 updater-level analogue of `action::HmcAction` — the contract apps and the
-orchestration layer rely on: `step()` (returns `{dH, accepted}`),
-`last_s_full()`, `rng()`. It is duck-typed and checked at the use site (both
+orchestration layer rely on: `step().acceptance()`, `last_s_full()`, `rng()`.
+It keys on `acceptance()` rather than on `dH`/`accepted` because those are not
+shared: one HMC trajectory is accepted or not, while one Metropolis sweep is
+V independent accept tests with no meaningful boolean. Algorithm-specific
+fields live on the concrete result (`HmcResult::dH`, `action::LocalStats::n_accepted`). It is duck-typed and checked at the use site (both
 orchestration workers `static_assert` their sampler against it), so a new
 updater is just a class modelling it — no base class, reuse the same
 `updater::integ::*` type-parameters. `orch::llr::Replica` and `orch::span::Chain`
 each own an `updater::Hmc` and drive it through this surface.
+
+`updater::Metropolis` is the local counterpart: a checkerboard sweep in place of
+a trajectory. It owns no momentum, force or rollback buffer — a rejected local
+move is discarded before it is written — and carries `S` incrementally from the
+ΔS the sweep already knew, so a measurement costs no extra pass. What it needs
+from the action is `action::LocalAction`: `n_colors(l)` and
+`metropolis_stencil(l, color, noise, logu, sigma)`. Both randomness fields are
+filled by the UPDATER (`updater/random_fill.hpp` — the same per-slab Gaussian
+fill HMC samples momenta with) and handed down as plain fields, so the action
+stays physics-only and the traversal stays in the action family. The colour
+index is opaque to the updater — 2 for a site field, 2·ndim for a link field —
+which is why one signature covers scalar, complex and gauge without
+reintroducing a `(Site, mu)` arity split.
 
 The HMC integrator is a **type parameter**, not a runtime switch. Three
 ship: `updater::integ::Omelyan2` (2nd-order minimum-norm, ~1.4× speedup at the
@@ -527,10 +546,10 @@ OpenMP is off, so neither reaches the nvcc compile. See
 ### Builtin apps (`apps/`)
 
 `apps/` is the canonical reference set: one HMC sim per action
-(`phi4_hmc`, `phi6_hmc`, `sine_gordon_hmc`, `bose_gas_hmc`, `u1_hmc`,
-`su2_hmc`, `su3_hmc`), the LLR sims (`phi4_llr`, `u1_llr`,
-`u1_llr_smoothed`, `bose_gas_llr`, `su2_llr`), `f32` variants, and the
-`bench_*` suite. Built in-tree only; registered with `reticolo_add_app`
+(`phi4_hmc`, `phi6_hmc`, `sine_gordon_hmc`, `xy_hmc`, `bose_gas_hmc`, `u1_hmc`,
+`su2_hmc`, `su3_hmc`), one Metropolis sim per action (`*_metropolis`, same
+list), the LLR sims (`phi4_llr`, `u1_llr`, `u1_llr_smoothed`, `bose_gas_llr`,
+`su2_llr`), `f32` variants of each, and the `bench_*` suite. Built in-tree only; registered with `reticolo_add_app`
 in `apps/CMakeLists.txt`.
 
 ### Standalone examples (`examples/`)

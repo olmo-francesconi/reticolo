@@ -36,10 +36,14 @@ drifts from the real files it mirrors, treat the real file as truth.
   `NNAction` leaf that binds it. Complex (sign-problem) and gauge actions follow
   the same 3-step shape via `ComplexAction`+`ImagPart` / `Wilson<G>` — start from
   a real `action/complex/*` / `action/gauge/*` leaf instead.
-- **Updater** — a new update algorithm *other than HMC* (Langevin, heat-bath,
-  overrelaxation, …). One header modelling the `updater::Updater` concept; the
-  apps and both orchestrators pick it up unchanged because they only depend on
-  that concept.
+- **Updater** — a new update algorithm *beyond HMC and Metropolis* (Langevin,
+  heat-bath, overrelaxation, …). One header modelling the `updater::Updater`
+  concept; the apps and both orchestrators pick it up unchanged because they only
+  depend on that concept. Whatever the algorithm needs evaluated over the lattice
+  belongs on the ACTION FAMILY as a lattice-level member — the shape of
+  `compute_force_and_kick` / `metropolis_stencil`, i.e. buffers and scalars in,
+  aggregate out — never a kernel or callback passed down from the updater, and
+  never a traversal written in the updater itself.
 - **Orchestrator** — a new *concurrent-simulation workflow* (a new way to drive
   an ensemble of workers, like `orch::span` or `orch::llr`). A `Worker` type +
   a two-phase `setup()/run()` orchestrator object over `parallel_workers`.

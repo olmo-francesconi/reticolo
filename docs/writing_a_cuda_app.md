@@ -32,8 +32,11 @@ warnings (inert on the `.cu` compile), and sets `CUDA_STANDARD 20`.
 ```
 
 `<reticolo/cuda/cuda.hpp>` re-exports the public device API: `DeviceField`,
-`DeviceAction`, `cuda::Hmc`, the on-device reductions, and the device-functor
-adapters for every supported action + gauge group. The device-vs-CPU validation
+`DeviceAction`, `cuda::Hmc`, `cuda::Metropolis`, the on-device reductions, and the
+device-functor adapters for every supported action + gauge group. A device action
+supplies force/energy functors (`init`/`accumulate`/`finalize`) for HMC and a ds
+functor (`init`/`accumulate`/`ds`) for Metropolis; both bind the same shared
+`RETICOLO_HD` formula the CPU action binds. The device-vs-CPU validation
 gates are separate `tests/cuda/test_cuda_<name>.cu` files, not part of this
 umbrella. `io::Writer` PIMPLs HDF5, so nvcc never sees `<hdf5.h>` — the app just
 links the prebuilt `reticolo::io` archive.
