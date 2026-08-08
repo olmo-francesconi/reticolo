@@ -61,6 +61,27 @@ concept HasFusedForce = requires(double* out,
     device_functors<HostAction>::s_full_and_force(out, a, field, force, scratch, partials, topo, s);
 };
 
+// Optional local-update launcher — the device peer of action::LocalAction, and
+// the same layering: the ACTION drives one colour of a checkerboard sweep over
+// the lattice, cuda::Metropolis only says when. Present → DeviceAction exposes
+// metropolis_stencil and cuda::Metropolis instantiates; absent → the action is
+// HMC-only on the device, exactly as on the host.
+template <class HostAction, class T>
+concept HasLocalUpdate = requires(HostAction const& a,
+                                  T* field,
+                                  DeviceTopology const& topo,
+                                  int color,
+                                  double sigma,
+                                  std::uint64_t seed,
+                                  std::uint64_t const* sweep,
+                                  double* ds_out,
+                                  double* acc_out,
+                                  cudaStream_t s) {
+    device_functors<HostAction>::metropolis_stencil(
+        a, field, topo, color, sigma, seed, sweep, ds_out, acc_out, s);
+    { device_functors<HostAction>::n_colors(topo) } -> std::convertible_to<int>;
+};
+
 // Optional imaginary-part launchers (complex actions only, e.g. BoseGas). When
 // present, DeviceAction exposes s_imag / s_imag_into / compute_force_imag and the
 // LLR WindowedAction selects mode B (sample S_R, constrain S_I). Absent → mode A.
@@ -134,6 +155,38 @@ public:
         traits::s_full_and_force(
             out, host_, field.data(), force.data(), scratch_.data(), partials, topo_, stream);
     }
+
+    // One colour of a local Metropolis sweep: updates `field` in place and stages
+    // the per-site applied ΔS / accept flag for the caller's reduction. The host
+    // twin is action::LocalAction::metropolis_stencil; the difference is only where
+    // the randomness comes from — Philox is counter-based, so the device draws it
+    // in-kernel from (seed, sweep counter, site) rather than reading pre-filled
+    // noise fields, matching how sample_momenta already works on this side.
+    void metropolis_stencil(Field& field,
+                            int color,
+                            double sigma,
+                            std::uint64_t seed,
+                            std::uint64_t const* sweep,
+                            double* ds_out,
+                            double* acc_out,
+                            cudaStream_t stream) const
+        requires HasLocalUpdate<HostAction, typename Field::value_type>
+    {
+        traits::metropolis_stencil(
+            host_, field.data(), topo_, color, sigma, seed, sweep, ds_out, acc_out, stream);
+    }
+
+    // How many colour passes make one sweep: 2 for a site field, 2*ndim for a
+    // link field, whose elementary move is per (direction, site parity).
+    [[nodiscard]] int n_colors() const
+        requires HasLocalUpdate<HostAction, typename Field::value_type>
+    {
+        return traits::n_colors(topo_);
+    }
+
+    // The site count the per-site staging buffers must hold — NOT field.size(),
+    // which for a link field counts every component of every direction.
+    [[nodiscard]] long nsites() const { return topo_.nsites; }
 
     // --- imaginary part (complex actions; instantiate only when the trait has it) ---
     [[nodiscard]] double s_imag(Field const& field) const
