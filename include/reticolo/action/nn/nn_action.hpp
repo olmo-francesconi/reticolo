@@ -1,8 +1,11 @@
 #pragma once
 
 #include <reticolo/action/cache.hpp>
+#include <reticolo/action/concepts.hpp>
+#include <reticolo/core/exec/nn_checkerboard.hpp>
 #include <reticolo/core/exec/nn_stencil.hpp>
 #include <reticolo/core/exec/parallel.hpp>
+#include <reticolo/core/field/field_traits.hpp>
 #include <reticolo/core/field/lattice.hpp>
 
 #include <cstddef>
@@ -97,6 +100,73 @@ struct NNAction : SFullCache {
                 base, cnt, [sb](std::size_t i) { return static_cast<double>(sb[i]); });
         });
     }
+
+    // One colour of a local (Metropolis) sweep — the local-update peer of
+    // `compute_force_and_kick`, and built from the SAME leaf kernels, so a leaf
+    // gets it for free the moment it defines `action_kernel`. No new physics, no
+    // new formula file, nothing for a leaf to opt into.
+    //
+    // The ΔS identity that makes it free: the per-site energy of x is exactly the
+    // leaf's own `action_kernel(φ_x, agg)` once `agg` folds ALL 2d neighbours
+    // instead of the d forward ones — every bond touching x then appears exactly
+    // once, which is precisely the set of terms a move of φ_x changes. So
+    //
+    //     ΔS = action_scale · [ K(prop, fold(comb, prop)) − K(old, fold(comb, old)) ]
+    //
+    // and the overall scale rides along because it multiplies the total, hence
+    // every difference of totals. Folding per candidate rather than reusing one
+    // aggregate is what makes this correct for a BOND leaf, whose combine reads
+    // its first argument (XY); for a site leaf `comb` is IdentityCombine, it drops
+    // `cand`, and the compiler collapses the two folds back to one gather.
+    //
+    // A leaf whose action_kernel is not linear in the aggregate declares its own
+    // `metropolis_stencil`, hiding this one — the same override route as `s_full`.
+    //
+    // The `requires` clause is load-bearing, not decoration: `action::LocalAction`
+    // is a declaration check, so without it a leaf that has no `action_kernel`
+    // (SineGordon, whose s_full batches its transcendental and never forms one)
+    // would SATISFY the concept and then fail to compile at the first call. Same
+    // guard style as Wilson's `compute_force_and_kick` / `s_full_and_force`.
+    [[nodiscard]] LocalStats metropolis_stencil(Lattice<T>& l,
+                                                int color,
+                                                Lattice<T> const& noise,
+                                                Lattice<real_scalar_t<T>> const& logu,
+                                                T sigma) const noexcept
+        requires requires(Derived const& d) { d.action_kernel(); }
+    {
+        auto const comb                  = action_combine_();
+        auto const fin                   = derived_().action_kernel();
+        T const sc                       = action_scale_();
+        T* const data                    = l.data();
+        T const* const nz                = noise.data();
+        real_scalar_t<T> const* const lu = logu.data();
+
+        // Fold the neighbours once per candidate: a bond combine reads its first
+        // argument, so the two sums genuinely differ. For a site leaf `comb` is
+        // IdentityCombine, it drops `cand`, and the compiler collapses the two
+        // folds back to one gather.
+        auto const fold = [&comb](auto const& gather, T cand) {
+            T agg{};
+            gather([&](std::size_t /*mu*/, T nbr) { agg += comb(cand, nbr); });
+            return agg;
+        };
+
+        return exec::nn_color_reduce<LocalStats>(
+            l, color, [&](std::size_t i, T self, auto const& gather) {
+                T const prop  = self + (sigma * nz[i]);
+                auto const ds = static_cast<double>(
+                    sc * (fin(prop, fold(gather, prop)) - fin(self, fold(gather, self))));
+                // −ΔS ≥ log u — the branchless form of `ΔS ≤ 0 or u < exp(−ΔS)`.
+                if (-ds >= static_cast<double>(lu[i])) {
+                    data[i] = prop;
+                    return LocalStats{.n_accepted = 1, .n_attempts = 1, .ds = ds};
+                }
+                return LocalStats{.n_accepted = 0, .n_attempts = 1, .ds = 0.0};
+            });
+    }
+
+    // Two checkerboard colours — a site field's elementary move is per site.
+    [[nodiscard]] static constexpr int n_colors(Lattice<T> const& /*l*/) noexcept { return 2; }
 
     // Lazy per-site scratch, sized to nsites — shared by the LLR fast-path and by
     // any leaf `prep`/`s_full` that batches a transcendental (SineGordon). Public
