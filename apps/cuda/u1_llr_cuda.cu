@@ -1,9 +1,9 @@
 // LLR (Gaussian-penalty) with replica exchange for compact U(1) on the CUDA
 // backend. The GPU twin of u1_llr.cpp: same CLI + LLR schedule (NR warm-up → RM +
 // even/odd exchange), same param-swap output schema as phi4_llr_cuda. The gauge
-// windowed action is the generic device WindowedAction over a LinkLayout field —
-// two-pass (no fused s_full_and_force yet); the U(1) plaquette kernels
-// (gauge_u1.cuh) supply force + action.
+// windowed action is the generic device WindowedAction over a LinkLayout field,
+// using the fused s_full_and_force (one sincos device pass for both force and
+// action); the U(1) plaquette kernels (gauge_u1.cuh) supply it.
 //
 // Cold config θ = 0 is a valid identity link (abelian), so the generic
 // memset-0 cold_start is correct here — no group cold-start needed (that is the

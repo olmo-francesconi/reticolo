@@ -161,7 +161,8 @@ with the CUDA preset:
 cmake --preset linux-nvcc && cmake --build --preset linux-nvcc
 ```
 
-`apps/cuda/` has HMC, Metropolis and LLR reference apps for φ⁴, Bose gas and U(1)/SU(2)/SU(3).
+`apps/cuda/` has HMC, Metropolis and LLR reference apps for φ⁴, Bose gas and
+SU(2); U(1) and SU(3) currently ship LLR only.
 With no local GPU, the `tools/modal/` runner builds and runs on a cloud GPU —
 see [`docs/cuda_architecture.md`](docs/cuda_architecture.md).
 

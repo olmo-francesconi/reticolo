@@ -1,10 +1,10 @@
 // Generalized-observable LLR: reconstruct the density of states of an ARBITRARY
 // observable Q, not the action itself. Here we sample the φ⁴ scalar field but
 // window / adapt / exchange on the field amplitude Q = Σ_x φ(x)² (see
-// observable.hpp). It is the ordinary replica-exchange LLR driver `orch::llr::run`
-// — the ONLY change from apps/phi4_llr.cpp is the `Constraint` template argument
-// on `orch::llr::Replica`; the base action, the observable, the window and the
-// sampler are independent building blocks.
+// observable.hpp). It is the ordinary replica-exchange LLR driver
+// `orch::llr::Orchestrator` — the ONLY change from apps/phi4_llr.cpp is the
+// `Constraint` template argument on `orch::llr::Replica`; the base action, the
+// observable, the window and the sampler are independent building blocks.
 //
 // The window is  S_win = S_φ⁴ + a·Q + (Q − E_n)²/2δ² , so the converged per-replica
 // tilt a_n = d ln ρ/dQ|_{E_n} and ln ρ(Q) = ∫ a dQ (reconstructed in analyze.py).

@@ -15,7 +15,7 @@
 //   5. A `static_assert(updater::Updater<MyUpdater<…>>)` in a test (or at the
 //      app use site) proves it models the contract.
 //
-// The contract (updater/concepts.hpp): step() → {dH, accepted}, last_s_full(),
+// The contract (updater/concepts.hpp): step().acceptance(), last_s_full(),
 // rng(). No base class. Own your randomness the same way Hmc does — take the
 // family generator BY VALUE in the ctor and build a StreamSet — so chains are
 // reproducible and checkpoint/resume works through rng().
@@ -49,7 +49,7 @@ struct MyUpdaterSpec {
     // ──────────────────────────────────────────────────────────────────────────
 };
 
-// The step() return type — must expose `.dH` and `.accepted` (the concept).
+// The step() return type — must expose `.acceptance()` (the concept).
 // Reuse updater::HmcResult if it fits; otherwise a local struct like this.
 struct MyUpdaterResult {
     double dH     = 0.0;  // NOLINT(readability-identifier-naming) physics: ΔH

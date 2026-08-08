@@ -423,7 +423,7 @@ inline void sample_algebra_philox_range(T* p,
 // with the variance-½ momentum sampling. Pure per-range reduction worker — the
 // cross-range fold is applied by the caller. Blocked: T-precision lane
 // accumulators over k_b sites folded into the double total once per block, so a
-// fixed k_b-block partition (see reduce_blocks) is thread-invariant.
+// fixed k_b-block partition (see parallel_reduce) is thread-invariant.
 template <class T>
 [[gnu::always_inline]] inline double
 kinetic_range(T const* p, std::size_t stride, std::size_t base, std::size_t cnt) noexcept {

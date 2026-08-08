@@ -20,7 +20,8 @@ struct ScalarLayout {
 };
 
 // Gauge link field: ndim·nsites elements, direction-major (link (mu, x) at
-// flat index mu·nsites + x) — identical to the host LinkLattice<T> order, so a
+// flat index mu·nsites + x) — identical to the host MatrixLinkLattice<U1,T>
+// order (n_real_components == 1), so a
 // flat copy round-trips exactly via the raw-pointer copy_from_host/to_host.
 struct LinkLayout {
     [[nodiscard]] static long flat_count(DeviceTopology const& t) {
@@ -91,7 +92,7 @@ private:
 };
 
 // flat_size ADL overload — lets the unchanged integrator atoms loop over the
-// buffer the same way they do for Lattice<T> / LinkLattice<T>.
+// buffer the same way they do for Lattice<T> / MatrixLinkLattice<G,T>.
 template <class T, class Layout>
 [[nodiscard]] inline std::size_t flat_size(DeviceField<T, Layout> const& f) noexcept {
     return f.size();

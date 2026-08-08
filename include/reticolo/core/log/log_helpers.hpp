@@ -20,7 +20,7 @@ void act(Action const& a) {
 
 // Announce an algorithm — same shape as `act`, but the tag comes from the
 // algorithm class itself (`A::log_tag`) since each algorithm gets its own
-// 4-char tag (`hmc`, `metr`, `wolf`, …) for the per-step lines.
+// 4-char tag (`hmc`, `metr`, `repl`, …) for the per-step lines.
 template <class A>
 void algo(A const& a) {
     Entry e{Level::info, A::log_tag};

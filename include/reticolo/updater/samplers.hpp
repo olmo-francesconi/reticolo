@@ -12,7 +12,7 @@
 // business spelling. So the parameter is a TAG that names the updater once the
 // worker supplies the action:
 //
-//     orch::llr::Orchestrator<Action, FastRng>                            HMC, Omelyan2
+//     orch::llr::Orchestrator<Action, FastRng, updater::HmcSampler<>>     HMC, Omelyan2
 //     orch::llr::Orchestrator<Action, FastRng, updater::MetropolisSampler>
 //     orch::llr::Orchestrator<Action, FastRng, updater::HmcSampler<integ::Omelyan4>>
 //

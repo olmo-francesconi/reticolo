@@ -9,12 +9,13 @@
 //   4. Register: create include/reticolo/orch/<name>.hpp that #includes this and
 //      worker.hpp, then #include <reticolo/orch/<name>.hpp> in reticolo.hpp.
 //
-// A two-phase object over the physics-free spine: setup(out) wires up IO (opens
-// the per-worker series, logs the ensemble); run(...) drives the schedule via
+// A two-phase object over the physics-free spine: setup(out) plans threads,
+// BUILDS the workers from Spec, and wires up IO (opens the per-worker series,
+// logs the ensemble); run(...) drives the schedule via
 // `orch::parallel_workers` (the ONE concurrent primitive) and drains output
 // SERIALLY (HDF5 writes are not thread-safe — the orchestrator owns its loop).
-// The app builds the workers (it owns the parameter grid / geometry) and hands
-// them over by move, then stamps any /cfg attrs before setup().
+// The app supplies the Spec (parameter grid / geometry) and stamps any /cfg
+// attrs before setup().
 //
 // Depends only on `orch::Worker` + the spine — never on a specific action or
 // updater. Mirrors include/reticolo/orch/span/driver.hpp (the minimal example);

@@ -3,7 +3,7 @@
 A map of where reticolo spends compute and memory bandwidth, and how the
 data structures and trajectory loop are shaped — written as the groundwork
 for a CUDA backend. Read [`architecture.md`](architecture.md) first; this
-document assumes its vocabulary (`Lattice`, `Indexing`, `Hmc`, the action
+document assumes its vocabulary (`Lattice`, `Hmc`, the action
 concepts, LLR replicas).
 
 ## The one structural fact that drives everything
@@ -64,14 +64,12 @@ U·V + TA), revised up from an earlier under-count.
 ## Memory architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ Indexing  (immutable, pooled by shape via process-wide weak_ptr map)     │
-│   shape_[ndims] + strides_[ndims]                                        │
-│   next(s,μ) / prev(s,μ) computed from strides — no stored table          │
-│   (periodic wrap, closed-form; d ≤ 4; no parity / even-odd arrays)       │
-│   ── ONE per shape; shared by all sibling lattices via shared_ptr ──     │
-└──────────────────────────────────────────────────────────────────────────┘
-         ▲ shared_ptr              ▲                                     ▲
+Each field owns its geometry inline (no shared object, no shared_ptr, no pool):
+   shape_[ndims] + strides_[ndims]
+   next(s,μ) / prev(s,μ) computed from strides — no stored table
+   (periodic wrap, closed-form; d ≤ 4; no parity / even-odd arrays)
+   rebuilding a sibling's geometry from a shape is four multiplies
+
 ┌─────────────────┐   ┌─────────────────────────┐   ┌────────────────────────────────────────┐
 │ Lattice<T>      │   │ MatrixLinkLattice<U1,T> │   │ MatrixLinkLattice<G,T>                 │
 │ scalar field    │   │ U(1) links              │   │ SU(N) links                            │
@@ -84,9 +82,9 @@ U·V + TA), revised up from an earlier under-count.
 │   complex}      │
 └─────────────────┘
 
-HMC sibling buffers (share ONE Indexing, separate data arrays):
+HMC sibling buffers (same shape, separate data arrays):
    field U ── momentum P ── force F ── old_field (rollback snapshot)
-   (mom/force/old built from field.indexing(); reuse the pooled Indexing, no rebuild)
+   (mom/force/old built from field.shape(); geometry is four multiplies to rebuild)
 ```
 
 Layout facts that matter for CUDA:
@@ -98,7 +96,7 @@ Layout facts that matter for CUDA:
 - **SU(N) links are already SoA** (`[μ][2N²][nsites]`, each real component
   a contiguous nsites slab). This is the GPU-ideal layout — straight
   `cudaMemcpy` + coalesced access, no repacking.
-- **Neighbours are computed, not stored.** `Indexing::next/prev` derive the
+- **Neighbours are computed, not stored.** The field's `next`/`prev` derive the
   periodic wrap from the shape strides on both CPU and device — no index
   arrays to ship (BCs are periodic-only and unbranched, so the math is
   closed-form). Caveat: computing the wrap costs nothing in bandwidth but does

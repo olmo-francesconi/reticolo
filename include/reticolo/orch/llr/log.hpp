@@ -14,11 +14,11 @@ namespace reticolo::orch::llr {
 // Per-iteration row for an LLR phase (NR warm-up or RM sweep). Identical schema
 // across every LLR app — phase is the only non-numeric column.
 //
-// `acc` is the HMC acceptance over THIS iteration's trajectories. It is the knob
-// n_md is tuned against: the windowed action carries a stiff (Q−E_n)²/2δ² term
-// on top of the base action, so a trajectory length that is fine for the plain
-// action can be far past the integrator's stability limit here. Without it in
-// the row there is no way to size n_md from a run's own logs.
+// `acc` is the sampler's acceptance over THIS iteration's trajectories. Under
+// HMC it is the knob n_md is tuned against: the windowed action carries a stiff
+// (Q−E_n)²/2δ² term on top of the base action, so a trajectory length that is
+// fine for the plain action can be far past the integrator's stability limit
+// here. Without it in the row there is no way to size n_md from a run's own logs.
 // NOLINTNEXTLINE(readability-identifier-naming, bugprone-easily-swappable-parameters)
 inline void iter(std::string_view phase,
                  std::size_t k,

@@ -11,8 +11,9 @@ overlap free energy follow.
 Two-stage pipeline per μ:
 
 1. **Stage 1 — phase-quenched HMC** (`bose_gas_hmc`). Samples `exp(−S_R(μ))`,
-   recording the `S_I` time series per trajectory; its `(lo, hi)` percentiles
-   bracket the LLR window range.
+   recording the `S_I` time series per trajectory for the diagnostic
+   histogram; the LLR window range is set independently (fixed in
+   intensive units S_I/V, see `run.sh`).
 2. **Stage 2 — complex LLR** (`bose_gas_llr`) over `[E_min, E_max]` with auto-δ
    for ~30 replicas. Reconstructs `ln ρ(S_I)` in the phase-quenched ensemble.
 3. **Diagnostics** (`analyze.py`). Per-μ LLR-vs-HMC overlays of `ln ρ` / `ρ` /

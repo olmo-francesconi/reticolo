@@ -13,9 +13,8 @@ namespace reticolo::action {
 // Every action is a plain struct. The HMC updater needs exactly two members:
 // the full action total and the molecular-dynamics force. Both are
 // field-agnostic — they take the action's `Field` (a `Lattice<F>` for site
-// actions, a `LinkLattice<F>` / `MatrixLinkLattice<G,F>` for gauge actions)
-// and never mention a site index — so one concept set covers scalar and gauge
-// alike.
+// actions, a `MatrixLinkLattice<G,F>` for gauge actions) and never mention a
+// site index — so one concept set covers scalar and gauge alike.
 //
 // A LOCAL updater (updater::Metropolis) needs one thing more: the change in S
 // under a single-element move. `LocalAction` below covers site, complex and link

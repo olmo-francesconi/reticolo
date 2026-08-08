@@ -4,8 +4,8 @@
 #
 # Two-stage pipeline per μ, mirroring examples 04 and 05:
 #   1. Phase-quenched HMC sampling exp(−S_R(μ)). Records the time series of
-#      S_I per trajectory; the empirical (lo, hi) percentiles of that series
-#      bracket the LLR window range.
+#      S_I per trajectory for the diagnostic histogram — the LLR window is
+#      set independently of it (fixed in intensive units, see below).
 #   2. LLR over [E_min, E_max] with auto-δ to give ~30 replicas. Reconstructs
 #      ln ρ(S_I) in the phase-quenched ensemble.
 #

@@ -38,7 +38,7 @@ samples per second.
 
 - The three pluggable integrators (Leapfrog, Omelyan2, Omelyan4) are
   selected purely as a type parameter on one `HasFusedKick` HMC chain, so a
-  single ~150-LOC C++ binary per integrator drives the same observable record.
+  single ~100-LOC C++ binary per integrator drives the same observable record.
 - The autocorrelation utility `examples/_common/autocorr.py` (FFT + Madras-
   Sokal windowing) is small (~110 LOC) and reusable from any future example.
 - The "right" integrator depends on what you want to measure: Σφ² and S have
@@ -65,7 +65,7 @@ python examples/02_phi4_algorithm_tuning/plot.py
 ## Run it
 
 Configurable via environment variables on `run.sh`: `L`, `NDIM`, `KAPPA`,
-`LAMBDA`, `N_THERM`, `N_PROD`, `SEED`, `JOBS`.
+`LAMBDA`, `N_THERM_SHARED`, `N_PROD`, `SEED`, `JOBS`.
 
 ## What you get
 

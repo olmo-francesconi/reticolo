@@ -38,7 +38,7 @@ void print_row(char const* field, char const* rng, std::size_t doubles, double w
 //  Lattice<double>           → normal_fill
 //  Lattice<complex<double>>  → normal_fill on reinterpret_cast<double*>
 //  Lattice<array<double,N>>  → per-element rng.normal()
-//  LinkLattice<double>       → normal_fill
+//  gauge links (raw buffer) → normal_fill
 //  MatrixLinkLattice<G,T>    → G::sample_algebra_slab per direction
 
 template <class Rng>
@@ -99,7 +99,7 @@ void bench_rng_for(char const* rng_name) {
         print_row(field_name, rng_name, k_sigma_n * buf.size(), t);
     }
 
-    // LinkLattice<double> at 3D L=24 and 4D L=8
+    // gauge links (raw buffer) at 3D L=24 and 4D L=8
     for (auto const& shape :
          std::array<std::vector<std::size_t>, 2>{{{24, 24, 24}, {8, 8, 8, 8}}}) {
         std::size_t n = 1;

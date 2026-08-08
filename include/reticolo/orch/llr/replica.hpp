@@ -35,10 +35,10 @@ struct ReplicaStats {
 // is copied at construction so any mutable per-action state stays
 // per-replica — required for OpenMP parallelism over replicas.
 //
-// One template for both scalar and gauge LLR: `Field` defaults to
-// `Lattice<T>` so existing scalar callers compile unchanged; gauge users
-// pass `LinkLattice<T>` explicitly. Window/tilt math lives in
-// WindowedAction; the sampler handles the field-type dispatch via flat_size.
+// One template for both scalar and gauge LLR: the field type comes from the
+// ACTION (`Action::field_type`), so a gauge replica spells the same thing a
+// scalar one does. Window/tilt math lives in WindowedAction; the sampler
+// handles the field-type dispatch via flat_size.
 //
 // THE SAMPLER IS A TEMPLATE PARAMETER — an `updater::` sampler tag, in the slot
 // the MD integrator used to hold, and with NO default: which updater drives a run
@@ -212,7 +212,7 @@ public:
 
     [[nodiscard]] field_type& field() noexcept { return field_; }
     [[nodiscard]] field_type const& field() const noexcept { return field_; }
-    // The replica's randomness is owned by its Hmc (one site stream per slab —
+    // The replica's randomness is owned by its sampler (one site stream per slab —
     // one stream inside the replica team — plus a driver for serial draws).
     [[nodiscard]] StreamSet<Rng>& rng() noexcept { return sampler_.rng(); }
     [[nodiscard]] windowed_action_type const& windowed_action() const noexcept { return windowed_; }

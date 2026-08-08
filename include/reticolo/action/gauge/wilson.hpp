@@ -35,8 +35,8 @@ namespace reticolo::action {
 // only the group constants (`n_color`, `name`) and the HMC algebra hooks; the
 // Wilson force lives here in the action layer, not in the group math.
 //
-// At N=1 with U=exp(iθ) this reduces line-for-line to `CompactU1` — the
-// bit-identity is the design point (validated in the physics suite).
+// At N=1 with U=exp(iθ) this reduces line-for-line to the plain abelian
+// plaquette action — bit-identity with that formula was the design point.
 
 template <math::group::GaugeGroup G, class T = double>
 struct Wilson : GaugeAction<Wilson<G, T>> {
@@ -85,8 +85,8 @@ struct Wilson : GaugeAction<Wilson<G, T>> {
     }
 
     // `force_into` (invoked by the base `compute_force`) hands the group's Wilson
-    // kernels the β/N prefactor. U(1) uses the per-plaquette sin scatter that
-    // matches CompactU1 bit-for-bit; SU(N) uses the link-centric staple + TA[U·V].
+    // kernels the β/N prefactor. U(1) uses the per-plaquette sin scatter; SU(N)
+    // uses the link-centric staple + TA[U·V].
     void force_into(field_type const& U, field_type& force) const noexcept {
         auto const beta_over_n_dbl = static_cast<double>(beta / static_cast<T>(G::n_color));
         // Each group's compute_force owns its own threading — SU(N) worksplit the

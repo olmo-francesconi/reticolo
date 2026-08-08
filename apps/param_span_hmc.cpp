@@ -1,9 +1,10 @@
 // Parameter-span orchestration: one binary that runs many phi^4 HMC chains
 // concurrently, each pinned to a different hopping parameter kappa across
 // [kappa_min, kappa_max]. Thin app over the generic `orch::span` orchestrator —
-// it builds the kappa grid + workers and stamps /cfg, then hands the schedule to
-// `span::run`. No LLR, no window, no exchange; an in-process replacement for an
-// outer bash sweep, writing one HDF5 file.
+// it builds the kappa grid (`Spec::points`) and stamps /cfg, then calls
+// `setup()`/`run()`, which build the workers and drive the schedule. No LLR, no
+// window, no exchange; an in-process replacement for an outer bash sweep,
+// writing one HDF5 file.
 //
 // Output schema:
 //  /run@*, /vars@*        — reproducibility metadata + resolved flags

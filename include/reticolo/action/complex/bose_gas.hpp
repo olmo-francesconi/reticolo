@@ -56,9 +56,9 @@ template <class T>
 //    per site. In Wirtinger notation that combination is F = -2 * dS/dphi*.
 //  * At mu = 0 the action is O(2)-symmetric in (phi_1, phi_2).
 //
-// All the per-site arithmetic lives in `detail/bose_gas_formula.hpp` (shared
-// with the CUDA device functors); the loop shells, the time-slab imag sweeps,
-// the combined kick and the caches come from `ComplexAction`. This
+// All the per-site arithmetic lives in `complex/formula/bose_gas_formula.hpp`
+// (shared with the CUDA device functors); the loop shells, the time-slab imag
+// sweeps, the combined kick and the caches come from `ComplexAction`. This
 // struct is the couplings + the four kernel binds + the cosh(mu) memo.
 
 template <class T = double>

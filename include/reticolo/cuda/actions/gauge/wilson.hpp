@@ -24,7 +24,8 @@
 //
 // U(1) is abelian and does NOT use the matrix path: the Wilson<U1> specialization
 // below reuses the dedicated angle kernels (gauge_u1.cuh) on a 1-angle link,
-// identical to CompactU1 (n_color=1 ⇒ β/N = β). Keeping the abelian kernels
+// the plaquette reducing to the angle form (n_color=1 ⇒ β/N = β). Keeping the
+// abelian kernels
 // separate from gauge_sun.cuh is deliberate — a future non-SU(N) family (e.g. a
 // symplectic group) plugs in as its own kernel set + functor, not a contortion of
 // the generic matrix path.
@@ -120,7 +121,7 @@ struct device_functors<action::Wilson<G, T>> {
 // so it wins for G = U1). Reuses the dedicated angle kernels (gauge_u1.cuh) on a
 // 1-angle LinkLayout link, NOT the matrix path: a U(1) link is a phase, the drift
 // is additive (θ ← θ + dt·p, the generic axpy atom), and the momentum is one iid
-// normal per link. Bodies mirror device_functors<CompactU1> (n_color = 1).
+// normal per link. Bodies are the abelian angle form (n_color = 1).
 template <class T>
 struct device_functors<action::Wilson<math::group::U1, T>> {
     static void compute_force(action::Wilson<math::group::U1, T> const& a,

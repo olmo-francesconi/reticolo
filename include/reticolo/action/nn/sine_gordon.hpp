@@ -25,7 +25,8 @@ namespace reticolo::action {
 // The per-site transcendental is the only reason this doesn't reduce to the
 // plain NNAction kernels: on the f64 hot path sin(phi) is Sleef-batched into
 // the shared scratch by `prep`, and cos(phi) is batched inside the bespoke
-// `s_full`. The physics still lives entirely in `detail/sine_gordon_formula.hpp`.
+// `s_full`. The physics still lives entirely in
+// `nn/formula/sine_gordon_formula.hpp`.
 
 template <class T = double>
 struct SineGordon : NNAction<SineGordon<T>, T> {

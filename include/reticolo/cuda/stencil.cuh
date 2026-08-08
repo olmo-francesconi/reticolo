@@ -2,8 +2,8 @@
 
 // Generic scalar STENCIL skeleton — nvcc-only (.cuh; included from .cu).
 //
-// One __global__ template, parameterized by an action functor F (see the
-// protocol in test_functors.hpp). Thread-per-site: each thread copies the POD
+// One __global__ template, parameterized by an action functor F (see e.g.
+// Phi4ForceFunctor in actions/nn/phi4.hpp). Thread-per-site: each thread copies the POD
 // functor into registers, streams all 2d nearest neighbours through
 // f.accumulate(mu, nbr), and writes f.finalize() to out[i]. This is the
 // access policy for the MD force / fused kick — every bond seen twice

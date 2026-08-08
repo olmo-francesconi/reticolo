@@ -1,11 +1,13 @@
-// Phase-quenched HMC for the 4D relativistic lattice Bose gas at finite chemical
-// potential, on the CUDA backend. The GPU twin of bose_gas_hmc.cpp: samples the
-// real (phase-quenched) part S_R = base.s_full and records BOTH S_R and the
-// imaginary observable S_I = base.s_imag per measurement — the reference the
-// complex-LLR run reconstructs. The complex field is cplx<double> (2 reals/site),
-// flat-copy-compatible with the host Lattice<std::complex<double>>.
+// Phase-quenched local Metropolis for the 4D relativistic lattice Bose gas at
+// finite chemical potential, on the CUDA backend. The GPU twin of
+// bose_gas_metropolis.cpp: samples the real (phase-quenched) part
+// S_R = base.s_full by a checkerboard sweep instead of a trajectory, and records
+// BOTH S_R and the imaginary observable S_I = base.s_imag per measurement — the
+// reference the complex-LLR run reconstructs. The complex field is
+// cplx<double> (2 reals/site), flat-copy-compatible with the host
+// Lattice<std::complex<double>>.
 //
-// Output schema (the observable series match bose_gas_hmc.cpp so
+// Output schema (the observable series match bose_gas_metropolis.cpp so
 // examples/05_bose_gas_llr/analyze.py reads it unchanged):
 //  /run@*, /vars@*        — Writer reproducibility metadata + resolved flags
 //  /therm/stats/s         — S_R per thermalisation block
@@ -15,15 +17,16 @@
 //
 // TWO DELIBERATE DIFFERENCES from the CPU twin, both consequences of host-free
 // execution rather than oversights:
-//   * `--block`, not the CPU's `--meas_every`. Trajectories replay inside one
-//     CUDA graph with no host sync, so this is the count BETWEEN syncs — a loop
+//   * `--block`, not the CPU's `--meas_every`. Sweeps replay inside one CUDA
+//     graph with no host sync, so this is the count BETWEEN syncs — a loop
 //     stride, not a measurement filter. Measurements happen once per block, so
 //     the series hold n_prod/block rows, not n_prod.
-//   * No per-trajectory `/prod/stats/dH` or `/prod/stats/accepted`. `run(k)`
-//     overwrites a single 4-double energy buffer per trajectory, so only the
-//     block's last trajectory survives; emitting them per trajectory would need
-//     a sync per trajectory — precisely the floor this backend exists to
-//     remove. The cumulative acceptance is written as an attribute instead.
+//   * No per-sweep `/prod/stats/acceptance` series (the CPU twin's
+//     `step().acceptance()` per sweep). `cuda::Metropolis` carries {S, accepted,
+//     attempts} incrementally on the device across every sweep in the block;
+//     reading a per-sweep value would need a sync per sweep — precisely the
+//     floor this backend exists to remove. The cumulative acceptance over the
+//     whole run is written as an attribute instead.
 
 #include <reticolo/cuda/cuda.hpp>
 #include <reticolo/reticolo.hpp>

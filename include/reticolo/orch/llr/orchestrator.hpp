@@ -183,8 +183,9 @@ inline void local_poly_fit(std::vector<double> const& e,
 // to something wrong.
 //
 // The schedule, the ladder, warm-up, NR/RM, exchange and checkpointing are shared
-// verbatim: nothing here reaches past `updater::Updater`. Only `Spec` carries
-// both samplers' knobs (tau/n_md vs sigma) and `sampler_spec_()` picks.
+// verbatim: nothing here reaches past `updater::Updater`. `Spec::sampler` carries
+// only the chosen sampler's own knobs (tau/n_md for HMC, sigma for Metropolis) —
+// never both — and `sampler_spec_()` resolves the team size into it.
 template <class Action, class Rng, class Sampler, class Constraint = void>
 class Orchestrator {
 public:

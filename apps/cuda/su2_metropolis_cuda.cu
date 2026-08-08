@@ -1,9 +1,9 @@
-// SU(2) Wilson gauge HMC on the CUDA backend. The GPU twin of su2_hmc.cpp: same
-// physics and flags, the trajectory for-loop plainly here in main(). A .cu
-// compiled by nvcc — cuda::Hmc over a MatrixLayout<SU2> field for the device
-// work, io::Writer (HDF5 PIMPL'd, never seen by nvcc) for output. Trajectories
-// run host-free in blocks of `block`; only the scalar action crosses PCIe,
-// and ⟨P⟩ = 1 − S_W/(β·n_plaq) is derived in-app.
+// Local Metropolis for SU(2) Wilson gauge theory on the CUDA backend. The GPU
+// twin of su2_metropolis.cpp: same physics and flags, the sweep for-loop plainly
+// here in main(). A .cu compiled by nvcc — cuda::Metropolis over a
+// MatrixLayout<SU2> field for the device work, io::Writer (HDF5 PIMPL'd, never
+// seen by nvcc) for output. Sweeps run host-free in blocks of `block`; only the
+// scalar action crosses PCIe, and ⟨P⟩ = 1 − S_W/(β·n_plaq) is derived in-app.
 //
 // Output schema:
 //  /run@*, /vars@*        — Writer reproducibility metadata + resolved flags
@@ -14,15 +14,16 @@
 //
 // TWO DELIBERATE DIFFERENCES from the CPU twin, both consequences of host-free
 // execution rather than oversights:
-//   * `--block`, not the CPU's `--meas_every`. Trajectories replay inside one
-//     CUDA graph with no host sync, so this is the count BETWEEN syncs — a loop
+//   * `--block`, not the CPU's `--meas_every`. Sweeps replay inside one CUDA
+//     graph with no host sync, so this is the count BETWEEN syncs — a loop
 //     stride, not a measurement filter. Measurements happen once per block, so
 //     the series hold n_prod/block rows, not n_prod.
-//   * No per-trajectory `/prod/stats/dH` or `/prod/stats/accepted`. `run(k)`
-//     overwrites a single 4-double energy buffer per trajectory, so only the
-//     block's last trajectory survives; emitting them per trajectory would need
-//     a sync per trajectory — precisely the floor this backend exists to
-//     remove. The cumulative acceptance is written as an attribute instead.
+//   * No per-sweep `/prod/stats/acceptance` series (the CPU twin's
+//     `step().acceptance()` per sweep). `cuda::Metropolis` carries {S, accepted,
+//     attempts} incrementally on the device across every sweep in the block;
+//     reading a per-sweep value would need a sync per sweep — precisely the
+//     floor this backend exists to remove. The cumulative acceptance over the
+//     whole run is written as an attribute instead.
 
 #include <reticolo/cuda/cuda.hpp>
 #include <reticolo/reticolo.hpp>

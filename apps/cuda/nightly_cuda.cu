@@ -10,7 +10,8 @@
 //   * SU(2) plaquette at beta, CPU vs GPU.
 //
 // Exits non-zero if any check fails. Built only with RETICOLO_ENABLE_CUDA;
-// driven on a GPU host by tools/cuda_build_test.sh with RETICOLO_NIGHTLY=1.
+// driven on a GPU host via tools/modal/app.py (`run --app nightly_cuda`), the
+// Modal runner for the shared linux-nvcc preset.
 
 #include <reticolo/cuda/cuda.hpp>
 #include <reticolo/reticolo.hpp>

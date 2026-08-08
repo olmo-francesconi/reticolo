@@ -7,7 +7,7 @@
 //     #include <reticolo/cuda/cuda.hpp>
 //
 // and gets the whole device stack: DeviceField (the host-side handle), the
-// generic DeviceAction<HostAction,Field> + Hmc<DAct,Integ,Field>, on-device
+// generic DeviceAction<HostAction,Field> + Hmc<DAct,Integ>, on-device
 // reductions, and the device-functor adapters for every supported action +
 // gauge group. The per-phase device-vs-CPU validation gates are native .cu
 // Catch2 tests under tests/cuda/ (test_cuda_<action>.cu); they include the

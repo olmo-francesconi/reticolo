@@ -199,8 +199,9 @@ io::Writer out = app::open_writer(p, cf, argc, argv);  // log::start + Writer, o
 `start` creates the workspace folder, opens the main log file
 `<workspace>/<stem>.log` (stem = the `--out` name minus extension — sweeps
 sharing a workspace don't clobber each other) and mirrors every entry into
-it, then prints the banner. LLR apps pass `/*replicas=*/true` to add the
-run-id column and per-replica `<stem>.<rNNN>.log` files.
+it, then prints the banner. LLR apps pass `/*replicas=*/true` to add a
+run-id column to scoped lines — everything still lands in the one main log,
+there are no separate per-replica files.
 
 Suppress everything with `log::off()`; opt out of a single algorithm step
 with `log::Mode::silent` (e.g. `hmc.step(log::Mode::silent)` during
@@ -499,8 +500,9 @@ binary name + expected paths.
 ## Conventions
 
 - Seed RNGs explicitly. Most tests use `FastRng{42}` or similar.
-- Use `Lattice<T> force{phi.indexing()}` (sibling), not
-  `Lattice<T> force{phi.shape()}` (allocates a fresh `Indexing`).
+- Build sibling buffers from `shape()` — `Lattice<T> force{phi.shape()}` — not
+  a fresh literal shape; it keeps the sibling's geometry byte-identical to
+  `phi`'s with no separate object to share or dangle.
 - Reset `phi[x] = old;` after a single-site FD probe inside a loop.
 - Central diff noise floor with ε = 1e-4 is ~1e-8, not 1e-12 — don't
   over-tighten the tolerance.

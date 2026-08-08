@@ -26,8 +26,8 @@
 // TU that NAMES the integrator tags (updater::integ::Leapfrog / Omelyan2 /
 // Omelyan4) — to instantiate the GENERIC integrator over DeviceField and prove
 // reuse. That is the opposite of integrator-specific kernel code. The gate
-// (tests/cuda/check_no_integrator_kernels.cmake) greps the kernel sources and
-// excludes this probe by name.
+// (tests/cuda/check_no_integrator_kernels.cmake) only greps include/reticolo/cuda/*.cuh,
+// so this test TU is out of scope entirely, not excluded by name.
 
 namespace reticolo::cuda {
 

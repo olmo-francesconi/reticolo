@@ -2,9 +2,9 @@
 // cross-replica local-quadratic smoother shrunk into each iterate. See
 // orch::llr::Orchestrator::run_smoothed.
 //
-// Mirrors apps/u1_llr.cpp: same action, sampler, geometry, exchange and
-// HDF5 schema; the only differences are run_smoothed (vs run) and four extra
-// CLI knobs controlling the smoother and shrinkage schedule.
+// Mirrors u1_llr.cpp (this directory): same action, sampler, geometry,
+// exchange and HDF5 schema; the only differences are run_smoothed (vs run)
+// and four extra CLI knobs controlling the smoother and shrinkage schedule.
 
 #include <reticolo/reticolo.hpp>
 

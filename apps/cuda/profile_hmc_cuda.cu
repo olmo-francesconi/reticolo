@@ -11,8 +11,8 @@
 //
 // Links reticolo::cuda only (no umbrella/io) — kernel names alone give the nsys
 // breakdown (stencil_kernel<Phi4ForceFunctor>, su_plaq_force_kernel<SU3Device>,
-// reduce_sumsq_*, axpy_*, ...). Args: --action=phi4|su3 --size=L [--ndim=4]
-// [--n_md=10] [--iters=30] [--force-only].
+// reduce_sumsq_*, axpy_*, ...). Args: --action=phi4|phi4f32|su3 --size=L
+// [--ndim=4] [--n_md=10] [--iters=30] [--force-only] [--lb-sweep].
 
 #include <reticolo/action/gauge/wilson.hpp>
 #include <reticolo/action/nn/phi4.hpp>

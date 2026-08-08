@@ -22,7 +22,7 @@
 //
 // A leaked FILE-BOUND id (dataset, group, datatype, attribute) matters more than
 // its bytes: HDF5 keeps the file object alive until every id derived from it is
-// released, so the file never really closes. `detail::HidGuard`
+// released, so the file never really closes. `impl::HidGuard`
 // (src/io/hid_guard.hpp) is the fix.
 //
 // SCOPE, stated honestly. This counts live file-bound ids with

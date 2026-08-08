@@ -9,7 +9,7 @@
 //
 //  Phi4         neighbour sum (2d) + polynomial (~7)             ≈ 2d + 7
 //  SineGordon   neighbour sum (2d) + 1 sin + ~3 polynomial      ≈ 2d + 3 + k_sin
-//  CompactU1    plaquette-centric scatter; each plaquette costs
+//  Wilson<U1>   plaquette-centric scatter; each plaquette costs
 //               3 adds (plaq angle) + 1 sin + 1 mul + 4 link
 //               scatters (4 mul-add) and touches 4 links →
 //               amortised per link: (d-1)·(3 + k_sin + 9)/2
@@ -197,7 +197,7 @@ int main() {
                       k_n_md);
         }
 
-        // CompactU1 (gauge).
+        // Wilson<U1> (gauge).
         {
             MatrixLinkLattice<math::group::U1, double> theta{shape_g};
             updater::Hmc hmc{u1, theta, FastRng{42}, {.tau = k_tau, .n_md = k_n_md}, GaugeInteg{}};

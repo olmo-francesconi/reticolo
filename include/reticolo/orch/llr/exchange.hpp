@@ -23,10 +23,10 @@ namespace reticolo::orch::llr {
 // mode A, S_I in complex mode B — the same observable `a` couples to.
 //
 // On accept, the two Lattice objects are swapped in place. Each replica's
-// HMC holds a `Lattice<F>&` bound to its own Lattice member's address;
+// sampler holds a `Lattice<F>&` bound to its own Lattice member's address;
 // std::swap on the Lattice values moves the underlying `std::vector` and
-// `std::shared_ptr<Indexing>` (both O(1)) without changing those addresses,
-// so the HMC references stay valid.
+// its inline geometry (both O(1)) without changing those addresses,
+// so the sampler's references stay valid.
 //
 // The app owns the sweep loop (even/odd alternation, parity choice, etc.).
 template <class Replica, class Rng>

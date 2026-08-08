@@ -207,7 +207,7 @@ struct gauge_local_ops<math::group::U1> {
 
 // The five sites a link's staple reads, as flat indices. Every one is a hoisted
 // ROW BASE plus an in-row x offset — no division survives into the inner loop.
-// `Indexing::next`/`prev` compute a coordinate with an integer divide per call,
+// The field's `next`/`prev` compute a coordinate with an integer divide per call,
 // which is fine for a cold path and ruinous here: an SU(3) 4D link would pay ~13
 // of them per site. Row bases are derived once per row instead, and the only
 // x-dependent shift is the ±1 wrap on the contiguous axis.

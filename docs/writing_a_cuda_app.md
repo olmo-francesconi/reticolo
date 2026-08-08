@@ -140,8 +140,8 @@ annotated `RETICOLO_HD`. To run it on the GPU:
 1. Add `include/reticolo/cuda/actions/<family>/<name>.hpp`: device functors whose
    `finalize()` calls the *same* `action::formula::<name>_*_site<T>(...)` formula,
    plus a `device_functors<action::<Name><T>>` trait wiring them to the site/
-   plaquette launchers (copy `actions/phi4.hpp` for a scalar, `actions/wilson.hpp`
-   for a gauge action).
+   plaquette launchers (copy `actions/nn/phi4.hpp` for a scalar,
+   `actions/gauge/wilson.hpp` for a gauge action).
 2. Re-export it from `include/reticolo/cuda/cuda.hpp`.
 3. Add a native `.cu` Catch2 test `tests/cuda/test_cuda_<name>.cu` (copy an
    existing one) and register it with `reticolo_add_cuda_test(...)` in

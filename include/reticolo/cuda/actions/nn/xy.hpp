@@ -93,7 +93,7 @@ private:
 // the two candidate values genuinely aggregate to different sums. It keeps the
 // 2d raw neighbours in registers instead — the device's answer to the host's
 // fold-once-per-candidate. Both compute the same thing; only where the
-// per-candidate work happens differs. k_max_nbr = 2*4, the Indexing dimension cap.
+// per-candidate work happens differs. k_max_nbr = 2*4, the lattice dimension cap.
 template <class T>
 class XyDsFunctor {
 public:

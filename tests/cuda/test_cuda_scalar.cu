@@ -24,7 +24,7 @@
 // path call the SAME shared HD formula (action::formula::*), so they must agree —
 // to roundoff for the polynomial Phi6, to a bounded tolerance for the
 // transcendental SineGordon / XY (device sin/cos vs Sleef/libm). This TU runs
-// both sides and compares, mirroring phi4_probe.cu.
+// both sides and compares, mirroring test_cuda_phi4.cu.
 
 namespace reticolo::cuda {
 

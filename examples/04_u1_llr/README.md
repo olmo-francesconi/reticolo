@@ -1,7 +1,7 @@
 # 04 — Compact U(1) gauge density of states with LLR + replica exchange
 
 End-to-end demo of the gauge stack (`gauge/`) on 4D compact U(1) Wilson
-gauge theory. Mirrors example 04 (φ⁴ scalar) but on link fields.
+gauge theory. Mirrors example 03 (φ⁴ scalar) but on link fields.
 
 ## What this example does
 
@@ -62,7 +62,7 @@ Outputs in `examples/04_u1_llr/results/`:
 * `range_beta<b>.txt`— `E_min E_max delta` chosen for the LLR run
 * `llr_beta<b>.h5`   — LLR slopes per replica + exchange stats
 
-And `rho_hmc_vs_llr.png` next to the script: per-β subplot, HMC histogram
+And `rho_hmc_vs_llr.pdf` next to the script: per-β subplot, HMC histogram
 markers + aligned LLR `ln ρ(S)` line on top; `a_n` convergence beneath.
 
 ## Knobs (env vars)
@@ -93,16 +93,16 @@ raise `L` and `N_RM` and lower `DELTA`.
 
 ## Paper-replication run
 
-`run_paper.sh` targets the bulk first-order transition shown in
+`run_critical.sh` targets the bulk first-order transition shown in
 [Langfeld, Lucini, Pellegrini, Rago, *EPJC* 76:306 (2016)](https://arxiv.org/abs/1509.08391)
-— `L=6`, `ndim=4`, three β values straddling β_c ≈ 1.0106(18). Heavier
+— `L=6`, `ndim=4`, a single β = 1.002 point near β_c ≈ 1.0106(18). Heavier
 sample counts than the quick demo so the LLR can resolve the double-peak /
-shoulder structure of `ρ(E_p)` at the transition. Approx wall time on 3
-cores at the shipped defaults: ~1.5 h.
+shoulder structure of `ρ(E_p)` at the transition. Approx wall time on 8
+cores at the shipped defaults: ~15 min.
 
 ```bash
-bash examples/04_u1_llr/run_paper.sh
-python3 examples/04_u1_llr/analyze.py
+bash examples/04_u1_llr/run_critical.sh
+python3 examples/04_u1_llr/analyze_critical.py
 ```
 
 For a cleaner double peak — what's actually shown in the paper figures — raise

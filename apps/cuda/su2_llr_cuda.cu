@@ -1,8 +1,9 @@
 // LLR (Gaussian-penalty) with replica exchange for SU(2) Wilson gauge theory on
 // the CUDA backend. The GPU twin of su2_llr.cpp: same CLI + LLR schedule, same
 // param-swap output schema as phi4_llr_cuda / u1_llr_cuda. The gauge windowed
-// action is the generic device WindowedAction over a MatrixLayout<SU2> field
-// (two-pass; no fused s_full_and_force yet).
+// action is the generic device WindowedAction over a MatrixLayout<SU2> field,
+// using the fused s_full_and_force (one staple gather for both force and
+// action, skipping the redundant plaquette pass).
 //
 // Cold start = SU(2) identity via the trait's set_cold (the zero the default
 // buffer holds is not a group element). No hot-start: β≈2.3 is smooth confined

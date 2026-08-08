@@ -5,7 +5,7 @@
 // The gauge counterpart of stencil.cuh / reduce_fwd.cuh: a thread-per-LINK force
 // (a gather, never the CPU scatter) and a thread-per-SITE plaquette energy. The
 // link field is direction-major (link (mu, x) at flat index mu·nsites + x), the
-// same order as the host LinkLattice<T>.
+// same order as the host MatrixLinkLattice<U1,T> (n_real_components == 1).
 
 #include <reticolo/action/gauge/formula/wilson_u1_formula.hpp>
 #include <reticolo/cuda/check.hpp>

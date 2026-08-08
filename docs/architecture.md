@@ -49,37 +49,47 @@ all in scope.
 
 ### `Lattice<T>`
 
-Value semantics: copy = deep-copy the field, share the `Indexing`. Move is
-cheap. The element type `T` is whatever the action needs — `double` for
-real scalar fields, `std::complex<double>` for charged scalars (BoseGas).
+Value semantics: copy = deep-copy, both data and geometry. Move is cheap. The
+element type `T` is whatever the action needs — `double` for real scalar fields,
+`std::complex<double>` for charged scalars (BoseGas).
 
 ```cpp
-Lattice<double>                phi{{16, 16, 16}};        // 3D, fresh Indexing from pool
-Lattice<double>                momentum{phi.indexing()}; // sibling: share Indexing
-Lattice<std::array<double, 3>> on3{{20, 20, 20}};        // O(3)
+Lattice<double>                phi{{16, 16, 16}};   // 3D
+Lattice<double>                momentum{phi.shape()};  // sibling: same shape, fresh storage
+Lattice<std::array<double, 3>> on3{{20, 20, 20}};   // O(3)
 ```
 
-The sibling constructor lets HMC stash momentum, force, and rollback
-buffers sharing one `Indexing` instead of three. It is the most
-performance-sensitive shortcut in the library.
+### Geometry lives in the field
 
-### `Indexing` + pool
+Shape, packed strides and site count are the field's own state, through the
+private base `impl::LatticeGeometry` — so `shape()`, `ndims()`, `nsites()`,
+`next(s, mu)` and `prev(s, mu)` are members of the field, and no geometry object
+appears in any signature. `shape()` returns a `std::span<std::size_t const>` over
+extents that live inline (build a shape with `std::vector<std::size_t>`; read one
+back through the span).
 
-`Indexing` holds the shape it was built from and the corresponding strides, and
-computes the neighbours `next(s, mu)` / `prev(s, mu)` on the fly from those
-strides — no stored table (the periodic wrap is closed-form, `ndims ≤ 4`). It's
-immutable and cheaply shared, so the library keeps a process-wide pool keyed on
-`shape`:
+This used to be a separate `Indexing` class, immutable and shared between
+same-shape fields through a `shared_ptr` out of a process-wide `weak_ptr` pool.
+That was worth it while `Indexing` carried neighbour **tables** — `nsites·d·2·8`
+bytes, tens of MB at production volumes. Those are gone: the periodic wrap is
+closed-form on the strides (`ndims ≤ 4`) and the hot nests roll their own
+row-nested offsets. What remained was 64 bytes reached through a mutex, an
+atomic refcount and a pointer chase, saving 240 bytes across HMC's four buffers
+against 40 MB of payload each — so the pool, the sharing and the class went, and
+a sibling buffer is now four multiplies:
 
 ```cpp
-auto idx = Indexing::acquire(shape);   // hits pool, builds once
+Lattice<double> mom{phi.shape()};   // HMC's mom / force / old_field
 ```
 
-The pool holds `weak_ptr`s; entries die when nobody holds them. Lattices
-with the same shape automatically share.
+Two consequences worth knowing. Sibling fields have no lifetime coupling at all
+(nothing is shared, so nothing can dangle). And "same geometry" is now a value
+question — `a.same_geometry(b)` — where it used to be answered by pointer
+identity on the pooled object, which was only ever a proxy for it.
 
 Boundary conditions are always periodic. `next` / `prev` are unbranched.
-Open / antiperiodic BCs are out of scope.
+Open / antiperiodic BCs are out of scope, and would land as a separate geometry
+base rather than a runtime flag.
 
 ### `FastRng` and the RNG families
 
@@ -341,7 +351,7 @@ struct with a static `run(...)`; the matching `inline constexpr` tag is a
 one-liner.
 
 HMC keeps its momentum, force, and rollback buffers as sibling lattices
-of the field — one shared `Indexing`, three lattices.
+of the field — same shape, three lattices.
 
 ## IO
 
@@ -404,7 +414,7 @@ Two tiers, and a family helper is **all-or-nothing**:
 - one helper per algorithm family for the run-control block that family shares
   verbatim: `hmc_run_flags` + `resume_or_start` (`tau`, `n_md`, `n_therm`,
   `n_prod`, `meas_every`, `checkpoint_every`, `resume`) for the 16 HMC apps,
-  `llr_run_flags` for the 8 LLR apps. Either every app in the family uses it or
+  `llr_run_flags` for the 10 LLR apps. Either every app in the family uses it or
   it does not exist — HMC ran 18 apps without one, which is how `--resume` came
   to be implemented in exactly one of them.
 
@@ -457,8 +467,9 @@ OpenMP-aware logger. Severity = sigil (`·` debug, `┃` info, `⚠` warn,
 creates the workspace folder, opens the main log file
 `<workspace>/<stem>.log` (stem = out_name minus extension, so sweeps
 sharing a workspace don't collide) and mirrors every entry into it, then
-prints the banner. With `replicas = true` each scoped run id also gets its
-own `<workspace>/<stem>.<rNNN>.log`.
+prints the banner. With `replicas = true` each scoped line also carries its
+run id in a dedicated column — everything still lands in the one main log,
+there are no separate per-replica files.
 
 `log::scope("rNNN")` (RAII) binds a thread-local replica tag —
 `orch::llr::Replica` binds its own id inside its public methods, so apps and
@@ -655,10 +666,10 @@ apps/cuda/                      all runnable .cu binaries: the reference sims
 The dependency is strictly one-way: **`cuda → core`, never `core → cuda`**. The
 only GPU-awareness in `core` is two deliberate shims:
 
-- `core/hd.hpp` — the `RETICOLO_HD` macro (`__host__ __device__` under nvcc,
+- `core/sys/hd.hpp` — the `RETICOLO_HD` macro (`__host__ __device__` under nvcc,
   expands to nothing otherwise), so one annotated function compiles for both.
-- `core/rng.hpp` — a `__CUDACC__` guard exposing the shared counter-based Philox
-  on the device.
+- `core/rng/philox.hpp` — the shared counter-based Philox, a pure `RETICOLO_HD`
+  bijection so it compiles identically on host and device.
 
 Header naming inside `cuda/`: **`.cuh` = contains device kernels** (`__global__`/
 `__device__` bodies, nvcc-mandatory); **`.hpp` = host-callable API** (may use the
@@ -673,7 +684,7 @@ The seam is a four-hop chain (Phi4 shown):
    the single source of truth.
 2. `action::Phi4` (CPU) and `cuda::Phi4ForceFunctor` (GPU) **both call that same
    formula** — they cannot silently diverge.
-3. `cuda/actions/site/phi4.hpp` — the `device_functors<action::Phi4<T>>` trait adapts
+3. `cuda/actions/nn/phi4.hpp` — the `device_functors<action::Phi4<T>>` trait adapts
    a *host* action struct into device launchers (force / s_full / sample_momenta).
 4. `cuda::DeviceAction<HostAction, Field>` + `cuda::Hmc<DAct, Integ>` — the
    generic device HMC, reusing the *same* `updater::integ::*` integrator tags as the
@@ -706,8 +717,10 @@ OpenMP is off, so neither reaches the nvcc compile. See
 `apps/` is the canonical reference set: one HMC sim per action
 (`phi4_hmc`, `phi6_hmc`, `sine_gordon_hmc`, `xy_hmc`, `bose_gas_hmc`, `u1_hmc`,
 `su2_hmc`, `su3_hmc`), one Metropolis sim per action (`*_metropolis`, same
-list), the LLR sims (`phi4_llr`, `phi4_llr_metropolis`, `u1_llr`,
-`u1_llr_smoothed`, `bose_gas_llr`, `su2_llr`), `f32` variants of each, and the `bench_*` suite. Built in-tree only; registered with `reticolo_add_app`
+list), the LLR sims (`phi4_llr`, `phi4_llr_metropolis`, `phi6_llr`,
+`sine_gordon_llr`, `xy_llr`, `bose_gas_llr`, `u1_llr`, `u1_llr_smoothed`,
+`su2_llr`, `su3_llr`), `f32` variants of the HMC and Metropolis sims, and the
+`bench_*` suite. Built in-tree only; registered with `reticolo_add_app`
 in `apps/CMakeLists.txt`.
 
 ### Standalone examples (`examples/`)
@@ -758,7 +771,7 @@ sets `RETICOLO_ENABLE_OPENMP=OFF` explicitly.
 
 ## Tests
 
-- `tests/unit/` — types in isolation: `Site`, `Indexing`, pool, `Lattice`,
+- `tests/unit/` — types in isolation: `Site`, lattice geometry, `Lattice`,
   `FastRng`, `Parser`, observers, analysis.
 - `tests/physics/` — force-vs-FD consistency for every action,
   HMC reversibility & integrator-order across the gauge groups.
