@@ -1,6 +1,8 @@
 #pragma once
 
+#include <reticolo/action/concepts.hpp>
 #include <reticolo/action/gauge/formula/wilson_kernels.hpp>
+#include <reticolo/action/gauge/formula/wilson_local.hpp>
 #include <reticolo/action/gauge/gauge_action.hpp>
 #include <reticolo/core/exec/parallel.hpp>
 #include <reticolo/core/field/matrix_link_lattice.hpp>
@@ -92,6 +94,38 @@ struct Wilson : GaugeAction<Wilson<G, T>> {
         // two-phase sinP fill+gather — so the action layer stays uniform with no
         // parallel-vs-serial branch of its own.
         kernels::compute_force(U, force, beta_over_n_dbl);
+    }
+
+    // One colour of a local (Metropolis) sweep, and the gauge peer of
+    // `compute_force_and_kick`. Colour decodes to (direction, site parity) —
+    // 2·ndims passes per sweep, each writing links that nothing in that pass
+    // reads. The staple gather and the per-link move are the shared
+    // `formula::wilson_metropolis_stencil`, generic over `G` through a small matrix
+    // op traits (`formula::gauge_local_ops<G>`), so U(1), SU(2) and SU(3) share
+    // one sweep rather than three.
+    //
+    // The proposal needs NO new group math: `noise` already holds the algebra
+    // element `sample_algebra_slab` produces for HMC momenta, and the move
+    // exponentiates it with the same closed form the integrator's drift uses.
+    [[nodiscard]] LocalStats metropolis_stencil(field_type& u,
+                                                int color,
+                                                field_type const& noise,
+                                                Lattice<real_scalar_t<T>> const& logu,
+                                                T sigma) const noexcept {
+        auto const beta_over_n = static_cast<double>(beta) / static_cast<double>(G::n_color);
+        return formula::wilson_metropolis_stencil<G, T>(u,
+                                                        static_cast<std::size_t>(color) / 2,
+                                                        color % 2,
+                                                        noise,
+                                                        logu,
+                                                        static_cast<double>(sigma),
+                                                        beta_over_n);
+    }
+
+    // A link field's elementary move is per LINK, so the colouring is
+    // (direction, site parity): 2·ndims passes, not 2.
+    [[nodiscard]] static int n_colors(field_type const& u) noexcept {
+        return 2 * static_cast<int>(u.ndims());
     }
 
     // Fused force-and-kick: scatter the per-plaquette force straight into the
