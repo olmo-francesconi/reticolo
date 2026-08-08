@@ -99,6 +99,31 @@ private:
     T fwd_  = T{0};
 };
 
+// Local-update functor (checkerboard.cuh's init/accumulate/ds protocol). No new
+// physics and no new formula file: the per-site energy of x is phi4_action_site
+// evaluated on the FULL 2d neighbour sum — each bond touching x counted once —
+// so ΔS is the difference of two calls to the shared HD formula, the same
+// expression NNAction::metropolis_stencil builds on the CPU from action_kernel.
+template <class T>
+class Phi4DsFunctor {
+public:
+    using element = T;
+    RETICOLO_HD Phi4DsFunctor(T kappa, T lambda) : kappa_{kappa}, lambda_{lambda} {}
+
+    RETICOLO_HD void init(T /*self*/) { nbrs_ = T{0}; }
+    RETICOLO_HD void accumulate(int /*mu*/, T nbr) { nbrs_ += nbr; }
+    [[nodiscard]] RETICOLO_HD double ds(T old_v, T prop) const {
+        return static_cast<double>(
+            action::formula::phi4_action_site<T>(prop, nbrs_, kappa_, lambda_) -
+            action::formula::phi4_action_site<T>(old_v, nbrs_, kappa_, lambda_));
+    }
+
+private:
+    T kappa_;
+    T lambda_;
+    T nbrs_ = T{0};
+};
+
 // Maps action::Phi4 to the device launchers DeviceAction calls (the primary
 // template lives in device_functors.hpp). A scalar action's trait wraps the
 // site-stencil skeletons (site_launchers.hpp) with its functor pair; a gauge
@@ -138,6 +163,31 @@ struct device_functors<action::Phi4<T>> {
                                cudaStream_t s) {
         impl::site_sample_momenta(mom, n, topo, seed, traj, s);
     }
+    // Local-update path (cuda::Metropolis) — the same trait shape as
+    // compute_force: bind the action's ds functor, hand it to the skeleton.
+    static void metropolis_stencil(action::Phi4<T> const& a,
+                                   T* field,
+                                   DeviceTopology const& topo,
+                                   int color,
+                                   double sigma,
+                                   std::uint64_t seed,
+                                   std::uint64_t const* sweep,
+                                   double* ds_out,
+                                   double* acc_out,
+                                   cudaStream_t s) {
+        impl::site_metropolis(Phi4DsFunctor<T>{a.kappa, a.lambda},
+                              field,
+                              topo,
+                              color,
+                              sigma,
+                              seed,
+                              sweep,
+                              ds_out,
+                              acc_out,
+                              s);
+    }
+    // A site field's elementary move is per site: the two checkerboard parities.
+    [[nodiscard]] static int n_colors(DeviceTopology const& /*topo*/) { return 2; }
     // Opt-in fused path (dual-output stencil) — detected by cuda::DeviceAction and
     // used by the LLR WindowedAction to skip the redundant base-S reduction.
     static void s_full_and_force(double* out,

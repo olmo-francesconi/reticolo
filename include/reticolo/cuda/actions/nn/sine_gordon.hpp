@@ -100,6 +100,31 @@ private:
     T fwd_  = T{0};
 };
 
+// Local-update functor. The host leaf's bespoke `s_full` batches cos through
+// Sleef, which a single-candidate score cannot use; the device takes cos scalar
+// per candidate, exactly as the host `action_kernel` does.
+template <class T>
+class SineGordonDsFunctor {
+public:
+    using element = T;
+    RETICOLO_HD SineGordonDsFunctor(T kappa, T alpha) : kappa_{kappa}, alpha_{alpha} {}
+
+    RETICOLO_HD void init(T /*self*/) { nbrs_ = T{0}; }
+    RETICOLO_HD void accumulate(int /*mu*/, T nbr) { nbrs_ += nbr; }
+    [[nodiscard]] RETICOLO_HD double ds(T old_v, T prop) const {
+        auto const cp = static_cast<T>(cos(static_cast<double>(prop)));
+        auto const co = static_cast<T>(cos(static_cast<double>(old_v)));
+        return static_cast<double>(
+            action::formula::sine_gordon_action_site<T>(prop, nbrs_, cp, kappa_, alpha_) -
+            action::formula::sine_gordon_action_site<T>(old_v, nbrs_, co, kappa_, alpha_));
+    }
+
+private:
+    T kappa_;
+    T alpha_;
+    T nbrs_ = T{0};
+};
+
 template <class T>
 struct device_functors<action::SineGordon<T>> {
     static void compute_force(action::SineGordon<T> const& a,
@@ -152,6 +177,31 @@ struct device_functors<action::SineGordon<T>> {
                                     topo,
                                     s);
     }
+    // Local-update path (cuda::Metropolis) — the same trait shape as
+    // compute_force: bind the action's ds functor, hand it to the skeleton.
+    static void metropolis_stencil(action::SineGordon<T> const& a,
+                                   T* field,
+                                   DeviceTopology const& topo,
+                                   int color,
+                                   double sigma,
+                                   std::uint64_t seed,
+                                   std::uint64_t const* sweep,
+                                   double* ds_out,
+                                   double* acc_out,
+                                   cudaStream_t s) {
+        impl::site_metropolis(SineGordonDsFunctor<T>{a.kappa, a.alpha},
+                              field,
+                              topo,
+                              color,
+                              sigma,
+                              seed,
+                              sweep,
+                              ds_out,
+                              acc_out,
+                              s);
+    }
+    // A site field's elementary move is per site: the two checkerboard parities.
+    [[nodiscard]] static int n_colors(DeviceTopology const& /*topo*/) { return 2; }
 };
 
 }  // namespace reticolo::cuda

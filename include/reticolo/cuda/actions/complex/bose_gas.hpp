@@ -87,6 +87,35 @@ private:
 };
 
 // --- trait ---------------------------------------------------------------
+// Local-update functor for the PHASE-QUENCHED weight. The anisotropy is folded
+// in per accumulated neighbour exactly as the force/energy functors do, so the
+// last direction's cosh(mu) weight lands in the same place. The identity survives
+// it because Re(conj(a)*b) is symmetric — see action::ComplexAction.
+template <class T>
+class BoseGasDsFunctor {
+public:
+    using element = cplx<T>;
+    RETICOLO_HD BoseGasDsFunctor(T coef_mass, T lambda, T ch_minus_1, int last_dim)
+        : coef_mass_{coef_mass}, lambda_{lambda}, ch_minus_1_{ch_minus_1}, last_dim_{last_dim} {}
+
+    RETICOLO_HD void init(cplx<T> /*self*/) { staple_ = cplx<T>{}; }
+    RETICOLO_HD void accumulate(int mu, cplx<T> nbr) {
+        staple_ = staple_ + ((mu == last_dim_) ? ((T{1} + ch_minus_1_) * nbr) : nbr);
+    }
+    [[nodiscard]] RETICOLO_HD double ds(cplx<T> old_v, cplx<T> prop) const {
+        return static_cast<double>(
+            action::formula::bose_gas_action_site<T>(prop, staple_, coef_mass_, lambda_) -
+            action::formula::bose_gas_action_site<T>(old_v, staple_, coef_mass_, lambda_));
+    }
+
+private:
+    T coef_mass_;
+    T lambda_;
+    T ch_minus_1_;
+    int last_dim_;
+    cplx<T> staple_{};
+};
+
 template <class T>
 struct device_functors<action::BoseGas<T>> {
     [[nodiscard]] static T coef_mass(action::BoseGas<T> const& a, DeviceTopology const& topo) {
@@ -206,6 +235,35 @@ struct device_functors<action::BoseGas<T>> {
                           cudaStream_t s) {
         fill_normals(reinterpret_cast<T*>(field), 2 * n, seed, traj, s, sigma);
     }
+    // Local-update path (cuda::Metropolis) — the same trait shape as
+    // compute_force: bind the action's ds functor, hand it to the skeleton.
+    // The couplings are hoisted here the way the host leaf hoists them in its
+    // kernel binds: coef_mass and cosh(mu) depend on the geometry, not the site.
+    static void metropolis_stencil(action::BoseGas<T> const& a,
+                                   cplx<T>* field,
+                                   DeviceTopology const& topo,
+                                   int color,
+                                   double sigma,
+                                   std::uint64_t seed,
+                                   std::uint64_t const* sweep,
+                                   double* ds_out,
+                                   double* acc_out,
+                                   cudaStream_t s) {
+        auto const coef_mass  = (T{2} * static_cast<T>(topo.ndim)) + (a.mass * a.mass);
+        auto const ch_minus_1 = static_cast<T>(std::cosh(static_cast<double>(a.mu))) - T{1};
+        impl::site_metropolis(BoseGasDsFunctor<T>{coef_mass, a.lambda, ch_minus_1, topo.ndim - 1},
+                              field,
+                              topo,
+                              color,
+                              sigma,
+                              seed,
+                              sweep,
+                              ds_out,
+                              acc_out,
+                              s);
+    }
+    // A site field's elementary move is per site: the two checkerboard parities.
+    [[nodiscard]] static int n_colors(DeviceTopology const& /*topo*/) { return 2; }
 };
 
 }  // namespace reticolo::cuda

@@ -94,6 +94,26 @@ struct device_functors<action::Wilson<G, T>> {
         su_plaq_fused_launch<GD>(field, force, scratch, topo, static_cast<double>(a.beta), s);
         reduce_sum_into(out, scratch, topo.nsites * topo.ndim, partials, s);
     }
+    // Local-update path (cuda::Metropolis). Colour enumerates (direction, site
+    // parity), so a link sweep is 2*ndim passes. The proposal reuses the same
+    // Gell-Mann algebra draw and closed-form exponential the momentum sampler and
+    // the drift already use — no new device group math.
+    static void metropolis_stencil(action::Wilson<G, T> const& a,
+                                   T* field,
+                                   DeviceTopology const& topo,
+                                   int color,
+                                   double sigma,
+                                   std::uint64_t seed,
+                                   std::uint64_t const* sweep,
+                                   double* ds_out,
+                                   double* acc_out,
+                                   cudaStream_t s) {
+        double const beta_over_n = static_cast<double>(a.beta) / static_cast<double>(GD::n_color);
+        su_metropolis_launch<GD>(
+            field, topo, color, sigma, beta_over_n, seed, sweep, ds_out, acc_out, s);
+    }
+    // A link field's elementary move is per LINK: (direction, site parity).
+    [[nodiscard]] static int n_colors(DeviceTopology const& topo) { return 2 * topo.ndim; }
 };
 
 // Wilson<U(1)> — abelian specialization (more specialized than Wilson<G> above,
@@ -154,6 +174,30 @@ struct device_functors<action::Wilson<math::group::U1, T>> {
                                cudaStream_t s) {
         fill_normals(mom, n, seed, traj, s);
     }
+    // Local-update path (cuda::Metropolis) — see the SU(N) trait above; U(1)
+    // carries the angle, so the staple is a plain complex accumulator.
+    static void metropolis_stencil(action::Wilson<math::group::U1, T> const& a,
+                                   T* field,
+                                   DeviceTopology const& topo,
+                                   int color,
+                                   double sigma,
+                                   std::uint64_t seed,
+                                   std::uint64_t const* sweep,
+                                   double* ds_out,
+                                   double* acc_out,
+                                   cudaStream_t s) {
+        u1_metropolis_launch<T>(field,
+                                topo,
+                                color,
+                                sigma,
+                                static_cast<double>(a.beta),
+                                seed,
+                                sweep,
+                                ds_out,
+                                acc_out,
+                                s);
+    }
+    [[nodiscard]] static int n_colors(DeviceTopology const& topo) { return 2 * topo.ndim; }
 };
 
 }  // namespace reticolo::cuda

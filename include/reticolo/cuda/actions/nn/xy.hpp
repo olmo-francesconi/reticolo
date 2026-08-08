@@ -88,6 +88,41 @@ private:
     T esum_  = T{0};
 };
 
+// Local-update functor for a BOND leaf. Unlike the site actions it cannot fold
+// the neighbours into a running sum: the per-bond term reads the candidate, so
+// the two candidate values genuinely aggregate to different sums. It keeps the
+// 2d raw neighbours in registers instead — the device's answer to the host's
+// fold-once-per-candidate. Both compute the same thing; only where the
+// per-candidate work happens differs. k_max_nbr = 2*4, the Indexing dimension cap.
+template <class T>
+class XyDsFunctor {
+public:
+    using element                  = T;
+    static constexpr int k_max_nbr = 8;
+
+    RETICOLO_HD explicit XyDsFunctor(T beta) : beta_{beta} {}
+
+    RETICOLO_HD void init(T /*self*/) { n_ = 0; }
+    RETICOLO_HD void accumulate(int /*mu*/, T nbr) {
+        if (n_ < k_max_nbr) {
+            nbr_[n_++] = nbr;
+        }
+    }
+    [[nodiscard]] RETICOLO_HD double ds(T old_v, T prop) const {
+        T acc{0};
+        for (int i = 0; i < n_; ++i) {
+            acc += action::formula::xy_action_bond<T>(prop, nbr_[i]) -
+                   action::formula::xy_action_bond<T>(old_v, nbr_[i]);
+        }
+        return static_cast<double>(-beta_ * acc);
+    }
+
+private:
+    T beta_;
+    T nbr_[k_max_nbr]{};
+    int n_ = 0;
+};
+
 template <class T>
 struct device_functors<action::Xy<T>> {
     static void compute_force(action::Xy<T> const& a,
@@ -132,6 +167,23 @@ struct device_functors<action::Xy<T>> {
         impl::site_s_full_and_force(
             out, XyForceEnergyFunctor<T>{a.beta}, field, force, scratch, partials, topo, s);
     }
+    // Local-update path (cuda::Metropolis) — the same trait shape as
+    // compute_force: bind the action's ds functor, hand it to the skeleton.
+    static void metropolis_stencil(action::Xy<T> const& a,
+                                   T* field,
+                                   DeviceTopology const& topo,
+                                   int color,
+                                   double sigma,
+                                   std::uint64_t seed,
+                                   std::uint64_t const* sweep,
+                                   double* ds_out,
+                                   double* acc_out,
+                                   cudaStream_t s) {
+        impl::site_metropolis(
+            XyDsFunctor<T>{a.beta}, field, topo, color, sigma, seed, sweep, ds_out, acc_out, s);
+    }
+    // A site field's elementary move is per site: the two checkerboard parities.
+    [[nodiscard]] static int n_colors(DeviceTopology const& /*topo*/) { return 2; }
 };
 
 }  // namespace reticolo::cuda

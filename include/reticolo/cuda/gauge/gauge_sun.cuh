@@ -13,6 +13,7 @@
 
 #include <reticolo/core/rng/philox.hpp>
 #include <reticolo/cuda/check.hpp>
+#include <reticolo/cuda/checkerboard.cuh>
 #include <reticolo/cuda/device_field.hpp>
 #include <reticolo/cuda/device_topology.hpp>
 #include <reticolo/cuda/gauge/group_device.hpp>
@@ -298,7 +299,147 @@ __global__ void su_sample_algebra_kernel(double* __restrict__ mom,
     GD::store(mom, mu, x, ns, pl);
 }
 
+// Per-link Metropolis, one (direction, site parity) colour. The staple gather is
+// the SAME as su_plaq_force_kernel's — this is the local-update finalizer on it:
+// instead of TA[U·V] it forms Re Tr[U'V] − Re Tr[UV] for a proposed U' = exp(σH)U
+// and accepts in place.
+//
+// Race-freedom is the colouring: every link in the staple of (x,μ) is either of a
+// different direction or on the opposite site parity, so a colour writes links
+// nothing in that colour reads. Threads of the wrong parity retire immediately.
+//
+// H is drawn in-kernel from Philox on the same Gell-Mann construction
+// su_sample_algebra_kernel uses for momenta, keyed on a separate word from the
+// accept uniform so the proposal and the accept test are independent draws.
+template <class GD, int MaxT = kSuBlock, int MinB = kSuMinBlocks>
+__global__ void __launch_bounds__(MaxT, MinB)
+    su_metropolis_kernel(double* __restrict__ field,
+                         DeviceTopology topo,
+                         int mu,
+                         int parity,
+                         double sigma,
+                         double beta_over_n,
+                         std::uint64_t seed,
+                         std::uint64_t const* __restrict__ sweep,
+                         double* __restrict__ ds_out,
+                         double* __restrict__ acc_out) {
+    long const x  = (static_cast<long>(blockIdx.x) * blockDim.x) + threadIdx.x;
+    long const ns = topo.nsites;
+    int const d   = topo.ndim;
+    if (x >= ns) {
+        return;
+    }
+    if (site_parity(topo, x) != parity) {
+        ds_out[x]  = 0.0;
+        acc_out[x] = 0.0;
+        return;
+    }
+    long const x_pmu = topo.next(x, mu);
+
+    double v[GD::nc];
+    for (int k = 0; k < GD::nc; ++k) {
+        v[k] = 0.0;
+    }
+    for (int nu = 0; nu < d; ++nu) {
+        if (nu == mu) {
+            continue;
+        }
+        long const x_pnu     = topo.next(x, nu);
+        long const x_mnu     = topo.prev(x, nu);
+        long const x_pmu_mnu = topo.prev(x_pmu, nu);
+        double a[GD::nc];
+        double b[GD::nc];
+        double c[GD::nc];
+        double t1[GD::nc];
+        double t2[GD::nc];
+        // forward staple: U_ν(x+μ)·U_μ(x+ν)†·U_ν(x)†
+        GD::load(field, nu, x_pmu, ns, a);
+        GD::load(field, mu, x_pnu, ns, b);
+        GD::load(field, nu, x, ns, c);
+        GD::mul_adj(t1, a, b);
+        GD::mul_adj(t2, t1, c);
+        for (int k = 0; k < GD::nc; ++k) {
+            v[k] += t2[k];
+        }
+        // backward staple: U_ν(x+μ−ν)†·U_μ(x−ν)†·U_ν(x−ν)
+        GD::load(field, nu, x_pmu_mnu, ns, a);
+        GD::load(field, mu, x_mnu, ns, b);
+        GD::load(field, nu, x_mnu, ns, c);
+        GD::adj_mul(t1, b, c);
+        GD::adj_mul(t2, a, t1);
+        for (int k = 0; k < GD::nc; ++k) {
+            v[k] += t2[k];
+        }
+    }
+
+    // ---- proposal: U' = exp(σ·H)·U, H a Gell-Mann algebra draw --------------
+    constexpr double k_inv_sqrt2 = std::numbers::sqrt2 / 2.0;
+    long const link              = (static_cast<long>(mu) * ns) + x;
+    long const pair0             = link * (((GD::n_gen + 1) / 2) + 1);
+    double h[GD::n_gen];
+    for (int a = 0; a < GD::n_gen; a += 2) {
+        double n0 = 0.0;
+        double n1 = 0.0;
+        philox_normal2(seed, *sweep, static_cast<std::uint64_t>(pair0 + (a / 2)), n0, n1);
+        h[a] = n0 * k_inv_sqrt2;
+        if (a + 1 < GD::n_gen) {
+            h[a + 1] = n1 * k_inv_sqrt2;
+        }
+    }
+    // The accept uniform comes from the word past this link's normals, so it can
+    // never be a re-use of a proposal draw.
+    double u0 = 0.0;
+    double u1 = 0.0;
+    philox_uniform2(
+        seed, *sweep, static_cast<std::uint64_t>(pair0 + ((GD::n_gen + 1) / 2)), u0, u1);
+
+    double pl[GD::nc];
+    double xm[GD::nc];
+    double u[GD::nc];
+    double prop[GD::nc];
+    double uv[GD::nc];
+    GD::pack_algebra(h, pl);
+    GD::expi(sigma, pl, xm);
+    GD::load(field, mu, x, ns, u);
+    GD::mul(prop, xm, u);
+
+    GD::mul(uv, u, v);
+    double const re_old = GD::retr(uv);
+    GD::mul(uv, prop, v);
+    double const re_new = GD::retr(uv);
+    double const ds     = -beta_over_n * (re_new - re_old);
+
+    // ::log — unqualified `log` resolves to the reticolo::log NAMESPACE here.
+    bool const accept = -ds >= ::log(u0);
+    if (accept) {
+        GD::store(field, mu, x, ns, prop);
+    }
+    ds_out[x]  = accept ? ds : 0.0;
+    acc_out[x] = accept ? 1.0 : 0.0;
+}
+
 // ---- launchers ----------------------------------------------------------
+
+template <class GD>
+void su_metropolis_launch(double* field,
+                          DeviceTopology const& topo,
+                          int color,
+                          double sigma,
+                          double beta_over_n,
+                          std::uint64_t seed,
+                          std::uint64_t const* sweep,
+                          double* ds_out,
+                          double* acc_out,
+                          cudaStream_t stream) {
+    // color enumerates (direction, parity) — 2*ndim of them per sweep.
+    int const mu         = color / 2;
+    int const parity     = color % 2;
+    constexpr int kBlock = 128;
+    auto const grid      = static_cast<unsigned>((topo.nsites + kBlock - 1) / kBlock);
+    su_metropolis_kernel<GD><<<grid, kBlock, 0, stream>>>(
+        field, topo, mu, parity, sigma, beta_over_n, seed, sweep, ds_out, acc_out);
+    RETICOLO_CUDA_CHECK_LAUNCH();
+}
 
 template <class GD>
 void su_plaq_energy_launch(double const* field,
